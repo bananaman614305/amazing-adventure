@@ -2,7 +2,7 @@
 
 **Branch:** `grunt/round3-living-world`, stacked on the published Round 2 HEAD
 `f98386f` (PR #4, confirmed published).
-**Last checkpoint:** Round 3 implemented, tested and committed.
+**Last checkpoint:** Round 3 implemented, tested and committed as `332d710`.
 
 ## Current task
 
@@ -43,7 +43,8 @@ rather than waiting for it to merge.
 
 ## Completed checks (real results this round)
 
-- `npm test` — **98/98 pass** (was 58 at Round 2 start). New coverage:
+- `npm test` — **98/98 pass** (was 58 at Round 2 start), re-run after a final
+  unused-import cleanup. New coverage:
   `tests/factions.test.mjs` (24 cases: clamping, tier boundaries, NPC standing
   math, rival news, every quest's reputation outcome, the toll dilemma's
   mutual exclusivity and gating, greeting grammar, save round-trip and corrupt
