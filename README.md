@@ -36,6 +36,19 @@ Grunt builds the game in rounds. Each round leaves a playable game that is deepe
 
 Every round ends with a pull request that Grunt has tested in a real browser, with screenshots.
 
+## Run it (Round 1)
+
+One command starts the game:
+
+```
+npm start
+```
+
+Then open http://localhost:8000 in a browser, click **Click to play**, and use
+W A S D to walk, the mouse to look, and E to talk to anyone who comes near.
+Set `PORT` to use a different port. No install or build step is needed; Three.js
+is pinned in the import map and loads from a CDN.
+
 ## Technical direction
 
 - **Engine:** Three.js, running in the browser.
