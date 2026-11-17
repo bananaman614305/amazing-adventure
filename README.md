@@ -110,6 +110,15 @@ The notice board is readable and reports back on the systems you have been
 playing: faction standing with the Watch changes its wording, and whether you
 paid or waived Oswin's toll changes what the traders have pinned up.
 
+**Wren the Toll Clerk** keeps a stall in the lane, and she is the proof that
+reputation opens doors. She will not discuss her missing toll ledger until the
+Market trusts you (**Warm** standing), which you earn in the plaza by dealing
+fairly with Oswin. Once she does, the quest has two endings that pull in
+opposite directions: naming the trader who took the arrears page earns the
+Watch's approval and 4 coins, while covering for him protects the Market. The
+ledger itself is a real object you have to walk to and pick up behind the
+barrels, and it only appears once Wren has told you where to look.
+
 ### Round 3 files
 
 | File | What it holds |

@@ -43,7 +43,8 @@ export const NPC_FACTION = {
   sable: 'keepers',
   oswin: 'trade',
   pip: 'trade',
-  halden: 'watch'
+  halden: 'watch',
+  wren: 'trade'
 };
 
 export const REPUTATION_MIN = -100;

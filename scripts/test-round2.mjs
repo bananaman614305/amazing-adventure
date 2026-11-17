@@ -58,8 +58,9 @@ try {
   checks.check('click to play locks the pointer and shows the HUD',
     started.locked && started.enabled && started.overlayHidden && started.hudVisible, JSON.stringify(started));
 
-  checks.check('five NPCs in the cast', await page.evaluate(() => window.amazingAdventure.npcs.length) === 5,
-    `${await page.evaluate(() => window.amazingAdventure.npcs.length)} NPCs`);
+  const castCount = await page.evaluate(() => window.amazingAdventure.npcs.length);
+  checks.check('six NPCs in the cast, one of them in the lane', castCount === 6,
+    `${castCount} NPCs`);
 
   // --- 2. Walking and the north terrace ---------------------------------
   await page.evaluate(() => {
@@ -459,10 +460,12 @@ try {
     panel: document.getElementById('panel').textContent,
     coins: document.getElementById('coin-count').textContent
   }));
-  checks.check('all three quests complete', Object.values(finalHud.quests).every((v) => v === 'done'),
-    JSON.stringify(finalHud.quests));
-  checks.check('tracker counts three done, none active',
-    finalHud.data.done === '3' && finalHud.data.active === '0', JSON.stringify(finalHud.data));
+  // Only these three are driven by this part of the run; the toll and the lane
+  // ledger are exercised separately in section 14 and 17.
+  const coreDone = ['lanterns', 'key', 'cheer'].every((q) => finalHud.quests[q] === 'done');
+  checks.check('all three plaza quests complete', coreDone, JSON.stringify(finalHud.quests));
+  checks.check('tracker counts at least three done and nothing active',
+    Number(finalHud.data.done) >= 3 && finalHud.data.active === '0', JSON.stringify(finalHud.data));
   checks.check('inventory panel lists every reward',
     /Keeper’s Promise/.test(finalHud.panel) && /Trader’s Marker/.test(finalHud.panel) && /Pip’s Ribbon/.test(finalHud.panel),
     finalHud.panel.replace(/\s+/g, ' ').slice(0, 140));
@@ -667,7 +670,107 @@ try {
     blocked.area === 'plaza' && blocked.z > -17.6,
     `stopped at z=${blocked.z.toFixed(2)} in ${blocked.area}`);
 
-  // --- 17. Final screenshots ----------------------------------------
+  // --- 17. Wren and the faction-gated lane quest --------------------
+  await page.evaluate(() => {
+    localStorage.clear();
+    window.amazingAdventure.saves.clear();
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await page.click('#play');
+  await new Promise((r) => setTimeout(r, 400));
+
+  // Wren exists, sits in the lane, and refuses her quest at neutral standing.
+  const wrenRefusal = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const wren = api.npcs.find((n) => n.id === 'wren');
+    const dialogue = await import('./src/dialogue.js');
+    const open = dialogue.startConversation(api.getState(), 'wren');
+    return {
+      exists: Boolean(wren),
+      area: wren ? (wren.group.position.z < -17.5 ? 'lane' : 'plaza') : null,
+      text: open.text,
+      offers: open.choices.map((c) => c.label)
+    };
+  });
+  checks.check('Wren is in the lane and refuses her quest at neutral standing',
+    wrenRefusal.exists && wrenRefusal.area === 'lane' &&
+    /Market trusts/.test(wrenRefusal.text) &&
+    !wrenRefusal.offers.some((l) => /look for it/i.test(l)),
+    JSON.stringify(wrenRefusal).slice(0, 200));
+
+  // With Warm Market standing the offer appears, and the quest can be finished.
+  const ledgerRun = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const state = api.getState();
+    const s = await import('./src/state.js');
+    const dialogue = await import('./src/dialogue.js');
+    // Earn Warm Market standing honestly through the toll-waive path.
+    s.startKey(state); s.pickUpKey(state); s.returnKey(state);
+    s.startToll(state); s.waiveToll(state, 'warm');
+    const tier = (await import('./src/factions.js')).npcTier(state, 'wren').id;
+    const open = dialogue.startConversation(state, 'wren');
+    const offer = open.choices.find((c) => /look for it/i.test(c.label));
+    if (!offer) return { error: 'no offer', tier };
+    dialogue.applyChoice(state, 'wren', offer);
+    const started = state.quests.ledger;
+    // Ask the rumour, then take the ledger from the lane.
+    const step2 = dialogue.startConversation(state, 'wren');
+    const rumour = step2.choices.find((c) => /who took it/i.test(c.label));
+    dialogue.applyChoice(state, 'wren', rumour);
+    const booked = state.quests.ledger;
+    api.refreshHUD();
+    api.syncPickups();
+    const ledgerVisible = api.environment.ledgerGroup.visible;
+    return { tier, started, booked, ledgerVisible };
+  });
+  checks.check('Warm Market standing unlocks Wren\'s ledger quest',
+    ledgerRun.tier === 'warm' && ledgerRun.started === 'started' && ledgerRun.booked === 'booked',
+    JSON.stringify(ledgerRun));
+  checks.check('the ledger appears in the lane only once Wren points at the barrels',
+    ledgerRun.ledgerVisible === true, JSON.stringify(ledgerRun));
+
+  // Walk to the barrels and pick it up through the real interaction path.
+  await page.evaluate(() => window.amazingAdventure.player.placeAt(7.6, -23.6, Math.PI, 0));
+  await new Promise((r) => setTimeout(r, 500));
+  const ledgerHint = await text(page, '#hint');
+  checks.check('the ledger is an interactable by the barrels',
+    /toll ledger/.test(ledgerHint || ''), JSON.stringify(ledgerHint));
+  await page.keyboard.press('KeyE');
+  await new Promise((r) => setTimeout(r, 500));
+  const afterPickup = await page.evaluate(() => ({
+    status: window.amazingAdventure.getState().quests.ledger,
+    hasItem: window.amazingAdventure.getState().inventory.includes('toll_ledger'),
+    hidden: window.amazingAdventure.environment.ledgerGroup.visible === false
+  }));
+  checks.check('picking up the ledger advances the quest and hides it',
+    afterPickup.status === 'recovered' && afterPickup.hasItem && afterPickup.hidden,
+    JSON.stringify(afterPickup));
+
+  // Covering for the trader is the Market-friendly ending.
+  const ending = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const state = api.getState();
+    const dialogue = await import('./src/dialogue.js');
+    const before = { ...state.reputation };
+    const open = dialogue.startConversation(state, 'wren');
+    const cover = open.choices.find((c) => /Cover for the trader/i.test(c.label));
+    const result = dialogue.applyChoice(state, 'wren', cover);
+    api.refreshHUD();
+    return {
+      status: state.quests.ledger,
+      before, after: { ...state.reputation },
+      message: result.message,
+      stillHasItem: state.inventory.includes('toll_ledger')
+    };
+  });
+  checks.check('covering for the trader ends the quest and moves two factions',
+    ending.status === 'done' && ending.after.trade > ending.before.trade &&
+    ending.after.watch < ending.before.watch && ending.stillHasItem === false,
+    JSON.stringify(ending).slice(0, 220));
+  await page.screenshot({ path: resolve(outDir, 'round4-wren-lane.png') });
+
+  // --- 18. Final screenshots ----------------------------------------
   await page.evaluate(() => {
     window.amazingAdventure.setClock(20);
     window.amazingAdventure.player.placeAt(2, 12, 0.2, -0.04);
@@ -703,6 +806,29 @@ try {
   });
   await new Promise((r) => setTimeout(r, 1200));
   await page.screenshot({ path: resolve(outDir, 'round3-lane-dusk.png') });
+
+  // Wren at her stall in the lane, mid-conversation.
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const state = api.getState();
+    const s = await import('./src/state.js');
+    s.startKey(state); s.pickUpKey(state); s.returnKey(state);
+    s.startToll(state); s.waiveToll(state, 'warm');
+    s.startLedger(state, 'warm'); s.hearLedgerRumour(state); s.recoverLedger(state);
+    api.refreshHUD();
+    api.setClock(85);
+    api.player.placeAt(11.4, -20.6, Math.PI, 0);
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const wren = api.npcs.find((n) => n.id === 'wren');
+    api.player.placeAt(wren.group.position.x, wren.group.position.z + 1.6, Math.PI, 0);
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  await page.keyboard.press('KeyE');
+  await new Promise((r) => setTimeout(r, 900));
+  await page.screenshot({ path: resolve(outDir, 'round4-wren-dialogue.png') });
 } finally {
   await close();
   await server.stop();

@@ -8,6 +8,7 @@ import {
   questStatus,
   coins,
   pickUpKey,
+  recoverLedger,
   watchLanterns,
   journalEntries,
   inventoryItems,
@@ -15,7 +16,7 @@ import {
 } from './state.js';
 import { startConversation, applyChoice } from './dialogue.js';
 import { reputationView, npcTier } from './factions.js';
-import { GATE, isGateOpen, gateHint, areaAt, NOTICE_BOARD, noticeText } from './areas.js';
+import { GATE, isGateOpen, gateHint, areaAt, NOTICE_BOARD, noticeText, LEDGER_SPOT } from './areas.js';
 import {
   chooseAmbientPair,
   buildExchange,
@@ -285,6 +286,25 @@ function interactables() {
     }
   }
 
+  if (environment.ledgerGroup.visible) {
+    const distance = Math.hypot(LEDGER_SPOT.x - player.position.x, LEDGER_SPOT.z - player.position.z);
+    if (distance < LEDGER_SPOT.range) {
+      list.push({
+        kind: 'ledger',
+        distance,
+        label: 'take the toll ledger',
+        run: () => {
+          const result = recoverLedger(state);
+          toast(result.message);
+          if (result.changed) {
+            refreshHUD();
+            autoSave();
+          }
+        }
+      });
+    }
+  }
+
   if (environment.keyGroup.visible) {
     const distance = Math.hypot(KEY_SPOT.x - player.position.x, KEY_SPOT.z - player.position.z);
     if (distance < KEY_PICKUP_RANGE) {
@@ -373,8 +393,17 @@ function refreshHint() {
     crosshair.classList.remove('active');
   }
 
-  // The key only appears once Halden has asked for help with it.
+  syncPickups();
+}
+
+/**
+ * World pickups follow quest state. This runs every frame rather than from
+ * refreshHint, because refreshHint returns early while a dialogue is open — and
+ * a dialogue is exactly what reveals the ledger.
+ */
+function syncPickups() {
   environment.setKeyVisible(questStatus(state, 'key') === 'started');
+  environment.setLedgerVisible(questStatus(state, 'ledger') === 'booked');
 }
 
 // --- Dusk watch (Pip's quest) --------------------------------------------
@@ -429,7 +458,7 @@ if (savedGame) {
       syncPhase(true);
     }
     started = true;
-    environment.setKeyVisible(questStatus(state, 'key') === 'started');
+    syncPickups();
     refreshHUD();
     player.requestLock();
   });
@@ -637,6 +666,7 @@ function frame() {
     npc.marker.visible = true;
   }
 
+  syncPickups();
   refreshHint();
 
   // Track which area the player is in every frame, so area-gated UI and tests
@@ -697,5 +727,6 @@ window.amazingAdventure = {
   TERRACE,
   areaAt: () => areaAt(player.position.x, player.position.z),
   isGateOpen: () => isGateOpen(state),
-  syncGate
+  syncGate,
+  syncPickups
 };

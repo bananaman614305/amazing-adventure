@@ -1,8 +1,12 @@
 # Grunt status — Amazing Adventure
 
-**Branch:** `grunt/round3-living-world`, stacked on the published Round 2 HEAD
-`f98386f` (PR #4, confirmed published).
-**Last checkpoint:** Round 3 plus the north gate and market lane, tested locally.
+**Branches:**
+- `grunt/round3-living-world` at `57b9c1f` — published-request pending with the
+  supervisor; tree clean, untouched since the request was written.
+- `grunt/round4-lane-quest` — the lane's NPC and faction-gated quest, stacked on
+  it. This is the branch this checkpoint describes.
+
+**Last checkpoint:** Round 4 in progress locally (unpublished).
 
 ## Current task
 
@@ -129,10 +133,49 @@ a second connected area.
    The acceptance threshold was not loosened to hide anything: it was tightened
    to the true terrace height (1.18) after confirming the ramp maths is exact.
 
+## Chunk 3 — Wren and the faction-gated lane quest
+
+The lane had no reason to exist beyond scenery, so it now has an NPC whose
+content is locked behind the reputation system built last chunk.
+
+- `src/state.js`: the `ledger` quest (`none → started → booked → recovered →
+  done`), `ledgerUnlocked`, `startLedger`, `hearLedgerRumour`, `recoverLedger`
+  and `returnLedger(state, 'name' | 'cover')`. Naming the trader is Watch +20,
+  Market −10 and pays 4 coins; covering for him is Market +20, Watch −10 and
+  pays nothing. A `toll_ledger` item was added to `ITEMS`.
+- `src/npcs.js`: **Wren the Toll Clerk**, in the lane, with a routine per phase.
+- `src/dialogue.js`: Wren's conversation, including the refusal branch at low
+  standing, so the gate is visible to the player rather than silent.
+- `src/areas.js` / `src/world.js`: `LEDGER_SPOT` and a real ledger object behind
+  the far barrels, hidden until Wren points at them.
+- `src/main.js`: the ledger pickup interactable; `syncPickups()` now runs every
+  frame.
+- Checks: `npm test` **112/112 pass** (5 new), `npm run test:browser`
+  **62/62 pass, exit 0** (6 new: Wren exists in the lane and refuses at neutral,
+  Warm standing unlocks the quest, the ledger appears only afterwards, it is
+  interactable by the barrels, picking it up advances and hides it, and covering
+  for the trader moves two factions in opposite directions).
+
+### Bugs found in this chunk
+
+1. **Wren had dialogue but no faction**, so her standing was permanently neutral
+   and the "Warm Market standing" gate could never open. Fixed by adding her to
+   `NPC_FACTION`, with a new test asserting *every* cast member has a faction.
+2. The ledger item did not exist in the `ITEMS` registry; `addItem` threw. Its
+   eager validation caught this immediately.
+3. The ledger never became visible after Wren's dialogue, because pickup
+   visibility was refreshed from `refreshHint`, which returns early while a
+   dialogue is open — the exact moment the ledger is revealed. Visibility now
+   syncs every frame.
+4. Two Round 2 browser assertions were counts of a five-NPC, three-quest world.
+   They were updated to six NPCs and to the three *plaza* quests specifically,
+   rather than deleted, so they still assert something true.
+
 ## Next task
 
-Put an NPC in the market lane and give the lane a faction-gated quest, so the new
-area has a reason to exist beyond scenery. The gate and notice board are done; the
-next slice is a lane character whose dialogue changes with standing and whose
-quest is refused below a reputation tier. Then reduce draw calls (97 today) so the
-scene stays responsive on weak hardware.
+1. Publish `grunt/round4-lane-quest` as a stacked PR once
+   `grunt/round3-living-world` is picked up.
+2. Reduce draw calls (97 today, ~3.3 fps under software GL) by merging the static
+   plaza and lane geometry into batched meshes.
+3. Let reputation *refuse* content in the plaza too, not only in the lane, so
+   standing matters where the player starts.

@@ -16,6 +16,8 @@ import {
   tellPipAboutLanterns, startToll, collectToll, waiveToll, finishToll,
   questStatus, coins, TOLL_COST, serialize, deserialize
 } from '../src/state.js';
+import { DIALOGUE } from '../src/dialogue.js';
+const NPC_IDS = Object.keys(DIALOGUE);
 
 const fresh = () => ({ reputation: createInitialReputation(), memory: {} });
 
@@ -340,4 +342,23 @@ test('a save without reputation starts everyone neutral', () => {
   });
   const restored = deserialize(raw);
   for (const id of FACTION_IDS) assert.equal(reputation(restored, id), 0);
+});
+
+// --- Every NPC must belong to a faction -----------------------------------
+
+test('every NPC in the cast has a faction, so standing can move', () => {
+  const missing = NPC_IDS.filter((id) => !NPC_FACTION[id]);
+  assert.deepEqual(missing, [], `NPCs with no faction: ${missing.join(', ')}`);
+  for (const id of NPC_IDS) {
+    assert.ok(FACTION_IDS.includes(NPC_FACTION[id]), `${id} has a known faction`);
+  }
+});
+
+test('Wren follows Market standing, like the other traders', () => {
+  const state = createInitialState();
+  assert.equal(npcTier(state, 'wren').id, 'neutral');
+  changeReputation(state, 'trade', 30);
+  assert.equal(npcTier(state, 'wren').id, 'warm', 'Market standing carries to Wren');
+  changeReputation(state, 'trade', -80);
+  assert.equal(npcTier(state, 'wren').id, 'cold');
 });

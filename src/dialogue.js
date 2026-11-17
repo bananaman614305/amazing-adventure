@@ -22,6 +22,12 @@ import {
   collectToll,
   waiveToll,
   finishToll,
+  startLedger,
+  hearLedgerRumour,
+  recoverLedger,
+  returnLedger,
+  ledgerUnlocked,
+  LEDGER_REWARD,
   TOLL_COST,
   remember
 } from './state.js';
@@ -437,7 +443,102 @@ const sable = {
   }
 };
 
-export const DIALOGUE = { mara, oswin, pip, halden, sable };
+// Wren keeps the toll ledger in the market lane. She is the faction gate: her
+// quest is refused below Warm Market standing, which makes the reputation built
+// in the plaza the thing that opens the lane's story.
+const wren = {
+  id: 'wren',
+  name: 'Wren the Toll Clerk',
+  talk(state) {
+    const mem = memoryFor(state, 'wren');
+    const tier = npcTier(state, 'wren').id;
+    const status = questStatus(state, 'ledger');
+    const greeting = standingGreeting(state, 'wren');
+    const unlocked = ledgerUnlocked(state, tier);
+
+    if (status === 'none') {
+      if (!unlocked) {
+        return node(
+          'Wren the Toll Clerk',
+          `Wren does not look up from her book. “Market business is for people the Market trusts. Come back when it does.”${greeting}`,
+          [
+            { label: 'What would earn that trust?', next: () => node('Wren the Toll Clerk', 'Dues paid. Promises kept. Oswin at his stall with his accounts in order. It is not complicated, it is just slow.') },
+            end('Leave')
+          ]
+        );
+      }
+      return node(
+        'Wren the Toll Clerk',
+        mem.talks > 0
+          ? `Wren marks her page. “Back again. Still nobody has owned up.”${greeting}`
+          : `Wren runs a finger down a column of numbers. “My toll ledger is missing. A quarter of the lane’s takings, gone, and every trader here suddenly cannot remember their own name.”${greeting}`,
+        [
+          {
+            label: 'I could look for it.',
+            do: () => startLedger(state, tier),
+            next: () => node('Wren the Toll Clerk', '“Then look. I want the ledger and I want the name of whoever took it.”')
+          },
+          { label: 'That sounds like your problem.', next: () => node('Wren the Toll Clerk', '“It is everybody’s problem. The toll is how the gate stays lit and the gate is how the lane stays open.”') },
+          end('Leave')
+        ]
+      );
+    }
+
+    if (status === 'started') {
+      return node(
+        'Wren the Toll Clerk',
+        '“The ledger is somewhere in this lane. Nobody here admits to anything, but nobody here is a good liar either.”',
+        [
+          {
+            label: 'Any idea who took it?',
+            do: () => hearLedgerRumour(state),
+            next: () => node('Wren the Toll Clerk', 'Wren lowers her voice. “The quarter is in the ledgers by the barrels. Ask yourself who would want the page with the arrears on it. Then look behind a barrel.”')
+          },
+          end('Leave')
+        ]
+      );
+    }
+
+    if (status === 'booked') {
+      return node(
+        'Wren the Toll Clerk',
+        '“Behind the barrels by the far wall. Go and look, and do not touch anything else.”',
+        [ end('Leave') ]
+      );
+    }
+
+    if (status === 'recovered') {
+      return node(
+        'Wren the Toll Clerk',
+        'You set the toll ledger on the stall. Wren opens it and finds the page she has been looking for. “Now. Whose name do I write?”',
+        [
+          {
+            label: `Name the trader honestly. (Watch +20, Market -10, ${LEDGER_REWARD} coins)`,
+            do: () => returnLedger(state, 'name')
+          },
+          {
+            label: 'Cover for the trader. (Market +20, Watch -10)',
+            do: () => returnLedger(state, 'cover')
+          },
+          end('Not yet')
+        ]
+      );
+    }
+
+    return node(
+      'Wren the Toll Clerk',
+      status === 'done'
+        ? 'Wren’s ledger is open at a fresh page, and she is writing in it. “Busy. The lane pays its toll now, one way or another.”'
+        : '“Mind the ledger.”',
+      [
+        { label: 'How are the accounts?', next: () => node('Wren the Toll Clerk', '“Balanced. Do not tell anyone, they might expect it more often.”') },
+        end('Leave')
+      ]
+    );
+  }
+};
+
+export const DIALOGUE = { mara, oswin, pip, halden, sable, wren };
 
 /** Runs a choice's action, records NPC memory and returns { changed, message }. */
 export function applyChoice(state, npcId, choice) {

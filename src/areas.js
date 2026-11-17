@@ -69,6 +69,9 @@ export const LANE_PROPS = [
   { kind: 'post', x: 13.4, z: -24.8, width: 0.4, depth: 0.4, height: 3.0 }
 ];
 
+/** Where the missing toll ledger is tucked away, behind the far barrels. */
+export const LEDGER_SPOT = { x: 7.6, z: -25.0, range: 1.7 };
+
 /** The notice board in the lane that the player can read. */
 export const NOTICE_BOARD = { x: 13.3, z: -23.2, range: 1.9, height: 1.9 };
 

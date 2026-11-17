@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
-  GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS
+  GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT
 } from './areas.js';
 
 // Everything you can see and bump into is built here from plain primitives.
@@ -414,6 +414,31 @@ export function buildWorld(renderer) {
   keyGroup.visible = false;
   scene.add(keyGroup);
 
+  // --- The toll ledger, hidden behind the barrels in the lane ------------
+  const ledgerGroup = new THREE.Group();
+  ledgerGroup.position.set(LEDGER_SPOT.x, 0.95, LEDGER_SPOT.z);
+  const ledgerBook = new THREE.Mesh(
+    new THREE.BoxGeometry(0.42, 0.1, 0.32),
+    new THREE.MeshStandardMaterial({ color: 0x7d2f2a, roughness: 0.7 })
+  );
+  ledgerBook.rotation.y = 0.4;
+  ledgerBook.castShadow = true;
+  ledgerGroup.add(ledgerBook);
+  const ledgerPages = new THREE.Mesh(
+    new THREE.BoxGeometry(0.38, 0.07, 0.29),
+    new THREE.MeshStandardMaterial({ color: 0xe6dcc4, roughness: 0.95 })
+  );
+  ledgerPages.position.y = 0.055;
+  ledgerPages.rotation.y = 0.4;
+  ledgerGroup.add(ledgerPages);
+  const ledgerGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.4, 12, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffe6a8, transparent: true, opacity: 0.14 })
+  );
+  ledgerGroup.add(ledgerGlow);
+  ledgerGroup.visible = false;
+  scene.add(ledgerGroup);
+
   const environment = {
     scene,
     hemi,
@@ -435,6 +460,10 @@ export function buildWorld(renderer) {
     /** Shows or hides the key pickup. */
     setKeyVisible(visible) {
       keyGroup.visible = Boolean(visible);
+    },
+    ledgerGroup,
+    setLedgerVisible(visible) {
+      ledgerGroup.visible = Boolean(visible);
     }
   };
 

@@ -113,3 +113,31 @@ test('every notice text is a complete sentence', () => {
     assert.match(line, /[.!”]$/, `${tier} notice ends cleanly`);
   }
 });
+
+// Cross-check the cast: the meshes in npcs.js and the dialogue in dialogue.js
+// drifted apart once (Wren had dialogue but no faction), so hold them together.
+// npcs.js imports Three, so read the ids from source text rather than importing.
+import { readFileSync } from 'node:fs';
+import { DIALOGUE } from '../src/dialogue.js';
+import { NPC_FACTION } from '../src/factions.js';
+
+test('the NPC meshes and the dialogue cast describe the same people', () => {
+  const source = readFileSync(new URL('../src/npcs.js', import.meta.url), 'utf8');
+  const meshIds = [...source.matchAll(/^\s{4}id: '([a-z]+)',$/gm)].map((m) => m[1]);
+  assert.ok(meshIds.length >= 6, `parsed the mesh cast (${meshIds.join(', ')})`);
+  assert.deepEqual(meshIds.sort(), Object.keys(DIALOGUE).sort(),
+    'every mesh has dialogue and every speaker has a body');
+  for (const id of meshIds) {
+    assert.ok(NPC_FACTION[id], `${id} is in a faction`);
+  }
+});
+
+test('the lane NPC is placed beyond the gate', () => {
+  const source = readFileSync(new URL('../src/npcs.js', import.meta.url), 'utf8');
+  const wren = source.slice(source.indexOf("id: 'wren'"));
+  const block = wren.slice(0, wren.indexOf('}\n  }'));
+  // Every routine spot for the lane NPC must be inside the lane's z range.
+  const zs = [...block.matchAll(/z: (-?[\d.]+)/g)].map((m) => Number(m[1]));
+  assert.ok(zs.length >= 3, 'Wren has routine spots for each phase');
+  for (const z of zs) assert.ok(z < LANE.maxZ, `Wren spot z=${z} is in the lane`);
+});

@@ -28,10 +28,25 @@ test('every NPC opens with a node that has at least one labelled choice', () => 
   assert.equal(startConversation(createInitialState(), 'nobody'), null);
 });
 
-test('the cast includes five distinct NPCs with unique ids', () => {
-  assert.equal(npcIds.length, 5);
+test('the cast includes six distinct NPCs with unique ids', () => {
+  assert.equal(npcIds.length, 6);
   const speakers = new Set(npcIds.map((id) => DIALOGUE[id].name));
-  assert.equal(speakers.size, 5);
+  assert.equal(speakers.size, 6);
+});
+
+test('Wren refuses her quest until the Market trusts you', () => {
+  const state = createInitialState();
+  const open = startConversation(state, 'wren');
+  assert.match(open.text, /Market business is for people the Market trusts/);
+  const ask = open.choices.find((c) => /look for it/i.test(c.label));
+  assert.equal(ask, undefined, 'no quest offer at neutral standing');
+  assert.equal(questStatus(state, 'ledger'), 'none');
+  // Asking what would earn trust must not start the quest either.
+  const advice = open.choices.find((c) => /earn that trust/i.test(c.label));
+  assert.ok(advice);
+  const adviceNode = advice.next();
+  assert.match(adviceNode.text, /Dues paid/);
+  assert.equal(questStatus(state, 'ledger'), 'none');
 });
 
 test('Mara → Oswin → Mara completes the lantern quest', () => {

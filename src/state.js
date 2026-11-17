@@ -9,10 +9,11 @@ export const ITEMS = {
   brass_key: { name: 'Brass Key', description: 'Small and worn smooth. Stamped with the north gate mark.' },
   keeper_promise: { name: 'Keeper’s Promise', description: 'Mara’s word that the plaza owes you a favour.' },
   pip_ribbon: { name: 'Pip’s Ribbon', description: 'A green ribbon. Pip tied it on and would not take it back.' },
-  oswin_marker: { name: 'Trader’s Marker', description: 'A wooden token from Oswin. Good for one favour, whenever you ask.' }
+  oswin_marker: { name: 'Trader’s Marker', description: 'A wooden token from Oswin. Good for one favour, whenever you ask.' },
+  toll_ledger: { name: 'Toll Ledger', description: 'Wren’s missing ledger. The last page names someone, and it is not Oswin.' }
 };
 
-export const QUEST_ORDER = ['lanterns', 'key', 'cheer', 'toll'];
+export const QUEST_ORDER = ['lanterns', 'key', 'cheer', 'toll', 'ledger'];
 
 export const QUESTS = {
   lanterns: {
@@ -40,6 +41,15 @@ export const QUESTS = {
       { id: 'watched', journal: 'You watched the lanterns from the north wall at dusk. Tell Pip.' }
     ]
   },
+  ledger: {
+    title: 'The Missing Ledger',
+    giver: 'wren',
+    steps: [
+      { id: 'started', journal: 'Wren needs the toll ledger that went missing from her stall. Nobody in the lane will own up.' },
+      { id: 'booked', journal: 'You promised Wren a name. The ledger quarter is somewhere in the lane.' },
+      { id: 'recovered', journal: 'You have the toll ledger. Wren is at her stall in the lane.' }
+    ]
+  },
   toll: {
     title: 'The Market Toll',
     giver: 'halden',
@@ -58,7 +68,7 @@ export const TOLL_COST = 5;
 export function createInitialState() {
   return {
     version: 2,
-    quests: { lanterns: 'none', key: 'none', cheer: 'none' },
+    quests: { lanterns: 'none', key: 'none', cheer: 'none', toll: 'none', ledger: 'none' },
     inventory: [],
     perks: {},
     flags: { coins: 6 },
@@ -323,6 +333,80 @@ export function finishToll(state) {
   if (status !== 'collected' && status !== 'waived') return noChange('The toll business is not finished yet.');
   setQuestStep(state, 'toll', 'done');
   return { changed: true, message: 'Quest complete: The Market Toll' };
+}
+
+// --- The lane: Wren and the missing ledger -------------------------------
+//
+// Wren is the gate on the new area's content. Her quest needs Warm standing
+// with the Market, so the reputation built in the plaza is what opens her up.
+// Two resolutions change who she is angry with, and both move standing.
+
+export const LEDGER_MIN_TIER = 'warm';
+export const LEDGER_REWARD = 4;
+
+/** Whether Wren will hand out her quest at all, given standing. */
+export function ledgerUnlocked(state, tierId) {
+  const rank = { hostile: 0, cold: 1, neutral: 2, warm: 3, trusted: 4 };
+  return rank[tierId] >= rank[LEDGER_MIN_TIER];
+}
+
+export function startLedger(state, tierId) {
+  if (questStatus(state, 'ledger') !== 'none') return noChange('Wren has already told you about the ledger.');
+  if (!ledgerUnlocked(state, tierId)) {
+    return noChange('Wren looks you over. “Market business is for people the Market trusts.”');
+  }
+  setQuestStep(state, 'ledger', 'started');
+  return { changed: true, message: 'Quest started: The Missing Ledger', topic: 'ledger_started' };
+}
+
+/** Wren tells you where the quarter went, if she likes you enough. */
+export function hearLedgerRumour(state) {
+  if (questStatus(state, 'ledger') !== 'started') return noChange('You have nothing to ask her about.');
+  setQuestStep(state, 'ledger', 'booked');
+  return { changed: true, message: 'Wren points you towards the barrels by the far wall.', topic: 'ledger_rumour' };
+}
+
+export function recoverLedger(state) {
+  if (questStatus(state, 'ledger') !== 'booked') return noChange('You have no reason to search the barrels yet.');
+  setQuestStep(state, 'ledger', 'recovered');
+  addItem(state, 'toll_ledger');
+  return { changed: true, message: 'You found the toll ledger tucked behind a barrel.' };
+}
+
+/**
+ * Wren's two endings. Naming the trader is honest and pleases the Watch;
+ * covering for him protects the Market. Neither is free.
+ */
+export function returnLedger(state, choice = 'name') {
+  if (questStatus(state, 'ledger') !== 'recovered') return noChange('Wren is not waiting on you for anything.');
+  setQuestStep(state, 'ledger', 'done');
+  removeItem(state, 'toll_ledger');
+  if (choice === 'cover') {
+    const standing = applyStanding(state, {
+      factionId: 'trade',
+      delta: 20,
+      rivals: [{ id: 'watch', delta: -10 }]
+    });
+    addPerk(state, 'oswin_favour', true);
+    return {
+      changed: true,
+      message: `You cover for the trader. ${standing.message}`,
+      topic: 'ledger_covered', opinion: 1,
+      reward: 0
+    };
+  }
+  const standing = applyStanding(state, {
+    factionId: 'watch',
+    delta: 20,
+    rivals: [{ id: 'trade', delta: -10 }]
+  });
+  addCoins(state, LEDGER_REWARD);
+  return {
+    changed: true,
+    message: `Wren writes the name down. ${standing.message}`,
+    topic: 'ledger_named', opinion: 1,
+    reward: LEDGER_REWARD
+  };
 }
 
 export function startCheer(state) {
