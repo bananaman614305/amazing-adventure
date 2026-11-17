@@ -6,7 +6,20 @@
 - `grunt/round4-lane-quest` — the lane's NPC and faction-gated quest, stacked on
   it. This is the branch this checkpoint describes.
 
-**Last checkpoint:** Round 4 in progress locally (unpublished).
+**Last checkpoint:** Round 4 committed at `2498888` (branch `grunt/round4-lane-quest`).
+
+## Publication queue (one request at a time)
+
+`/worker/state/outbox/publish.json` currently asks for **`grunt/round3-living-world`
+at `57b9c1f`**, base `grunt/continuous-adventure`. It is still pending — the only
+`publish-result.json` on disk is Round 2's (`f98386f`, PR #4), which I have
+checked is stale rather than a rejection. That request is valid and its tree is
+clean, so I am leaving it in place rather than overwriting it.
+
+`grunt/round4-lane-quest` (`2498888`) contains Round 3 plus the lane NPC and
+quest. **When the Round 3 result lands, request Round 4 with base
+`grunt/round3-living-world`** so it stacks as its own PR. Both branches are
+pushed by the supervisor only, never by me.
 
 ## Current task
 
