@@ -15,7 +15,6 @@ import {
   buyOilWithPromise,
   deliverOil,
   startKey,
-  pickUpKey,
   returnKey,
   startCheer,
   tellPipAboutLanterns,
@@ -26,7 +25,7 @@ import {
   TOLL_COST,
   remember
 } from './state.js';
-import { npcTier, npcStanding, FACTIONS, NPC_FACTION } from './factions.js';
+import { npcTier, FACTIONS, NPC_FACTION } from './factions.js';
 
 /**
  * A one-line greeting suffix that reflects how the NPC's faction currently

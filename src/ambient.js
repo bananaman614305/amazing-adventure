@@ -5,8 +5,7 @@
 // always yields the same lines. That keeps it testable without a browser and
 // makes saves reproducible, instead of sprinkling Math.random through the sim.
 
-import { questStatus, memoryFor } from './state.js';
-import { npcTier, FACTIONS, NPC_FACTION } from './factions.js';
+import { questStatus } from './state.js';
 
 export const AMBIENT_RANGE = 4.5;
 export const AMBIENT_CHANCE = 0.35;
