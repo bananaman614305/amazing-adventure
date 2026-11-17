@@ -36,7 +36,7 @@ Grunt builds the game in rounds. Each round leaves a playable game that is deepe
 
 Every round ends with a pull request that Grunt has tested in a real browser, with screenshots.
 
-## Run it (Round 1)
+## Run it (Round 2)
 
 One command starts the game:
 
@@ -44,10 +44,24 @@ One command starts the game:
 npm start
 ```
 
-Then open http://localhost:8000 in a browser, click **Click to play**, and use
-W A S D to walk, the mouse to look, and E to talk to anyone who comes near.
-Set `PORT` to use a different port. No install or build step is needed; Three.js
-is pinned in the import map and loads from a CDN.
+Then open the address it prints (http://localhost:8000 by default) in a browser,
+click **Click to play**, and use W A S D to walk, the mouse to look, E to talk or
+pick something up, and 1 / 2 to pick a quest choice. Esc pauses. Set `PORT` to use
+a different port. No install or build step is needed; Three.js is pinned in the
+import map and loads from a CDN.
+
+Progress saves itself to your browser's local storage: your place in the world, the
+inventory, the quest and what each person remembers about you all come back when
+you reload. **New game** on the start screen clears that save and starts over, and
+`window.amazingAdventure.reset()` does the same from the console.
+
+The Round 2 browser test checks every new path and writes screenshots to
+`artifacts/`:
+
+```
+npm start
+node scripts/smoke.mjs http://localhost:8000
+```
 
 ## Technical direction
 

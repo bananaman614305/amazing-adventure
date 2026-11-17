@@ -6,8 +6,7 @@ import * as THREE from 'three';
 export const PLAYER_HEIGHT = 1.7;
 export const PLAYER_RADIUS = 0.42;
 const WALK_SPEED = 4.2;
-const ACCELERATION = 40;
-const DAMPING = 12;
+const ACCELERATION_RATE = 14; // how fast the player reaches walking speed
 
 export class Player {
   constructor(camera, colliders, { onLock, onUnlock }) {
@@ -78,22 +77,13 @@ export class Player {
     const wishZ = -cos * forward - sin * strafe;
     const wishLength = Math.hypot(wishX, wishZ);
 
-    if (this.enabled && wishLength > 0) {
-      const nx = wishX / wishLength;
-      const nz = wishZ / wishLength;
-      this.velocity.x += nx * ACCELERATION * dt;
-      this.velocity.z += nz * ACCELERATION * dt;
-    }
-
-    // Cap the speed and apply damping so stopping feels immediate but not stiff.
-    const speed = Math.hypot(this.velocity.x, this.velocity.z);
-    if (speed > WALK_SPEED) {
-      this.velocity.x = (this.velocity.x / speed) * WALK_SPEED;
-      this.velocity.z = (this.velocity.z / speed) * WALK_SPEED;
-    }
-    const damp = Math.exp(-DAMPING * dt);
-    this.velocity.x *= damp;
-    this.velocity.z *= damp;
+    // Ease the velocity towards the wished direction at WALK_SPEED. Blending by
+    // 1 - exp(-rate * dt) keeps walking speed the same at any frame rate.
+    const blend = 1 - Math.exp(-ACCELERATION_RATE * dt);
+    const targetX = this.enabled && wishLength > 0 ? (wishX / wishLength) * WALK_SPEED : 0;
+    const targetZ = this.enabled && wishLength > 0 ? (wishZ / wishLength) * WALK_SPEED : 0;
+    this.velocity.x += (targetX - this.velocity.x) * blend;
+    this.velocity.z += (targetZ - this.velocity.z) * blend;
 
     // Move one axis at a time so we slide along walls instead of sticking.
     this.position.x += this.velocity.x * dt;

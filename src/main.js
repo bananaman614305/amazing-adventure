@@ -282,7 +282,9 @@ let hudTimer = 0;
 let saveTimer = 0;
 
 function frame() {
-  const dt = Math.min(clock.getDelta(), 0.05);
+  // Clamp the step so a stalled tab cannot teleport the player, but allow up to
+  // 100ms so slow machines still move at the intended speed.
+  const dt = Math.min(clock.getDelta(), 0.1);
   state.clockMinutes = (state.clockMinutes + dt * 0.5) % 1440;
   player.update(dt);
   syncNPCs(npcs, state, dt);
