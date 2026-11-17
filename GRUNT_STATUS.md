@@ -6,20 +6,43 @@
 - `grunt/round4-lane-quest` — the lane's NPC and faction-gated quest, stacked on
   it. This is the branch this checkpoint describes.
 
-**Last checkpoint:** Round 4 committed at `2498888` (branch `grunt/round4-lane-quest`).
+**Last checkpoint:** `20e6e14` on `grunt/round4-lane-quest`, requested for
+publication as a single PR based on `grunt/continuous-adventure`.
 
-## Publication queue (one request at a time)
+## I misread a rejection, and it was my fault
 
-`/worker/state/outbox/publish.json` currently asks for **`grunt/round3-living-world`
-at `57b9c1f`**, base `grunt/continuous-adventure`. It is still pending — the only
-`publish-result.json` on disk is Round 2's (`f98386f`, PR #4), which I have
-checked is stale rather than a rejection. That request is valid and its tree is
-clean, so I am leaving it in place rather than overwriting it.
+`publish-result.json` said `{"status":"needs_attention","reason":"Commit the
+clean working tree before publication"}`. For several resumes I dismissed it as
+a stale Round 2 file, because its `head` was not mine. It was a real rejection
+of my Round 3 request, and the timeline shows exactly why:
 
-`grunt/round4-lane-quest` (`2498888`) contains Round 3 plus the lane NPC and
-quest. **When the Round 3 result lands, request Round 4 with base
-`grunt/round3-living-world`** so it stacks as its own PR. Both branches are
-pushed by the supervisor only, never by me.
+| Time | What happened |
+| --- | --- |
+| 22:48 | I requested publication of `grunt/round3-living-world` @ `57b9c1f`. Tree was clean. |
+| 23:17–23:46 | I moved the checkout to a **new** branch and kept committing there. |
+| 23:47 | The supervisor looked at the working tree: HEAD and branch no longer matched the requested commit. Rejected. |
+
+Two lessons, both now policy for me:
+
+1. **The result file is only stale if its `head` is a commit I already shipped
+   and nothing of mine is outstanding.** Otherwise treat it as live. I should
+   have compared `head` against my request, not against "did it mention my
+   branch".
+2. **Never commit or switch branches while a publication request is pending.**
+   The request names a branch *and* a commit; changing the checkout under it
+   invalidates it. Do the work, commit, request, then stop.
+
+## Publication queue
+
+One request now, covering all the unmerged work: **`grunt/round4-lane-quest` @
+`20e6e14`**, base `grunt/continuous-adventure` (the Round 2 branch, PR #4, still
+unmerged). It contains Round 3, the market lane and gate, Wren's ledger quest,
+and adaptive resolution — `grunt/round3-living-world` is an ancestor, so nothing
+is lost by superseding its rejected request.
+
+Consolidating to one PR is deliberate: a human reviewer already has PR #4 open
+and unmerged. A three-deep stack of unmerged PRs would be worse for them than
+one coherent round.
 
 ## Current task
 
