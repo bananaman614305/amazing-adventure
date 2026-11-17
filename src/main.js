@@ -180,6 +180,9 @@ function advanceConversation() {
     renderConversation();
     return;
   }
+  // At the last line the choice buttons are the only way on. Closing here would
+  // drop the quest choice without recording an outcome.
+  if (activeConversation.choices.length > 0) return;
   closeConversation();
 }
 

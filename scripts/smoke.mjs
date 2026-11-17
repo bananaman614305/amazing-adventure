@@ -317,8 +317,81 @@ check('otherBranch',
   JSON.stringify(sold));
 await other.close();
 
-check('consoleErrors', errors.length === 0 && otherErrors.length === 0,
-  JSON.stringify([...errors, ...otherErrors]));
+// 9. Walk-only play path: no teleporting, only W and E like a real player.
+// This is what a person at the keyboard does, so it catches stuck routes and
+// dialogue that cannot be finished with the keys.
+const walker = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+const walkErrors = [];
+walker.on('pageerror', (err) => walkErrors.push(String(err)));
+await walker.goto(base, { waitUntil: 'networkidle' });
+await walker.evaluate(() => localStorage.removeItem('amazing-adventure-round2'));
+await walker.reload({ waitUntil: 'networkidle' });
+await walker.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 15000 });
+await walker.click('#play');
+await walker.waitForTimeout(400);
+
+async function walkTowards(getTarget) {
+  for (let step = 0; step < 45; step++) {
+    const { x, z, yaw, tx, tz, near } = await walker.evaluate((fn) => {
+      const a = window.amazingAdventure;
+      const t = new Function('a', `return ${fn}`)(a);
+      const p = a.player;
+      return {
+        x: p.position.x, z: p.position.z, yaw: p.yaw,
+        tx: t.x, tz: t.z,
+        near: Math.hypot(t.x - p.position.x, t.z - p.position.z)
+      };
+    }, getTarget);
+    if (near < 1.9) return near;
+    const desired = Math.atan2(-(tx - x), -(tz - z));
+    let delta = desired - yaw;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    await walker.evaluate((y) => { window.amazingAdventure.player.yaw = y; }, yaw + delta * 0.5);
+    await walker.keyboard.down('KeyW');
+    await walker.waitForTimeout(280);
+    await walker.keyboard.up('KeyW');
+    await walker.waitForTimeout(60);
+  }
+  return Infinity;
+}
+
+const lanternTarget = "(() => { const l = a.items.find((i) => i.id === 'brass-lantern'); return { x: l.group.position.x, z: l.group.position.z }; })()";
+const toLantern = await walkTowards(lanternTarget);
+check('walkOnlyItemReach', toLantern < 1.9, `walked to within ${toLantern.toFixed(2)}m of the lantern`);
+await walker.keyboard.press('KeyE');
+await walker.waitForTimeout(300);
+const walkedInv = await walker.evaluate(() => window.amazingAdventure.state.inventory);
+check('walkOnlyPickup', walkedInv.includes('brass-lantern'), `inventory=${walkedInv.join(',') || 'empty'}`);
+
+const maraTarget = "(() => { const n = a.npcs.find((x) => x.id === 'mara'); return { x: n.group.position.x, z: n.group.position.z }; })()";
+const toMara = await walkTowards(maraTarget);
+check('walkOnlyNpcReach', toMara < 2.6, `walked to within ${toMara.toFixed(2)}m of Mara`);
+await walker.keyboard.press('KeyE');
+await walker.waitForTimeout(250);
+for (let i = 0; i < 3; i++) {
+  await walker.keyboard.press('KeyE');
+  await walker.waitForTimeout(140);
+}
+const choicesLeft = await walker.evaluate(() => ({
+  buttons: document.querySelectorAll('#dialogue-choices button').length,
+  open: !document.getElementById('dialogue').hidden
+}));
+check('choiceSurvivesKeyAdvance', choicesLeft.buttons === 2 && choicesLeft.open,
+  `after pressing E through the lines: ${choicesLeft.buttons} choices, dialogue open=${choicesLeft.open}`);
+
+await walker.keyboard.press('Digit1');
+await walker.waitForTimeout(250);
+const walkOutcome = await walker.evaluate(() => ({
+  outcome: window.amazingAdventure.state.quest.outcome,
+  inventory: window.amazingAdventure.state.inventory
+}));
+check('walkOnlyBranch', walkOutcome.outcome === 'restored' && walkOutcome.inventory.includes('fountain-token'),
+  JSON.stringify(walkOutcome));
+await walker.close();
+
+check('consoleErrors', errors.length === 0 && otherErrors.length === 0 && walkErrors.length === 0,
+  JSON.stringify([...errors, ...otherErrors, ...walkErrors]));
 
 await browser.close();
 
