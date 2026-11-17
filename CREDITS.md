@@ -17,6 +17,13 @@ game loads reproducibly.
 The two PNGs in `artifacts/` are browser screenshots of this game, taken with
 Playwright for the Round 1 pull request. They are not game assets.
 
+## Round 3 additions
+
+Round 3 adds no outside assets either. Faction names, reputation tiers, the
+toll quest and every line of ambient NPC dialogue were written for this game.
+The standing panel and overheard-conversation overlay are plain HTML and CSS in
+`index.html`.
+
 ## Round 2 additions
 
 Round 2 adds no outside art either. The north terrace, ramp, parapet, banner,
@@ -37,5 +44,5 @@ drive the host Chrome. The game itself still needs no install, and the browser
 test uses the already-present `/opt/google/chrome/chrome` (override with
 `CHROME_PATH`) rather than downloading a browser.
 
-The `round2-*.png` files in `artifacts/` are real screenshots of this game taken
-by that test. They are not game assets.
+The `round2-*.png` and `round3-*.png` files in `artifacts/` are real screenshots
+of this game taken by that test. They are not game assets.

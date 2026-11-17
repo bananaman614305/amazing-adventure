@@ -3,7 +3,7 @@
 // Uses the host Chrome at $CHROME_PATH (default /opt/google/chrome/chrome) with
 // a private temporary profile, --no-sandbox and --disable-dev-shm-usage, and
 // binds a local game server to 127.0.0.1 on a free port.
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -88,6 +88,30 @@ export async function launchBrowser() {
       await rm(userDataDir, { recursive: true, force: true });
     }
   };
+}
+
+/**
+ * Where screenshots go.
+ *
+ * By default a test run writes to a throwaway directory. That matters because
+ * the committed `artifacts/*.png` are evidence for a pull request: re-running a
+ * test must never dirty the working tree, or a clean-tree publication check
+ * fails for no gameplay reason. Pass `RECORD_ARTIFACTS=1` (or an explicit
+ * SCREENSHOT_DIR) to refresh the committed evidence on purpose.
+ */
+export async function screenshotDir() {
+  if (process.env.SCREENSHOT_DIR) {
+    const dir = resolve(process.env.SCREENSHOT_DIR);
+    await mkdir(dir, { recursive: true });
+    return dir;
+  }
+  if (process.env.RECORD_ARTIFACTS === '1') {
+    const dir = resolve(ROOT, 'artifacts');
+    await mkdir(dir, { recursive: true });
+    return dir;
+  }
+  const dir = await mkdtemp(join(tmpdir(), 'amazing-adventure-shots-'));
+  return dir;
 }
 
 /** A tiny assertion collector so every check reports PASS/FAIL explicitly. */

@@ -36,7 +36,7 @@ Grunt builds the game in rounds. Each round leaves a playable game that is deepe
 
 Every round ends with a pull request that Grunt has tested in a real browser, with screenshots.
 
-## Run it (Round 2)
+## Run it (Round 3)
 
 One command starts the game:
 
@@ -72,6 +72,43 @@ npm run test:browser   # drives the real game in headless Chrome, writes artifac
 - Use one account per free provider. Never make duplicate accounts.
 - Every asset must have a license that allows its use, and be credited.
 - Each round must leave the game playable.
+
+## Round 3 — a living world
+
+Round 3 gives the plaza memory with consequences and lets its people talk to
+each other.
+
+- **Factions and reputation.** The Keepers, the Market and the Watch each track
+  standing from -100 to 100 across five tiers (Hostile, Cold, Neutral, Warm,
+  Trusted). Your faction standing combines with each NPC's personal opinion of
+  you, and NPC greetings change accordingly — a Trusted Mara talks differently
+  to a Hostile one.
+- **Choices pull two ways.** Delivering the lantern oil pleases the Keepers; if
+  you paid with a promise instead of coins, the Market cools until Halden's
+  voucher repairs it. Pip's favour earns Market goodwill.
+- **The Market Toll.** A fourth quest, gated on returning Halden's key. You
+  either pay Oswin's outstanding toll (Watch +20, Market -15) or talk Halden
+  into waiving it, which needs Warm standing with the Watch (Market +20,
+  Watch -10). The two resolutions are mutually exclusive, and the standing
+  panel shows the result.
+- **NPCs talk to each other.** Nearby NPCs occasionally strike up an exchange
+  drawn from a state-aware script bank: they gossip about an unpaid debt, the
+  toll, the lanterns or the hour. Walk close and you overhear it on screen;
+  walk away and it fades. The scripts are deterministic from game state, so they
+  are testable and never desynchronise a save.
+
+### Round 3 files
+
+| File | What it holds |
+| --- | --- |
+| `src/factions.js` | Faction data, reputation scoring, tiers, NPC standing, rival reactions. Pure. |
+| `src/ambient.js` | Pair selection, script bank and exchange building for NPC-to-NPC talk. Pure. |
+
+### Testing note
+
+Browser tests now write screenshots to a throwaway directory by default, so a
+verification run can never dirty the committed `artifacts/` evidence. Pass
+`RECORD_ARTIFACTS=1` to refresh the committed screenshots on purpose.
 
 ## Round 2 — people and quests
 

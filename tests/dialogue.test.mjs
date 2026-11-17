@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 
 import {
   createInitialState, questStatus, startLanterns, buyOilWithCoins,
-  buyOilWithPromise, startKey, pickUpKey, startCheer, watchLanterns,
+  buyOilWithPromise, deliverOil, startKey, pickUpKey, returnKey,
+  startCheer, watchLanterns, tellPipAboutLanterns,
+  startToll, collectToll, waiveToll, finishToll,
   hasItem, coins
 } from '../src/state.js';
 import { startConversation, applyChoice, DIALOGUE } from '../src/dialogue.js';
@@ -167,10 +169,19 @@ const STATES = [
   ['key found', (s) => { startKey(s); pickUpKey(s); }],
   ['cheer started', startCheer],
   ['cheer watched', (s) => { startCheer(s); watchLanterns(s, 'dusk'); }],
+  ['key returned', (s) => { startKey(s); pickUpKey(s); returnKey(s); }],
+  ['toll started', (s) => { startKey(s); pickUpKey(s); returnKey(s); startToll(s); }],
+  ['toll collected', (s) => {
+    startKey(s); pickUpKey(s); returnKey(s); startToll(s); collectToll(s);
+  }],
+  ['toll waived', (s) => {
+    startKey(s); pickUpKey(s); returnKey(s); startToll(s); waiveToll(s, 'warm');
+  }],
   ['everything', (s) => {
-    startLanterns(s); buyOilWithPromise(s);
-    startKey(s); pickUpKey(s);
-    startCheer(s); watchLanterns(s, 'dusk');
+    startLanterns(s); buyOilWithPromise(s); deliverOil(s);
+    startKey(s); pickUpKey(s); returnKey(s);
+    startCheer(s); watchLanterns(s, 'dusk'); tellPipAboutLanterns(s);
+    startToll(s); waiveToll(s, 'warm'); finishToll(s);
   }]
 ];
 
@@ -215,7 +226,8 @@ test('applying every choice in every state never throws or corrupts state', () =
         const parsed = JSON.parse(JSON.stringify(state));
         assert.ok(parsed.quests, `${label}/${npcId}#${index} keeps quests`);
         for (const value of Object.values(state.quests)) {
-          assert.ok(['none', 'done', 'started', 'oil_bought', 'found', 'watched'].includes(value),
+          assert.ok(['none', 'done', 'started', 'oil_bought', 'found', 'watched',
+            'collected', 'waived', 'delivered'].includes(value),
             `${label}/${npcId}#${index} keeps valid quest steps (saw ${value})`);
         }
       }

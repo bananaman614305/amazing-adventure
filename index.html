@@ -110,6 +110,32 @@
     #quest-tracker .quest .text { color: #c7d4e4; }
     #quest-tracker .empty { color: #8698ae; font-style: italic; }
 
+    #overheard {
+      position: fixed;
+      left: 50%;
+      bottom: 24%;
+      transform: translateX(-50%);
+      width: min(620px, calc(100vw - 40px));
+      padding: 12px 18px;
+      border-radius: 12px;
+      background: rgba(9, 15, 25, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      pointer-events: none;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    #overheard .overheard-label {
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #8698ae;
+      margin-bottom: 6px;
+    }
+    #overheard .overheard-line { margin-bottom: 3px; color: #c7d4e4; }
+    #overheard .overheard-line:last-child { margin-bottom: 0; }
+    #overheard .overheard-line b { color: #ffd479; font-weight: 600; }
+    #overheard .overheard-line.speaking { color: #fff; }
+
     #toast-stack {
       position: fixed;
       left: 50%;
@@ -209,6 +235,19 @@
     #panel .journal-title { color: #ffd479; font-weight: 600; }
     #panel .journal-title.done { color: #8fd49a; }
     #panel .muted { color: #8698ae; font-style: italic; }
+    #panel .standing-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    #panel .standing-name { color: #c7d4e4; }
+    #panel .standing-tier { font-weight: 600; }
+    #panel .tier-hostile { color: #e06c6c; }
+    #panel .tier-cold { color: #d9a06a; }
+    #panel .tier-neutral { color: #8698ae; }
+    #panel .tier-warm { color: #ffd479; }
+    #panel .tier-trusted { color: #8fd49a; }
 
     #overlay {
       position: fixed;
@@ -275,6 +314,13 @@
     <ul id="inventory-list"></ul>
     <h3>Journal</h3>
     <ul id="journal-list"></ul>
+    <h3>Standing</h3>
+    <ul id="standing-list"></ul>
+  </div>
+
+  <div id="overheard" hidden>
+    <div class="overheard-label">Overheard</div>
+    <div id="overheard-lines"></div>
   </div>
 
   <div id="toast-stack"></div>

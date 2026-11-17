@@ -1,102 +1,98 @@
 # Grunt status — Amazing Adventure
 
-**Branch:** `grunt/continuous-adventure` (stacked on the Round 1 seed commit `afaf355`)
-**Last checkpoint:** Round 2 complete, tested and committed as `69d08f4`
-(publish requested for that HEAD; earlier Round 2 commit was `963ccb7`).
+**Branch:** `grunt/round3-living-world`, stacked on the published Round 2 HEAD
+`f98386f` (PR #4, confirmed published).
+**Last checkpoint:** Round 3 implemented, tested and committed.
 
 ## Current task
 
-Round 2 — "People and quests" — is finished, tested and committed. The game is
-playable end to end: walking, five NPCs with routines and memory, a branching
-questline with real consequences, two more quests, an inventory, a journal, a
-day/dusk/night cycle and save/load.
+Round 3 — "a living world" — factions with reputation, choices that pull two
+ways, a fourth quest that forces a side, and NPCs who talk to each other while
+the player can overhear them.
+
+## Round 2 publication (resolved)
+
+The earlier `needs_attention` result was correct and my fault: my final
+verification run had regenerated the committed screenshots, so the tree was
+dirty at the publish HEAD. I restored the artifacts, confirmed a clean tree, and
+the supervisor published:
+
+    {"status":"published","head":"f98386f","branch":"grunt/continuous-adventure",
+     "pullRequest":4,"url":".../pull/4"}
+
+PR #4 is left open for the human. Round 3 continues on a new stacked branch
+rather than waiting for it to merge.
 
 ## Decisions made this round
 
-- Kept Round 1's code-generated art direction; no outside assets, so CREDITS
-  still lists Three.js only.
-- Split all story/quest/day/save logic into Three-free modules (`state.js`,
-  `dialogue.js`, `daynight.js`, `terrain.js`) so the whole narrative can be
-  tested in Node without a browser. `world.js`/`npcs.js`/`main.js` stay as the
-  view layer.
-- Dialogue is data with `do`/`next`/`end` choices rather than branching code, so
-  a test can walk every reachable node.
-- The oil quest branches on money versus a promise, and the promise has a
-  lasting cost (Oswin's debt) that other dialogue reacts to and the player can
-  settle. This is the first choice with consequences.
-- Made Pip's quest require a real world action (standing on the north terrace
-  during dusk) so quests are not all dialogue-only.
-- Replaced the Round 1 `scripts/smoke.mjs` with a shared harness
-  (`scripts/browser.mjs`) and a Round 2 test that plays the game through the DOM.
-- Saves are hardened: any unreadable or partially invalid save is ignored or
-  sanitised, and blocked storage falls back to memory rather than breaking.
-- The dev server now binds `127.0.0.1` by default.
+- Reputation is a *second* axis alongside the existing per-NPC opinion, not a
+  replacement. `npcStanding` = faction score + (personal opinion × 10), clamped,
+  so one good conversation cannot outshout a whole faction.
+- Factions react in opposition. Paying the toll pleases the Watch and angers the
+  Market; waiving it does the reverse. This is the concrete way "choices affect
+  one another" ships this round instead of being described.
+- The toll quest is gated on returning Halden's key, so reputation progression
+  is sequential rather than a menu of free options.
+- Waiving the toll requires Warm standing with the Watch. It is a *check*, not a
+  dice roll, and it is tested — talking is not a get-out-of-jail card.
+- Ambient NPC dialogue is deterministic from `(state, phase, pair)`. No
+  `Math.random` in the sim, so saves stay consistent and the whole system is
+  unit-testable. The occasional/random *timing* is a hash of the pair and clock.
+- Fixed the artifact trap from last round at the source: browser tests now write
+  to a temp directory unless `RECORD_ARTIFACTS=1` is set.
 
-## Completed checks (all run this round, real results)
+## Completed checks (real results this round)
 
-- `npm test` — **58/58 pass** (`node --test tests/*.test.mjs`): quest state
-  transitions, both oil-payment branches, the debt and its settlement, key
-  pickup/return, the dusk-only rule, inventory, journal counts, NPC memory
-  clamping, save round-trips, corrupt/invalid saves, storage fallback, every
-  reachable dialogue node across 9 quest states, ramp profile and terrace maths,
-  clock phases and labels.
-- `npm run test:browser` — **45/45 pass**, exit 0. Headless Chrome
-  (`/opt/google/chrome/chrome`) with a private temp profile, `--no-sandbox`,
-  `--disable-dev-shm-usage`, server on a free loopback port. It plays the full
-  lantern quest (promise branch), Halden's key (world pickup, hint, return),
-  Pip's dusk quest (grass attempt rejected, terrace attempt accepted), checks
-  the ramp raises the player to y=2.90 and that the terrace side wall stops
-  them, checks dialogue freezes movement, the day/dusk/night looks, NPC
-  routines, save then reload then Continue restoring quests/inventory/coins/
-  position/time, the final journal, the bench rest, and keyboard dialogue
-  navigation. No console errors.
-- Screenshots saved as real browser captures in `artifacts/`:
-  `round2-plaza-day.png`, `round2-dusk.png`, `round2-night-plaza.png`,
-  `round2-dialogue-mara.png`, `round2-dialogue-oswin.png`,
-  `round2-key-pickup.png`, `round2-journal.png`, `round2-journal-final.png`.
-  I verified their pixel statistics differ per phase (day sky blue, dusk warm
-  orange, night navy) — I did not and cannot visually inspect images.
+- `npm test` — **98/98 pass** (was 58 at Round 2 start). New coverage:
+  `tests/factions.test.mjs` (24 cases: clamping, tier boundaries, NPC standing
+  math, rival news, every quest's reputation outcome, the toll dilemma's
+  mutual exclusivity and gating, greeting grammar, save round-trip and corrupt
+  reputation) and `tests/ambient.test.mjs` (13 cases: pair selection, range and
+  proximity rules, exclusion of busy NPCs, determinism, script choice per quest
+  outcome and phase, earshot, exchange counting).
+- `npm run test:browser` — **50/50 pass, exit 0** in real headless Chrome with a
+  private temp profile. Round 2's 45 checks still pass, plus 5 new ones:
+  reputation earned from quest outcomes, the standing panel listing three
+  factions with tiers, the toll dilemma shifting two factions in opposite
+  directions, an overheard exchange rendering for a nearby player, and that text
+  hiding when the player walks away. No console errors.
+- Screenshots: `artifacts/round3-overheard.png` and
+  `artifacts/round3-standing.png` are new, real captures. Round 2's screenshots
+  are byte-identical to what PR #4 carries (restored after the recording run).
+  Verified programmatically at 1280×800 with 496 and 614 distinct sampled
+  colours respectively. I did not visually inspect them.
 
-## Bugs found and fixed (by my own tests, this round)
+## Bugs found and fixed this round
 
-1. `createSaveStore` used a supplied storage backend without probing it, so a
-   throwing/blocked backend crashed instead of falling back.
-2. Mara's oil-delivery dialogue passed arguments to `node()` in the wrong order.
-3. Oswin's debt could only be settled after the lantern quest completed, not
-   while it was still active.
-4. Sable existed as an NPC but had no dialogue at all.
-5. The terrace ramp rose sideways out of the plaza; rebuilt as a northward ramp
-   and added step-height blocking so the 1.2m side cannot be walked up.
-6. Sable's spot overlapped the bench, so the bench was unreachable.
-7. Movement continued while dialogue was open; the player now freezes.
-8. Found later in review: with the pointer locked, mouse clicks could never
-   reach the dialogue choice buttons although the footer advertised clicking.
-   Choices now have a visible keyboard highlight (W/S or arrows, E/Enter/1-5)
-   and a click handler that works when paused; covered by three new checks.
+1. `allStandings()` used `tier` for a different key than `reputationView()`, so
+   the HUD view and the NPC view disagreed. Both now return `{ tier, tierName }`.
+2. Reputation greetings had three separate grammar defects — "TheKeepers"
+   (missing space), "Every Keepers eye" (wrong number) and "for watch" (missing
+   article, plus "The watch are" with a plural verb). Fixed with explicit
+   `member`/`collective` noun fields per faction and tested for all three
+   factions at all five tiers.
+3. The toll's pay option could not be reached without leaving and re-entering
+   the conversation; both resolutions are now offered in one exchange.
+4. The overheard overlay never re-rendered when the player walked out of
+   earshot, so text lingered. Earshot is now checked every frame.
+5. Running the browser test rewrote committed screenshots and dirtied the tree
+   (the cause of the Round 2 publish rejection). Fixed with a temp-dir default.
 
 ## Known limitations / remaining issues
 
-- One courtyard area only. Round 3 needs connected areas.
-- Nobody talks to anyone else yet; NPC-to-NPC conversation is not started.
-- Reputation is only per-NPC opinion (-3..3); there are no factions yet.
-- No trading UI beyond the fixed oil price, no persuasion checks, no combat.
-- No sound or music.
-- The terrace is climbable but has little on it besides the view.
-- The renderer runs at only a few fps under software rasterisation in the test
-  environment; not measured on real GPU hardware.
-- `puppeteer-core` is a dev dependency only; the game itself still needs no
-  install. The browser test needs `npm install` and the host Chrome.
+- Still one courtyard. Connected areas (the market lane past the north gate) are
+  the biggest remaining Round 3 gap.
+- Factions do not yet *lock* content: no quest is refused purely for low
+  standing, and there is no faction-exclusive item or ending.
+- Ambient conversations are short (2–3 lines) and always between fixed pairs.
+- No trading UI beyond fixed prices, no persuasion mechanic, no combat, no sound.
+- Reputation currently only moves through quests, not through ambient choices.
+- Only a few fps under software rasterisation in this environment; not measured
+  on real GPU hardware.
 
-## Publication state
+## Next task
 
-`/worker/state/outbox/publish.json` asks for `grunt/continuous-adventure` based
-on `feature/corner-5a4c38eae323` at HEAD `69d08f4`, working tree clean. No
-`publish-result.json` had appeared at this checkpoint, so publication is
-**requested but not yet confirmed**.
-
-## Next task (Round 3 direction)
-
-A living world: a second connected area reached from the plaza (e.g. the market
-lane through the north gate opened with Halden's key), factions with reputation
-that changes dialogue, and NPC-to-NPC conversations the player can overhear.
-Keep every new system pure-testable where possible and extend both test suites.
+Add a second connected area reached through the north gate (opened by returning
+Halden's key), with its own NPC and a faction-locked quest, and let reputation
+refuse or unlock that content. Keep new logic in pure modules with tests, and
+extend the browser suite for the new area's collision and interaction.

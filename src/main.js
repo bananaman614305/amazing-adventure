@@ -14,6 +14,14 @@ import {
   questCounts
 } from './state.js';
 import { startConversation, applyChoice } from './dialogue.js';
+import { reputationView } from './factions.js';
+import {
+  chooseAmbientPair,
+  buildExchange,
+  canOverhear,
+  noteExchange,
+  AMBIENT_CHANCE
+} from './ambient.js';
 import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
 import { onTerrace } from './terrain.js';
 
@@ -35,6 +43,9 @@ const questList = $('quest-list');
 const panel = $('panel');
 const inventoryList = $('inventory-list');
 const journalList = $('journal-list');
+const standingList = $('standing-list');
+const overheardEl = $('overheard');
+const overheardLines = $('overheard-lines');
 const toastStack = $('toast-stack');
 const dialogueEl = $('dialogue');
 const dialogueName = $('dialogue-name');
@@ -131,6 +142,16 @@ function refreshHUD() {
         .map((entry) => `<li><span class="journal-title${entry.done ? ' done' : ''}">${escapeHtml(entry.title)}</span><br>${escapeHtml(entry.text)}</li>`)
         .join('')
     : '<li class="muted">No quests started.</li>';
+
+  standingList.innerHTML = reputationView(state)
+    .map((faction) => `<li class="standing-row">
+      <span class="standing-name">${escapeHtml(faction.name)}</span>
+      <span class="standing-tier tier-${faction.tier}">${escapeHtml(faction.tierName)}${
+        faction.score === 0 ? '' : ` ${faction.score > 0 ? '+' : ''}${faction.score}`
+      }</span>
+    </li>`)
+    .join('');
+  standingList.dataset.tiers = reputationView(state).map((f) => f.tier).join(',');
 }
 
 function escapeHtml(text) {
@@ -431,6 +452,128 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+// --- Ambient conversations -----------------------------------------------
+// Two nearby NPCs occasionally strike up an exchange. The player can walk over
+// and overhear it. The exchange itself is pure data from ambient.js; this is
+// only the timing and display.
+const ambient = {
+  lines: [],
+  index: 0,
+  timer: 0,
+  speakerIds: [],
+  cooldown: 4,
+  nextPairCheck: 0
+};
+
+function ambientBusyIds() {
+  return ambient.lines.length ? ambient.speakerIds : [];
+}
+
+function resetAmbient() {
+  ambient.lines = [];
+  ambient.index = 0;
+  ambient.speakerIds = [];
+  ambientElHide();
+}
+
+function ambientElHide() {
+  overheardEl.hidden = true;
+  overheardLines.innerHTML = '';
+}
+
+/** Starts an exchange between the pair ambient.js picks for this moment. */
+function maybeStartAmbient(dt) {
+  if (ambient.lines.length) return;
+  if (ambient.cooldown > 0) {
+    ambient.cooldown = Math.max(0, ambient.cooldown - dt);
+    return;
+  }
+  ambient.nextPairCheck -= dt;
+  if (ambient.nextPairCheck > 0) return;
+  ambient.nextPairCheck = 1.2;
+
+  if (activeNPC) return; // do not talk over the player's own conversation
+  const snapshot = npcs.map((npc) => ({
+    id: npc.id,
+    name: npc.name,
+    position: { x: npc.group.position.x, z: npc.group.position.z }
+  }));
+  const pair = chooseAmbientPair({
+    npcs: snapshot,
+    state,
+    phase: currentPhase,
+    playerPosition: player.position,
+    busyIds: ambientBusyIds(),
+    activeId: activeNPC?.id ?? null
+  });
+  if (!pair) return;
+
+  // A little deliberate chance so conversations feel occasional, not scripted.
+  ambient.nextPairCheck = 1.2;
+  if (deterministicChance(`${pair.a.id}|${pair.b.id}|${Math.floor(clockSeconds)}`) > AMBIENT_CHANCE) return;
+
+  const names = Object.fromEntries(npcs.map((npc) => [npc.id, npc.name]));
+  ambient.lines = buildExchange({ state, phase: currentPhase, a: pair.a, b: pair.b, names });
+  ambient.speakerIds = [pair.a.id, pair.b.id];
+  ambient.index = 0;
+  ambient.timer = 0;
+  noteExchange(state, pair.a.id, pair.b.id);
+  renderAmbient();
+}
+
+/** A stable pseudo-random 0..1 value, so the sim is reproducible from a save. */
+function deterministicChance(seed) {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) % 10000) / 10000;
+}
+
+function advanceAmbient(dt) {
+  if (!ambient.lines.length) return;
+  ambient.timer += dt;
+
+  // Re-check earshot every tick so walking away hides the text immediately and
+  // walking back brings it in again, rather than waiting for the next line.
+  const line = ambient.lines[ambient.index];
+  const speaker = line ? npcs.find((npc) => npc.id === line.speakerId) : null;
+  const inEarshot = !speaker || canOverhear(speaker.group.position, player.position);
+  if (!inEarshot) {
+    ambientElHide();
+  } else if (overheardEl.hidden || !overheardLines.innerHTML) {
+    renderAmbient();
+  }
+
+  if (ambient.timer < 2.4) return;
+  ambient.timer = 0;
+  ambient.index += 1;
+  if (ambient.index >= ambient.lines.length) {
+    resetAmbient();
+    ambient.cooldown = 8;
+    return;
+  }
+  renderAmbient();
+}
+
+function renderAmbient() {
+  const line = ambient.lines[ambient.index];
+  if (!line) return ambientElHide();
+  const speaker = npcs.find((npc) => npc.id === line.speakerId);
+  const position = speaker ? speaker.group.position : null;
+  if (position && !canOverhear(position, player.position)) {
+    // Out of earshot: keep the conversation running but hide the text.
+    ambientElHide();
+    return;
+  }
+  overheardEl.hidden = !player.enabled;
+  overheardLines.innerHTML = ambient.lines
+    .slice(0, ambient.index + 1)
+    .map((entry, index) => `<div class="overheard-line${index === ambient.index ? ' speaking' : ''}"><b>${escapeHtml(entry.speakerName)}</b> — ${escapeHtml(entry.text)}</div>`)
+    .join('');
+}
+
 // --- Loop ----------------------------------------------------------------
 const clock = new THREE.Clock();
 let hudTimer = 0;
@@ -443,6 +586,8 @@ function frame() {
   syncPhase();
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
+  maybeStartAmbient(dt);
+  advanceAmbient(dt);
 
   for (const npc of npcs) {
     const near = nearestInteractable?.npc === npc;
@@ -497,7 +642,10 @@ window.amazingAdventure = {
   },
   restOnBench,
   refreshHUD,
+  ambient,
   isDialogueOpen: () => !dialogueEl.hidden,
+  resetAmbient,
+  renderAmbient,
   getDialogue: () => (activeNode ? { speaker: activeNode.speaker, text: activeNode.text, choices: activeNode.choices?.map((c) => c.label) ?? [] } : null),
   choose: (index) => choose(index),
   KEY_SPOT,

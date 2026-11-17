@@ -1,13 +1,12 @@
 // Round 2 browser test: drives the real page in headless Chrome and plays the
 // full quest chain through the DOM, then checks save/load and the day cycle.
 // Run: npm run test:browser
-import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { startServer, launchBrowser, createChecks } from './browser.mjs';
+import { startServer, launchBrowser, createChecks, screenshotDir } from './browser.mjs';
 
-const ROOT = resolve(import.meta.dirname, '..');
-const outDir = resolve(ROOT, 'artifacts');
-await mkdir(outDir, { recursive: true });
+// Screenshots go to a throwaway directory unless RECORD_ARTIFACTS=1, so a
+// verification run never dirties the committed artifacts/ evidence.
+const outDir = await screenshotDir();
 
 const checks = createChecks();
 
@@ -483,7 +482,99 @@ try {
   const rested = await page.evaluate(() => window.amazingAdventure.getClock());
   checks.check('resting on the bench skips to the next phase', rested.phase === 'dusk', JSON.stringify(rested));
 
-  // --- 13. Final screenshots ----------------------------------------
+  // --- 13. Reputation from quest outcomes ---------------------------
+  const repAfterQuests = await page.evaluate(() => {
+    const state = window.amazingAdventure.getState();
+    return {
+      reputation: state.reputation,
+      standingText: document.getElementById('standing-list').textContent,
+      tiers: document.getElementById('standing-list').dataset.tiers
+    };
+  });
+  checks.check('completing quests earned faction reputation',
+    repAfterQuests.reputation.keepers > 0 && repAfterQuests.reputation.trade > 0,
+    JSON.stringify(repAfterQuests.reputation));
+  checks.check('the standing panel lists all three factions with tiers',
+    /Keepers/.test(repAfterQuests.standingText) && /Market/.test(repAfterQuests.standingText) &&
+    /Watch/.test(repAfterQuests.standingText) &&
+    repAfterQuests.tiers.split(',').length === 3,
+    JSON.stringify(repAfterQuests.tiers));
+
+  // --- 14. The Market Toll dilemma ----------------------------------
+  // Start from a clean save-free state so the toll gating is testable.
+  await page.evaluate(() => {
+    localStorage.clear();
+    window.amazingAdventure.saves.clear();
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await page.click('#play');
+  await new Promise((r) => setTimeout(r, 400));
+
+  // Returning the key is the gate for the toll quest.
+  const tollFlow = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const state = api.getState();
+    // Drive the same state functions the dialogue uses, through the UI layer.
+    const { startKey, pickUpKey, returnKey, startToll, collectToll, finishToll } = await import('./src/state.js');
+    startKey(state); pickUpKey(state); returnKey(state);
+    const gatedBefore = startToll(state).changed;
+    collectToll(state);
+    const afterCollect = { ...state.reputation };
+    finishToll(state);
+    api.refreshHUD();
+    return { gatedBefore, afterCollect, status: state.quests.toll };
+  });
+  checks.check('the toll quest is gated and its outcome shifts two factions',
+    tollFlow.gatedBefore === true && tollFlow.status === 'done' &&
+    tollFlow.afterCollect.watch > 0 && tollFlow.afterCollect.trade < 0,
+    JSON.stringify(tollFlow));
+
+  // --- 15. Overheard NPC conversation -------------------------------
+  const ambient = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const { buildExchange, scriptKeyFor } = await import('./src/ambient.js');
+    const state = api.getState();
+    api.resetAmbient();
+    // Force a specific pair through the same code the game uses.
+    const mara = api.npcs.find((n) => n.id === 'mara');
+    const halden = api.npcs.find((n) => n.id === 'halden');
+    const names = Object.fromEntries(api.npcs.map((n) => [n.id, n.name]));
+    const lines = buildExchange({
+      state,
+      phase: api.getClock().phase,
+      a: { id: mara.id },
+      b: { id: halden.id },
+      names
+    });
+    // Play it into the live ambient state so the UI renders it.
+    api.ambient.lines = lines;
+    api.ambient.speakerIds = [mara.id, halden.id];
+    api.ambient.index = 0;
+    // Put the player near enough to overhear.
+    api.player.placeAt(mara.group.position.x + 1.2, mara.group.position.z + 1.2, 0, 0);
+    // Render the exchange exactly as the game does when a conversation starts.
+    api.renderAmbient();
+    return { lines: lines.length, key: scriptKeyFor(state, api.getClock().phase), text: lines[0].text };
+  });
+  // Render by waiting a frame with the player nearby.
+  await new Promise((r) => setTimeout(r, 900));
+  const overheardShown = await page.evaluate(() => ({
+    hidden: document.getElementById('overheard').hidden,
+    text: document.getElementById('overheard-lines').textContent
+  }));
+  checks.check('an overheard NPC exchange renders for a nearby player',
+    ambient.lines >= 2 && !overheardShown.hidden && overheardShown.text.length > 10,
+    `${ambient.lines} lines, key=${ambient.key}, shown=${JSON.stringify(overheardShown.text.slice(0, 70))}`);
+  await page.screenshot({ path: resolve(outDir, 'round3-overheard.png') });
+
+  // Walking away hides the text but does not crash.
+  await page.evaluate(() => window.amazingAdventure.player.placeAt(14, 14, 0, 0));
+  await new Promise((r) => setTimeout(r, 700));
+  const farAway = await page.evaluate(() => document.getElementById('overheard').hidden);
+  checks.check('overheard text hides when the player walks away', farAway === true);
+
+  // --- 16. Final screenshots ----------------------------------------
   await page.evaluate(() => {
     window.amazingAdventure.setClock(20);
     window.amazingAdventure.player.placeAt(2, 12, 0.2, -0.04);
@@ -496,11 +587,24 @@ try {
   });
   await new Promise((r) => setTimeout(r, 900));
   await page.screenshot({ path: resolve(outDir, 'round2-night-plaza.png') });
+
+  // Standing panel and reputation, for the record.
+  await page.evaluate(() => {
+    window.amazingAdventure.setClock(80);
+    window.amazingAdventure.player.placeAt(-2, 12, 0.3, -0.03);
+    document.getElementById('panel').hidden = false;
+    window.amazingAdventure.refreshHUD();
+  });
+  await new Promise((r) => setTimeout(r, 700));
+  await page.screenshot({ path: resolve(outDir, 'round3-standing.png') });
 } finally {
   await close();
   await server.stop();
 }
 
 checks.print();
-console.log(`\nscreenshots: ${outDir}/round2-*.png`);
+console.log(`\nscreenshots: ${outDir}/round2-*.png, round3-*.png`);
+if (process.env.RECORD_ARTIFACTS !== '1' && !process.env.SCREENSHOT_DIR) {
+  console.log('(temporary directory — set RECORD_ARTIFACTS=1 to refresh artifacts/)');
+}
 process.exit(checks.failed ? 1 : 0);

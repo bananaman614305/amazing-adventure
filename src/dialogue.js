@@ -19,8 +19,36 @@ import {
   returnKey,
   startCheer,
   tellPipAboutLanterns,
+  startToll,
+  collectToll,
+  waiveToll,
+  finishToll,
+  TOLL_COST,
   remember
 } from './state.js';
+import { npcTier, npcStanding, FACTIONS, NPC_FACTION } from './factions.js';
+
+/**
+ * A one-line greeting suffix that reflects how the NPC's faction currently
+ * sees the player. Returns '' at neutral so ordinary lines stay unchanged.
+ */
+function standingGreeting(state, npcId) {
+  const tier = npcTier(state, npcId).id;
+  const faction = FACTIONS[NPC_FACTION[npcId]];
+  if (!faction) return '';
+  switch (tier) {
+    case 'hostile':
+      return ` Every ${faction.member} in this plaza has heard of you, and none of it is kind.`;
+    case 'cold':
+      return ` Word travels, and the ${faction.collective} have been careful around you since.`;
+    case 'warm':
+      return ` ${faction.name} are saying good things about you.`;
+    case 'trusted':
+      return ` You have done enough for the ${faction.collective} that nobody questions you now.`;
+    default:
+      return '';
+  }
+}
 
 const node = (speaker, text, choices = []) => ({ speaker, text, choices });
 
@@ -89,7 +117,9 @@ const mara = {
 
     return node(
       'Mara the Keeper',
-      mem.talks > 0 ? 'Back again. The lanterns still need oil, if you are offering.' : 'You came on foot? Nobody walks the north road this late.',
+      mem.talks > 0
+        ? `Back again. The lanterns still need oil, if you are offering.${standingGreeting(state, 'mara')}`
+        : `You came on foot? Nobody walks the north road this late.${standingGreeting(state, 'mara')}`,
       [
         {
           label: 'The lanterns look low. What is wrong?',
@@ -150,7 +180,9 @@ const oswin = {
 
     return node(
       'Oswin the Trader',
-      mem.talks > 0 ? 'Still browsing? Everything is for sale twice over.' : 'Stall is open. Everything worth having is worth haggling for.',
+      mem.talks > 0
+        ? `Still browsing? Everything is for sale twice over.${standingGreeting(state, 'oswin')}`
+        : `Stall is open. Everything worth having is worth haggling for.${standingGreeting(state, 'oswin')}`,
       [
         { label: 'Do you have lantern oil?', next: () => node('Oswin the Trader', 'Always. Bring Mara’s name and I will even be polite about the price.') },
         { label: 'Ask about Halden.', next: () => node('Oswin the Trader', 'The guard? Lost his gate key again, I hear. Careless man for someone who watches doors.') },
@@ -195,7 +227,9 @@ const pip = {
 
     return node(
       'Pip',
-      mem.talks > 0 ? 'Back again! You never come when there is anything to see.' : 'Have you seen the lanterns at dusk? That is the whole reason to live here.',
+      mem.talks > 0
+        ? `Back again! You never come when there is anything to see.${standingGreeting(state, 'pip')}`
+        : `Have you seen the lanterns at dusk? That is the whole reason to live here.${standingGreeting(state, 'pip')}`,
       [
         {
           label: 'What is so special about the lanterns?',
@@ -239,6 +273,7 @@ const halden = {
     if (status === 'done') {
       return node('Halden the Guard', 'Gate is locked proper again. Much obliged.', [
         { label: 'Who else has a key?', next: () => node('Halden the Guard', 'Mara, the captain, and me. That is the whole list, and it stays that way.') },
+        tollChoice(state),
         end('Leave')
       ]);
     }
@@ -252,7 +287,9 @@ const halden = {
 
     return node(
       'Halden the Guard',
-      mem.talks > 0 ? 'Still here. Still guarding.' : 'Keep off the walls and we will get along fine.',
+      mem.talks > 0
+        ? `Still here. Still guarding.${standingGreeting(state, 'halden')}`
+        : `Keep off the walls and we will get along fine.${standingGreeting(state, 'halden')}`,
       [
         {
           label: 'You look like you lost something.',
@@ -268,6 +305,90 @@ const halden = {
     );
   }
 };
+
+// --- The Market Toll dialogue -------------------------------------------
+// Halden offers the toll once he trusts you with the key. Both resolutions are
+// on the table at once, and the player can only take one: that is the point.
+
+function tollChoice(state) {
+  const status = questStatus(state, 'toll');
+
+  if (status === 'none') {
+    return {
+      label: 'Ask about the gate toll.',
+      next: () => node(
+        'Halden the Guard',
+        'Oswin has not paid the gate toll in three weeks. Fetch the money, or talk me into letting it go. Your choice.',
+        [
+          {
+            label: 'I will get your toll.',
+            do: () => ({ ...startToll(state), topic: 'toll', opinion: 1 }),
+            // Stay in the conversation and offer the decision straight away.
+            next: () => tollOptionsNode(state)
+          },
+          {
+            label: 'What if I argued for him instead?',
+            do: () => ({ ...startToll(state), topic: 'toll', opinion: 0 }),
+            next: () => tollOptionsNode(state)
+          },
+          end('Later')
+        ]
+      )
+    };
+  }
+
+  if (status === 'started') {
+    return { label: 'About Oswin’s toll.', next: () => tollOptionsNode(state) };
+  }
+
+  if (status === 'collected') {
+    return {
+      label: 'Hand over the toll money.',
+      do: () => ({ ...finishToll(state), topic: 'toll_paid', opinion: 1 }),
+      next: () => node('Halden the Guard', 'Counted and logged. The Watch remembers who squares up.')
+    };
+  }
+
+  if (status === 'waived') {
+    return {
+      label: 'Tell Halden the toll is settled.',
+      do: () => ({ ...finishToll(state), topic: 'toll_settled', opinion: 0 }),
+      next: () => node('Halden the Guard', 'Waived and witnessed. You are collecting favours like a trader. Be careful whose.')
+    };
+  }
+
+  return {
+    label: 'About the toll.',
+    next: () => node(
+      'Halden the Guard',
+      'The toll is settled. Do not expect me to forget which way you settled it.'
+    )
+  };
+}
+
+/** The actual decision: pay the Watch or side with the Market. */
+function tollOptionsNode(state) {
+  return node(
+    'Halden the Guard',
+    `The toll. ${TOLL_COST} coins, or a good reason why not.`,
+    [
+      {
+        label: `Pay it myself (${TOLL_COST} coins).`,
+        do: () => ({ ...collectToll(state) })
+      },
+      {
+        label: 'Waive it. He has had a hard season.',
+        do: () => {
+          // The tier is read when the choice is taken, not when it was drawn.
+          const result = waiveToll(state, npcTier(state, 'halden').id);
+          return { ...result, topic: result.changed ? 'toll_waived' : 'toll_refused', opinion: result.changed ? 1 : 0 };
+        },
+        next: () => node('Halden the Guard', '...Fine. Put it on my conscience, not my ledger. Do not make me regret it.')
+      },
+      end('Not yet')
+    ]
+  );
+}
 
 // Sable is the plaza's mapmaker: a quieter character whose lines change with
 // what the player knows, and who explains the north terrace for new players.
@@ -299,8 +420,8 @@ const sable = {
     return node(
       'Sable the Cartographer',
       mem.talks > 0
-        ? 'You again. Still no map of your own, I notice.'
-        : 'Mind the ink. This is the fourth map of this plaza I have drawn, and the only one that is right.',
+        ? `You again. Still no map of your own, I notice.${standingGreeting(state, 'sable')}`
+        : `Mind the ink. This is the fourth map of this plaza I have drawn, and the only one that is right.${standingGreeting(state, 'sable')}`,
       [
         {
           label: 'Why four maps?',
