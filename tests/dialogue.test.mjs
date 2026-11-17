@@ -1,0 +1,232 @@
+// Dialogue tests: every NPC, every quest state, every reachable choice.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  createInitialState, questStatus, startLanterns, buyOilWithCoins,
+  buyOilWithPromise, startKey, pickUpKey, startCheer, watchLanterns,
+  hasItem, coins
+} from '../src/state.js';
+import { startConversation, applyChoice, DIALOGUE } from '../src/dialogue.js';
+
+const npcIds = Object.keys(DIALOGUE);
+
+test('every NPC opens with a node that has at least one labelled choice', () => {
+  for (const npcId of npcIds) {
+    const node = startConversation(createInitialState(), npcId);
+    assert.ok(node, `${npcId} has an opening node`);
+    assert.ok(node.speaker && node.speaker.length > 0, `${npcId} names its speaker`);
+    assert.ok(node.text.length > 10, `${npcId} says something real`);
+    assert.ok(Array.isArray(node.choices) && node.choices.length > 0, `${npcId} offers choices`);
+    for (const choice of node.choices) {
+      assert.equal(typeof choice.label, 'string');
+      assert.ok(choice.label.length > 0);
+    }
+  }
+  assert.equal(startConversation(createInitialState(), 'nobody'), null);
+});
+
+test('the cast includes five distinct NPCs with unique ids', () => {
+  assert.equal(npcIds.length, 5);
+  const speakers = new Set(npcIds.map((id) => DIALOGUE[id].name));
+  assert.equal(speakers.size, 5);
+});
+
+test('Mara → Oswin → Mara completes the lantern quest', () => {
+  const state = createInitialState();
+  const maraOpen = startConversation(state, 'mara');
+  const askChoice = maraOpen.choices.find((c) => c.label.includes('lanterns'));
+  assert.ok(askChoice, 'Mara offers the lantern hook');
+  assert.equal(applyChoice(state, 'mara', askChoice).changed, true);
+  assert.equal(questStatus(state, 'lanterns'), 'started');
+
+  const oswinOpen = startConversation(state, 'oswin');
+  assert.match(oswinOpen.text, /Four coins/);
+  const promise = oswinOpen.choices.find((c) => c.label.includes('owe you'));
+  assert.equal(applyChoice(state, 'oswin', promise).changed, true);
+  assert.equal(hasItem(state, 'lantern_oil'), true);
+  assert.equal(state.perks.oswin_debt, true);
+
+  const maraReturn = startConversation(state, 'mara');
+  assert.match(maraReturn.text, /Hand it over/);
+  const deliver = maraReturn.choices.find((c) => c.label.includes('oil'));
+  assert.equal(applyChoice(state, 'mara', deliver).changed, true);
+  assert.equal(questStatus(state, 'lanterns'), 'done');
+  assert.equal(hasItem(state, 'keeper_promise'), true);
+});
+
+test('the coins branch of the oil trade actually spends coins', () => {
+  const state = createInitialState();
+  startLanterns(state);
+  const open = startConversation(state, 'oswin');
+  const pay = open.choices.find((c) => c.label.includes('Pay 4 coins'));
+  assert.ok(pay);
+  applyChoice(state, 'oswin', pay);
+  assert.equal(coins(state), 2);
+  assert.equal(state.perks.oswin_debt, undefined);
+});
+
+test('the oil trade is not offered before the quest starts', () => {
+  const state = createInitialState();
+  const open = startConversation(state, 'oswin');
+  assert.equal(open.choices.some((c) => c.label.includes('Pay 4 coins')), false);
+});
+
+test('Oswin only offers the debt branch when his ledger has your name', () => {
+  const state = createInitialState();
+  startLanterns(state);
+  buyOilWithPromise(state);
+  const withDebt = startConversation(state, 'oswin');
+  const settle = withDebt.choices.find((c) => c.label.includes('Settle'));
+  assert.ok(settle, 'settle option appears while owed');
+  const result = applyChoice(state, 'oswin', settle);
+  assert.equal(result.changed, true);
+  assert.equal(state.perks.oswin_debt, false);
+  assert.equal(coins(state), 2, '6 starting coins minus the 4-coin debt');
+  assert.equal(startConversation(state, 'oswin').choices.some((c) => c.label.includes('Settle')), false);
+});
+
+test('paying upfront leaves no debt for Mara to mention', () => {
+  const state = createInitialState();
+  startLanterns(state);
+  buyOilWithCoins(state);
+  const maraNode = startConversation(state, 'mara');
+  assert.match(maraNode.text, /Hand it over/);
+  // Complete it, then ask Mara about Oswin.
+  applyChoice(state, 'mara', maraNode.choices[0]);
+  const after = startConversation(state, 'mara');
+  const oswinTalk = after.choices.find((c) => c.label.includes('Oswin'));
+  assert.match(oswinTalk.next().text, /never lets a favour go/);
+});
+
+test('Halden gives the key quest and accepts the key back', () => {
+  const state = createInitialState();
+  const open = startConversation(state, 'halden');
+  const lost = open.choices.find((c) => c.label.includes('lost'));
+  assert.equal(applyChoice(state, 'halden', lost).changed, true);
+  assert.equal(questStatus(state, 'key'), 'started');
+
+  pickUpKey(state);
+  const withKey = startConversation(state, 'halden');
+  assert.match(withKey.text, /That is my key/);
+  const hand = withKey.choices.find((c) => c.label.includes('Here it is'));
+  assert.equal(applyChoice(state, 'halden', hand).changed, true);
+  assert.equal(questStatus(state, 'key'), 'done');
+  assert.equal(hasItem(state, 'oswin_marker'), true);
+});
+
+test('Halden will not take the key before it is found', () => {
+  const state = createInitialState();
+  startKey(state);
+  const open = startConversation(state, 'halden');
+  assert.equal(open.choices.some((c) => c.label.includes('Here it is')), false);
+});
+
+test('Pip gives the dusk quest and pays out after the watch', () => {
+  const state = createInitialState();
+  const open = startConversation(state, 'pip');
+  const special = open.choices.find((c) => c.label.includes('special'));
+  assert.equal(applyChoice(state, 'pip', special).changed, true);
+  assert.equal(questStatus(state, 'cheer'), 'started');
+
+  watchLanterns(state, 'dusk');
+  const back = startConversation(state, 'pip');
+  assert.match(back.text, /Did you see it/);
+  const tell = back.choices.find((c) => c.label.includes('I did'));
+  assert.equal(applyChoice(state, 'pip', tell).changed, true);
+  assert.equal(questStatus(state, 'cheer'), 'done');
+  assert.equal(hasItem(state, 'pip_ribbon'), true);
+});
+
+test('Pip will not pay out before the watch happens', () => {
+  const state = createInitialState();
+  startCheer(state);
+  const open = startConversation(state, 'pip');
+  assert.equal(open.choices.some((c) => c.label.includes('I did')), false);
+});
+
+test('Sable exists and reacts to what the player has done', () => {
+  const state = createInitialState();
+  const open = startConversation(state, 'sable');
+  assert.ok(open.text.length > 10);
+  startLanterns(state);
+  startKey(state);
+  const after = startConversation(state, 'sable');
+  assert.notEqual(after.text, open.text);
+});
+
+// --- The exhaustive sweep -------------------------------------------------
+
+// Quest states worth testing: every NPC must produce a sane node in each.
+const STATES = [
+  ['fresh', (s) => {}],
+  ['lanterns started', startLanterns],
+  ['oil paid', (s) => { startLanterns(s); buyOilWithCoins(s); }],
+  ['oil promised', (s) => { startLanterns(s); buyOilWithPromise(s); }],
+  ['key started', startKey],
+  ['key found', (s) => { startKey(s); pickUpKey(s); }],
+  ['cheer started', startCheer],
+  ['cheer watched', (s) => { startCheer(s); watchLanterns(s, 'dusk'); }],
+  ['everything', (s) => {
+    startLanterns(s); buyOilWithPromise(s);
+    startKey(s); pickUpKey(s);
+    startCheer(s); watchLanterns(s, 'dusk');
+  }]
+];
+
+test('every reachable dialogue node in every quest state is well formed', () => {
+  let nodes = 0;
+  for (const [label, seed] of STATES) {
+    for (const npcId of npcIds) {
+      const state = createInitialState();
+      seed(state);
+      const open = startConversation(state, npcId);
+      const queue = [open];
+      const seen = new Set();
+      while (queue.length) {
+        const node = queue.shift();
+        if (!node || seen.has(node)) continue;
+        seen.add(node);
+        nodes += 1;
+        assert.equal(typeof node.text, 'string', `${label}/${npcId}: text is a string`);
+        assert.ok(node.text.trim().length > 0, `${label}/${npcId}: text is not empty`);
+        for (const choice of node.choices || []) {
+          assert.equal(typeof choice.label, 'string');
+          const next = typeof choice.next === 'function' ? choice.next() : choice.next;
+          if (next) queue.push(next);
+        }
+      }
+    }
+  }
+  assert.ok(nodes > 100, `walked ${nodes} dialogue nodes`);
+});
+
+test('applying every choice in every state never throws or corrupts state', () => {
+  for (const [label, seed] of STATES) {
+    for (const npcId of npcIds) {
+      for (const index of [0, 1, 2, 3]) {
+        const state = createInitialState();
+        seed(state);
+        const open = startConversation(state, npcId);
+        const choice = open.choices?.[index];
+        if (!choice) continue;
+        assert.doesNotThrow(() => applyChoice(state, npcId, choice), `${label}/${npcId}#${index}`);
+        // The state must always stay loadable.
+        const parsed = JSON.parse(JSON.stringify(state));
+        assert.ok(parsed.quests, `${label}/${npcId}#${index} keeps quests`);
+        for (const value of Object.values(state.quests)) {
+          assert.ok(['none', 'done', 'started', 'oil_bought', 'found', 'watched'].includes(value),
+            `${label}/${npcId}#${index} keeps valid quest steps (saw ${value})`);
+        }
+      }
+    }
+  }
+});
+
+test('choice actions report a changed flag and a message when they do something', () => {
+  const state = createInitialState();
+  const open = startConversation(state, 'mara');
+  const result = applyChoice(state, 'mara', open.choices[0]);
+  assert.equal(result.changed, true);
+  assert.match(result.message, /Quest started/);
+});

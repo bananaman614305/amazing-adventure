@@ -36,7 +36,7 @@ Grunt builds the game in rounds. Each round leaves a playable game that is deepe
 
 Every round ends with a pull request that Grunt has tested in a real browser, with screenshots.
 
-## Run it (Round 1)
+## Run it (Round 2)
 
 One command starts the game:
 
@@ -44,10 +44,19 @@ One command starts the game:
 npm start
 ```
 
-Then open http://localhost:8000 in a browser, click **Click to play**, and use
-W A S D to walk, the mouse to look, and E to talk to anyone who comes near.
-Set `PORT` to use a different port. No install or build step is needed; Three.js
-is pinned in the import map and loads from a CDN.
+Then open http://127.0.0.1:8000 in a browser, click **Click to play**, and use
+W A S D to walk, the mouse to look, E to talk or interact, J for the journal,
+and R on the bench to rest until the next phase. Esc pauses. Set `PORT` to use a
+different port. The server binds loopback only.
+
+No install or build step is needed to play; Three.js is pinned in the import map
+and loads from a CDN. The test suites need `npm install` for `puppeteer-core`
+(dev-only) and use the host Chrome via `CHROME_PATH`.
+
+```
+npm test          # pure logic tests (no browser)
+npm run test:browser   # drives the real game in headless Chrome, writes artifacts/
+```
 
 ## Technical direction
 
@@ -63,3 +72,50 @@ is pinned in the import map and loads from a CDN.
 - Use one account per free provider. Never make duplicate accounts.
 - Every asset must have a license that allows its use, and be credited.
 - Each round must leave the game playable.
+
+## Round 2 — people and quests
+
+Round 2 makes the plaza a place with people who remember you. Everything below
+is in the game now:
+
+- **Five NPCs with roles and routines.** Mara the Keeper, Oswin the Trader, Pip,
+  Halden the Guard and Sable the Cartographer. Each has its own spot for day,
+  dusk and night and walks there when the phase changes.
+- **A day/dusk/night cycle.** A full cycle is 180 seconds. The sky, fog, sun and
+  the four lanterns all change with the phase, and the lanterns only light at
+  dusk and night.
+- **A branching questline with real consequences.** *The Failing Lantern* can be
+  paid for with 4 of your starting 6 coins or with a promise to Oswin. The
+  promise branch creates a debt he calls in; Mara comments on it, and you can
+  settle it later for 4 coins.
+- **Two more quests.** *Halden's Missing Key* has a physical key you pick up out
+  of the grass once he asks for help, and *Pip's Small Favour* only completes if
+  you actually climb the north terrace and watch the lanterns light at dusk.
+- **A journal and an inventory.** The tracker shows active and completed quests
+  and updates as they change; J opens the full journal and inventory.
+- **NPC memory.** Every NPC counts how often you have talked to them, remembers
+  the last topic and keeps a small opinion of you that changes how they greet
+  you.
+- **Save and load.** Progress saves to `localStorage` after every state change
+  and when you pause. A save that cannot be read is ignored rather than crashing
+  the game, and storage being blocked falls back to memory.
+- **A climbable north terrace.** A ramp on the north side rises 1.2m to a
+  gallery with a parapet. The terrace side is too tall to walk up; only the ramp
+  works, and it is checked in the browser test.
+
+### How it is built
+
+| File | What it holds |
+| --- | --- |
+| `src/state.js` | Quests, inventory, coins, NPC memory, save format. Pure functions. |
+| `src/dialogue.js` | Every NPC's dialogue tree as data, with actions and branches. |
+| `src/daynight.js` | Phase maths, wrapping, clock labels. Pure. |
+| `src/terrain.js` | Terrace/ramp geometry maths and the walkable-height function. Pure. |
+| `src/world.js` | Builds the scene meshes, colliders, lights and the phase looks. |
+| `src/npcs.js` | Builds the NPCs and moves them along their routines. |
+| `src/player.js` | First-person movement, floor height and step-height blocking. |
+| `src/main.js` | Wires state, dialogue, HUD, input and the render loop together. |
+
+The logic files import nothing from Three.js, so `npm test` runs the whole story
+and save system in Node without a browser. `scripts/test-round2.mjs` then plays
+the game through the real DOM in headless Chrome.

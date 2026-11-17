@@ -1,11 +1,16 @@
 {
   "name": "amazing-adventure",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "A first-person 3D adventure game for the browser, built with Three.js.",
   "scripts": {
     "start": "node server.mjs",
-    "corner:prepare": "node -e \"for (const f of ['index.html', 'src/main.js', 'server.mjs']) require('node:fs').accessSync(f); console.log('Amazing Adventure static shell is ready')\""
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "node scripts/test-round2.mjs",
+    "test:all": "npm test && npm run test:browser"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^23.11.1"
   }
 }

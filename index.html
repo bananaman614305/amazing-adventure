@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101826'/%3E%3Cpath d='M16 5 27 25H5z' fill='%23ffd479'/%3E%3C/svg%3E">
-  <title>Amazing Adventure — Round 1</title>
+  <title>Amazing Adventure — Round 2</title>
   <script type="importmap">
     {
       "imports": {
@@ -41,6 +41,7 @@
     }
     #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
     #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+    #crosshair.active::before, #crosshair.active::after { background: #ffd479; }
 
     #hint {
       position: fixed;
@@ -58,18 +59,94 @@
     }
     #hint b { color: #ffd479; }
 
+    #clock {
+      position: fixed;
+      top: 18px;
+      right: 20px;
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(10, 16, 26, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      font-variant-numeric: tabular-nums;
+      pointer-events: none;
+    }
+    #clock .time { font-weight: 700; font-size: 16px; }
+    #clock .phase {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #ffd479;
+    }
+    #coin-count { font-size: 13px; color: #ffe2a3; }
+    #coin-count::before { content: "◈ "; }
+
+    #quest-tracker {
+      position: fixed;
+      top: 18px;
+      left: 20px;
+      width: min(320px, calc(100vw - 40px));
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(10, 16, 26, 0.66);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 13px;
+      line-height: 1.45;
+      pointer-events: none;
+    }
+    #quest-tracker h2 {
+      margin: 0 0 6px;
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #9fb0c6;
+    }
+    #quest-tracker .quest { margin: 0 0 7px; }
+    #quest-tracker .quest:last-child { margin-bottom: 0; }
+    #quest-tracker .quest .title { color: #ffd479; font-weight: 600; }
+    #quest-tracker .quest.done .title { color: #8fd49a; }
+    #quest-tracker .quest .text { color: #c7d4e4; }
+    #quest-tracker .empty { color: #8698ae; font-style: italic; }
+
+    #toast-stack {
+      position: fixed;
+      left: 50%;
+      top: 22%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 9px 18px;
+      border-radius: 999px;
+      background: rgba(18, 28, 44, 0.94);
+      border: 1px solid rgba(255, 212, 121, 0.55);
+      color: #ffe9bd;
+      font-size: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      animation: toast-in 180ms ease-out;
+    }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: none; }
+    }
+
     #dialogue {
       position: fixed;
       left: 50%;
-      bottom: 6%;
+      bottom: 5%;
       transform: translateX(-50%);
-      width: min(680px, calc(100vw - 32px));
-      padding: 20px 24px 16px;
+      width: min(700px, calc(100vw - 32px));
+      padding: 20px 24px 14px;
       border-radius: 14px;
-      background: rgba(11, 18, 30, 0.94);
+      background: rgba(11, 18, 30, 0.95);
       border: 1px solid rgba(255, 255, 255, 0.2);
       box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
-      pointer-events: none;
     }
     #dialogue .name {
       font-size: 13px;
@@ -77,15 +154,61 @@
       text-transform: uppercase;
       letter-spacing: 0.14em;
       color: #ffd479;
-      margin-bottom: 8px;
+      margin-bottom: 2px;
     }
-    #dialogue .line { font-size: 19px; line-height: 1.5; min-height: 58px; }
+    #dialogue .role { font-size: 11px; color: #8698ae; margin-bottom: 10px; }
+    #dialogue .line { font-size: 19px; line-height: 1.5; min-height: 56px; }
+    #dialogue .choices { margin: 14px 0 0; display: flex; flex-direction: column; gap: 6px; }
+    #dialogue .choice {
+      font: inherit;
+      text-align: left;
+      color: #dfe8f4;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 9px;
+      padding: 9px 13px;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    #dialogue .choice:hover, #dialogue .choice:focus-visible,
+    #dialogue .choice.selected {
+      background: rgba(255, 212, 121, 0.18);
+      border-color: #ffd479;
+      color: #fff;
+      outline: none;
+    }
+    #dialogue .choice.selected .num::after { content: "›"; margin-left: 6px; }
+    #dialogue .choice .num { color: #ffd479; font-weight: 700; margin-right: 8px; }
     #dialogue .foot {
-      margin-top: 12px;
+      margin-top: 10px;
       font-size: 12px;
       color: #9fb0c6;
       text-align: right;
     }
+
+    #panel {
+      position: fixed;
+      right: 20px;
+      top: 68px;
+      width: min(340px, calc(100vw - 40px));
+      max-height: 60vh;
+      overflow: auto;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: rgba(9, 15, 25, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      font-size: 13px;
+      line-height: 1.5;
+      pointer-events: none;
+    }
+    #panel h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: #9fb0c6; }
+    #panel h3 + h3, #panel ul + h3 { margin-top: 14px; }
+    #panel ul { margin: 0; padding: 0; list-style: none; }
+    #panel li { margin-bottom: 9px; }
+    #panel .item-name { color: #ffd479; font-weight: 600; }
+    #panel .journal-title { color: #ffd479; font-weight: 600; }
+    #panel .journal-title.done { color: #8fd49a; }
+    #panel .muted { color: #8698ae; font-style: italic; }
 
     #overlay {
       position: fixed;
@@ -97,22 +220,24 @@
     }
     #overlay .card {
       text-align: center;
-      padding: 36px 44px;
+      padding: 34px 42px;
       border-radius: 18px;
-      background: rgba(8, 14, 24, 0.82);
+      background: rgba(8, 14, 24, 0.84);
       border: 1px solid rgba(255, 255, 255, 0.16);
       box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+      max-width: min(560px, calc(100vw - 40px));
     }
     #overlay h1 { margin: 0; font-size: 38px; letter-spacing: -0.02em; }
     #overlay .round {
-      margin: 8px 0 26px;
+      margin: 8px 0 20px;
       color: #ffd479;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.18em;
     }
-    #overlay .controls { margin: 0 0 26px; color: #c7d4e4; font-size: 15px; line-height: 1.8; }
+    #overlay .controls { margin: 0 0 22px; color: #c7d4e4; font-size: 14px; line-height: 1.9; }
+    #overlay .buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
     #overlay button {
       font: inherit;
       font-weight: 700;
@@ -120,10 +245,13 @@
       background: #ffd479;
       border: 0;
       border-radius: 999px;
-      padding: 13px 30px;
+      padding: 12px 26px;
       cursor: pointer;
     }
+    #overlay button.ghost { background: transparent; color: #ffd479; border: 1px solid rgba(255, 212, 121, 0.6); }
     #overlay button:hover { background: #ffe2a3; }
+    #overlay button.ghost:hover { background: rgba(255, 212, 121, 0.14); }
+    #overlay .save-note { margin: 16px 0 0; font-size: 12px; color: #8698ae; }
   </style>
 </head>
 <body>
@@ -131,18 +259,48 @@
   <div id="crosshair" hidden></div>
   <div id="hint" hidden></div>
 
+  <div id="clock" hidden>
+    <span class="phase" id="clock-phase">Day</span>
+    <span class="time" id="clock-time">07:00</span>
+    <span id="coin-count">0</span>
+  </div>
+
+  <div id="quest-tracker" hidden>
+    <h2>Journal</h2>
+    <div id="quest-list"></div>
+  </div>
+
+  <div id="panel" hidden>
+    <h3>Inventory</h3>
+    <ul id="inventory-list"></ul>
+    <h3>Journal</h3>
+    <ul id="journal-list"></ul>
+  </div>
+
+  <div id="toast-stack"></div>
+
   <div id="dialogue" hidden>
     <div class="name" id="dialogue-name"></div>
+    <div class="role" id="dialogue-role"></div>
     <div class="line" id="dialogue-line"></div>
-    <div class="foot">E / Enter — next &nbsp;·&nbsp; Esc — close</div>
+    <div class="choices" id="dialogue-choices"></div>
+    <div class="foot">W / S select &nbsp;·&nbsp; E or Enter confirm &nbsp;·&nbsp; 1–5 pick &nbsp;·&nbsp; Esc close</div>
   </div>
 
   <div id="overlay">
     <div class="card">
       <h1>Amazing Adventure</h1>
-      <p class="round">Round 1 — Walk the world</p>
-      <p class="controls">W A S D to walk &nbsp;·&nbsp; mouse to look<br>E to talk &nbsp;·&nbsp; Esc to pause</p>
-      <button type="button" id="play">Click to play</button>
+      <p class="round">Round 2 — People and quests</p>
+      <p class="controls">
+        W A S D walk &nbsp;·&nbsp; mouse look &nbsp;·&nbsp; Shift run<br>
+        E talk / interact &nbsp;·&nbsp; J journal &nbsp;·&nbsp; Esc pause<br>
+        At a bench, E rests until the next hour
+      </p>
+      <div class="buttons">
+        <button type="button" id="play">Click to play</button>
+        <button type="button" id="continue" class="ghost" hidden>Continue saved game</button>
+      </div>
+      <p class="save-note" id="save-note">Progress saves automatically.</p>
     </div>
   </div>
 
