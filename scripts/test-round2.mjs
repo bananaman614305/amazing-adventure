@@ -10,6 +10,26 @@ const outDir = await screenshotDir();
 
 const checks = createChecks();
 
+/**
+ * Evidence screenshots should be sharp, but the game deliberately lowers its
+ * internal resolution on slow machines — which this environment is. Pin it to
+ * native for the capture, then hand control back so the adaptive checks still
+ * see the real behaviour.
+ */
+async function capture(page, name) {
+  const restore = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const wasAdaptive = api ? api.resolution.adaptive : false;
+    if (api) api.resolution.setAdaptive(false);
+    return wasAdaptive;
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  await page.screenshot({ path: resolve(outDir, name) });
+  if (restore) {
+    await page.evaluate(() => window.amazingAdventure.resolution.setAdaptive(true));
+  }
+}
+
 // Puppeteer has no textContent helper; $eval is the equivalent.
 const text = (page, selector) => page.$eval(selector, (el) => el.textContent);
 const server = await startServer();
@@ -128,7 +148,7 @@ try {
   const dialogue1 = await page.evaluate(() => window.amazingAdventure.getDialogue());
   checks.check('dialogue opens with choices', Boolean(dialogue1 && dialogue1.choices.length >= 2),
     dialogue1 ? `${dialogue1.speaker}: ${dialogue1.choices.length} choices` : 'no dialogue');
-  await page.screenshot({ path: resolve(outDir, 'round2-dialogue-mara.png') });
+  await capture(page, 'round2-dialogue-mara.png');
 
   // Keyboard navigation: S moves the highlight, E confirms the highlighted one.
   const highlight = () => page.evaluate(() =>
@@ -192,7 +212,7 @@ try {
   checks.check('Oswin offers both payment branches',
     trade && trade.choices.some((l) => /Pay 4 coins/.test(l)) && trade.choices.some((l) => /owe you/.test(l)),
     trade ? trade.choices.join(' | ') : 'no dialogue');
-  await page.screenshot({ path: resolve(outDir, 'round2-dialogue-oswin.png') });
+  await capture(page, 'round2-dialogue-oswin.png');
 
   const promiseIndex = trade.choices.findIndex((label) => /owe you/.test(label));
   await page.evaluate((index) => window.amazingAdventure.choose(index), promiseIndex);
@@ -212,7 +232,7 @@ try {
   const panelText = await text(page, '#panel');
   checks.check('J opens the inventory panel with the oil',
     /Inventory/.test(panelText) && /Lantern Oil/.test(panelText), panelText.slice(0, 80));
-  await page.screenshot({ path: resolve(outDir, 'round2-journal.png') });
+  await capture(page, 'round2-journal.png');
   await page.keyboard.press('KeyJ');
 
   // --- 5. Deliver the oil to Mara ---------------------------------------
@@ -269,7 +289,7 @@ try {
   await new Promise((r) => setTimeout(r, 350));
   const keyHint = await text(page, '#hint');
   checks.check('the key is an interactable in the world', /brass key/.test(keyHint || ''), JSON.stringify(keyHint));
-  await page.screenshot({ path: resolve(outDir, 'round2-key-pickup.png') });
+  await capture(page, 'round2-key-pickup.png');
   await page.keyboard.press('KeyE');
   await new Promise((r) => setTimeout(r, 350));
   const picked = await page.evaluate(() => {
@@ -329,7 +349,7 @@ try {
   await new Promise((r) => setTimeout(r, 500));
   checks.check('watching from the grass does not count',
     await page.evaluate(() => window.amazingAdventure.getState().quests.cheer === 'started'));
-  await page.screenshot({ path: resolve(outDir, 'round2-dusk.png') });
+  await capture(page, 'round2-dusk.png');
 
   // Watch from the terrace at dusk: counts.
   await page.evaluate(() => {
@@ -469,7 +489,7 @@ try {
   checks.check('inventory panel lists every reward',
     /Keeper’s Promise/.test(finalHud.panel) && /Trader’s Marker/.test(finalHud.panel) && /Pip’s Ribbon/.test(finalHud.panel),
     finalHud.panel.replace(/\s+/g, ' ').slice(0, 140));
-  await page.screenshot({ path: resolve(outDir, 'round2-journal-final.png') });
+  await capture(page, 'round2-journal-final.png');
   await page.keyboard.press('KeyJ');
 
   // --- 12. Bench rest skips the clock --------------------------------
@@ -569,7 +589,7 @@ try {
   checks.check('an overheard NPC exchange renders for a nearby player',
     ambient.lines >= 2 && !overheardShown.hidden && overheardShown.text.length > 10,
     `${ambient.lines} lines, key=${ambient.key}, shown=${JSON.stringify(overheardShown.text.slice(0, 70))}`);
-  await page.screenshot({ path: resolve(outDir, 'round3-overheard.png') });
+  await capture(page, 'round3-overheard.png');
 
   // Walking away hides the text but does not crash.
   await page.evaluate(() => window.amazingAdventure.player.placeAt(14, 14, 0, 0));
@@ -629,7 +649,7 @@ try {
   checks.check('the player can walk through the gate into the market lane',
     reachedLane && lanePos.area === 'lane' && lanePos.bodyArea === 'lane',
     JSON.stringify(lanePos));
-  await page.screenshot({ path: resolve(outDir, 'round3-market-lane.png') });
+  await capture(page, 'round3-market-lane.png');
 
   // The notice board in the lane is readable.
   const board = await page.evaluate(() => ({
@@ -768,21 +788,61 @@ try {
     ending.status === 'done' && ending.after.trade > ending.before.trade &&
     ending.after.watch < ending.before.watch && ending.stillHasItem === false,
     JSON.stringify(ending).slice(0, 220));
-  await page.screenshot({ path: resolve(outDir, 'round4-wren-lane.png') });
+  await capture(page, 'round4-wren-lane.png');
 
-  // --- 18. Final screenshots ----------------------------------------
+  // --- 18. Adaptive resolution on weak hardware ---------------------
+  const adaptive = await page.evaluate(() => ({
+    adaptive: window.amazingAdventure.resolution.adaptive,
+    ratio: window.amazingAdventure.resolution.ratio,
+    dataset: document.body.dataset.pixelRatio,
+    actual: window.amazingAdventure.renderer.getPixelRatio(),
+    base: window.amazingAdventure.basePixelRatio
+  }));
+  checks.check('adaptive resolution is on and reported honestly',
+    adaptive.adaptive === true && adaptive.actual === adaptive.ratio &&
+    adaptive.dataset === String(adaptive.ratio),
+    JSON.stringify(adaptive));
+
+  // This environment renders at roughly 3fps, so the controller must have
+  // noticed and reduced the pixel ratio during the earlier checks.
+  checks.check('slow frames actually lowered the render resolution',
+    adaptive.ratio < adaptive.base,
+    `ratio=${adaptive.ratio} base=${adaptive.base}`);
+
+  // The manual override must restore native sharpness and persist the choice.
+  const fixed = await page.evaluate(() => {
+    const on = window.amazingAdventure.resolution.setAdaptive(false);
+    return {
+      on,
+      ratio: window.amazingAdventure.renderer.getPixelRatio(),
+      base: window.amazingAdventure.basePixelRatio,
+      stored: localStorage.getItem('amazing-adventure:resolution')
+    };
+  });
+  checks.check('turning adaptive off restores native resolution and remembers it',
+    fixed.on === false && fixed.ratio === fixed.base && fixed.stored === 'fixed',
+    JSON.stringify(fixed));
+
+  const reEnabled = await page.evaluate(() => {
+    const on = window.amazingAdventure.resolution.setAdaptive(true);
+    return { on, stored: localStorage.getItem('amazing-adventure:resolution') };
+  });
+  checks.check('adaptive resolution can be turned back on',
+    reEnabled.on === true && reEnabled.stored === 'auto', JSON.stringify(reEnabled));
+
+  // --- 19. Final screenshots ----------------------------------------
   await page.evaluate(() => {
     window.amazingAdventure.setClock(20);
     window.amazingAdventure.player.placeAt(2, 12, 0.2, -0.04);
   });
   await new Promise((r) => setTimeout(r, 900));
-  await page.screenshot({ path: resolve(outDir, 'round2-plaza-day.png') });
+  await capture(page, 'round2-plaza-day.png');
   await page.evaluate(() => {
     window.amazingAdventure.setClock(150);
     window.amazingAdventure.player.placeAt(0, 11, 0, -0.05);
   });
   await new Promise((r) => setTimeout(r, 900));
-  await page.screenshot({ path: resolve(outDir, 'round2-night-plaza.png') });
+  await capture(page, 'round2-night-plaza.png');
 
   // Standing panel and reputation, for the record.
   await page.evaluate(() => {
@@ -792,7 +852,7 @@ try {
     window.amazingAdventure.refreshHUD();
   });
   await new Promise((r) => setTimeout(r, 700));
-  await page.screenshot({ path: resolve(outDir, 'round3-standing.png') });
+  await capture(page, 'round3-standing.png');
 
   // The market lane at dusk, with the gate open.
   await page.evaluate(async () => {
@@ -805,7 +865,7 @@ try {
     api.player.placeAt(9.8, -19.5, 0.15, 0.02);
   });
   await new Promise((r) => setTimeout(r, 1200));
-  await page.screenshot({ path: resolve(outDir, 'round3-lane-dusk.png') });
+  await capture(page, 'round3-lane-dusk.png');
 
   // Wren at her stall in the lane, mid-conversation.
   await page.evaluate(async () => {
@@ -828,7 +888,7 @@ try {
   await new Promise((r) => setTimeout(r, 900));
   await page.keyboard.press('KeyE');
   await new Promise((r) => setTimeout(r, 900));
-  await page.screenshot({ path: resolve(outDir, 'round4-wren-dialogue.png') });
+  await capture(page, 'round4-wren-dialogue.png');
 } finally {
   await close();
   await server.stop();

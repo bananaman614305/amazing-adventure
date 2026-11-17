@@ -25,6 +25,7 @@ import {
   AMBIENT_CHANCE
 } from './ambient.js';
 import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
+import { createAdaptiveResolution } from './perf.js';
 import { onTerrace } from './terrain.js';
 
 // --- DOM ------------------------------------------------------------------
@@ -57,8 +58,26 @@ const dialogueChoices = $('dialogue-choices');
 
 // --- World, player, state -------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const basePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+renderer.setPixelRatio(basePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
+
+// Resolution scales down automatically when frames are slow. That is what keeps
+// the game playable on weak hardware, where it is fill-rate bound rather than
+// draw-call bound (measured: shadows and materials barely matter, pixel count
+// matters a lot). The setting is remembered so a choice sticks.
+const RESOLUTION_KEY = 'amazing-adventure:resolution';
+const resolution = createAdaptiveResolution({ start: basePixelRatio });
+let adaptiveResolution = localStorage.getItem(RESOLUTION_KEY) !== 'fixed';
+function applyResolution(ratio) {
+  const next = Number(ratio.toFixed(2));
+  if (renderer.getPixelRatio() === next) return;
+  renderer.setPixelRatio(next);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.dataset.pixelRatio = String(next);
+}
+applyResolution(resolution.ratio);
+document.body.dataset.pixelRatio = String(resolution.ratio);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
@@ -518,6 +537,16 @@ document.addEventListener('keydown', (event) => {
   if (event.code === 'KeyJ') {
     panel.hidden = !panel.hidden;
     refreshHUD();
+    return;
+  }
+
+  // Manual escape hatch: P toggles adaptive resolution off/on. Worth having
+  // because the automatic behaviour is invisible, and a player on a fast
+  // machine may prefer a fixed, sharp image.
+  if (event.code === 'KeyP') {
+    const on = window.amazingAdventure.resolution.setAdaptive(!adaptiveResolution);
+    toast(on ? 'Adaptive resolution on.' : 'Adaptive resolution off — fixed at native.');
+    return;
   }
 });
 
@@ -647,8 +676,10 @@ function renderAmbient() {
 const clock = new THREE.Clock();
 let hudTimer = 0;
 
+let lastFrameMs = 16;
 function frame() {
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const rawDt = clock.getDelta();
+  const dt = Math.min(rawDt, 0.05);
   player.update(dt);
 
   clockSeconds = wrapClock(clockSeconds + dt);
@@ -681,6 +712,15 @@ function frame() {
   }
 
   renderer.render(scene, camera);
+
+  // Adapt resolution from the real frame time, not the clamped game delta. The
+  // first few frames are dropped by the controller itself so shader compiles do
+  // not count against the machine.
+  if (adaptiveResolution) {
+    lastFrameMs = rawDt * 1000;
+    applyResolution(resolution.sample(lastFrameMs));
+  }
+
   requestAnimationFrame(frame);
 }
 
@@ -728,5 +768,17 @@ window.amazingAdventure = {
   areaAt: () => areaAt(player.position.x, player.position.z),
   isGateOpen: () => isGateOpen(state),
   syncGate,
-  syncPickups
+  syncPickups,
+  resolution: {
+    get ratio() { return resolution.ratio; },
+    get changes() { return resolution.changes; },
+    get adaptive() { return adaptiveResolution; },
+    setAdaptive(on) {
+      adaptiveResolution = Boolean(on);
+      localStorage.setItem(RESOLUTION_KEY, adaptiveResolution ? 'auto' : 'fixed');
+      if (!adaptiveResolution) applyResolution(basePixelRatio);
+      return adaptiveResolution;
+    }
+  },
+  basePixelRatio
 };

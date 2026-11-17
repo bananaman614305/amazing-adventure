@@ -184,11 +184,57 @@ content is locked behind the reputation system built last chunk.
    They were updated to six NPCs and to the three *plaza* quests specifically,
    rather than deleted, so they still assert something true.
 
+## Chunk 4 — keeping the game playable on weak hardware
+
+Measured before changing anything, rather than guessing:
+
+| Change | fps |
+| --- | --- |
+| baseline (1280x800, software GL) | 3.2 |
+| shadows disabled | 3.3 (no gain) |
+| every material swapped to Lambert | 3.7 |
+| pixel ratio 0.5 | 8.1 |
+| **adaptive resolution, settled** | **7.1** |
+
+So the bottleneck is fill rate, not draw calls or material cost. The fix is
+adaptive resolution, which also happens to be the right fix for real weak
+hardware (integrated GPUs, high-DPI laptops).
+
+- `src/perf.js` (pure): `clampRatio`, `nextRatio`, `smooth` and a
+  `createAdaptiveResolution` state machine with an integer ratio grid, streak
+  hysteresis and spike clamping.
+- `src/main.js`: samples the real frame time each frame and applies the ratio;
+  `P` toggles it; the setting persists in `localStorage`; the current ratio is
+  exposed on `document.body.dataset.pixelRatio` and via
+  `window.amazingAdventure.resolution` for testing.
+- Browser evidence screenshots pin native resolution for the capture
+  (`capture()` helper), because otherwise the evidence would be a blurry upscale
+  of the reduced buffer. That is an honest capture of the scene, not of the
+  adaptive buffer.
+- Checks: `npm test` **125/125 pass** (13 new in `tests/perf.test.mjs`),
+  `npm run test:browser` **66/66 pass, exit 0** (4 new: adaptive is on and
+  reported honestly, slow frames really did lower the ratio, turning it off
+  restores native and remembers the choice, turning it back on works).
+
+### Bugs found in this chunk
+
+1. **The controller was blind on the machines that need it most.** I first
+   *discarded* frame times over 250ms as "not real frames". This environment
+   renders at ~310ms per frame, so every sample was thrown away and the ratio
+   never moved. Long samples are now clamped instead, so genuine slowness
+   registers while a tab-restore spike still cannot dominate the average.
+2. My own `clampRatio` used a 0.15 step from 0.5, which could never land on 1.0
+   or 2.0. It now uses an integer grid of 0.05 steps.
+3. Two perf tests initially encoded *fixed* frame times, which is unphysical for
+   a fill-rate-bound game — lowering the resolution has to make frames faster,
+   or convergence is impossible by construction. The tests now model frame time
+   as proportional to pixel count, and assert that the controller settles.
+
 ## Next task
 
-1. Publish `grunt/round4-lane-quest` as a stacked PR once
-   `grunt/round3-living-world` is picked up.
-2. Reduce draw calls (97 today, ~3.3 fps under software GL) by merging the static
-   plaza and lane geometry into batched meshes.
-3. Let reputation *refuse* content in the plaza too, not only in the lane, so
+1. Publish `grunt/round4` as a stacked PR once `grunt/round3-living-world` is
+   picked up (see the publication queue above).
+2. Let reputation refuse content in the plaza too, not only in the lane, so
    standing matters where the player starts.
+3. Give the next round a real objective loop: something to carry between the two
+   areas in both directions, so the lane is not a dead end.

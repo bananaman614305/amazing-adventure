@@ -126,6 +126,20 @@ barrels, and it only appears once Wren has told you where to look.
 | `src/factions.js` | Faction data, reputation scoring, tiers, NPC standing, rival reactions. Pure. |
 | `src/ambient.js` | Pair selection, script bank and exchange building for NPC-to-NPC talk. Pure. |
 | `src/areas.js` | The plaza and market lane boxes, the north gate, lane props and notice-board text. Pure. |
+| `src/perf.js` | Adaptive resolution rules: clamping, stepping, hysteresis and smoothing. Pure. |
+
+### Running on weak hardware
+
+The game is fill-rate bound, not draw-call bound: measured in this environment,
+disabling shadows changed nothing and swapping every material for a cheaper one
+gained 0.5fps, but halving the pixel count more than doubled the frame rate. So
+the renderer **adapts its own resolution**. It samples real frame times, waits
+for the reading to be consistent, and then walks the pixel ratio between 0.5 and
+2 until frames are comfortable. On the software rasteriser used for testing this
+takes the game from about 3.2fps to **7.1fps** and settles there without
+oscillating.
+
+Press **P** to turn it off and pin native resolution; the choice is remembered.
 
 ### Testing note
 
