@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101826'/%3E%3Cpath d='M16 5 27 25H5z' fill='%23ffd479'/%3E%3C/svg%3E">
+  <title>Amazing Adventure — Round 1</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { height: 100%; }
+    body { margin: 0; overflow: hidden; background: #0d1420; color: #f4f7fb; }
+    #game canvas { display: block; }
+
+    #crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      margin: -9px 0 0 -9px;
+      pointer-events: none;
+      opacity: 0.85;
+    }
+    #crosshair::before, #crosshair::after {
+      content: "";
+      position: absolute;
+      background: #fff;
+      box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+    }
+    #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+    #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+
+    #hint {
+      position: fixed;
+      left: 50%;
+      bottom: 16%;
+      transform: translateX(-50%);
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: rgba(10, 16, 26, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      font-size: 15px;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    #hint b { color: #ffd479; }
+
+    #dialogue {
+      position: fixed;
+      left: 50%;
+      bottom: 6%;
+      transform: translateX(-50%);
+      width: min(680px, calc(100vw - 32px));
+      padding: 20px 24px 16px;
+      border-radius: 14px;
+      background: rgba(11, 18, 30, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+      pointer-events: none;
+    }
+    #dialogue .name {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #ffd479;
+      margin-bottom: 8px;
+    }
+    #dialogue .line { font-size: 19px; line-height: 1.5; min-height: 58px; }
+    #dialogue .foot {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #9fb0c6;
+      text-align: right;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at 50% 35%, rgba(30, 56, 88, 0.72), rgba(6, 10, 18, 0.94));
+      cursor: pointer;
+    }
+    #overlay .card {
+      text-align: center;
+      padding: 36px 44px;
+      border-radius: 18px;
+      background: rgba(8, 14, 24, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+    }
+    #overlay h1 { margin: 0; font-size: 38px; letter-spacing: -0.02em; }
+    #overlay .round {
+      margin: 8px 0 26px;
+      color: #ffd479;
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    #overlay .controls { margin: 0 0 26px; color: #c7d4e4; font-size: 15px; line-height: 1.8; }
+    #overlay button {
+      font: inherit;
+      font-weight: 700;
+      color: #101826;
+      background: #ffd479;
+      border: 0;
+      border-radius: 999px;
+      padding: 13px 30px;
+      cursor: pointer;
+    }
+    #overlay button:hover { background: #ffe2a3; }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="crosshair" hidden></div>
+  <div id="hint" hidden></div>
+
+  <div id="dialogue" hidden>
+    <div class="name" id="dialogue-name"></div>
+    <div class="line" id="dialogue-line"></div>
+    <div class="foot">E / Enter — next &nbsp;·&nbsp; Esc — close</div>
+  </div>
+
+  <div id="overlay">
+    <div class="card">
+      <h1>Amazing Adventure</h1>
+      <p class="round">Round 1 — Walk the world</p>
+      <p class="controls">W A S D to walk &nbsp;·&nbsp; mouse to look<br>E to talk &nbsp;·&nbsp; Esc to pause</p>
+      <button type="button" id="play">Click to play</button>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
