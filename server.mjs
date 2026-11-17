@@ -4,6 +4,8 @@ import { extname, resolve, normalize } from 'node:path';
 
 const root = resolve(import.meta.dirname);
 const port = Number(process.env.PORT || 8000);
+// Bind loopback by default; this is a local game server, never a public one.
+const host = process.env.HOST || '127.0.0.1';
 
 const types = {
   '.html': 'text/html; charset=utf-8',
@@ -32,6 +34,6 @@ createServer(async (request, response) => {
   } catch {
     response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found');
   }
-}).listen(port, () => {
-  console.log(`Amazing Adventure is running at http://localhost:${port}`);
+}).listen(port, host, () => {
+  console.log(`Amazing Adventure is running at http://${host}:${port}`);
 });

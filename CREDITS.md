@@ -16,3 +16,26 @@ game loads reproducibly.
 
 The two PNGs in `artifacts/` are browser screenshots of this game, taken with
 Playwright for the Round 1 pull request. They are not game assets.
+
+## Round 2 additions
+
+Round 2 adds no outside art either. The north terrace, ramp, parapet, banner,
+key pickup, bench and the new NPC bodies are all built in code from Three.js
+primitives (`src/world.js`, `src/npcs.js`). The sky, fog and light colours for
+each phase are plain hex values in `src/world.js`.
+
+The dialogue, quests and all text were written for this game.
+
+### Development dependencies (not shipped with the game)
+
+| Package | Version | Source | License |
+| --- | --- | --- | --- |
+| puppeteer-core | 23.x | https://registry.npmjs.org/puppeteer-core | Apache-2.0 |
+
+`puppeteer-core` is a dev-only dependency used by `scripts/test-round2.mjs` to
+drive the host Chrome. The game itself still needs no install, and the browser
+test uses the already-present `/opt/google/chrome/chrome` (override with
+`CHROME_PATH`) rather than downloading a browser.
+
+The `round2-*.png` files in `artifacts/` are real screenshots of this game taken
+by that test. They are not game assets.

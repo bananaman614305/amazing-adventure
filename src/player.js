@@ -10,9 +10,12 @@ const ACCELERATION = 40;
 const DAMPING = 12;
 
 export class Player {
-  constructor(camera, colliders, { onLock, onUnlock }) {
+  constructor(camera, colliders, { onLock, onUnlock, floorHeight = () => 0, stepHeight = 0.45 } = {}) {
     this.camera = camera;
     this.colliders = colliders;
+    this.floorHeight = floorHeight;
+    // How tall a ledge the player can walk up. Taller ledges are walls.
+    this.stepHeight = stepHeight;
 
     // Position is tracked on the floor plane; the camera sits at eye height.
     this.position = new THREE.Vector3(0, 0, 13);
@@ -22,6 +25,8 @@ export class Player {
 
     this.keys = new Set();
     this.enabled = false;
+    // Set while a dialogue or menu owns the input, so the player stands still.
+    this.frozen = false;
 
     this._onLock = onLock;
     this._onUnlock = onUnlock;
@@ -68,8 +73,9 @@ export class Player {
   }
 
   update(dt) {
-    const forward = Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS'));
-    const strafe = Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA'));
+    const moving = this.enabled && !this.frozen;
+    const forward = moving ? Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')) : 0;
+    const strafe = moving ? Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')) : 0;
 
     // Movement is relative to where the camera is looking, flat on the ground.
     const sin = Math.sin(this.yaw);
@@ -78,7 +84,7 @@ export class Player {
     const wishZ = -cos * forward - sin * strafe;
     const wishLength = Math.hypot(wishX, wishZ);
 
-    if (this.enabled && wishLength > 0) {
+    if (moving && wishLength > 0) {
       const nx = wishX / wishLength;
       const nz = wishZ / wishLength;
       this.velocity.x += nx * ACCELERATION * dt;
@@ -96,23 +102,54 @@ export class Player {
     this.velocity.z *= damp;
 
     // Move one axis at a time so we slide along walls instead of sticking.
+    const beforeX = this.position.x;
     this.position.x += this.velocity.x * dt;
-    if (this._blocked()) {
-      this.position.x -= this.velocity.x * dt;
+    if (this._blocked() || this._stepTooHigh(beforeX, this.position.z, this.position.x, this.position.z)) {
+      this.position.x = beforeX;
       this.velocity.x = 0;
     }
+    const beforeZ = this.position.z;
     this.position.z += this.velocity.z * dt;
-    if (this._blocked()) {
-      this.position.z -= this.velocity.z * dt;
+    if (this._blocked() || this._stepTooHigh(this.position.x, beforeZ, this.position.x, this.position.z)) {
+      this.position.z = beforeZ;
       this.velocity.z = 0;
     }
 
     this.syncCamera();
   }
 
+  /** Ground height under the player, so the terrace and ramp are walkable. */
+  groundHeight() {
+    return this.floorHeight(this.position.x, this.position.z);
+  }
+
   syncCamera() {
-    this.camera.position.set(this.position.x, PLAYER_HEIGHT, this.position.z);
+    this.camera.position.set(this.position.x, this.groundHeight() + PLAYER_HEIGHT, this.position.z);
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+  }
+
+  /** Teleports the player, cancelling momentum (used by save/load and tests). */
+  placeAt(x, z, yaw = this.yaw, pitch = this.pitch) {
+    this.position.set(x, 0, z);
+    this.velocity.set(0, 0, 0);
+    this.yaw = yaw;
+    this.pitch = pitch;
+    this.syncCamera();
+  }
+
+  /**
+   * True when moving from (fromX, fromZ) to (toX, toZ) would climb a ledge
+   * taller than `stepHeight`. A few points across the player's radius are
+   * sampled so grazing a wall corner still stops the move.
+   */
+  _stepTooHigh(fromX, fromZ, toX, toZ) {
+    const r = PLAYER_RADIUS * 0.7;
+    const samples = [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]];
+    for (const [dx, dz] of samples) {
+      const rise = this.floorHeight(toX + dx, toZ + dz) - this.floorHeight(fromX + dx, fromZ + dz);
+      if (rise > this.stepHeight) return true;
+    }
+    return false;
   }
 
   /** True when the player's circle overlaps any collider. */
