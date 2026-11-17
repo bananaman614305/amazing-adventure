@@ -14,7 +14,8 @@ import {
   questCounts
 } from './state.js';
 import { startConversation, applyChoice } from './dialogue.js';
-import { reputationView } from './factions.js';
+import { reputationView, npcTier } from './factions.js';
+import { GATE, isGateOpen, gateHint, areaAt, NOTICE_BOARD, noticeText } from './areas.js';
 import {
   chooseAmbientPair,
   buildExchange,
@@ -111,9 +112,18 @@ function toast(message) {
   setTimeout(() => el.remove(), 3200);
 }
 
+function syncGate() {
+  const open = isGateOpen(state);
+  environment.setGateOpen(open);
+  return open;
+}
+
 function refreshHUD() {
   clockTime.textContent = clockLabel(clockSeconds);
   coinCount.textContent = String(coins(state));
+  // The gate is derived from quest state, so every HUD refresh re-applies it.
+  // setGateOpen is idempotent, which keeps this safe to call often.
+  syncGate();
 
   const entries = journalEntries(state);
   const counts = questCounts(state);
@@ -293,6 +303,36 @@ function interactables() {
         }
       });
     }
+  }
+
+  // The north gate: report why it is shut, or just note that it is open.
+  const gateDistance = Math.hypot(GATE.x - player.position.x, GATE.z - player.position.z);
+  if (gateDistance < GATE.range) {
+    list.push({
+      kind: 'gate',
+      distance: gateDistance,
+      label: gateHint(state),
+      run: () => {
+        if (isGateOpen(state)) {
+          toast('The north gate stands open. The market lane is beyond.');
+        } else {
+          toast('Locked. Halden keeps the brass key — and he tends to lose it.');
+        }
+      }
+    });
+  }
+
+  // The notice board in the lane.
+  const boardDistance = Math.hypot(NOTICE_BOARD.x - player.position.x, NOTICE_BOARD.z - player.position.z);
+  if (boardDistance < NOTICE_BOARD.range) {
+    list.push({
+      kind: 'notice',
+      distance: boardDistance,
+      label: 'read the notice board',
+      run: () => {
+        toast(noticeText(state, npcTier(state, 'halden').id));
+      }
+    });
   }
 
   // Bench: rest to skip to the next phase.
@@ -599,6 +639,11 @@ function frame() {
 
   refreshHint();
 
+  // Track which area the player is in every frame, so area-gated UI and tests
+  // see the change immediately rather than on the next throttled HUD refresh.
+  const area = areaAt(player.position.x, player.position.z) || 'outside';
+  if (document.body.dataset.area !== area) document.body.dataset.area = area;
+
   hudTimer += dt;
   if (hudTimer > 0.2) {
     hudTimer = 0;
@@ -649,5 +694,8 @@ window.amazingAdventure = {
   getDialogue: () => (activeNode ? { speaker: activeNode.speaker, text: activeNode.text, choices: activeNode.choices?.map((c) => c.label) ?? [] } : null),
   choose: (index) => choose(index),
   KEY_SPOT,
-  TERRACE
+  TERRACE,
+  areaAt: () => areaAt(player.position.x, player.position.z),
+  isGateOpen: () => isGateOpen(state),
+  syncGate
 };

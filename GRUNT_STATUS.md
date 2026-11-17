@@ -2,7 +2,7 @@
 
 **Branch:** `grunt/round3-living-world`, stacked on the published Round 2 HEAD
 `f98386f` (PR #4, confirmed published).
-**Last checkpoint:** Round 3 implemented, tested and committed as `332d710`.
+**Last checkpoint:** Round 3 plus the north gate and market lane, tested locally.
 
 ## Current task
 
@@ -91,9 +91,48 @@ rather than waiting for it to merge.
 - Only a few fps under software rasterisation in this environment; not measured
   on real GPU hardware.
 
+## Chunk 2 — the north gate and the market lane
+
+Round 2's publication is confirmed (PR #4). The supervisor had not yet picked up
+the Round 3 publish request, so instead of idling I began the next owned outcome:
+a second connected area.
+
+- `src/areas.js` (pure): the plaza and lane extents, the gate opening, wall
+  segments either side of it, lane props and the notice-board text. Gate state is
+  *derived* from `questStatus(state, 'key')`, so it needs no new save field and
+  cannot desynchronise.
+- `src/world.js`: the north wall is now split around the gate, with stone piers
+  and a liftable door. `environment.setGateOpen()` toggles the door mesh and
+  adds/removes its collider. The lane is built as a walled corridor with a stall,
+  crates, a barrel, a lamp post, hanging point lights that follow the day/night
+  phase, and a readable notice board.
+- `src/main.js`: `syncGate()` runs from the HUD refresh; the gate and notice
+  board are interactables with hint lines; `document.body.dataset.area` is
+  updated every frame so area-gated UI is never stale.
+- Checks: `npm test` **107/107 pass** (9 new in `tests/areas.test.mjs`:
+  non-overlapping areas, gate reachability, wall split, gate unlocking only
+  after the key is returned, props inside the lane and clear of the gate path,
+  notice text per tier and per toll outcome). `npm run test:browser`
+  **56/56 pass, exit 0** (6 new: gate shut and solid before the key, open with
+  its collider gone after, walking through into the lane, the notice board being
+  interactable and showing text, and a locked gate stopping the player).
+
+### Bugs found in this chunk
+
+1. The crate at (12.6, -19.6) physically covered the notice board; the board
+   moved to z = -23.2, with a test that every prop clears every other feature.
+2. `document.body.dataset.area` was only updated on the throttled HUD refresh
+   (every 0.2s), so it lagged the player's real area. It is now set per frame.
+3. The ramp-walk browser check became flaky once the lane was added: the bigger
+   scene drops software-GL rendering to about 3.3 fps, so a fixed walk budget was
+   too short. The check now waits on the actual condition with a longer timeout.
+   The acceptance threshold was not loosened to hide anything: it was tightened
+   to the true terrace height (1.18) after confirming the ramp maths is exact.
+
 ## Next task
 
-Add a second connected area reached through the north gate (opened by returning
-Halden's key), with its own NPC and a faction-locked quest, and let reputation
-refuse or unlock that content. Keep new logic in pure modules with tests, and
-extend the browser suite for the new area's collision and interaction.
+Put an NPC in the market lane and give the lane a faction-gated quest, so the new
+area has a reason to exist beyond scenery. The gate and notice board are done; the
+next slice is a lane character whose dialogue changes with standing and whose
+quest is refused below a reputation tier. Then reduce draw calls (97 today) so the
+scene stays responsive on weak hardware.

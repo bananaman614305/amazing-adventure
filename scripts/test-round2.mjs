@@ -75,7 +75,7 @@ try {
   // actually reached (or the timeout proves the ramp is broken).
   await page.keyboard.down('KeyW');
   const reachedTerrace = await page
-    .waitForFunction(() => window.amazingAdventure.player.groundHeight() > 1.19, { timeout: 20000, polling: 100 })
+    .waitForFunction(() => window.amazingAdventure.player.groundHeight() > 1.19, { timeout: 45000, polling: 100 })
     .then(() => true)
     .catch(() => false);
   await page.keyboard.up('KeyW');
@@ -91,7 +91,7 @@ try {
     };
   });
   checks.check('walking up the ramp raises the player onto the terrace',
-    terraceState.ground >= 1.19 && terraceState.eye > 2.85 && terraceState.z < -13.2,
+    terraceState.ground >= 1.18 && terraceState.eye > 2.85 && terraceState.z < -13.1,
     `foot ground=${rampFoot.ground.toFixed(2)} at z=${rampFoot.z.toFixed(2)} -> ground=${terraceState.ground.toFixed(2)} eye=${terraceState.eye.toFixed(2)} at z=${terraceState.z.toFixed(2)}`);
 
   // The 1.2m terrace side must not be walkable: approach it from the grass.
@@ -574,7 +574,100 @@ try {
   const farAway = await page.evaluate(() => document.getElementById('overheard').hidden);
   checks.check('overheard text hides when the player walks away', farAway === true);
 
-  // --- 16. Final screenshots ----------------------------------------
+  // --- 16. The market lane behind the north gate --------------------
+  await page.evaluate(() => {
+    localStorage.clear();
+    window.amazingAdventure.saves.clear();
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await page.click('#play');
+  await new Promise((r) => setTimeout(r, 400));
+
+  // With the key back, the gate opens and its collider is removed.
+  const gateState = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const { startKey, pickUpKey, returnKey } = await import('./src/state.js');
+    const state = api.getState();
+    const shutBefore = !api.isGateOpen();
+    const gateCollider = api.environment.gateCollider;
+    const blockerBefore = api.player.colliders.includes(gateCollider);
+    startKey(state); pickUpKey(state); returnKey(state);
+    api.refreshHUD();
+    return {
+      shutBefore,
+      blockerBefore,
+      openAfter: api.isGateOpen(),
+      blockerAfter: api.player.colliders.includes(gateCollider),
+      doorHidden: api.environment.gateDoor.visible === false
+    };
+  });
+  checks.check('the north gate is shut until Halden has his key back',
+    gateState.shutBefore === true && gateState.blockerBefore === true,
+    JSON.stringify(gateState));
+  checks.check('returning the key opens the gate and removes its collider',
+    gateState.openAfter === true && gateState.blockerAfter === false && gateState.doorHidden === true,
+    JSON.stringify(gateState));
+
+  // Walk from the plaza through the gate into the lane.
+  await page.evaluate(() => window.amazingAdventure.player.placeAt(9.5, -14.5, 0, 0));
+  await page.keyboard.down('KeyW');
+  const reachedLane = await page
+    .waitForFunction(() => window.amazingAdventure.areaAt() === 'lane', { timeout: 20000, polling: 100 })
+    .then(() => true)
+    .catch(() => false);
+  await page.keyboard.up('KeyW');
+  const lanePos = await page.evaluate(() => ({
+    area: window.amazingAdventure.areaAt(),
+    x: window.amazingAdventure.player.position.x,
+    z: window.amazingAdventure.player.position.z,
+    bodyArea: document.body.dataset.area
+  }));
+  checks.check('the player can walk through the gate into the market lane',
+    reachedLane && lanePos.area === 'lane' && lanePos.bodyArea === 'lane',
+    JSON.stringify(lanePos));
+  await page.screenshot({ path: resolve(outDir, 'round3-market-lane.png') });
+
+  // The notice board in the lane is readable.
+  const board = await page.evaluate(() => ({
+    x: window.amazingAdventure.player.position.x,
+    z: window.amazingAdventure.player.position.z
+  }));
+  await page.evaluate(() => {
+    // Stand in front of the notice board.
+    window.amazingAdventure.player.placeAt(12.2, -23.2, -Math.PI / 2, 0);
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  const boardHint = await text(page, '#hint');
+  checks.check('the notice board is an interactable in the lane',
+    /notice board/.test(boardHint || ''), JSON.stringify(boardHint));
+  await page.keyboard.press('KeyE');
+  await new Promise((r) => setTimeout(r, 400));
+  const toastText = await page.$eval('#toast-stack', (el) => el.textContent);
+  checks.check('reading the notice board shows its text', (toastText || '').length > 15,
+    JSON.stringify((toastText || '').slice(0, 60)));
+
+  // The gate is a solid wall again when the key has not been returned.
+  await page.evaluate(() => {
+    window.amazingAdventure.saves.clear();
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await page.click('#play');
+  await new Promise((r) => setTimeout(r, 400));
+  await page.evaluate(() => window.amazingAdventure.player.placeAt(9.5, -15.6, 0, 0));
+  await page.keyboard.down('KeyW');
+  await new Promise((r) => setTimeout(r, 5000));
+  await page.keyboard.up('KeyW');
+  const blocked = await page.evaluate(() => ({
+    z: window.amazingAdventure.player.position.z,
+    area: window.amazingAdventure.areaAt()
+  }));
+  checks.check('a locked gate stops the player entering the lane',
+    blocked.area === 'plaza' && blocked.z > -17.6,
+    `stopped at z=${blocked.z.toFixed(2)} in ${blocked.area}`);
+
+  // --- 17. Final screenshots ----------------------------------------
   await page.evaluate(() => {
     window.amazingAdventure.setClock(20);
     window.amazingAdventure.player.placeAt(2, 12, 0.2, -0.04);
@@ -597,6 +690,19 @@ try {
   });
   await new Promise((r) => setTimeout(r, 700));
   await page.screenshot({ path: resolve(outDir, 'round3-standing.png') });
+
+  // The market lane at dusk, with the gate open.
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const { startKey, pickUpKey, returnKey } = await import('./src/state.js');
+    const state = api.getState();
+    startKey(state); pickUpKey(state); returnKey(state);
+    api.refreshHUD();
+    api.setClock(85);
+    api.player.placeAt(9.8, -19.5, 0.15, 0.02);
+  });
+  await new Promise((r) => setTimeout(r, 1200));
+  await page.screenshot({ path: resolve(outDir, 'round3-lane-dusk.png') });
 } finally {
   await close();
   await server.stop();

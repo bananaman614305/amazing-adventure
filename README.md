@@ -97,12 +97,26 @@ each other.
   walk away and it fades. The scripts are deterministic from game state, so they
   are testable and never desynchronise a save.
 
+### A second connected area
+
+Returning Halden's key unlocks the **north gate** in the plaza wall, and beyond
+it lies **the market lane** — a narrow back street with a trader's stall, crates,
+a barrel, a lamp post and a notice board. The gate is a real gate: until the key
+is back it is a solid collider and the door is visibly shut, and with the key
+returned the collider is removed and the door lifts. Its state is *derived* from
+the quest rather than stored, so the unlock can never desynchronise a save.
+
+The notice board is readable and reports back on the systems you have been
+playing: faction standing with the Watch changes its wording, and whether you
+paid or waived Oswin's toll changes what the traders have pinned up.
+
 ### Round 3 files
 
 | File | What it holds |
 | --- | --- |
 | `src/factions.js` | Faction data, reputation scoring, tiers, NPC standing, rival reactions. Pure. |
 | `src/ambient.js` | Pair selection, script bank and exchange building for NPC-to-NPC talk. Pure. |
+| `src/areas.js` | The plaza and market lane boxes, the north gate, lane props and notice-board text. Pure. |
 
 ### Testing note
 

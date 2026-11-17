@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
+import {
+  GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS
+} from './areas.js';
 
 // Everything you can see and bump into is built here from plain primitives.
 // No outside models or textures, so the whole scene is code. The walkable
@@ -42,8 +45,9 @@ export function buildWorld(renderer) {
   const wallHeight = 3.2;
   const wallThickness = 1;
 
+  // The north wall is split either side of the gate so the gate opening can be
+  // opened and closed by its own collider (see the gate block below).
   const sides = [
-    { x: 0, z: -HALF, w: WORLD_SIZE, d: wallThickness },
     { x: 0, z: HALF, w: WORLD_SIZE, d: wallThickness },
     { x: -HALF, z: 0, w: wallThickness, d: WORLD_SIZE },
     { x: HALF, z: 0, w: wallThickness, d: WORLD_SIZE }
@@ -55,6 +59,162 @@ export function buildWorld(renderer) {
       position: [side.x, wallHeight / 2, side.z],
       material: wallMaterial
     });
+  }
+
+  for (const segment of NORTH_WALL_SEGMENTS) {
+    const width = segment.maxX - segment.minX;
+    addBox(scene, colliders, {
+      size: [width, wallHeight, wallThickness],
+      position: [(segment.minX + segment.maxX) / 2, wallHeight / 2, -HALF],
+      material: wallMaterial
+    });
+  }
+
+  // --- The north gate ----------------------------------------------------
+  // Two stone piers frame the opening; the door itself is a slab that lifts
+  // when the gate is unlocked.
+  const pierMaterial = new THREE.MeshStandardMaterial({ color: 0x7b7163, roughness: 0.82 });
+  for (const x of [GATE.minX - 0.35, GATE.maxX + 0.35]) {
+    addBox(scene, colliders, {
+      size: [0.7, wallHeight + 0.9, 1.4],
+      position: [x, (wallHeight + 0.9) / 2, -HALF],
+      material: pierMaterial,
+      castShadow: true
+    });
+  }
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(GATE.width + 1.4, 0.55, 1.4), pierMaterial);
+  lintel.position.set(GATE.x, wallHeight + 0.62, -HALF);
+  lintel.castShadow = true;
+  scene.add(lintel);
+
+  const gateDoor = new THREE.Mesh(
+    new THREE.BoxGeometry(GATE.width, wallHeight - 0.3, 0.28),
+    new THREE.MeshStandardMaterial({ color: 0x5e4a33, roughness: 0.7, metalness: 0.1 })
+  );
+  gateDoor.position.set(GATE.x, (wallHeight - 0.3) / 2, -HALF);
+  gateDoor.castShadow = true;
+  scene.add(gateDoor);
+
+  // The gate collider is separate from the walls so it can be removed.
+  const gateCollider = boxCollider(GATE.minX, -HALF - 0.5, GATE.maxX, -HALF + 0.5);
+  colliders.push(gateCollider);
+
+  // --- The market lane, north of the gate --------------------------------
+  const laneFloor = new THREE.Mesh(
+    new THREE.PlaneGeometry(LANE.maxX - LANE.minX, LANE.maxZ - LANE.minZ),
+    new THREE.MeshStandardMaterial({ color: 0x9d9182, roughness: 0.93 })
+  );
+  laneFloor.rotation.x = -Math.PI / 2;
+  laneFloor.position.set(
+    (LANE.minX + LANE.maxX) / 2,
+    0.02,
+    (LANE.minZ + LANE.maxZ) / 2
+  );
+  laneFloor.receiveShadow = true;
+  scene.add(laneFloor);
+
+  // Lane walls: two long sides and a far end, leaving the gate end open.
+  const laneWall = new THREE.MeshStandardMaterial({ color: 0x6a6053, roughness: 0.88 });
+  const laneWallHeight = 3.0;
+  for (const x of [LANE.minX, LANE.maxX]) {
+    addBox(scene, colliders, {
+      size: [0.8, laneWallHeight, LANE.maxZ - LANE.minZ],
+      position: [x, laneWallHeight / 2, (LANE.minZ + LANE.maxZ) / 2],
+      material: laneWall
+    });
+  }
+  addBox(scene, colliders, {
+    size: [LANE.maxX - LANE.minX + 1.6, laneWallHeight, 0.8],
+    position: [(LANE.minX + LANE.maxX) / 2, laneWallHeight / 2, LANE.minZ],
+    material: laneWall
+  });
+  // Short returns to the plaza wall, closing the gap beside the gate.
+  for (const [x, toX] of [[LANE.minX, GATE.minX], [GATE.maxX, LANE.maxX]]) {
+    if (toX <= x) continue;
+    addBox(scene, colliders, {
+      size: [toX - x, laneWallHeight, 0.8],
+      position: [(x + toX) / 2, laneWallHeight / 2, LANE.maxZ],
+      material: laneWall
+    });
+  }
+
+  // Props make the lane read as a working back street.
+  const laneWood = new THREE.MeshStandardMaterial({ color: 0x7a5232, roughness: 0.8 });
+  const laneRoof = new THREE.MeshStandardMaterial({ color: 0x6d3a2c, roughness: 0.75 });
+  for (const prop of LANE_PROPS) {
+    if (prop.kind === 'post') {
+      const post = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.16, prop.height, 10),
+        laneWood
+      );
+      post.position.set(prop.x, prop.height / 2, prop.z);
+      post.castShadow = true;
+      scene.add(post);
+      const lamp = new THREE.Mesh(
+        new THREE.SphereGeometry(0.24, 14, 10),
+        new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xffb43a, emissiveIntensity: 0.9 })
+      );
+      lamp.position.set(prop.x, prop.height + 0.1, prop.z);
+      scene.add(lamp);
+      colliders.push(boxCollider(prop.x - 0.25, prop.z - 0.25, prop.x + 0.25, prop.z + 0.25));
+    } else if (prop.kind === 'barrel') {
+      const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.5, 0.5, prop.height, 16),
+        laneWood
+      );
+      barrel.position.set(prop.x, prop.height / 2, prop.z);
+      barrel.castShadow = true;
+      barrel.receiveShadow = true;
+      scene.add(barrel);
+      colliders.push(boxCollider(
+        prop.x - prop.width / 2, prop.z - prop.depth / 2,
+        prop.x + prop.width / 2, prop.z + prop.depth / 2
+      ));
+    } else {
+      addBox(scene, colliders, {
+        size: [prop.width, prop.height, prop.depth],
+        position: [prop.x, prop.height / 2, prop.z],
+        material: prop.kind === 'stall' ? laneWood : laneRoof,
+        castShadow: true
+      });
+      if (prop.kind === 'stall') {
+        addBox(scene, [], {
+          size: [prop.width + 0.5, 0.25, prop.depth + 0.4],
+          position: [prop.x, prop.height + 0.15, prop.z],
+          material: laneRoof,
+          castShadow: true
+        });
+      }
+    }
+  }
+
+  // The notice board: readable, and the only thing in the lane that talks back.
+  const boardFrame = addBox(scene, [], {
+    size: [0.24, NOTICE_BOARD.height, 1.5],
+    position: [NOTICE_BOARD.x, NOTICE_BOARD.height / 2, NOTICE_BOARD.z],
+    material: laneWood,
+    castShadow: true
+  });
+  boardFrame.rotation.y = Math.PI / 2;
+  const boardFace = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.4, 1.2),
+    new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.95 })
+  );
+  boardFace.position.set(NOTICE_BOARD.x - 0.14, 1.25, NOTICE_BOARD.z);
+  boardFace.rotation.y = -Math.PI / 2;
+  scene.add(boardFace);
+  colliders.push(boxCollider(
+    NOTICE_BOARD.x - 0.3, NOTICE_BOARD.z - 0.9,
+    NOTICE_BOARD.x + 0.3, NOTICE_BOARD.z + 0.9
+  ));
+
+  // A row of hanging lights so the lane is not a dark tunnel at dusk.
+  const laneLamps = [];
+  for (const z of [-19.5, -22.5, -25.2]) {
+    const light = new THREE.PointLight(0xffc46b, 0, 9, 2);
+    light.position.set(LANE.minX + 3.2, 2.6, z);
+    scene.add(light);
+    laneLamps.push(light);
   }
 
   // --- North terrace + ramp ----------------------------------------------
@@ -260,6 +420,17 @@ export function buildWorld(renderer) {
     sun,
     fill,
     lamps,
+    laneLamps,
+    gateDoor,
+    gateCollider,
+    /** Opens or shuts the north gate: the door lifts and its collider goes. */
+    setGateOpen(open) {
+      gateDoor.visible = !open;
+      gateDoor.position.y = open ? wallHeight + 2 : (wallHeight - 0.3) / 2;
+      const index = colliders.indexOf(gateCollider);
+      if (open && index !== -1) colliders.splice(index, 1);
+      if (!open && index === -1) colliders.push(gateCollider);
+    },
     keyGroup,
     /** Shows or hides the key pickup. */
     setKeyVisible(visible) {
@@ -342,6 +513,10 @@ export function applyPhase(environment, phaseId) {
   for (const lamp of lamps) {
     lamp.light.intensity = look.lampIntensity;
     lamp.mesh.material.emissiveIntensity = look.lampGlow;
+  }
+  // The market lane keeps the same lighting rhythm as the plaza.
+  for (const light of environment.laneLamps || []) {
+    light.intensity = look.lampIntensity * 0.6;
   }
   environment.phase = phaseId;
 }
