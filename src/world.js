@@ -65,10 +65,12 @@ export function buildWorld(renderer) {
   // Fountain in the plaza centre: everyone gathers around it.
   addBox(scene, colliders, { size: [4, 0.7, 4], position: [0, 0.35, 0], material: stone });
   const basin = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.1, 32), water);
+  basin.name = 'fountain-water';
   basin.position.set(0, 0.72, 0);
   basin.receiveShadow = true;
   scene.add(basin);
   const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 1.8, 12), stone);
+  pillar.name = 'fountain-pillar';
   pillar.position.set(0, 1.5, 0);
   pillar.castShadow = true;
   scene.add(pillar);

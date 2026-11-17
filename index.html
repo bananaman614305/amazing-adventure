@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101826'/%3E%3Cpath d='M16 5 27 25H5z' fill='%23ffd479'/%3E%3C/svg%3E">
-  <title>Amazing Adventure — Round 1</title>
+  <title>Amazing Adventure — Round 2</title>
   <script type="importmap">
     {
       "imports": {
@@ -42,6 +42,32 @@
     #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
     #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
 
+    #status {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      width: min(360px, calc(100vw - 36px));
+      display: grid;
+      gap: 8px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: rgba(8, 14, 24, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+      pointer-events: none;
+    }
+    #status .row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+    #status .label { color: #93a5bd; text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px; font-weight: 700; }
+    #status .value { text-align: right; color: #f4f7fb; font-weight: 600; }
+    #quest { color: #ffd479 !important; }
+    #inventory { color: #b9f3d0 !important; }
+    #event {
+      min-height: 16px;
+      color: #ffd479;
+      font-size: 12px;
+      text-align: center;
+    }
+
     #hint {
       position: fixed;
       left: 50%;
@@ -63,13 +89,13 @@
       left: 50%;
       bottom: 6%;
       transform: translateX(-50%);
-      width: min(680px, calc(100vw - 32px));
+      width: min(720px, calc(100vw - 32px));
       padding: 20px 24px 16px;
       border-radius: 14px;
       background: rgba(11, 18, 30, 0.94);
       border: 1px solid rgba(255, 255, 255, 0.2);
       box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
-      pointer-events: none;
+      pointer-events: auto;
     }
     #dialogue .name {
       font-size: 13px;
@@ -77,7 +103,12 @@
       text-transform: uppercase;
       letter-spacing: 0.14em;
       color: #ffd479;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
+    }
+    #dialogue-context {
+      font-size: 12px;
+      color: #9fb0c6;
+      margin-bottom: 12px;
     }
     #dialogue .line { font-size: 19px; line-height: 1.5; min-height: 58px; }
     #dialogue .foot {
@@ -86,6 +117,23 @@
       color: #9fb0c6;
       text-align: right;
     }
+    #dialogue-choices {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    #dialogue-choices button {
+      font: inherit;
+      font-size: 14px;
+      color: #f4f7fb;
+      background: rgba(255, 212, 121, 0.12);
+      border: 1px solid rgba(255, 212, 121, 0.45);
+      border-radius: 8px;
+      padding: 10px 12px;
+      text-align: left;
+      cursor: pointer;
+    }
+    #dialogue-choices button:hover { background: rgba(255, 212, 121, 0.24); }
 
     #overlay {
       position: fixed;
@@ -124,6 +172,13 @@
       cursor: pointer;
     }
     #overlay button:hover { background: #ffe2a3; }
+    #new-game {
+      margin-left: 10px;
+      color: #f4f7fb;
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    #new-game:hover { background: rgba(255, 255, 255, 0.1); }
   </style>
 </head>
 <body>
@@ -131,18 +186,29 @@
   <div id="crosshair" hidden></div>
   <div id="hint" hidden></div>
 
+  <div id="status">
+    <div class="row"><span class="label">Moonmoss time</span><span class="value" id="clock">8:20 AM</span></div>
+    <div class="row"><span class="label">Story</span><span class="value" id="quest">Quest: speak with Mara the Keeper</span></div>
+    <div class="row"><span class="label">Inventory</span><span class="value" id="inventory">empty</span></div>
+    <div class="row"><span class="label">Acquaintances</span><span class="value" id="memory">0/8 people know you</span></div>
+    <div id="event"></div>
+  </div>
+
   <div id="dialogue" hidden>
     <div class="name" id="dialogue-name"></div>
+    <div id="dialogue-context"></div>
     <div class="line" id="dialogue-line"></div>
-    <div class="foot">E / Enter — next &nbsp;·&nbsp; Esc — close</div>
+    <div id="dialogue-choices"></div>
+    <div class="foot" id="dialogue-foot">E / Enter — next · Esc — close</div>
   </div>
 
   <div id="overlay">
     <div class="card">
       <h1>Amazing Adventure</h1>
-      <p class="round">Round 1 — Walk the world</p>
-      <p class="controls">W A S D to walk &nbsp;·&nbsp; mouse to look<br>E to talk &nbsp;·&nbsp; Esc to pause</p>
+      <p class="round">Round 2 — People and quests</p>
+      <p class="controls">W A S D to walk &nbsp;·&nbsp; mouse to look<br>E to talk or pick up &nbsp;·&nbsp; Esc to pause<br>Progress saves automatically</p>
       <button type="button" id="play">Click to play</button>
+      <button type="button" id="new-game">New game</button>
     </div>
   </div>
 
