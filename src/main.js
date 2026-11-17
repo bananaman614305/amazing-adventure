@@ -142,6 +142,9 @@ function escapeHtml(text) {
 // --- Dialogue ------------------------------------------------------------
 let activeNPC = null;
 let activeNode = null;
+// Which choice the keyboard is pointing at. E/Enter/click all go through
+// choose(); W/S or arrow keys move the highlight.
+let choiceIndex = 0;
 
 function openDialogue(npc) {
   activeNPC = npc;
@@ -151,6 +154,7 @@ function openDialogue(npc) {
   hint.hidden = true;
   // Stand still while talking: no walking away mid-sentence.
   player.frozen = true;
+  choiceIndex = 0;
   renderNode();
 }
 
@@ -160,6 +164,7 @@ function renderNode() {
   dialogueRole.textContent = activeNPC?.role || '';
   dialogueLine.textContent = activeNode.text;
   dialogueChoices.innerHTML = '';
+  choiceIndex = Math.max(0, Math.min(choiceIndex, (activeNode.choices?.length || 1) - 1));
 
   const choices = activeNode.choices?.length ? activeNode.choices : [{ label: 'Leave', end: true }];
   choices.forEach((choice, index) => {
@@ -168,9 +173,34 @@ function renderNode() {
     button.className = 'choice';
     button.dataset.index = String(index);
     button.innerHTML = `<span class="num">${index + 1}</span>${escapeHtml(choice.label)}`;
-    button.addEventListener('click', () => choose(index));
+    // The pointer is normally locked, so this click is a convenience for
+    // players who pause first; keyboard selection is the primary path.
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      choiceIndex = index;
+      choose(index);
+    });
     dialogueChoices.appendChild(button);
   });
+  highlightChoice();
+}
+
+/** Marks the keyboard-selected choice and scrolls it into view. */
+function highlightChoice() {
+  const buttons = dialogueChoices.querySelectorAll('.choice');
+  buttons.forEach((button, index) => {
+    button.classList.toggle('selected', index === choiceIndex);
+    button.setAttribute('aria-selected', String(index === choiceIndex));
+    if (index === choiceIndex) button.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+/** Moves the keyboard highlight by `delta`, wrapping at both ends. */
+function moveChoice(delta) {
+  const count = dialogueChoices.querySelectorAll('.choice').length;
+  if (count === 0) return;
+  choiceIndex = (choiceIndex + delta + count) % count;
+  highlightChoice();
 }
 
 function choose(index) {
@@ -191,6 +221,7 @@ function choose(index) {
   const next = typeof choice.next === 'function' ? choice.next() : choice.next;
   if (!next) return closeDialogue();
   activeNode = next;
+  choiceIndex = 0;
   renderNode();
 }
 
@@ -367,8 +398,16 @@ document.addEventListener('keydown', (event) => {
 
   if (!dialogueEl.hidden) {
     if (event.code === 'KeyE' || event.code === 'Enter') {
-      // E picks the first choice (usually the natural next step).
-      choose(0);
+      // E confirms the highlighted choice, which starts on the natural next step.
+      const index = choiceIndex;
+      choiceIndex = 0;
+      choose(index);
+      event.preventDefault();
+    } else if (event.code === 'KeyS' || event.code === 'ArrowDown') {
+      moveChoice(1);
+      event.preventDefault();
+    } else if (event.code === 'KeyW' || event.code === 'ArrowUp') {
+      moveChoice(-1);
       event.preventDefault();
     } else if (/^Digit[1-9]$/.test(event.code)) {
       choose(Number(event.code.slice(5)) - 1);

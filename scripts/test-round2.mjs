@@ -130,6 +130,20 @@ try {
     dialogue1 ? `${dialogue1.speaker}: ${dialogue1.choices.length} choices` : 'no dialogue');
   await page.screenshot({ path: resolve(outDir, 'round2-dialogue-mara.png') });
 
+  // Keyboard navigation: S moves the highlight, E confirms the highlighted one.
+  const highlight = () => page.evaluate(() =>
+    [...document.querySelectorAll('#dialogue-choices .choice')].findIndex((el) => el.classList.contains('selected')));
+  checks.check('first dialogue choice starts highlighted', (await highlight()) === 0,
+    `highlighted index ${await highlight()}`);
+  await page.keyboard.press('KeyS');
+  await new Promise((r) => setTimeout(r, 150));
+  checks.check('S moves the dialogue highlight down', (await highlight()) === 1,
+    `highlighted index ${await highlight()}`);
+  await page.keyboard.press('KeyW');
+  await new Promise((r) => setTimeout(r, 150));
+  checks.check('W moves the dialogue highlight back up', (await highlight()) === 0,
+    `highlighted index ${await highlight()}`);
+
   // Talking freezes movement: walk for a moment and confirm the player stays put.
   const beforeFreeze = await page.evaluate(() => ({
     x: window.amazingAdventure.player.position.x,

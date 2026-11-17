@@ -170,7 +170,14 @@
       cursor: pointer;
       pointer-events: auto;
     }
-    #dialogue .choice:hover, #dialogue .choice:focus-visible { background: rgba(255, 212, 121, 0.16); border-color: #ffd479; color: #fff; outline: none; }
+    #dialogue .choice:hover, #dialogue .choice:focus-visible,
+    #dialogue .choice.selected {
+      background: rgba(255, 212, 121, 0.18);
+      border-color: #ffd479;
+      color: #fff;
+      outline: none;
+    }
+    #dialogue .choice.selected .num::after { content: "›"; margin-left: 6px; }
     #dialogue .choice .num { color: #ffd479; font-weight: 700; margin-right: 8px; }
     #dialogue .foot {
       margin-top: 10px;
@@ -277,7 +284,7 @@
     <div class="role" id="dialogue-role"></div>
     <div class="line" id="dialogue-line"></div>
     <div class="choices" id="dialogue-choices"></div>
-    <div class="foot">1–5 choose &nbsp;·&nbsp; E next &nbsp;·&nbsp; Esc close</div>
+    <div class="foot">W / S select &nbsp;·&nbsp; E or Enter confirm &nbsp;·&nbsp; 1–5 pick &nbsp;·&nbsp; Esc close</div>
   </div>
 
   <div id="overlay">
@@ -286,7 +293,8 @@
       <p class="round">Round 2 — People and quests</p>
       <p class="controls">
         W A S D walk &nbsp;·&nbsp; mouse look &nbsp;·&nbsp; Shift run<br>
-        E talk / interact &nbsp;·&nbsp; J journal &nbsp;·&nbsp; R rest on a bench &nbsp;·&nbsp; Esc pause
+        E talk / interact &nbsp;·&nbsp; J journal &nbsp;·&nbsp; Esc pause<br>
+        At a bench, E rests until the next hour
       </p>
       <div class="buttons">
         <button type="button" id="play">Click to play</button>
