@@ -1,7 +1,8 @@
 # Grunt status — Amazing Adventure
 
 **Branch:** `grunt/continuous-adventure` (stacked on the Round 1 seed commit `afaf355`)
-**Last checkpoint:** Round 2 complete, tested and committed as `963ccb7`.
+**Last checkpoint:** Round 2 complete, tested and committed as `69d08f4`
+(publish requested for that HEAD; earlier Round 2 commit was `963ccb7`).
 
 ## Current task
 
@@ -39,7 +40,7 @@ day/dusk/night cycle and save/load.
   clamping, save round-trips, corrupt/invalid saves, storage fallback, every
   reachable dialogue node across 9 quest states, ramp profile and terrace maths,
   clock phases and labels.
-- `npm run test:browser` — **42/42 pass**, exit 0. Headless Chrome
+- `npm run test:browser` — **45/45 pass**, exit 0. Headless Chrome
   (`/opt/google/chrome/chrome`) with a private temp profile, `--no-sandbox`,
   `--disable-dev-shm-usage`, server on a free loopback port. It plays the full
   lantern quest (promise branch), Halden's key (world pickup, hint, return),
@@ -47,7 +48,8 @@ day/dusk/night cycle and save/load.
   the ramp raises the player to y=2.90 and that the terrace side wall stops
   them, checks dialogue freezes movement, the day/dusk/night looks, NPC
   routines, save then reload then Continue restoring quests/inventory/coins/
-  position/time, the final journal, and the bench rest. No console errors.
+  position/time, the final journal, the bench rest, and keyboard dialogue
+  navigation. No console errors.
 - Screenshots saved as real browser captures in `artifacts/`:
   `round2-plaza-day.png`, `round2-dusk.png`, `round2-night-plaza.png`,
   `round2-dialogue-mara.png`, `round2-dialogue-oswin.png`,
@@ -67,6 +69,10 @@ day/dusk/night cycle and save/load.
    and added step-height blocking so the 1.2m side cannot be walked up.
 6. Sable's spot overlapped the bench, so the bench was unreachable.
 7. Movement continued while dialogue was open; the player now freezes.
+8. Found later in review: with the pointer locked, mouse clicks could never
+   reach the dialogue choice buttons although the footer advertised clicking.
+   Choices now have a visible keyboard highlight (W/S or arrows, E/Enter/1-5)
+   and a click handler that works when paused; covered by three new checks.
 
 ## Known limitations / remaining issues
 
@@ -80,6 +86,13 @@ day/dusk/night cycle and save/load.
   environment; not measured on real GPU hardware.
 - `puppeteer-core` is a dev dependency only; the game itself still needs no
   install. The browser test needs `npm install` and the host Chrome.
+
+## Publication state
+
+`/worker/state/outbox/publish.json` asks for `grunt/continuous-adventure` based
+on `feature/corner-5a4c38eae323` at HEAD `69d08f4`, working tree clean. No
+`publish-result.json` had appeared at this checkpoint, so publication is
+**requested but not yet confirmed**.
 
 ## Next task (Round 3 direction)
 
