@@ -373,7 +373,59 @@ instructions.
 
 ## Current task
 
-Round 17 — The game could be made impossible to finish.
+Round 18 — Proving there are no other soft-locks, and hardening save loading.
+
+PRs #5–#18 are published and open for the human. Round 17 fixed a soft-lock found by
+a single playthrough, and its own report said honestly: *"I tested completion, not
+every hostile path."* This round does the exhaustive version and closes that caveat.
+
+### What Round 18 adds
+
+- **`scripts/reachability.mjs`**: breadth-first search over **every legal action**
+  from the start state, then reverse-reachability to find any state that can never
+  reach completion. Result: **1428 reachable states, 591 complete, 1428 winnable,
+  zero dead ends.**
+- **Proof the search works**: restoring the old −15 toll penalty makes it
+  independently rediscover the round-17 soft-lock (it prints the stranded states).
+  Re-fixed, it reports zero. The explorer is not a rubber stamp.
+- **Save hardening**: coins were clamped at the bottom but **not the top**, so a
+  hand-edited save could carry `1e308` coins. Now clamped to `MAX_COINS = 9999`,
+  which is far beyond the ~7 a finished playthrough ends with (asserted).
+- **Corrupt-save fix**: `"quests": []` passed the `typeof === 'object'` check and
+  loaded as an empty game. An array is now refused as the corrupt save it is.
+- `scripts/reachability.mjs` is **not** added to the shipped manifest: it is a test
+  harness, and the browser suite checks the underlying state functions in the
+  shipped build instead of shipping the harness to players.
+
+### Correction to my own reporting
+
+While probing this round I claimed I had found "a critical bug: nothing is ever
+saved". **That was wrong.** My probe called `applyChoice()` directly, bypassing the
+UI's `choose()`, which is what calls `autoSave()`. Re-testing the real path — walking
+to Mara and clicking a choice — saving, the Continue button and reloading a finished
+game all work correctly. I am recording this because an unverified "critical bug"
+claim is exactly the kind of thing I should not leave in a report.
+
+### Checks actually run this round
+
+- `npm test` — **343/343 pass** (was 330): 12 save-hardening cases + 1 exhaustive
+  reachability case.
+- `npm run test:browser` — **132/132 pass, exit 0** (was 128): 4 new checks (coin
+  clamp, array-quests refusal, fractional floor, and the shipped build exposing the
+  state functions the reachability proof covers).
+- `npm run test:mobile` — **165/165 pass, exit 0**.
+- **Totals: 640 checks — 343 unit, 132 desktop, 165 mobile.**
+- `node scripts/reachability.mjs` — exits 0, prints 1428 states / 0 dead ends.
+- `node scripts/playthrough.mjs` — still exits 0.
+- Self-contained re-verified: 26 files, 972 KB, 0 external requests, 0 errors.
+
+### Evidence
+
+`artifacts/round18-reachability.png` — 1280x800, mean luminance 53.3, 12.7% bright,
+max 247, 4721 distinct colours. I am text-only and did not inspect it; the claims
+rest on the search output and the test results.
+
+## Previous round — Round 17: a soft-lock that made the game unfinishable
 
 PRs #5–#17 are published and open for the human. This round found the most serious
 defect in the whole project, and it was found by **playing the game** rather than by
@@ -1099,9 +1151,9 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **Fix the walk-through parapet.** The terrace has a visible 0.55 m wall with no
-   collider, so the player can walk through it and off the ledge. Found while probing
-   props; needs a collider and a test that the terrace edge stops you.
+2. **Give the terrace parapet a collider.** It is drawn but has none. Testing showed
+   the player cannot actually walk through it (the step-height rule blocks the drop),
+   so it is cosmetic rather than a hole — but the geometry should match what is drawn.
 3. **Give the lane its own work board, or a second reason to cross the gate.**
    The plaza board makes standing earnable early, but the lane has no equivalent,
    so the two areas are not symmetrical in how a player recovers standing.
