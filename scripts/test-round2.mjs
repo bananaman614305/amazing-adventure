@@ -1510,6 +1510,109 @@ try {
     reduced.some((c) => /prefers-reduced-motion: reduce/.test(c)), JSON.stringify(reduced));
 
   await capture(page, 'round13-access.png');
+
+  // --- 27. The spoken compass ---------------------------------------------
+  // Announcing what changed is not enough to move through the world. These checks
+  // assert the directions are actually right, because a blind player has no way to
+  // notice a compass that points the wrong way.
+  await page.evaluate(() => { const a = window.amazingAdventure; a.player.placeAt(0, 0, 0, 0); });
+  await new Promise((r) => setTimeout(r, 400));
+
+  const compass = await page.evaluate(() => {
+    const a = window.amazingAdventure;
+    const targets = a.compassTargets();
+    const gate = targets.find((t) => t.id === 'gate');
+    return { count: targets.length, gate: { x: gate.x, z: gate.z }, hasMara: targets.some((t) => t.id === 'mara') };
+  });
+  checks.check('the compass knows the real landmarks and where people actually are',
+    compass.count >= 10 && compass.gate.z < 0 && compass.hasMara === true,
+    JSON.stringify(compass));
+
+  // Query the gate directly: the nearby list only holds the closest few, which at
+  // the plaza centre are people, and that is the correct behaviour.
+  const gateNorth = await page.evaluate(() => window.amazingAdventure.announceRouteTo('gate'));
+  await new Promise((r) => setTimeout(r, 350));
+  const facingNorth = await page.evaluate(() => window.amazingAdventure.srAlertText());
+  checks.check('standing at the plaza centre facing north puts the north gate ahead, not behind',
+    gateNorth?.id === 'gate' &&
+    /gate is (straight ahead|ahead and to your (left|right))/i.test(facingNorth || '') &&
+    /north/.test(facingNorth || ''),
+    JSON.stringify(facingNorth));
+
+  // Turning around must flip the relative direction while the world bearing stays.
+  await page.evaluate(() => { const a = window.amazingAdventure; a.player.placeAt(0, 0, Math.PI, 0); });
+  await new Promise((r) => setTimeout(r, 400));
+  await page.evaluate(() => window.amazingAdventure.announceRouteTo('gate'));
+  await new Promise((r) => setTimeout(r, 350));
+  const facingSouth = await page.evaluate(() => window.amazingAdventure.srAlertText());
+  checks.check('turning around flips the relative direction but not the world bearing',
+    /gate is (behind you|behind you and to your (left|right))/i.test(facingSouth || '') &&
+    /north/.test(facingSouth || ''),
+    JSON.stringify(facingSouth));
+
+  // Asking for one place must name it and give a direction.
+  await page.evaluate(() => { window.amazingAdventure.player.placeAt(0, 0, 0, 0); });
+  await new Promise((r) => setTimeout(r, 300));
+  const route = await page.evaluate(() => window.amazingAdventure.announceRouteTo('bench'));
+  await new Promise((r) => setTimeout(r, 350));
+  const routeText = await page.evaluate(() => window.amazingAdventure.srAlertText());
+  checks.check('asking the way to a place names it and gives a direction and bearing',
+    route?.id === 'bench' && /bench is/i.test(routeText || '') && /west|left|ahead|behind/i.test(routeText || ''),
+    JSON.stringify(routeText));
+
+  // The compass box lives in the journal panel, which starts hidden.
+  await page.keyboard.press('KeyJ');
+  await new Promise((r) => setTimeout(r, 450));
+
+  // Typing must not drive the game: the compass box is a text field.
+  await page.click('#compass-input');
+  await page.evaluate(() => { const p = window.amazingAdventure.player; p.velocity.x = 0; p.velocity.z = 0; });
+  const posBefore = await page.evaluate(() => {
+    const p = window.amazingAdventure.player;
+    p.velocity.x = 0; p.velocity.z = 0;
+    return { x: p.position.x, z: p.position.z };
+  });
+  await page.type('#compass-input', 'wwwwww');
+  await new Promise((r) => setTimeout(r, 600));
+  const typing = await page.evaluate(() => {
+    const p = window.amazingAdventure.player;
+    return { value: document.getElementById('compass-input').value, x: p.position.x, z: p.position.z };
+  });
+  const typingMoved = Math.hypot(typing.x - posBefore.x, typing.z - posBefore.z);
+  checks.check('typing a place does not walk the player or fire movement hotkeys',
+    typing.value === 'wwwwww' && typingMoved < 0.02,
+    JSON.stringify({ value: typing.value, moved: Number(typingMoved.toFixed(4)) }));
+
+  // A written query gives the same answer as the spoken one.
+  await page.evaluate(() => { document.getElementById('compass-input').value = ''; });
+  await page.type('#compass-input', 'bench');
+  await page.keyboard.press('Enter');
+  await new Promise((r) => setTimeout(r, 400));
+  const written = await page.evaluate(() => ({
+    panel: document.getElementById('compass-results').textContent,
+    spoken: window.amazingAdventure.srAlertText()
+  }));
+  checks.check('typing a place in the journal gives the same answer aloud and in text',
+    /bench is/i.test(written.panel) && written.panel === written.spoken,
+    JSON.stringify(written));
+
+  // An unknown place must say so rather than fail silently.
+  await page.evaluate(() => { document.getElementById('compass-input').value = ''; });
+  await page.type('#compass-input', 'dragon');
+  await page.keyboard.press('Enter');
+  await new Promise((r) => setTimeout(r, 400));
+  const unknown = await page.evaluate(() => document.getElementById('compass-results').textContent);
+  checks.check('an unknown place is reported, not ignored',
+    /nothing called/i.test(unknown || ''), JSON.stringify(unknown));
+
+  // The written panel and the spoken list must agree, since both come from one source.
+  const panelRows = await page.evaluate(() =>
+    [...document.querySelectorAll('#compass-list li')].map((li) => li.textContent.trim()));
+  checks.check('the journal shows a written compass list, not only speech',
+    panelRows.length > 0 && panelRows.some((r) => /(ahead|behind|left|right)/.test(r)),
+    JSON.stringify(panelRows.slice(0, 3)));
+
+  await capture(page, 'round14-compass.png');
 } finally {
   await close();
   await server.stop();
