@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 
 import {
   createInitialState, questStatus, startLanterns, buyOilWithCoins,
-  buyOilWithPromise, startKey, pickUpKey, startCheer, watchLanterns,
+  buyOilWithPromise, deliverOil, startKey, pickUpKey, returnKey,
+  startCheer, watchLanterns, tellPipAboutLanterns,
+  startToll, collectToll, waiveToll, finishToll,
   hasItem, coins
 } from '../src/state.js';
 import { startConversation, applyChoice, DIALOGUE } from '../src/dialogue.js';
@@ -26,10 +28,25 @@ test('every NPC opens with a node that has at least one labelled choice', () => 
   assert.equal(startConversation(createInitialState(), 'nobody'), null);
 });
 
-test('the cast includes five distinct NPCs with unique ids', () => {
-  assert.equal(npcIds.length, 5);
+test('the cast includes six distinct NPCs with unique ids', () => {
+  assert.equal(npcIds.length, 6);
   const speakers = new Set(npcIds.map((id) => DIALOGUE[id].name));
-  assert.equal(speakers.size, 5);
+  assert.equal(speakers.size, 6);
+});
+
+test('Wren refuses her quest until the Market trusts you', () => {
+  const state = createInitialState();
+  const open = startConversation(state, 'wren');
+  assert.match(open.text, /Market business is for people the Market trusts/);
+  const ask = open.choices.find((c) => /look for it/i.test(c.label));
+  assert.equal(ask, undefined, 'no quest offer at neutral standing');
+  assert.equal(questStatus(state, 'ledger'), 'none');
+  // Asking what would earn trust must not start the quest either.
+  const advice = open.choices.find((c) => /earn that trust/i.test(c.label));
+  assert.ok(advice);
+  const adviceNode = advice.next();
+  assert.match(adviceNode.text, /Dues paid/);
+  assert.equal(questStatus(state, 'ledger'), 'none');
 });
 
 test('Mara → Oswin → Mara completes the lantern quest', () => {
@@ -167,10 +184,19 @@ const STATES = [
   ['key found', (s) => { startKey(s); pickUpKey(s); }],
   ['cheer started', startCheer],
   ['cheer watched', (s) => { startCheer(s); watchLanterns(s, 'dusk'); }],
+  ['key returned', (s) => { startKey(s); pickUpKey(s); returnKey(s); }],
+  ['toll started', (s) => { startKey(s); pickUpKey(s); returnKey(s); startToll(s); }],
+  ['toll collected', (s) => {
+    startKey(s); pickUpKey(s); returnKey(s); startToll(s); collectToll(s);
+  }],
+  ['toll waived', (s) => {
+    startKey(s); pickUpKey(s); returnKey(s); startToll(s); waiveToll(s, 'warm');
+  }],
   ['everything', (s) => {
-    startLanterns(s); buyOilWithPromise(s);
-    startKey(s); pickUpKey(s);
-    startCheer(s); watchLanterns(s, 'dusk');
+    startLanterns(s); buyOilWithPromise(s); deliverOil(s);
+    startKey(s); pickUpKey(s); returnKey(s);
+    startCheer(s); watchLanterns(s, 'dusk'); tellPipAboutLanterns(s);
+    startToll(s); waiveToll(s, 'warm'); finishToll(s);
   }]
 ];
 
@@ -215,7 +241,8 @@ test('applying every choice in every state never throws or corrupts state', () =
         const parsed = JSON.parse(JSON.stringify(state));
         assert.ok(parsed.quests, `${label}/${npcId}#${index} keeps quests`);
         for (const value of Object.values(state.quests)) {
-          assert.ok(['none', 'done', 'started', 'oil_bought', 'found', 'watched'].includes(value),
+          assert.ok(['none', 'done', 'started', 'oil_bought', 'found', 'watched',
+            'collected', 'waived', 'delivered'].includes(value),
             `${label}/${npcId}#${index} keeps valid quest steps (saw ${value})`);
         }
       }

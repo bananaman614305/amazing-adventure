@@ -1,16 +1,19 @@
-// Game state for the plaza: quests, inventory, coins, NPC memory and saves.
-// Everything here is plain data plus pure functions, so it can be unit-tested
-// in Node (`npm test`) without a browser.
+// Game state for the plaza: quests, inventory, coins, NPC memory, reputation
+// and saves. Everything here is plain data plus pure functions, so it can be
+// unit-tested in Node (`npm test`) without a browser.
+
+import { createInitialReputation, changeReputation, clampReputation as clampReputationSafe, FACTIONS } from './factions.js';
 
 export const ITEMS = {
   lantern_oil: { name: 'Lantern Oil', description: 'A flask of oil, still warm from the market stall.' },
   brass_key: { name: 'Brass Key', description: 'Small and worn smooth. Stamped with the north gate mark.' },
   keeper_promise: { name: 'Keeper’s Promise', description: 'Mara’s word that the plaza owes you a favour.' },
   pip_ribbon: { name: 'Pip’s Ribbon', description: 'A green ribbon. Pip tied it on and would not take it back.' },
-  oswin_marker: { name: 'Trader’s Marker', description: 'A wooden token from Oswin. Good for one favour, whenever you ask.' }
+  oswin_marker: { name: 'Trader’s Marker', description: 'A wooden token from Oswin. Good for one favour, whenever you ask.' },
+  toll_ledger: { name: 'Toll Ledger', description: 'Wren’s missing ledger. The last page names someone, and it is not Oswin.' }
 };
 
-export const QUEST_ORDER = ['lanterns', 'key', 'cheer'];
+export const QUEST_ORDER = ['lanterns', 'key', 'cheer', 'toll', 'ledger'];
 
 export const QUESTS = {
   lanterns: {
@@ -20,7 +23,8 @@ export const QUESTS = {
       { id: 'started', journal: 'Mara says the north lantern is failing. Oswin sells the only oil in the plaza.' },
       { id: 'oil_bought', journal: 'You have lantern oil. Mara is waiting by the fountain.' },
       { id: 'delivered', journal: 'Mara has the oil. The lanterns will burn through the night.' }
-    ]
+    ],
+    done: 'Mara has the oil. The lanterns burn all night without a flicker.'
   },
   key: {
     title: 'Halden’s Missing Key',
@@ -28,7 +32,8 @@ export const QUESTS = {
     steps: [
       { id: 'started', journal: 'Halden dropped the brass gate key near the crates south-east of the fountain.' },
       { id: 'found', journal: 'You found the brass key in the grass by the crates. Halden is at his post.' }
-    ]
+    ],
+    done: 'Halden has his brass key back, and the north gate stands open.'
   },
   cheer: {
     title: 'Pip’s Small Favour',
@@ -36,21 +41,55 @@ export const QUESTS = {
     steps: [
       { id: 'started', journal: 'Pip wants to hear what the lanterns look like from the north wall at dusk. Stand there when the sky turns.' },
       { id: 'watched', journal: 'You watched the lanterns from the north wall at dusk. Tell Pip.' }
-    ]
+    ],
+    done: 'You told Pip how the lanterns light up the plaza from the wall. Pip has not stopped talking about it.'
+  },
+  ledger: {
+    title: 'The Missing Ledger',
+    giver: 'wren',
+    steps: [
+      { id: 'started', journal: 'Wren needs the toll ledger that went missing from her stall. Nobody in the lane will own up.' },
+      { id: 'booked', journal: 'You promised Wren a name. The ledger quarter is somewhere in the lane.' },
+      { id: 'recovered', journal: 'You have the toll ledger. Wren is at her stall in the lane.' }
+    ],
+    doneBy: {
+      name: 'You gave Wren the trader’s name and collected the reward. The lane’s accounts are square with the Watch.',
+      cover: 'You gave Wren the ledger and kept the trader’s name out of it. The lane remembers that.'
+    }
+  },
+  toll: {
+    title: 'The Market Toll',
+    giver: 'halden',
+    steps: [
+      { id: 'started', journal: 'Halden says Oswin has not paid the gate toll in weeks. Fetch it, or talk Oswin round.' },
+      { id: 'collected', journal: 'You have Oswin’s toll money for the Watch.' },
+      { id: 'waived', journal: 'You talked Halden into waiving the toll. Oswin owes you again.' }
+    ],
+    doneBy: {
+      collected: 'You paid Oswin’s toll out of your own purse. Halden has the money; Oswin is not grateful.',
+      waived: 'You talked Halden into waiving the toll. Oswin owes you again.'
+    }
   }
 };
 
 export const PHASES = ['day', 'dusk', 'night'];
 
+export const TOLL_COST = 5;
+
 export function createInitialState() {
   return {
     version: 2,
-    quests: { lanterns: 'none', key: 'none', cheer: 'none' },
+    quests: { lanterns: 'none', key: 'none', cheer: 'none', toll: 'none', ledger: 'none' },
     inventory: [],
     perks: {},
     flags: { coins: 6 },
     // NPC memory: how often you have talked, the last topic, and small opinions.
-    memory: {}
+    memory: {},
+    // Faction standing, separate from personal opinion. See factions.js.
+    reputation: createInitialReputation(),
+    // Which resolution a branching quest ended on, so the journal can describe
+    // what actually happened instead of guessing at the last listed step.
+    outcomes: {}
   };
 }
 
@@ -138,6 +177,23 @@ export function inventoryItems(state) {
   return state.inventory.map((id) => ({ id, ...ITEMS[id] }));
 }
 
+// --- Reputation actions (quest-level consequences) ------------------------
+
+/**
+ * Applies faction news with rival reactions and returns a readable message for
+ * the toast. Nothing is reported when no score actually moved.
+ */
+export function applyStanding(state, { factionId, delta, rivals = [] }) {
+  const applied = changeReputation(state, factionId, delta);
+  const parts = [];
+  if (applied !== 0) parts.push(`${FACTIONS[factionId].name} ${applied > 0 ? '+' : ''}${applied}`);
+  for (const rival of rivals) {
+    const rivalApplied = changeReputation(state, rival.id, rival.delta);
+    if (rivalApplied !== 0) parts.push(`${FACTIONS[rival.id].name} ${rivalApplied > 0 ? '+' : ''}${rivalApplied}`);
+  }
+  return { changed: parts.length > 0, message: parts.length ? `Reputation: ${parts.join(', ')}` : '' };
+}
+
 // --- Quest actions (the only places quest state changes) ------------------
 // Each returns a result object: { changed, message }. Callers (dialogue and
 // world pickups) only ever use these, which keeps transitions consistent.
@@ -174,11 +230,23 @@ export function deliverOil(state) {
   if (questStatus(state, 'lanterns') !== 'oil_bought' || !hasItem(state, 'lantern_oil')) {
     return noChange('You have no oil to hand over.');
   }
+  const owedOswin = hasPerk(state, 'oswin_debt');
   removeItem(state, 'lantern_oil');
   addItem(state, 'keeper_promise');
   addCoins(state, 3);
   setQuestStep(state, 'lanterns', 'done');
-  return { changed: true, message: 'Quest complete: The Failing Lantern (+3 coins)' };
+  // The Keepers care about the light itself; the Market notices whether the
+  // trader was paid. A promise kept at Oswin's expense is not free goodwill.
+  const standing = applyStanding(state, owedOswin
+    ? { factionId: 'keepers', delta: 20, rivals: [{ id: 'trade', delta: -10 }] }
+    : { factionId: 'keepers', delta: 20, rivals: [{ id: 'trade', delta: 10 }] });
+  const suffix = state.perks.oswin_debt ? ' Oswin still holds your promise.' : '';
+  return {
+    changed: true,
+    message: `Quest complete: The Failing Lantern (+3 coins). ${standing.message}${suffix}`,
+    topic: 'delivered',
+    opinion: 1
+  };
 }
 
 export function startKey(state) {
@@ -198,12 +266,164 @@ export function returnKey(state) {
   if (questStatus(state, 'key') !== 'found' || !hasItem(state, 'brass_key')) {
     return noChange('You have no key to return.');
   }
+  const owedOswin = hasPerk(state, 'oswin_debt');
   removeItem(state, 'brass_key');
   addItem(state, 'oswin_marker');
-  if (hasPerk(state, 'oswin_debt')) addPerk(state, 'oswin_debt', false);
+  if (owedOswin) addPerk(state, 'oswin_debt', false);
   setFlag(state, 'paid_oswin', true);
   setQuestStep(state, 'key', 'done');
-  return { changed: true, message: 'Quest complete: Halden’s Missing Key. He vouched for you with Oswin.' };
+  // Halden's vouch is worth more than a coin: the Watch warms to you, and the
+  // Market forgives a promise because the guard made it good.
+  const standing = applyStanding(state, {
+    factionId: 'watch',
+    delta: 25,
+    rivals: [{ id: 'trade', delta: owedOswin ? 10 : 5 }]
+  });
+  return {
+    changed: true,
+    message: `Quest complete: Halden’s Missing Key. He vouched for you with Oswin. ${standing.message}`,
+    topic: 'key_returned',
+    opinion: 2
+  };
+}
+
+// --- The Market Toll: a deliberate faction dilemma ------------------------
+// The player cannot please both sides. Collecting the toll pays the Watch and
+// costs the Market; waiving it does the opposite. This is the clearest example
+// of the "choices affect one another" goal for this round.
+
+export function startToll(state) {
+  if (questStatus(state, 'toll') !== 'none') return noChange('Halden has already raised the toll with you.');
+  if (questStatus(state, 'key') !== 'done') {
+    return noChange('Halden does not trust you with Watch business yet. Return his key first.');
+  }
+  setQuestStep(state, 'toll', 'started');
+  return { changed: true, message: 'Quest started: The Market Toll' };
+}
+
+/** Collect Oswin's toll for the Watch. */
+export function collectToll(state) {
+  if (questStatus(state, 'toll') !== 'started') return noChange('There is no toll to collect.');
+  if (coins(state) < TOLL_COST) return noChange(`Oswin counts out what he owes. You would need ${TOLL_COST} coins to cover it.`);
+  addCoins(state, -TOLL_COST);
+  setQuestStep(state, 'toll', 'collected');
+  const standing = applyStanding(state, {
+    factionId: 'watch',
+    delta: 20,
+    rivals: [{ id: 'trade', delta: -15 }]
+  });
+  return {
+    changed: true,
+    message: `You pay Oswin’s toll out of your own purse. ${standing.message}`,
+    topic: 'toll_collected',
+    opinion: -1
+  };
+}
+
+/** Talk Halden into waiving the toll, which the Market rewards. */
+export function waiveToll(state, tierId) {
+  if (questStatus(state, 'toll') !== 'started') return noChange('There is no toll to waive.');
+  const trusted = tierId === 'warm' || tierId === 'trusted';
+  if (!trusted) {
+    return noChange('Halden is not convinced. He would need to trust you more than he does.');
+  }
+  setQuestStep(state, 'toll', 'waived');
+  addPerk(state, 'oswin_favour', true);
+  const standing = applyStanding(state, {
+    factionId: 'trade',
+    delta: 20,
+    rivals: [{ id: 'watch', delta: -10 }]
+  });
+  return {
+    changed: true,
+    message: `Halden agrees to let the toll go. ${standing.message}`,
+    topic: 'toll_waived',
+    opinion: 1
+  };
+}
+
+export function finishToll(state) {
+  const status = questStatus(state, 'toll');
+  if (status !== 'collected' && status !== 'waived') return noChange('The toll business is not finished yet.');
+  // Remember the branch before collapsing the status to 'done'.
+  state.outcomes.toll = status;
+  setQuestStep(state, 'toll', 'done');
+  return { changed: true, message: 'Quest complete: The Market Toll' };
+}
+
+// --- The lane: Wren and the missing ledger -------------------------------
+//
+// Wren is the gate on the new area's content. Her quest needs Warm standing
+// with the Market, so the reputation built in the plaza is what opens her up.
+// Two resolutions change who she is angry with, and both move standing.
+
+export const LEDGER_MIN_TIER = 'warm';
+export const LEDGER_REWARD = 4;
+
+/** Whether Wren will hand out her quest at all, given standing. */
+export function ledgerUnlocked(state, tierId) {
+  const rank = { hostile: 0, cold: 1, neutral: 2, warm: 3, trusted: 4 };
+  return rank[tierId] >= rank[LEDGER_MIN_TIER];
+}
+
+export function startLedger(state, tierId) {
+  if (questStatus(state, 'ledger') !== 'none') return noChange('Wren has already told you about the ledger.');
+  if (!ledgerUnlocked(state, tierId)) {
+    return noChange('Wren looks you over. “Market business is for people the Market trusts.”');
+  }
+  setQuestStep(state, 'ledger', 'started');
+  return { changed: true, message: 'Quest started: The Missing Ledger', topic: 'ledger_started' };
+}
+
+/** Wren tells you where the quarter went, if she likes you enough. */
+export function hearLedgerRumour(state) {
+  if (questStatus(state, 'ledger') !== 'started') return noChange('You have nothing to ask her about.');
+  setQuestStep(state, 'ledger', 'booked');
+  return { changed: true, message: 'Wren points you towards the barrels by the far wall.', topic: 'ledger_rumour' };
+}
+
+export function recoverLedger(state) {
+  if (questStatus(state, 'ledger') !== 'booked') return noChange('You have no reason to search the barrels yet.');
+  setQuestStep(state, 'ledger', 'recovered');
+  addItem(state, 'toll_ledger');
+  return { changed: true, message: 'You found the toll ledger tucked behind a barrel.' };
+}
+
+/**
+ * Wren's two endings. Naming the trader is honest and pleases the Watch;
+ * covering for him protects the Market. Neither is free.
+ */
+export function returnLedger(state, choice = 'name') {
+  if (questStatus(state, 'ledger') !== 'recovered') return noChange('Wren is not waiting on you for anything.');
+  state.outcomes.ledger = choice === 'cover' ? 'cover' : 'name';
+  setQuestStep(state, 'ledger', 'done');
+  removeItem(state, 'toll_ledger');
+  if (choice === 'cover') {
+    const standing = applyStanding(state, {
+      factionId: 'trade',
+      delta: 20,
+      rivals: [{ id: 'watch', delta: -10 }]
+    });
+    addPerk(state, 'oswin_favour', true);
+    return {
+      changed: true,
+      message: `You cover for the trader. ${standing.message}`,
+      topic: 'ledger_covered', opinion: 1,
+      reward: 0
+    };
+  }
+  const standing = applyStanding(state, {
+    factionId: 'watch',
+    delta: 20,
+    rivals: [{ id: 'trade', delta: -10 }]
+  });
+  addCoins(state, LEDGER_REWARD);
+  return {
+    changed: true,
+    message: `Wren writes the name down. ${standing.message}`,
+    topic: 'ledger_named', opinion: 1,
+    reward: LEDGER_REWARD
+  };
 }
 
 export function startCheer(state) {
@@ -223,7 +443,13 @@ export function tellPipAboutLanterns(state) {
   if (questStatus(state, 'cheer') !== 'watched') return noChange('You have nothing to tell Pip yet.');
   addItem(state, 'pip_ribbon');
   setQuestStep(state, 'cheer', 'done');
-  return { changed: true, message: 'Quest complete: Pip’s Small Favour' };
+  const standing = applyStanding(state, { factionId: 'trade', delta: 10 });
+  return {
+    changed: true,
+    message: `Quest complete: Pip’s Small Favour. ${standing.message}`,
+    topic: 'lanterns_seen',
+    opinion: 2
+  };
 }
 
 // --- NPC memory -----------------------------------------------------------
@@ -250,13 +476,20 @@ export function journalEntries(state) {
     const status = questStatus(state, questId);
     if (status === 'none') continue;
     const quest = QUESTS[questId];
-    const step = status === 'done'
-      ? quest.steps[quest.steps.length - 1]
-      : quest.steps.find((s) => s.id === status) || quest.steps[0];
+    let text;
+    if (status === 'done') {
+      // Branching quests record which ending was reached; the journal must
+      // report that ending, not whichever step happens to be listed last.
+      const outcome = state.outcomes?.[questId];
+      text = (outcome && quest.doneBy?.[outcome]) || quest.done || quest.steps[quest.steps.length - 1].journal;
+    } else {
+      const step = quest.steps.find((s) => s.id === status) || quest.steps[0];
+      text = step.journal;
+    }
     entries.push({
       id: questId,
       title: quest.title,
-      text: step.journal,
+      text,
       done: status === 'done'
     });
   }
@@ -353,6 +586,11 @@ export function deserialize(raw) {
       if (ITEMS[id] && !state.inventory.includes(id)) state.inventory.push(id);
     }
   }
+  if (saved.outcomes && typeof saved.outcomes === 'object') {
+    for (const [questId, outcome] of Object.entries(saved.outcomes)) {
+      if (QUESTS[questId]?.doneBy?.[outcome]) state.outcomes[questId] = outcome;
+    }
+  }
   if (saved.perks && typeof saved.perks === 'object') {
     for (const [key, value] of Object.entries(saved.perks)) {
       if (typeof value === 'boolean') state.perks[key] = value;
@@ -366,6 +604,13 @@ export function deserialize(raw) {
     }
     if (!Number.isFinite(state.flags.coins)) state.flags.coins = 6;
     state.flags.coins = Math.max(0, Math.floor(state.flags.coins));
+  }
+  if (saved.reputation && typeof saved.reputation === 'object') {
+    for (const factionId of Object.keys(FACTIONS)) {
+      if (Number.isFinite(saved.reputation[factionId])) {
+        state.reputation[factionId] = clampReputationSafe(saved.reputation[factionId]);
+      }
+    }
   }
   if (saved.memory && typeof saved.memory === 'object') {
     for (const [npcId, memory] of Object.entries(saved.memory)) {

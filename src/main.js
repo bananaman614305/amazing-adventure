@@ -8,13 +8,24 @@ import {
   questStatus,
   coins,
   pickUpKey,
+  recoverLedger,
   watchLanterns,
   journalEntries,
   inventoryItems,
   questCounts
 } from './state.js';
 import { startConversation, applyChoice } from './dialogue.js';
+import { reputationView, npcTier } from './factions.js';
+import { GATE, isGateOpen, gateHint, areaAt, NOTICE_BOARD, noticeText, LEDGER_SPOT } from './areas.js';
+import {
+  chooseAmbientPair,
+  buildExchange,
+  canOverhear,
+  noteExchange,
+  AMBIENT_CHANCE
+} from './ambient.js';
 import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
+import { createAdaptiveResolution } from './perf.js';
 import { onTerrace } from './terrain.js';
 
 // --- DOM ------------------------------------------------------------------
@@ -35,6 +46,9 @@ const questList = $('quest-list');
 const panel = $('panel');
 const inventoryList = $('inventory-list');
 const journalList = $('journal-list');
+const standingList = $('standing-list');
+const overheardEl = $('overheard');
+const overheardLines = $('overheard-lines');
 const toastStack = $('toast-stack');
 const dialogueEl = $('dialogue');
 const dialogueName = $('dialogue-name');
@@ -44,8 +58,26 @@ const dialogueChoices = $('dialogue-choices');
 
 // --- World, player, state -------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const basePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+renderer.setPixelRatio(basePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
+
+// Resolution scales down automatically when frames are slow. That is what keeps
+// the game playable on weak hardware, where it is fill-rate bound rather than
+// draw-call bound (measured: shadows and materials barely matter, pixel count
+// matters a lot). The setting is remembered so a choice sticks.
+const RESOLUTION_KEY = 'amazing-adventure:resolution';
+const resolution = createAdaptiveResolution({ start: basePixelRatio });
+let adaptiveResolution = localStorage.getItem(RESOLUTION_KEY) !== 'fixed';
+function applyResolution(ratio) {
+  const next = Number(ratio.toFixed(2));
+  if (renderer.getPixelRatio() === next) return;
+  renderer.setPixelRatio(next);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.dataset.pixelRatio = String(next);
+}
+applyResolution(resolution.ratio);
+document.body.dataset.pixelRatio = String(resolution.ratio);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
@@ -100,9 +132,18 @@ function toast(message) {
   setTimeout(() => el.remove(), 3200);
 }
 
+function syncGate() {
+  const open = isGateOpen(state);
+  environment.setGateOpen(open);
+  return open;
+}
+
 function refreshHUD() {
   clockTime.textContent = clockLabel(clockSeconds);
   coinCount.textContent = String(coins(state));
+  // The gate is derived from quest state, so every HUD refresh re-applies it.
+  // setGateOpen is idempotent, which keeps this safe to call often.
+  syncGate();
 
   const entries = journalEntries(state);
   const counts = questCounts(state);
@@ -131,6 +172,16 @@ function refreshHUD() {
         .map((entry) => `<li><span class="journal-title${entry.done ? ' done' : ''}">${escapeHtml(entry.title)}</span><br>${escapeHtml(entry.text)}</li>`)
         .join('')
     : '<li class="muted">No quests started.</li>';
+
+  standingList.innerHTML = reputationView(state)
+    .map((faction) => `<li class="standing-row">
+      <span class="standing-name">${escapeHtml(faction.name)}</span>
+      <span class="standing-tier tier-${faction.tier}">${escapeHtml(faction.tierName)}${
+        faction.score === 0 ? '' : ` ${faction.score > 0 ? '+' : ''}${faction.score}`
+      }</span>
+    </li>`)
+    .join('');
+  standingList.dataset.tiers = reputationView(state).map((f) => f.tier).join(',');
 }
 
 function escapeHtml(text) {
@@ -254,6 +305,25 @@ function interactables() {
     }
   }
 
+  if (environment.ledgerGroup.visible) {
+    const distance = Math.hypot(LEDGER_SPOT.x - player.position.x, LEDGER_SPOT.z - player.position.z);
+    if (distance < LEDGER_SPOT.range) {
+      list.push({
+        kind: 'ledger',
+        distance,
+        label: 'take the toll ledger',
+        run: () => {
+          const result = recoverLedger(state);
+          toast(result.message);
+          if (result.changed) {
+            refreshHUD();
+            autoSave();
+          }
+        }
+      });
+    }
+  }
+
   if (environment.keyGroup.visible) {
     const distance = Math.hypot(KEY_SPOT.x - player.position.x, KEY_SPOT.z - player.position.z);
     if (distance < KEY_PICKUP_RANGE) {
@@ -272,6 +342,36 @@ function interactables() {
         }
       });
     }
+  }
+
+  // The north gate: report why it is shut, or just note that it is open.
+  const gateDistance = Math.hypot(GATE.x - player.position.x, GATE.z - player.position.z);
+  if (gateDistance < GATE.range) {
+    list.push({
+      kind: 'gate',
+      distance: gateDistance,
+      label: gateHint(state),
+      run: () => {
+        if (isGateOpen(state)) {
+          toast('The north gate stands open. The market lane is beyond.');
+        } else {
+          toast('Locked. Halden keeps the brass key — and he tends to lose it.');
+        }
+      }
+    });
+  }
+
+  // The notice board in the lane.
+  const boardDistance = Math.hypot(NOTICE_BOARD.x - player.position.x, NOTICE_BOARD.z - player.position.z);
+  if (boardDistance < NOTICE_BOARD.range) {
+    list.push({
+      kind: 'notice',
+      distance: boardDistance,
+      label: 'read the notice board',
+      run: () => {
+        toast(noticeText(state, npcTier(state, 'halden').id));
+      }
+    });
   }
 
   // Bench: rest to skip to the next phase.
@@ -312,8 +412,17 @@ function refreshHint() {
     crosshair.classList.remove('active');
   }
 
-  // The key only appears once Halden has asked for help with it.
+  syncPickups();
+}
+
+/**
+ * World pickups follow quest state. This runs every frame rather than from
+ * refreshHint, because refreshHint returns early while a dialogue is open — and
+ * a dialogue is exactly what reveals the ledger.
+ */
+function syncPickups() {
   environment.setKeyVisible(questStatus(state, 'key') === 'started');
+  environment.setLedgerVisible(questStatus(state, 'ledger') === 'booked');
 }
 
 // --- Dusk watch (Pip's quest) --------------------------------------------
@@ -368,7 +477,7 @@ if (savedGame) {
       syncPhase(true);
     }
     started = true;
-    environment.setKeyVisible(questStatus(state, 'key') === 'started');
+    syncPickups();
     refreshHUD();
     player.requestLock();
   });
@@ -428,21 +537,157 @@ document.addEventListener('keydown', (event) => {
   if (event.code === 'KeyJ') {
     panel.hidden = !panel.hidden;
     refreshHUD();
+    return;
+  }
+
+  // Manual escape hatch: P toggles adaptive resolution off/on. Worth having
+  // because the automatic behaviour is invisible, and a player on a fast
+  // machine may prefer a fixed, sharp image.
+  if (event.code === 'KeyP') {
+    const on = window.amazingAdventure.resolution.setAdaptive(!adaptiveResolution);
+    toast(on ? 'Adaptive resolution on.' : 'Adaptive resolution off — fixed at native.');
+    return;
   }
 });
+
+// --- Ambient conversations -----------------------------------------------
+// Two nearby NPCs occasionally strike up an exchange. The player can walk over
+// and overhear it. The exchange itself is pure data from ambient.js; this is
+// only the timing and display.
+const ambient = {
+  lines: [],
+  index: 0,
+  timer: 0,
+  speakerIds: [],
+  cooldown: 4,
+  nextPairCheck: 0
+};
+
+function ambientBusyIds() {
+  return ambient.lines.length ? ambient.speakerIds : [];
+}
+
+function resetAmbient() {
+  ambient.lines = [];
+  ambient.index = 0;
+  ambient.speakerIds = [];
+  ambientElHide();
+}
+
+function ambientElHide() {
+  overheardEl.hidden = true;
+  overheardLines.innerHTML = '';
+}
+
+/** Starts an exchange between the pair ambient.js picks for this moment. */
+function maybeStartAmbient(dt) {
+  if (ambient.lines.length) return;
+  if (ambient.cooldown > 0) {
+    ambient.cooldown = Math.max(0, ambient.cooldown - dt);
+    return;
+  }
+  ambient.nextPairCheck -= dt;
+  if (ambient.nextPairCheck > 0) return;
+  ambient.nextPairCheck = 1.2;
+
+  if (activeNPC) return; // do not talk over the player's own conversation
+  const snapshot = npcs.map((npc) => ({
+    id: npc.id,
+    name: npc.name,
+    position: { x: npc.group.position.x, z: npc.group.position.z }
+  }));
+  const pair = chooseAmbientPair({
+    npcs: snapshot,
+    state,
+    phase: currentPhase,
+    playerPosition: player.position,
+    busyIds: ambientBusyIds(),
+    activeId: activeNPC?.id ?? null
+  });
+  if (!pair) return;
+
+  // A little deliberate chance so conversations feel occasional, not scripted.
+  ambient.nextPairCheck = 1.2;
+  if (deterministicChance(`${pair.a.id}|${pair.b.id}|${Math.floor(clockSeconds)}`) > AMBIENT_CHANCE) return;
+
+  const names = Object.fromEntries(npcs.map((npc) => [npc.id, npc.name]));
+  ambient.lines = buildExchange({ state, phase: currentPhase, a: pair.a, b: pair.b, names });
+  ambient.speakerIds = [pair.a.id, pair.b.id];
+  ambient.index = 0;
+  ambient.timer = 0;
+  noteExchange(state, pair.a.id, pair.b.id);
+  renderAmbient();
+}
+
+/** A stable pseudo-random 0..1 value, so the sim is reproducible from a save. */
+function deterministicChance(seed) {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) % 10000) / 10000;
+}
+
+function advanceAmbient(dt) {
+  if (!ambient.lines.length) return;
+  ambient.timer += dt;
+
+  // Re-check earshot every tick so walking away hides the text immediately and
+  // walking back brings it in again, rather than waiting for the next line.
+  const line = ambient.lines[ambient.index];
+  const speaker = line ? npcs.find((npc) => npc.id === line.speakerId) : null;
+  const inEarshot = !speaker || canOverhear(speaker.group.position, player.position);
+  if (!inEarshot) {
+    ambientElHide();
+  } else if (overheardEl.hidden || !overheardLines.innerHTML) {
+    renderAmbient();
+  }
+
+  if (ambient.timer < 2.4) return;
+  ambient.timer = 0;
+  ambient.index += 1;
+  if (ambient.index >= ambient.lines.length) {
+    resetAmbient();
+    ambient.cooldown = 8;
+    return;
+  }
+  renderAmbient();
+}
+
+function renderAmbient() {
+  const line = ambient.lines[ambient.index];
+  if (!line) return ambientElHide();
+  const speaker = npcs.find((npc) => npc.id === line.speakerId);
+  const position = speaker ? speaker.group.position : null;
+  if (position && !canOverhear(position, player.position)) {
+    // Out of earshot: keep the conversation running but hide the text.
+    ambientElHide();
+    return;
+  }
+  overheardEl.hidden = !player.enabled;
+  overheardLines.innerHTML = ambient.lines
+    .slice(0, ambient.index + 1)
+    .map((entry, index) => `<div class="overheard-line${index === ambient.index ? ' speaking' : ''}"><b>${escapeHtml(entry.speakerName)}</b> — ${escapeHtml(entry.text)}</div>`)
+    .join('');
+}
 
 // --- Loop ----------------------------------------------------------------
 const clock = new THREE.Clock();
 let hudTimer = 0;
 
+let lastFrameMs = 16;
 function frame() {
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const rawDt = clock.getDelta();
+  const dt = Math.min(rawDt, 0.05);
   player.update(dt);
 
   clockSeconds = wrapClock(clockSeconds + dt);
   syncPhase();
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
+  maybeStartAmbient(dt);
+  advanceAmbient(dt);
 
   for (const npc of npcs) {
     const near = nearestInteractable?.npc === npc;
@@ -452,7 +697,13 @@ function frame() {
     npc.marker.visible = true;
   }
 
+  syncPickups();
   refreshHint();
+
+  // Track which area the player is in every frame, so area-gated UI and tests
+  // see the change immediately rather than on the next throttled HUD refresh.
+  const area = areaAt(player.position.x, player.position.z) || 'outside';
+  if (document.body.dataset.area !== area) document.body.dataset.area = area;
 
   hudTimer += dt;
   if (hudTimer > 0.2) {
@@ -461,6 +712,15 @@ function frame() {
   }
 
   renderer.render(scene, camera);
+
+  // Adapt resolution from the real frame time, not the clamped game delta. The
+  // first few frames are dropped by the controller itself so shader compiles do
+  // not count against the machine.
+  if (adaptiveResolution) {
+    lastFrameMs = rawDt * 1000;
+    applyResolution(resolution.sample(lastFrameMs));
+  }
+
   requestAnimationFrame(frame);
 }
 
@@ -497,9 +757,28 @@ window.amazingAdventure = {
   },
   restOnBench,
   refreshHUD,
+  ambient,
   isDialogueOpen: () => !dialogueEl.hidden,
+  resetAmbient,
+  renderAmbient,
   getDialogue: () => (activeNode ? { speaker: activeNode.speaker, text: activeNode.text, choices: activeNode.choices?.map((c) => c.label) ?? [] } : null),
   choose: (index) => choose(index),
   KEY_SPOT,
-  TERRACE
+  TERRACE,
+  areaAt: () => areaAt(player.position.x, player.position.z),
+  isGateOpen: () => isGateOpen(state),
+  syncGate,
+  syncPickups,
+  resolution: {
+    get ratio() { return resolution.ratio; },
+    get changes() { return resolution.changes; },
+    get adaptive() { return adaptiveResolution; },
+    setAdaptive(on) {
+      adaptiveResolution = Boolean(on);
+      localStorage.setItem(RESOLUTION_KEY, adaptiveResolution ? 'auto' : 'fixed');
+      if (!adaptiveResolution) applyResolution(basePixelRatio);
+      return adaptiveResolution;
+    }
+  },
+  basePixelRatio
 };

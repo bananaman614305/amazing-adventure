@@ -36,7 +36,7 @@ Grunt builds the game in rounds. Each round leaves a playable game that is deepe
 
 Every round ends with a pull request that Grunt has tested in a real browser, with screenshots.
 
-## Run it (Round 2)
+## Run it (Round 3)
 
 One command starts the game:
 
@@ -72,6 +72,87 @@ npm run test:browser   # drives the real game in headless Chrome, writes artifac
 - Use one account per free provider. Never make duplicate accounts.
 - Every asset must have a license that allows its use, and be credited.
 - Each round must leave the game playable.
+
+## Round 3 — a living world
+
+Round 3 gives the plaza memory with consequences and lets its people talk to
+each other.
+
+- **Factions and reputation.** The Keepers, the Market and the Watch each track
+  standing from -100 to 100 across five tiers (Hostile, Cold, Neutral, Warm,
+  Trusted). Your faction standing combines with each NPC's personal opinion of
+  you, and NPC greetings change accordingly — a Trusted Mara talks differently
+  to a Hostile one.
+- **Choices pull two ways.** Delivering the lantern oil pleases the Keepers; if
+  you paid with a promise instead of coins, the Market cools until Halden's
+  voucher repairs it. Pip's favour earns Market goodwill.
+- **The Market Toll.** A fourth quest, gated on returning Halden's key. You
+  either pay Oswin's outstanding toll (Watch +20, Market -15) or talk Halden
+  into waiving it, which needs Warm standing with the Watch (Market +20,
+  Watch -10). The two resolutions are mutually exclusive, and the standing
+  panel shows the result.
+- **NPCs talk to each other.** Nearby NPCs occasionally strike up an exchange
+  drawn from a state-aware script bank: they gossip about an unpaid debt, the
+  toll, the lanterns or the hour. Walk close and you overhear it on screen;
+  walk away and it fades. The scripts are deterministic from game state, so they
+  are testable and never desynchronise a save.
+
+### A second connected area
+
+Returning Halden's key unlocks the **north gate** in the plaza wall, and beyond
+it lies **the market lane** — a narrow back street with a trader's stall, crates,
+a barrel, a lamp post and a notice board. The gate is a real gate: until the key
+is back it is a solid collider and the door is visibly shut, and with the key
+returned the collider is removed and the door lifts. Its state is *derived* from
+the quest rather than stored, so the unlock can never desynchronise a save.
+
+The notice board is readable and reports back on the systems you have been
+playing: faction standing with the Watch changes its wording, and whether you
+paid or waived Oswin's toll changes what the traders have pinned up.
+
+**Wren the Toll Clerk** keeps a stall in the lane, and she is the proof that
+reputation opens doors. She will not discuss her missing toll ledger until the
+Market trusts you (**Warm** standing), which you earn in the plaza by dealing
+fairly with Oswin. Once she does, the quest has two endings that pull in
+opposite directions: naming the trader who took the arrears page earns the
+Watch's approval and 4 coins, while covering for him protects the Market. The
+ledger itself is a real object you have to walk to and pick up behind the
+barrels, and it only appears once Wren has told you where to look.
+
+### Round 3 files
+
+| File | What it holds |
+| --- | --- |
+| `src/factions.js` | Faction data, reputation scoring, tiers, NPC standing, rival reactions. Pure. |
+| `src/ambient.js` | Pair selection, script bank and exchange building for NPC-to-NPC talk. Pure. |
+| `src/areas.js` | The plaza and market lane boxes, the north gate, lane props and notice-board text. Pure. |
+| `src/perf.js` | Adaptive resolution rules: clamping, stepping, hysteresis and smoothing. Pure. |
+
+### The journal tells the truth
+
+Quests with more than one ending record which ending you reached, and the journal
+(press J) reports that. Pay Oswin's toll and the journal says you paid it; talk
+Halden into waiving it and the journal says that instead. The same applies to
+Wren's ledger: naming the trader and covering for him produce different entries.
+
+### Running on weak hardware
+
+The game is fill-rate bound, not draw-call bound: measured in this environment,
+disabling shadows changed nothing and swapping every material for a cheaper one
+gained 0.5fps, but halving the pixel count more than doubled the frame rate. So
+the renderer **adapts its own resolution**. It samples real frame times, waits
+for the reading to be consistent, and then walks the pixel ratio between 0.5 and
+2 until frames are comfortable. On the software rasteriser used for testing this
+takes the game from about 3.2fps to **7.1fps** and settles there without
+oscillating.
+
+Press **P** to turn it off and pin native resolution; the choice is remembered.
+
+### Testing note
+
+Browser tests now write screenshots to a throwaway directory by default, so a
+verification run can never dirty the committed `artifacts/` evidence. Pass
+`RECORD_ARTIFACTS=1` to refresh the committed screenshots on purpose.
 
 ## Round 2 — people and quests
 

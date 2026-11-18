@@ -59,6 +59,19 @@ export const NPC_DATA = [
       dusk: { x: -5.2, z: 12.6, facing: 1.1 },
       night: { x: -5.8, z: 11.4, facing: 1.4 }
     }
+  },
+  {
+    // Lives beyond the north gate, so she is only reachable once it is open.
+    id: 'wren',
+    name: 'Wren the Toll Clerk',
+    role: 'Lane clerk',
+    colors: { coat: 0x3f5a4a, skin: 0xb98a63, hair: 0x2a2118, accent: 0xf0c46b },
+    home: 'lane',
+    routine: {
+      day: { x: 11.4, z: -22.2, facing: -1.9 },
+      dusk: { x: 11.4, z: -22.2, facing: -1.9 },
+      night: { x: 9.2, z: -24.0, facing: 0.9 }
+    }
   }
 ];
 

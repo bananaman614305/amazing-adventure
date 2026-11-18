@@ -4,13 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  createInitialState, questStatus, setQuestStep, advanceQuest,
-  startLanterns, buyOilWithCoins, buyOilWithPromise, deliverOil,
-  startKey, pickUpKey, returnKey,
-  startCheer, watchLanterns, tellPipAboutLanterns,
-  addCoins, coins, addItem, hasItem, removeItem, inventoryItems,
-  journalEntries, questCounts, remember, memoryFor,
-  serialize, deserialize, createSaveStore, SAVE_KEY
+  createInitialState, questStatus, setQuestStep, advanceQuest, startLanterns, buyOilWithCoins, buyOilWithPromise, deliverOil, startKey, pickUpKey, returnKey, startCheer, watchLanterns, tellPipAboutLanterns, addCoins, coins, addItem, hasItem, removeItem, inventoryItems, journalEntries, questCounts, remember, memoryFor, serialize, deserialize, createSaveStore, SAVE_KEY, startToll, collectToll, waiveToll, finishToll, startLedger, hearLedgerRumour, recoverLedger, returnLedger, QUEST_ORDER, QUESTS
 } from '../src/state.js';
 
 test('new state starts with no quests and 6 coins', () => {
@@ -161,7 +155,9 @@ test('journal and counts track active versus completed quests', () => {
   assert.equal(entries.length, 2);
   assert.equal(entries.find((e) => e.id === 'lanterns').done, true);
   assert.equal(entries.find((e) => e.id === 'key').done, false);
-  assert.match(entries.find((e) => e.id === 'lanterns').text, /lanterns will burn/);
+  assert.match(entries.find((e) => e.id === 'lanterns').text, /lanterns burn all night/);
+  // A completed quest must describe the finished state, not an instruction.
+  assert.doesNotMatch(entries.find((e) => e.id === 'lanterns').text, /tell|waiting|should|need/i);
 });
 
 test('NPC memory counts talks and clamps opinion', () => {
@@ -175,4 +171,86 @@ test('NPC memory counts talks and clamps opinion', () => {
   assert.equal(memory.opinion, 3);
   remember(state, 'mara', { opinionDelta: -10 });
   assert.equal(memoryFor(state, 'mara').opinion, -3);
+});
+
+// --- Journal text must match the branch the player actually took -----------
+
+test('a paid toll is never journalled as waived', () => {
+  const paid = createInitialState();
+  startKey(paid); pickUpKey(paid); returnKey(paid);
+  startToll(paid); collectToll(paid); finishToll(paid);
+  const text = journalEntries(paid).find((e) => e.id === 'toll').text;
+  assert.match(text, /paid/i);
+  assert.doesNotMatch(text, /waived|talked Halden into/i,
+    'the paid branch must not claim the toll was waived');
+});
+
+test('a waived toll is never journalled as paid', () => {
+  const waived = createInitialState();
+  startKey(waived); pickUpKey(waived); returnKey(waived);
+  startToll(waived); waiveToll(waived, 'warm'); finishToll(waived);
+  const text = journalEntries(waived).find((e) => e.id === 'toll').text;
+  assert.match(text, /waiv/i);
+  assert.doesNotMatch(text, /purse/i, 'the waived branch must not claim payment');
+});
+
+test('the two ledger endings are journalled differently and truthfully', () => {
+  const named = createInitialState();
+  startLedger(named, 'warm'); hearLedgerRumour(named); recoverLedger(named); returnLedger(named, 'name');
+  const cover = createInitialState();
+  startLedger(cover, 'warm'); hearLedgerRumour(cover); recoverLedger(cover); returnLedger(cover, 'cover');
+  const namedText = journalEntries(named).find((e) => e.id === 'ledger').text;
+  const coverText = journalEntries(cover).find((e) => e.id === 'ledger').text;
+  assert.notEqual(namedText, coverText, 'the endings read differently');
+  assert.match(namedText, /name/i);
+  assert.match(coverText, /kept the trader’s name out/i);
+  // Neither should still be telling the player to go and fetch it.
+  for (const text of [namedText, coverText]) {
+    assert.doesNotMatch(text, /at her stall in the lane\.$/, 'not an unfinished instruction');
+  }
+});
+
+test('every quest has truthful completion text for each of its endings', () => {
+  for (const questId of QUEST_ORDER) {
+    const quest = QUESTS[questId];
+    const endings = quest.doneBy ? Object.keys(quest.doneBy) : ['default'];
+    if (!quest.doneBy) assert.ok(quest.done, `${questId} declares completion text`);
+    for (const ending of endings) {
+      const text = quest.doneBy ? quest.doneBy[ending] : quest.done;
+      assert.ok(text.length > 20, `${questId}/${ending} has a real sentence`);
+      assert.match(text, /[.!]$/, `${questId}/${ending} ends cleanly`);
+    }
+    if (quest.doneBy) {
+      const texts = Object.values(quest.doneBy);
+      assert.equal(new Set(texts).size, texts.length, `${questId} endings are distinct`);
+    }
+  }
+});
+
+test('outcomes survive a save round-trip and corrupt outcomes are dropped', () => {
+  const state = createInitialState();
+  startKey(state); pickUpKey(state); returnKey(state);
+  startToll(state); collectToll(state); finishToll(state);
+  const restored = deserialize(serialize(state));
+  assert.equal(restored.outcomes.toll, 'collected');
+  assert.match(journalEntries(restored).find((e) => e.id === 'toll').text, /paid/i);
+
+  const corrupt = deserialize(JSON.stringify({
+    state: {
+      quests: { toll: 'done', ledger: 'done' },
+      outcomes: { toll: 'not-a-branch', ledger: 'cover', bogus: 'x' }
+    }
+  }));
+  assert.equal(corrupt.outcomes.toll, undefined, 'an unknown branch is dropped');
+  assert.equal(corrupt.outcomes.ledger, 'cover', 'a valid branch is kept');
+  assert.equal(corrupt.outcomes.bogus, undefined, 'a branch for an unknown quest is dropped');
+});
+
+test('an old save with no recorded outcome still opens a journal entry', () => {
+  const legacy = deserialize(JSON.stringify({
+    state: { quests: { lanterns: 'done', key: 'none', cheer: 'none', toll: 'none', ledger: 'none' } }
+  }));
+  const entry = journalEntries(legacy).find((e) => e.id === 'lanterns');
+  assert.equal(entry.done, true);
+  assert.ok(entry.text.length > 10, 'falls back to a real sentence rather than crashing');
 });
