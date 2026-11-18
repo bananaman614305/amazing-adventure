@@ -603,19 +603,19 @@
   </div>
 
   <div id="quest-tracker" hidden>
-    <h2>Journal</h2>
+    <h2 id="quest-tracker-title">Quests</h2>
     <div id="quest-list"></div>
   </div>
 
   <div id="panel" hidden>
-    <h3>Inventory</h3>
-    <ul id="inventory-list"></ul>
-    <h3>Journal</h3>
-    <ul id="journal-list"></ul>
-    <h3>Standing</h3>
-    <ul id="standing-list"></ul>
-    <h3>Where things are</h3>
-    <div id="compass-list"></div>
+    <h3 id="inventory-title">Inventory</h3>
+    <ul id="inventory-list" aria-labelledby="inventory-title"></ul>
+    <h3 id="journal-panel-title">Journal</h3>
+    <ul id="journal-list" aria-labelledby="journal-panel-title"></ul>
+    <h3 id="standing-title">Standing</h3>
+    <ul id="standing-list" aria-labelledby="standing-title"></ul>
+    <h3 id="compass-title">Where things are</h3>
+    <div id="compass-list" role="list" aria-labelledby="compass-title"></div>
     <div id="compass-ask">
       <label for="compass-input">Walk to…</label>
       <input type="text" id="compass-input" list="compass-options" autocomplete="off" placeholder="a place or person">

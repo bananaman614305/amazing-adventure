@@ -1905,6 +1905,56 @@ try {
     audioSamples.cuePeak > audioSamples.dronePeak && audioSamples.cuePeak < 1,
     JSON.stringify(audioSamples));
 
+  // --- 27z. The whole interface in the accessibility tree --------------------
+  // Round 24 checked the conversation; this checks the rest of the UI the same way,
+  // by reading the tree rather than the markup. Two regions were both headed
+  // "Journal" and visible at the same time, so navigating by heading gave the same
+  // name twice with nothing to tell them apart.
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    document.getElementById('dialogue')?.setAttribute('hidden', '');
+    api.player.frozen = false;
+  });
+  await new Promise((r) => setTimeout(r, 250));
+  await page.keyboard.press('j');
+  await new Promise((r) => setTimeout(r, 600));
+
+  const uiCdp = await page.createCDPSession();
+  await uiCdp.send('Accessibility.enable');
+  let uiNodes = (await uiCdp.send('Accessibility.getFullAXTree')).nodes;
+  const axList = (nodes) => nodes.filter((n) => n.role?.value === 'list');
+  const axHeadings = (nodes) => nodes.filter((n) => n.role?.value === 'heading');
+
+  const headingNames = axHeadings(uiNodes).map((n) => n.name?.value || '');
+  const duplicates = headingNames.filter((name, i) => name && headingNames.indexOf(name) !== i);
+  checks.check('no two visible regions share the same heading name',
+    duplicates.length === 0,
+    JSON.stringify({ headings: headingNames }));
+
+  checks.check('the heading outline is coherent rather than flat or out of order',
+    headingNames.length >= 4 && headingNames.every((n) => n.length > 0),
+    JSON.stringify(headingNames));
+
+  const listNames = axList(uiNodes).map((n) => n.name?.value || '');
+  checks.check('every list is labelled so a reader knows what it contains',
+    axList(uiNodes).length >= 3 && listNames.every((n) => n.length > 0),
+    JSON.stringify({ lists: listNames }));
+
+  // A list whose children are not listitems is announced as nothing useful.
+  const byId = new Map(uiNodes.map((n) => [n.nodeId, n]));
+  const childRoles = (id) => (byId.get(id)?.childIds || []).map((c) => byId.get(c)).filter(Boolean).map((c) => c.role?.value);
+  const badLists = axList(uiNodes).filter((l) => {
+    const roles = childRoles(l.nodeId);
+    return roles.length > 0 && !roles.includes('listitem');
+  });
+  checks.check('every list contains real list items',
+    badLists.length === 0,
+    JSON.stringify({ bad: badLists.map((l) => l.name?.value) }));
+
+  await capture(page, 'round25-headings.png');
+  await page.keyboard.press('j');
+  await new Promise((r) => setTimeout(r, 400));
+
   // --- 28a. The real accessibility tree, not just the DOM -------------------
   // Every earlier accessibility round verified attributes in the DOM. This reads
   // the accessibility tree the browser actually hands to assistive technology, via
