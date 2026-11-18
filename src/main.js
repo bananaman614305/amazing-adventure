@@ -60,6 +60,7 @@ const dialogueName = $('dialogue-name');
 const dialogueRole = $('dialogue-role');
 const dialogueLine = $('dialogue-line');
 const dialogueChoices = $('dialogue-choices');
+const dialogueClose = $('dialogue-close');
 const touchRoot = $('touch');
 const stickZone = $('stick-zone');
 const stickBase = $('stick-base');
@@ -226,6 +227,7 @@ function openDialogue(npc) {
   activeNode = startConversation(state, npc.id);
   if (!activeNode) return;
   dialogueEl.hidden = false;
+  touchRoot.classList.add('dialogue-open');
   hint.hidden = true;
   // Stand still while talking: no walking away mid-sentence.
   player.frozen = true;
@@ -302,6 +304,7 @@ function choose(index) {
 
 function closeDialogue() {
   dialogueEl.hidden = true;
+  touchRoot.classList.remove('dialogue-open');
   activeNode = null;
   activeNPC = null;
   player.frozen = false;
@@ -515,7 +518,11 @@ playButton.addEventListener('click', (event) => {
   player.requestLock();
 });
 overlay.addEventListener('click', () => {
+  // Any tap on the overlay is a request to start, so this path must set up
+  // touch mode too -- otherwise a phone player who taps beside the button
+  // gets an overlay that never goes away.
   started = true;
+  beginTouchMode();
   player.requestLock();
 });
 
@@ -560,9 +567,11 @@ function showTouchPause(show) {
     touchState.stickId = null;
     touchState.lookId = null;
     player.setMoveInput(0, 0);
-    player.frozen = true;
     resetStick();
+    // Close any conversation FIRST: closeDialogue() clears `frozen`, so setting
+    // it before this call would leave the world running behind the pause sheet.
     if (!dialogueEl.hidden) closeDialogue();
+    player.frozen = true;
     saveGame();
   } else if (!dialogueEl.hidden) {
     player.frozen = true;
@@ -618,7 +627,10 @@ stickZone.addEventListener('pointermove', (event) => {
   stickKnob.style.transform = `translate(${knob.x}px, ${knob.y}px)`;
 });
 
-for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
+// Deliberately NOT listening for pointerleave: with pointer capture the thumb
+// keeps controlling the stick even when it crosses the zone edge, and treating
+// a leave as a release made the walk stutter mid-drag on real devices.
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   stickZone.addEventListener(type, (event) => {
     if (event.pointerId !== touchState.stickId) return;
     resetStick();
@@ -647,7 +659,7 @@ lookZone.addEventListener('pointermove', (event) => {
   player.pitch = clampPitch(player.pitch);
 });
 
-for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   lookZone.addEventListener(type, (event) => {
     if (event.pointerId !== touchState.lookId) return;
     touchState.lookId = null;
@@ -722,6 +734,11 @@ for (const type of ['touchend', 'touchcancel']) {
 }
 }
 
+dialogueClose.addEventListener('click', (event) => {
+  event.preventDefault();
+  closeDialogue();
+});
+
 touchInteract.addEventListener('click', (event) => {
   event.preventDefault();
   if (!nearestInteractable) return;
@@ -762,6 +779,11 @@ function refreshTouchInteract() {
 // --- Input ---------------------------------------------------------------
 document.addEventListener('keydown', (event) => {
   if (event.code === 'Escape') {
+    if (!touchPause.hidden) {
+      showTouchPause(false);
+      event.preventDefault();
+      return;
+    }
     if (!dialogueEl.hidden) {
       closeDialogue();
       event.preventDefault();
@@ -994,7 +1016,10 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) return;
   if (!started) return;
   if (touchState.active) {
-    showTouchPause(true);
+    // Do not tear down an open conversation: a phone user checking a message
+    // should find their dialogue where they left it. Just stop the world.
+    player.setMoveInput(0, 0);
+    player.frozen = true;
   } else if (player.enabled) {
     document.exitPointerLock?.();
   }

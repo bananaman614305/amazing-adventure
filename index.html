@@ -175,8 +175,24 @@
       to { opacity: 1; transform: none; }
     }
 
+    /* Above #touch (z-index 40): on a short screen the touch buttons would
+       otherwise sit on top of the dialogue choices and swallow the taps. */
+    #dialogue-close {
+      display: none;
+      position: absolute; top: 8px; right: 8px;
+      width: 40px; height: 40px;
+      align-items: center; justify-content: center;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.06);
+      color: #cfe0f5; font: inherit; font-size: 17px; line-height: 1;
+      cursor: pointer;
+    }
+    #dialogue-close:hover { background: rgba(255, 255, 255, 0.14); }
+
     #dialogue {
       position: fixed;
+      z-index: 50;
       left: 50%;
       bottom: 5%;
       transform: translateX(-50%);
@@ -339,9 +355,11 @@
       will-change: transform;
     }
 
+    /* The look zone stops short of the button cluster so a thumb aiming at
+       Pause can never be interpreted as a look drag instead. */
     #look-zone {
       position: absolute; right: 0; bottom: 0;
-      width: 45%; height: 70%;
+      width: 50%; height: 68%;
       pointer-events: auto;
       touch-action: none;
     }
@@ -350,6 +368,7 @@
       position: absolute; right: 16px; bottom: 24px;
       display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
       padding-right: env(safe-area-inset-right);
+      z-index: 2;
     }
     .touch-button {
       pointer-events: auto;
@@ -376,15 +395,30 @@
 
     /* Dialogues become a full-width sheet on a phone so choices are thumb-sized. */
     @media (max-width: 760px), (pointer: coarse) {
+      /* The base rule centres with translateX(-50%); switching to left/right
+         edges without clearing that transform pushed the whole panel off the
+         left of the screen, where the thumb stick then swallowed the taps. */
       #dialogue {
-        left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom));
+        left: 8px; right: 8px;
+        transform: none;
+        width: auto;
+        bottom: calc(8px + env(safe-area-inset-bottom));
         max-height: 62vh; overflow-y: auto;
         -webkit-overflow-scrolling: touch;
       }
+      /* The stick must start above the dialogue sheet, not on top of it. */
+      #touch.dialogue-open #stick-zone,
+      #touch.dialogue-open #look-zone,
+      #touch.dialogue-open #touch-buttons { pointer-events: none; }
+      /* Hide the action/journal cluster while a conversation is open: the
+         dialogue sheet owns the bottom of the screen. */
+      #touch.dialogue-open #touch-buttons { opacity: 0.25; }
       #dialogue .choices button { min-height: 48px; font-size: 15px; }
+      #dialogue-close { display: flex; }
       #dialogue .foot { display: none; }
+      #dialogue { padding-right: 52px; }
       #hint { bottom: auto; top: calc(64px + env(safe-area-inset-top)); font-size: 13px; }
-      #panel { left: 8px; right: 8px; top: 8px; max-height: 76vh; overflow-y: auto; }
+      #panel { left: 8px; right: 8px; top: 8px; max-height: 76vh; overflow-y: auto; z-index: 50; }
       #quest-tracker { max-width: 58vw; font-size: 12px; }
       #overheard { font-size: 13px; }
       .touch-only { display: initial; }
@@ -392,6 +426,15 @@
     .touch-only { display: none; }
     @media (max-width: 760px), (pointer: coarse) { .desktop-only { display: none; } }
     @media (hover: hover) and (pointer: fine) { .touch-only { display: none !important; } }
+
+    /* On a short screen the button cluster and the dialogue fight for the
+       bottom edge, so give the dialogue the room and shrink the buttons. */
+    @media (max-height: 620px) and (pointer: coarse) {
+      #dialogue { max-height: 70vh; }
+      #dialogue .choices button { min-height: 44px; }
+      .touch-button { min-height: 46px; }
+      #touch-interact { min-height: 54px; }
+    }
 
     /* Pause menu for touch (keyboard uses Esc) */
     #touch-pause {
@@ -413,6 +456,7 @@
       color: #ffd479; font: inherit; font-size: 15px; font-weight: 600;
     }
     #touch-pause button.primary { background: #ffd479; color: #1a1206; border-color: #ffd479; }
+    #touch-pause .hint-line { margin: 14px 0 0; font-size: 12px; color: #7d8ea6; }
   </style>
 </head>
 <body>
@@ -467,10 +511,12 @@
       <p>Your progress is saved automatically.</p>
       <button type="button" class="primary" id="touch-resume">Resume</button>
       <button type="button" id="touch-save">Save now</button>
+      <p class="hint-line">Tab away and the game pauses, keeping your place.</p>
     </div>
   </div>
 
   <div id="dialogue" hidden>
+    <button type="button" id="dialogue-close" aria-label="Close conversation">✕</button>
     <div class="name" id="dialogue-name"></div>
     <div class="role" id="dialogue-role"></div>
     <div class="line" id="dialogue-line"></div>
@@ -490,7 +536,7 @@
       <p class="controls touch-only">
         Left thumb to walk &nbsp;·&nbsp; drag the right side to look<br>
         Tap <b>Talk</b> to speak to people &nbsp;·&nbsp; <b>Journal</b> to check your quests<br>
-        <b>Pause</b> at the top right saves and stops
+        <b>Pause</b> at the bottom right saves and stops
       </p>
       <div class="buttons">
         <button type="button" id="play">Play</button>

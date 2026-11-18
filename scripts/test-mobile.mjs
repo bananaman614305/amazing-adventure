@@ -196,12 +196,15 @@ async function playSession(browser, server, profile) {
     const rect = button.getBoundingClientRect();
     return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
   });
+  const lineBeforeTap = await page.evaluate(() => document.getElementById('dialogue-line').textContent);
   await tap(choiceHit.x, choiceHit.y);
   await wait(300);
   const afterChoiceTap = await page.evaluate(() => ({
     stillOpen: !document.getElementById('dialogue').hidden,
-    text: document.getElementById('dialogue-line').textContent
+    text: document.getElementById('dialogue-line').textContent,
+    memory: window.amazingAdventure.getState().memory.mara || null
   }));
+  afterChoiceTap.lineBeforeTap = lineBeforeTap;
 
   // --- Take the first quest, then save and reload ---------------------------
   const questStarted = await page.evaluate(async () => {
@@ -221,6 +224,67 @@ async function playSession(browser, server, profile) {
   });
   checks.check(`${profile.name}: the first quest can be started from a touch conversation`,
     questStarted === 'started', String(questStarted));
+
+  // Close the conversation with the on-screen control, as a phone player must:
+  // there is no Esc key, and a sub-menu may offer no "Leave" choice at all.
+  const reopen = async () => {
+    await page.evaluate(() => {
+      const api = window.amazingAdventure;
+      const mara = api.npcs.find((npc) => npc.id === 'mara');
+      api.player.placeAt(mara.group.position.x, mara.group.position.z + 1.9, 0, -0.05);
+      api.touch.refresh();
+      api.touch.interact();
+    });
+    await wait(250);
+  };
+
+  await reopen();
+  const closeReach = await page.evaluate(() => {
+    const button = document.getElementById('dialogue-close');
+    const rect = button.getBoundingClientRect();
+    const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return {
+      onTop: top === button, display: getComputedStyle(button).display,
+      w: rect.width, h: rect.height, x: rect.x, y: rect.y
+    };
+  });
+  checks.check(`${profile.name}: the close control is visible and on top of the dialogue`,
+    closeReach.onTop === true && closeReach.display !== 'none' &&
+    closeReach.w >= 40 && closeReach.h >= 40, JSON.stringify(closeReach));
+
+  await tap(closeReach.x + closeReach.w / 2, closeReach.y + closeReach.h / 2);
+  await wait(300);
+  const dialogueClosed = await page.evaluate(() => ({
+    hidden: document.getElementById('dialogue').hidden,
+    frozen: window.amazingAdventure.player.frozen,
+    zonesLive: getComputedStyle(document.getElementById('stick-zone')).pointerEvents !== 'none'
+  }));
+  checks.check(`${profile.name}: tapping the close control ends the conversation and frees the controls`,
+    dialogueClosed.hidden === true && dialogueClosed.frozen === false && dialogueClosed.zonesLive === true,
+    JSON.stringify(dialogueClosed));
+
+  // Pausing while a conversation is open must actually stop the world. This
+  // regressed once because closeDialogue() clears `frozen` after pause sets it.
+  await reopen();
+  const pauseOverDialogue = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    api.touch.pause(true);
+    const paused = {
+      sheet: !document.getElementById('touch-pause').hidden,
+      dialogueClosed: document.getElementById('dialogue').hidden,
+      frozen: api.player.frozen
+    };
+    api.touch.pause(false);
+    return { paused, resumedFrozen: api.player.frozen, sheetHidden: document.getElementById('touch-pause').hidden };
+  });
+  checks.check(`${profile.name}: pausing mid-conversation really stops the world`,
+    pauseOverDialogue.paused.sheet === true &&
+    pauseOverDialogue.paused.dialogueClosed === true &&
+    pauseOverDialogue.paused.frozen === true,
+    JSON.stringify(pauseOverDialogue.paused));
+  checks.check(`${profile.name}: resuming after a mid-conversation pause restores control`,
+    pauseOverDialogue.resumedFrozen === false && pauseOverDialogue.sheetHidden === true,
+    JSON.stringify(pauseOverDialogue));
 
   // Save out of the pause menu, then reload the page and resume.
   const pause = await page.evaluate(() => {
@@ -289,13 +353,18 @@ async function playSession(browser, server, profile) {
   checks.check(`${profile.name}: the layout does not scroll sideways`,
     overflow.scroll <= 0 && overflow.bodyScroll <= 0, JSON.stringify(overflow));
 
-  const identity = await page.evaluate(() => ({
-    version: window.amazingAdventure.version,
-    buildName: window.amazingAdventure.buildName,
-    channel: window.amazingAdventure.releaseChannel,
-    entry: window.amazingAdventure.entryPoint,
-    onPage: document.querySelector('.round')?.textContent || ''
-  }));
+  const identity = await page.evaluate(async () => {
+    const module = await import('./src/version.js');
+    return {
+      version: window.amazingAdventure.version,
+      buildName: window.amazingAdventure.buildName,
+      channel: window.amazingAdventure.releaseChannel,
+      entry: window.amazingAdventure.entryPoint,
+      moduleVersion: module.VERSION,
+      moduleEntry: module.ENTRY_POINT,
+      onPage: document.querySelector('.round')?.textContent || ''
+    };
+  });
 
   const fps = await page.evaluate(() => new Promise((done) => {
     let frames = 0;
@@ -308,8 +377,32 @@ async function playSession(browser, server, profile) {
     requestAnimationFrame(tick);
   }));
 
-  // Evidence should show the game being played, not a menu: put the player back
-  // in the world near Mara with the touch controls visible.
+  // Starting by tapping the overlay background (not the button) must also work.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 30000 });
+  const overlayRect = await page.evaluate(() => {
+    const card = document.querySelector('#overlay .card').getBoundingClientRect();
+    return { x: card.x + card.width / 2, y: card.y - 30 };
+  });
+  await tap(overlayRect.x, overlayRect.y);
+  await wait(700);
+  const overlayStart = await page.evaluate(() => ({
+    started: !document.getElementById('overlay').hidden ? false : true,
+    touchActive: window.amazingAdventure.touch.active,
+    enabled: window.amazingAdventure.player.enabled,
+    rootVisible: !document.getElementById('touch').hidden
+  }));
+  checks.check(`${profile.name}: tapping the overlay background also starts in touch mode`,
+    overlayStart.started && overlayStart.touchActive && overlayStart.enabled && overlayStart.rootVisible,
+    JSON.stringify(overlayStart));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 30000 });
+
+  // Evidence should show the game being played, not a menu. The reload above
+  // left the game on the title overlay, so start it again and stand by Mara
+  // with the touch controls on screen.
+  await page.click('#play');
+  await wait(900);
   await page.evaluate(async () => {
     const api = window.amazingAdventure;
     api.touch.pause(false);
@@ -318,7 +411,27 @@ async function playSession(browser, server, profile) {
     api.setClock(78);
     api.touch.refresh();
   });
-  await wait(900);
+  await wait(1200);
+  // Evidence must be a sharp, full-resolution frame: the adaptive controller
+  // has been lowering the pixel ratio on this GPU-less machine all session, and
+  // the smallest viewport drops furthest, which made the SE capture look almost
+  // black. Pin native resolution just for the screenshot.
+  await page.evaluate(() => window.amazingAdventure.resolution.setAdaptive(false));
+  await wait(600);
+  const evidenceState = await page.evaluate(() => ({
+    pixelRatio: window.amazingAdventure.renderer.getPixelRatio(),
+    pauseSheet: !document.getElementById('touch-pause').hidden,
+    dialogue: !document.getElementById('dialogue').hidden,
+    panel: !document.getElementById('panel').hidden,
+    touchClass: document.getElementById('touch').className,
+    overlayHidden: document.getElementById('overlay').hidden,
+    touchVisible: !document.getElementById('touch').hidden,
+    interact: document.getElementById('touch-interact').hidden
+      ? null : document.getElementById('touch-interact').textContent
+  }));
+  checks.check(`${profile.name}: the evidence frame shows live play with touch UI`,
+    evidenceState.overlayHidden === true && evidenceState.touchVisible === true,
+    JSON.stringify(evidenceState));
   const slug = profile.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
   await page.screenshot({ path: resolve(outDir, `mobile-${slug}.png`) });
 
@@ -372,10 +485,23 @@ for (const run of runs) {
     run.afterRelease.knob === false, JSON.stringify(run.afterRelease));
   checks.check(`${run.profile}: the Journal button opens and closes the journal`,
     run.journalOpen === true && run.journalClosed === true);
+  // A real tap must do something observable: either the line changes, the
+  // conversation closes, or Mara records the topic. Asserting `text !== undefined`
+  // would have passed even if the tap did nothing at all.
+  const tapDidSomething =
+    run.afterChoiceTap.stillOpen === false ||
+    run.afterChoiceTap.text !== run.afterChoiceTap.lineBeforeTap ||
+    Boolean(run.afterChoiceTap.memory && run.afterChoiceTap.memory.talks > 0);
   checks.check(`${run.profile}: tapping a dialogue choice advances the conversation`,
-    run.afterChoiceTap.text !== undefined, run.afterChoiceTap.text?.slice(0, 60));
-  checks.check(`${run.profile}: the build identifies itself`,
-    /^\d+\.\d+\.\d+$/.test(run.identity.version) && run.identity.onPage.includes(run.identity.version),
+    tapDidSomething,
+    JSON.stringify({ before: run.afterChoiceTap.lineBeforeTap?.slice(0, 40),
+                     after: run.afterChoiceTap.text?.slice(0, 40),
+                     open: run.afterChoiceTap.stillOpen, memory: run.afterChoiceTap.memory }));
+  checks.check(`${run.profile}: the build identifies itself consistently`,
+    /^\d+\.\d+\.\d+$/.test(run.identity.version) &&
+    run.identity.version === run.identity.moduleVersion &&
+    run.identity.entry === run.identity.moduleEntry &&
+    run.identity.onPage.includes(run.identity.version),
     JSON.stringify(run.identity));
   checks.check(`${run.profile}: renders above 1fps on this device profile`,
     run.fps > 1, `${run.fps}fps`);

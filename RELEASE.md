@@ -63,7 +63,8 @@ with touch points; it is forced off on a desktop with a mouse.
   matches the action (`Talk`, `Pick up`, `Read`, `Rest`, `Gate`).
 - **Journal** button: opens the inventory, journal and standing panel.
 - **Pause** button: pauses, saves, and offers *Resume* / *Save now*.
-- Dialogue choices are tapped directly and are at least 44px tall.
+- Dialogue choices are tapped directly and are at least 44px tall. A **✕**
+  button closes the conversation, because a phone has no Esc key.
 
 ## What was actually tested, and on what
 
@@ -87,6 +88,37 @@ DOM, CSS, touch event plumbing, viewport behaviour and control logic, but is
 | Landscape | **Tested** — emulated iPhone 13 landscape |
 | Frame rate on real hardware | **Not tested.** All figures are software rasterisation with no GPU |
 
+### Review findings fixed in this candidate
+
+An independent review of the touch code found real defects, all now fixed and
+covered by tests:
+
+1. **Tapping the title overlay background started the game without touch mode**,
+   leaving a phone player on an overlay that never went away. Every start path
+   now enters touch mode.
+2. **Dialogue choices were rendered off the left edge of the screen** — the
+   mobile rule set `left`/`right` but never cleared the desktop `translateX(-50%)`
+   — so the thumb stick received the taps instead of the buttons. This one only
+   surfaced when the test was tightened to prove a tap *did* something, rather
+   than asserting that a string existed.
+3. **The Journal/Pause cluster sat on top of the dialogue choices** on short
+   screens. The dialogue now layers above the touch controls, and the cluster
+   stops accepting input while a conversation is open.
+4. **`pointerleave` reset the stick mid-drag**, which would have made walking
+   stutter on real devices. It now releases on `pointerup`/`pointercancel`/
+   `lostpointercapture` only, so pointer capture keeps the stick alive.
+5. **No way out of the pause sheet on a phone** except one button; Escape works
+   again, and the sheet no longer claims Pause is in the wrong corner.
+6. **Backgrounding the tab mid-dialogue silently discarded it.** Now it keeps
+   the conversation and only stops the world.
+7. **Pausing while a conversation was open did not actually pause.** The pause
+   handler set `frozen = true` and then called `closeDialogue()`, which clears
+   `frozen` — so the world kept running behind the pause sheet. The dialogue is
+   now closed first. A test asserts the paused state is really frozen.
+8. **The close control had no test proving it was on top and reachable**, so it
+   is now checked by hit-testing its own centre point while a conversation is
+   open, on every profile.
+
 Emulated profiles in `npm run test:mobile`: iPhone 13 portrait, iPhone 13
 landscape, Pixel 7 portrait, iPhone SE (small). Each runs the same scripted
 playthrough. Real-device verification is a sensible next step before treating the
@@ -105,8 +137,9 @@ preview as final.
   interception test that aborts every off-origin request, then playing the game).
 - The build identifies itself as `0.3.0` both in code and on the page.
 
-Everything above is re-run by `npm run test:mobile` (93 checks × 4 profiles) and
-`npm run test:browser` (70 checks).
+Everything above is re-run by `npm run test:mobile` (117 checks across 4
+profiles = 29 per profile) and `npm run test:browser` (70 desktop checks), plus
+151 Node unit tests. 338 checks in total.
 
 ## A note on frame rate
 

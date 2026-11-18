@@ -1,13 +1,98 @@
 # Grunt status — Amazing Adventure
 
 **Branches:**
-- `grunt/round3-living-world` at `57b9c1f` — published-request pending with the
-  supervisor; tree clean, untouched since the request was written.
-- `grunt/round4-lane-quest` — the lane's NPC and faction-gated quest, stacked on
-  it. This is the branch this checkpoint describes.
+- `grunt/round3-living-world` — published inside PR #5.
+- `grunt/round4-lane-quest` at `65c6263` — **published as PR #5**
+  (`https://github.com/bananaman614305/amazing-adventure/pull/5`), left open for
+  the human.
+- `grunt/round5-mobile-preview` — the phone playtest candidate. This is the
+  branch this checkpoint describes.
 
-**Last checkpoint:** `20e6e14` on `grunt/round4-lane-quest`, requested for
-publication as a single PR based on `grunt/continuous-adventure`.
+**Last checkpoint:** the mobile playtest candidate, committed and verified; see
+the publication section at the end of this file.
+
+## Round 5 — playable phone preview (owner priority)
+
+The owner asked for a playable phone preview: simultaneous left-thumb movement
+and right-thumb drag-to-look, onscreen interaction, journal and pause, the first
+quest and save/load reachable by touch, and adaptive resolution on small screens
+— without breaking desktop keyboard and mouse.
+
+### What was built
+
+- `src/touch.js` (pure, 14 unit tests): analog stick maths with a deadzone that
+  ramps rather than snapping, magnitude preserved so half-push walks at half
+  speed, clamped knob, touch look deltas, pitch clamping, and
+  `wantsTouchControls` so a touchscreen *laptop* keeps mouse and keyboard.
+- `src/player.js`: an analog input channel beside the keyboard that cannot stack
+  with it (the larger request wins, so holding W and pushing the stick is not
+  double speed), touch mode that enables play without pointer lock, `applyLook`.
+- `index.html`: a stick that appears where the thumb presses, a right-side look
+  zone, Talk/Use labelled per action, Journal and Pause with safe-area insets, a
+  pause sheet, a dialogue ✕ button, and a phone layout for dialogue and panels.
+- `src/main.js`: multi-touch with pointer capture, per-frame interact-button
+  sync, a pause that genuinely freezes and blocks input, auto-pause on tab hide
+  that keeps an open conversation, and touch-event fallbacks bound only when
+  Pointer Events are missing (so one finger never drives two handlers).
+- `src/version.js`, `RELEASE.md`, `vendor/`: the candidate is **self-contained**.
+  Three.js r160 is vendored instead of loaded from a CDN.
+
+### Checks actually run
+
+- `npm test` — **151/151 pass** (14 new touch, 6 new version/self-containment).
+- `npm run test:browser` — **70/70 pass, exit 0** (desktop regression).
+- `npm run test:mobile` — **117/117 pass, exit 0** across four emulated profiles
+  (iPhone 13 portrait, iPhone 13 landscape, Pixel 7, iPhone SE), driving real
+  multi-touch events through CDP rather than synthetic clicks. That is 29 checks
+  per profile, including pause-while-talking, the dialogue close control being
+  hit-testable on top of its own centre, and a fresh overlay-start path.
+- Self-containment: a test aborts every off-origin request and the game still
+  plays; `index.html` has zero remote URLs; a Node test also asserts it.
+- Evidence: `artifacts/mobile-*.png`, four real captures of live play at dusk
+  with the touch UI visible. Verified programmatically as 1170x2532, 2532x1170,
+  1071x2379 and 640x1136 with 654/833/664/583 distinct sampled colours. I did not
+  visually inspect them; I am text-only.
+
+### Bugs found and fixed this round
+
+1. **Tapping the overlay background started the game without touch mode** — a
+   phone player was left on an overlay that never cleared. Fixed on every start
+   path; the mobile suite now tests the overlay tap specifically.
+2. **Dialogue choices were rendered off-screen at x = -146.** The mobile rule
+   set `left`/`right` but never cleared the desktop `transform: translateX(-50%)`,
+   so choices were shoved left and the stick zone swallowed the taps. This was
+   invisible until I tightened a weak assertion (`text !== undefined`, which
+   passes on an empty string) to require that a tap actually changed something.
+3. **The Journal/Pause cluster covered the dialogue choices** on short screens;
+   the dialogue now layers above the touch controls and the cluster stops
+   accepting input while talking.
+4. **`pointerleave` reset the stick mid-drag**, which would stutter walking on
+   real hardware. Released on `pointerup`/`pointercancel`/`lostpointercapture`.
+5. **Only one way out of the pause sheet**, and no Escape handling for it; both
+   fixed, and the sheet said Pause was top-right when it is bottom-right.
+6. **Backgrounding the tab mid-dialogue discarded the conversation.** It is now
+   kept, and only the world stops.
+7. `package.json` said version `0.2.0` while the game was `0.3.0`; a test now
+   holds them to the same release line.
+8. **Pausing while a dialogue was open did not pause anything.** The handler set
+   `player.frozen = true` and *then* called `closeDialogue()`, which clears
+   `frozen`, so the world kept running behind the pause sheet. Closing the
+   dialogue now happens first, and a test asserts the paused state is really
+   frozen. Found by deliberately probing stuck-state scenarios rather than by a
+   test I had already written.
+9. The iPhone SE evidence screenshot came out almost black: adaptive resolution
+   had walked the pixel ratio down furthest on the smallest viewport. Evidence
+   capture now pins native resolution first, so all four screenshots are sharp,
+   bright frames of live play (579-656 distinct sampled colours).
+
+### Honest limits on device testing
+
+No physical phone and no real iOS Safari were available. WebKit could not be
+installed (`npx playwright install webkit` fails on missing system libraries I am
+not permitted to install). All mobile testing is **Chrome device emulation**,
+which exercises the DOM, CSS, touch plumbing, viewport behaviour and control
+logic, but is not Safari. `RELEASE.md` states this precisely, per claim. Real
+device verification is the obvious next step before calling the preview final.
 
 ## I misread a rejection, and it was my fault
 
@@ -44,11 +129,11 @@ Consolidating to one PR is deliberate: a human reviewer already has PR #4 open
 and unmerged. A three-deep stack of unmerged PRs would be worse for them than
 one coherent round.
 
-## Current task
+## Earlier current task (Round 3 — completed)
 
 Round 3 — "a living world" — factions with reputation, choices that pull two
 ways, a fourth quest that forces a side, and NPCs who talk to each other while
-the player can overhear them.
+the player can overhear them. Published in PR #5.
 
 ## Round 2 publication (resolved)
 
@@ -286,11 +371,17 @@ instructions.
   no instructional text on a finished quest, and the rendered journal panel
   itself showing what really happened).
 
-## Next task
+## Current task
 
-1. Publish the branch as a single PR (see the publication queue above), and do
-   not touch the tree again until the result lands.
-2. Let reputation refuse content in the plaza too, not only in the lane, so
-   standing matters where the player starts.
-3. Give the next round a real objective loop: something to carry between the two
-   areas in both directions, so the lane is not a dead end.
+Ship the phone playtest candidate: the mobile preview is built, tested and
+verified, and this checkout is the exact clean commit requested for publication.
+
+## Next steps
+
+1. **Publish `grunt/round5-mobile-preview`** as the v0.3.0 playtest candidate and
+   verify the Play tab can serve it from the static files listed in `RELEASE.md`.
+2. **Get it onto real hardware.** The biggest honest gap is that no physical
+   phone or iOS Safari was available here. A real-device pass should confirm touch
+   gestures, safe-area insets on a notched phone, and frame rate on an actual GPU.
+3. Then return to game content: let reputation refuse plaza content too, and give
+   the two areas something to carry between them so the lane is not a dead end.
