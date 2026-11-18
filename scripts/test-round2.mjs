@@ -1825,6 +1825,85 @@ try {
 
   await capture(page, 'round17-playthrough.png');
 
+  // --- 29a. The terrace parapet is a real edge ------------------------------
+  // The parapet is only 0.55m tall, so the shared "can a person step over it" rule
+  // gave it no collider -- but behind it is a 1.2m drop, which is exactly the edge
+  // the wall exists to mark. The player used to walk straight over the lip anywhere
+  // along the terrace instead of taking the ramp.
+  const terraceInfo = await page.evaluate(async () => {
+    const t = await import('./src/terrain.js');
+    return { TERRACE: t.TERRACE };
+  });
+  const rampMinX = terraceInfo.TERRACE.ramp.minX;
+  const rampMaxX = terraceInfo.TERRACE.ramp.maxX;
+  const lipZ = terraceInfo.TERRACE.maxZ;
+
+  const pushOffLip = async (x) => {
+    await page.evaluate(async (probe) => {
+      const api = window.amazingAdventure;
+      api.player.position.set(probe.x, 0, probe.z);
+      api.player.velocity.set(0, 0, 0);
+      api.player.yaw = Math.PI; // face south, toward the lip
+      api.player.syncCamera();
+      api.player.frozen = false;
+      api.player.enabled = true;
+    }, { x, z: -16.0 });
+    await new Promise((r) => setTimeout(r, 250));
+    for (let i = 0; i < 60; i += 1) {
+      await page.evaluate(() => window.amazingAdventure.player.setMoveInput(1, 0));
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    await page.evaluate(() => window.amazingAdventure.player.setMoveInput(0, 0));
+    await new Promise((r) => setTimeout(r, 250));
+    return page.evaluate(() => {
+      const p = window.amazingAdventure.player.position;
+      return { x: +p.x.toFixed(2), z: +p.z.toFixed(2), ground: +window.amazingAdventure.player.groundHeight().toFixed(2) };
+    });
+  };
+
+  // Points outside the ramp opening must be held back on the terrace.
+  const outsideRamp = [];
+  for (const x of [rampMinX - 3.1, rampMinX - 1.6, rampMaxX + 1.1, rampMaxX + 3.1]) {
+    outsideRamp.push({ tried: x, ...(await pushOffLip(x)) });
+  }
+  const escaped = outsideRamp.filter((r) => r.z > lipZ + 0.05 || r.ground < 1.0);
+  checks.check('the terrace parapet stops the player everywhere except the ramp',
+    escaped.length === 0, JSON.stringify({ lipZ, outsideRamp }));
+
+  // ...and the ramp opening must still be passable in both directions.
+  await page.evaluate(() => window.amazingAdventure.player.placeAt(0, -7.5, 0, 0));
+  await new Promise((r) => setTimeout(r, 300));
+  for (let i = 0; i < 90; i += 1) {
+    await page.evaluate(() => window.amazingAdventure.player.setMoveInput(1, 0));
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  await page.evaluate(() => window.amazingAdventure.player.setMoveInput(0, 0));
+  await new Promise((r) => setTimeout(r, 300));
+  const upRamp = await page.evaluate(() => {
+    const p = window.amazingAdventure.player.position;
+    return { z: +p.z.toFixed(2), ground: +window.amazingAdventure.player.groundHeight().toFixed(2) };
+  });
+  checks.check('the ramp still leads onto the terrace',
+    upRamp.ground > 1.0 && upRamp.z < lipZ,
+    JSON.stringify({ upRamp, lipZ }));
+
+  await page.evaluate(() => { window.amazingAdventure.player.yaw = Math.PI; });
+  for (let i = 0; i < 90; i += 1) {
+    await page.evaluate(() => window.amazingAdventure.player.setMoveInput(1, 0));
+    await new Promise((r) => setTimeout(r, 30));
+  }
+  await page.evaluate(() => window.amazingAdventure.player.setMoveInput(0, 0));
+  await new Promise((r) => setTimeout(r, 300));
+  const downRamp = await page.evaluate(() => ({
+    z: +window.amazingAdventure.player.position.z.toFixed(2),
+    ground: +window.amazingAdventure.player.groundHeight().toFixed(2)
+  }));
+  checks.check('the ramp still leads back down to the plaza',
+    downRamp.ground < 0.1 && downRamp.z > lipZ,
+    JSON.stringify({ downRamp, lipZ }));
+
+  await capture(page, 'round22-parapet.png');
+
   // --- 29b. Dialog focus management -----------------------------------------
   // The dialogue panel declares role=dialog and aria-modal=true, which tells
   // assistive tech that everything outside is inert. That is only honest if focus
