@@ -1127,6 +1127,108 @@ try {
   checks.check('hostile standing still lets the player hand back the gate key',
     /That is my key/i.test(hostileHalden.line), hostileHalden.line.slice(0, 90));
   await closeDialogue();
+
+  // --- 22. Earning standing back is possible, and costs something ----------
+  // A refusal must never be a dead end. The work menu is the repeatable way out,
+  // so these checks prove it is reachable, that it charges a real price, that a
+  // time-costing job moves the clock, and that standing actually recovers.
+  const clickChoiceRegex = async (pattern) => {
+    const index = await page.evaluate((p) => [...document.querySelectorAll('#dialogue-choices button')]
+      .findIndex((b) => new RegExp(p, 'i').test(b.textContent)), pattern);
+    if (index < 0) return { ok: false, labels: await page.evaluate(() => [...document.querySelectorAll('#dialogue-choices button')].map((b) => b.textContent.trim())) };
+    await page.evaluate((i) => document.querySelectorAll('#dialogue-choices button')[i].click(), index);
+    await new Promise((r) => setTimeout(r, 250));
+    return { ok: true };
+  };
+
+  // Put the market back into a refusal, then walk the repair path for real.
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const { changeReputation } = await import('./src/factions.js');
+    const state = api.getState();
+    state.quests.lanterns = 'none';
+    state.inventory = state.inventory.filter((id) => id !== 'oswin_marker');
+    state.reputation.trade = 0;
+    changeReputation(state, 'trade', -40);
+    state.flags.coins = 20;
+    api.refreshHUD();
+  });
+  await closeDialogue();
+
+  const refusedAgain = await talkToNpc('oswin');
+  await clickChoiceRegex('change your mind');
+  const offeredWork = await clickChoiceRegex('show me the work');
+  const jobLabels = await page.evaluate(() => [...document.querySelectorAll('#dialogue-choices button')].map((b) => b.textContent.trim()));
+  checks.check('a refused player is offered repeatable work instead of a dead end',
+    refusedAgain.visible && /nothing for you/i.test(refusedAgain.line) && offeredWork.ok &&
+    jobLabels.some((l) => /Sweep|Carry|Drill/.test(l)), JSON.stringify(jobLabels.slice(0, 3)));
+
+  checks.check('every job states its price and its reward',
+    jobLabels.filter((l) => /Sweep|Carry|Drill/.test(l)).every((l) => /coins|hour/.test(l) && /\+\d+/.test(l)) &&
+    !jobLabels.some((l) => /1 coins/.test(l)), JSON.stringify(jobLabels.slice(0, 3)));
+
+  // Capture the repair UI itself, in daylight, while it is on screen: this is
+  // the evidence for the feature, not a dark frame after the dialogue closed.
+  await page.evaluate(() => window.amazingAdventure.setClock(20));
+  await new Promise((r) => setTimeout(r, 600));
+  await capture(page, 'round9-standing-repair.png');
+  await page.evaluate(() => window.amazingAdventure.setClock(20));
+  await new Promise((r) => setTimeout(r, 250));
+
+  const beforeWork = await page.evaluate(() => ({
+    trade: window.amazingAdventure.getState().reputation.trade,
+    coins: window.amazingAdventure.getState().flags.coins,
+    phase: window.amazingAdventure.getClock().phase
+  }));
+
+  // A coin job must cost coins and leave the clock alone.
+  await clickChoiceRegex('Carry crates');
+  const afterCoinJob = await page.evaluate(() => ({
+    trade: window.amazingAdventure.getState().reputation.trade,
+    coins: window.amazingAdventure.getState().flags.coins,
+    phase: window.amazingAdventure.getClock().phase
+  }));
+  checks.check('a coin job charges its price and does not move the clock',
+    afterCoinJob.coins === beforeWork.coins - 2 &&
+    afterCoinJob.phase === beforeWork.phase &&
+    afterCoinJob.trade > beforeWork.trade,
+    JSON.stringify({ beforeWork, afterCoinJob }));
+
+  // A time job must move the clock on, which proves the cost is real.
+  await clickChoiceRegex('anything else');
+  await clickChoiceRegex('Sweep');
+  const afterTimeJob = await page.evaluate(() => ({
+    keepers: window.amazingAdventure.getState().reputation.keepers,
+    phase: window.amazingAdventure.getClock().phase
+  }));
+  checks.check('a time job really passes the hour instead of being free reputation',
+    afterTimeJob.phase !== afterCoinJob.phase && afterTimeJob.keepers > 0,
+    JSON.stringify({ afterCoinJob, afterTimeJob }));
+
+  // Repeat until the refusal lifts, proving the loop is not decorative.
+  const recovered = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const { work } = await import('./src/repair.js');
+    const { refusalFor } = await import('./src/refusal.js');
+    const { REFUSAL_RULES } = await import('./src/state.js');
+    const state = api.getState();
+    state.flags.coins = 200;
+    let jobs = 0;
+    while (refusalFor(state, 'oswin', REFUSAL_RULES) !== null && jobs < 60) {
+      work(state, 'carry');
+      jobs += 1;
+    }
+    api.refreshHUD();
+    return { jobs, trade: state.reputation.trade, stillRefused: refusalFor(state, 'oswin', REFUSAL_RULES) !== null };
+  });
+  checks.check('enough honest work actually earns the refusal away',
+    recovered.stillRefused === false && recovered.jobs > 1,
+    JSON.stringify(recovered));
+
+  const served = await talkToNpc('oswin');
+  checks.check('the player Oswin refused is served again after working',
+    !/nothing for you/i.test(served.line) && served.visible, served.line.slice(0, 90));
+  await closeDialogue();
 } finally {
   await close();
   await server.stop();

@@ -468,7 +468,12 @@ export const REFUSAL_RULES = [
     npcIds: ['halden'],
     required: 'cold',
     reason: 'Halden will not do business with you.',
-    until: (state) => isQuestDone(state, 'key'),
+    // No `until` here on purpose. An earlier version lifted the refusal forever
+    // once the key quest was done, which made the Watch literally unable to
+    // refuse in normal play -- so its refusal and the repair work behind it were
+    // unreachable content. The `exempt` below is the part that actually protects
+    // the critical path, and it only applies while the key is in hand.
+    //
     // The key opens the only route to the market lane, so returning it has to
     // stay possible or the whole northern half of the game becomes unreachable.
     exempt: (state) => hasItem(state, 'brass_key')

@@ -334,6 +334,11 @@ function choose(index) {
 
   const npcId = activeNPC.id;
   const result = applyChoice(state, npcId, choice);
+  // Odd jobs take a stretch of the day, and only this side owns the clock.
+  if (result.advanceTime) {
+    clockSeconds = nextPhaseStart(clockSeconds);
+    syncPhase(true);
+  }
   if (result.changed) {
     toast(result.message);
     refreshHUD();

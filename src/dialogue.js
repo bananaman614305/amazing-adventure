@@ -40,6 +40,7 @@ import {
 } from './state.js';
 import { npcTier, FACTIONS, NPC_FACTION } from './factions.js';
 import { refusalFor, refusalHint } from './refusal.js';
+import { JOBS, canWork, work, payFor } from './repair.js';
 
 /**
  * A one-line greeting suffix that reflects how the NPC's faction currently
@@ -77,11 +78,73 @@ function refusalNode(state, npcId, name, flavour) {
     {
       label: 'What would change your mind?',
       next: () => node(name, refusal.shortfall >= 2
-        ? 'Do something for the people I answer to. Words will not move me, and neither will apologies.'
-        : 'One good turn. Help someone I trust and I will hear about it soon enough.')
+        ? 'Do something for the people I answer to. Words will not move me, and neither will apologies. There is always work if you are willing to do it.'
+        : 'One good turn. Help someone I trust and I will hear about it soon enough. There is work, if you want it.',
+        [
+          { label: 'Show me the work.', next: () => workMenu(state, npcId, name) },
+          end('Leave')
+        ])
     },
     end('Leave')
   ]);
+}
+
+/**
+ * The repeatable way back up. Every job costs something real — coins, or a
+ * stretch of the day — so reputation cannot be farmed by pressing a button in
+ * one place. Each job also nudges a rival faction down, which is what keeps the
+ * choice of who to work for meaningful.
+ */
+function workMenu(state, npcId, name) {
+  const jobs = Object.values(JOBS);
+  const choices = jobs.map((job) => {
+    const allowed = canWork(job, state);
+    const pays = payFor(job, state);
+    const costBits = [];
+    if (job.cost?.coins) costBits.push(`${job.cost.coins} coin${job.cost.coins === 1 ? '' : 's'}`);
+    if (job.cost?.time) costBits.push('the rest of the hour');
+    const cost = costBits.length ? `costs ${costBits.join(' and ')}` : 'costs nothing but time';
+    return {
+      label: allowed.ok
+        ? `${job.title} (${cost}) — ${FACTIONS[job.factionId].name} +${pays}`
+        : `${job.title} — ${allowed.reason}`,
+      // A job the player cannot afford stays visible but does nothing, so the
+      // reason is the feedback rather than a silently missing option.
+      do: () => (allowed.ok ? doJob(state, job.id) : { changed: false, message: allowed.reason }),
+      next: () => (allowed.ok
+        ? node(name, jobDoneLine(job, state), [
+            { label: 'Anything else?', next: () => workMenu(state, npcId, name) },
+            end('That is enough for now')
+          ])
+        : node(name, allowed.reason, [
+            { label: 'Something else?', next: () => workMenu(state, npcId, name) },
+            end('Leave')
+          ]))
+    };
+  });
+  return node(name, '“Work is work. Pick something.”', [...choices, end('Leave')]);
+}
+
+/** Runs a job and folds in its time cost, which only the caller can apply. */
+function doJob(state, jobId) {
+  const result = work(state, jobId);
+  if (!result.changed) return result;
+  const bits = [result.message];
+  if (result.note) bits.push(result.note);
+  return { ...result, changed: true, message: bits.filter(Boolean).join(' ') };
+}
+
+function jobDoneLine(job, state) {
+  switch (job.id) {
+    case 'sweep':
+      return 'You sweep the steps until the stone shows through. Mara nods once, which from her is a speech.';
+    case 'carry':
+      return 'You haul crates until your arms ache. Oswin counts coins into your hand without looking up.';
+    case 'drill':
+      return 'Halden puts you through the paces twice. By the end he is correcting your stance instead of ignoring you.';
+    default:
+      return 'You work until the job is done.';
+  }
 }
 
 const say = (text) => ({ label: text, do: () => ({}) });

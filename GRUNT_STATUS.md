@@ -373,7 +373,63 @@ instructions.
 
 ## Current task
 
-Round 8 — Reputation refuses content, and cannot soft-lock the game.
+Round 9 — Earning standing back: closing the dead-end I flagged last round.
+
+PRs #5–#9 are published and open for the human. Real-device testing is still
+blocked on hardware I do not have. Round 8 gave reputation teeth but left a real
+design gap, stated honestly in that round's notes: **refusals were escapable only
+through quests, so a player who had finished every quest had no repeatable way
+back out of Hostile.** The plaza shut them out and stayed shut. This round fixes
+that.
+
+### What Round 9 adds
+
+- `src/repair.js` (pure, 16 unit tests): three odd jobs — sweep the fountain steps
+  (Keepers), carry crates (Market), drill with the gate watch (Watch). Every job
+  costs something real, so standing can never be farmed by pressing a button:
+  - the sweep and the drill take **the rest of the hour** (the clock really
+    advances to the next phase);
+  - the crates and the drill cost **coins**, deducted before the work happens;
+  - each job nudges a rival faction down, so who you work for is a choice.
+- **The way back is discoverable where it is needed.** The refusal itself now
+  offers "What would change your mind?" → "Show me the work.", listing every job
+  with its price and its reward, and listing unaffordable jobs too, with the
+  reason, instead of silently hiding them.
+- **Working while disliked pays less** (half at Hostile, three-quarters at Cold),
+  so the first points out of Hostile are the expensive ones. Verified: climbing
+  out of Hostile takes more than a handful of jobs, not one.
+
+### Dead content removed
+
+Round 8's Watch rule carried `until: isQuestDone('key')`, which lifted Halden's
+refusal **forever** once the key quest was done. Since that happens in the first
+few minutes, the Watch could never actually refuse in normal play — its refusal
+and the whole repair path behind it were unreachable content. My own new test
+caught it. The `until` is gone; the `exempt: carries the key` predicate is what
+protects the critical path, and it only applies while the key is in hand.
+
+### Checks actually run this round
+
+- `npm test` — **223/223 pass** (was 207): 16 new repair cases. The manifest test
+  caught `src/repair.js` missing from `requiredFiles` (its purpose again); the
+  manifest was regenerated, now 21 files.
+- `npm run test:browser` — **89/89 pass, exit 0** (was 83). Six new checks drive
+  the real dialogue: a refused player is offered work, every job states price and
+  reward, a coin job charges coins and leaves the clock alone, a time job really
+  moves the clock, enough work earns the refusal away, and the player is served
+  again afterwards.
+- `npm run test:mobile` — **137/137 pass, exit 0**.
+- **Totals: 449 checks — 223 unit, 89 desktop, 137 mobile.**
+
+### Evidence
+
+`artifacts/round9-standing-repair.png` captures the work menu itself in daylight,
+verified programmatically at 36.0% bright pixels and max luminance 255. My first
+attempt placed the capture after the clock had moved to dusk, producing a dim
+frame that showed the room rather than the feature; I moved it to the moment the
+menu is on screen.
+
+## Previous round — Round 8: Reputation refuses content
 
 PRs #5–#8 are published and open for the human. Real-device testing is still
 blocked on hardware I do not have. Last round closed the lane's dead end; this
@@ -540,10 +596,10 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **Give the player a way to deliberately repair a bad reputation.** Refusals are
-   now escapable, but only through quests they may have already finished. A
-   repeatable way to earn standing back would stop a hostile plaza from being a
-   dead end in practice as well as in theory.
+2. **Make the odd jobs visible in the world, not only inside a refusal.** Right
+   now work is offered by a refused NPC. A notice board job listing, or Mara
+   handing out work to anyone regardless of standing, would let a player build
+   goodwill *before* they need it, which is how a real reputation works.
 3. **Give the street beyond the gate a second reason to exist.** The gate is still
    the only route between the areas, and the lane's content now loops through the
    plaza, so a third location is the natural next step.
