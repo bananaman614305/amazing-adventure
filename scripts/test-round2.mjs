@@ -1905,6 +1905,77 @@ try {
     audioSamples.cuePeak > audioSamples.dronePeak && audioSamples.cuePeak < 1,
     JSON.stringify(audioSamples));
 
+  // --- 27y. A new player is told what to do --------------------------------
+  // The plaza puts you a few metres from anyone, so the interaction hint is hidden
+  // at spawn and a first-time player used to get no instruction at all.
+  await page.evaluate(() => {
+    localStorage.removeItem('amazing-adventure:save:v2');
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 25000 });
+  await page.click('#play');
+  await new Promise((r) => setTimeout(r, 1400));
+
+  const arrival = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const p = api.player.position;
+    const nearest = api.npcs
+      .map((n) => ({ name: n.name, d: Math.hypot(n.group.position.x - p.x, n.group.position.z - p.z) }))
+      .sort((a, b) => a.d - b.d)[0];
+    return {
+      toasts: [...document.querySelectorAll('#toast-stack > *')].map((t) => t.textContent.trim()),
+      live: (document.getElementById('sr-live')?.textContent || '').trim(),
+      hintShown: !document.getElementById('hint')?.hidden,
+      nearest,
+      interactables: api.interactables().length
+    };
+  });
+  checks.check('the first thing a new player sees out of range is an instruction',
+    arrival.interactables === 0 && arrival.toasts.length > 0,
+    JSON.stringify(arrival));
+  checks.check('the opening instruction says how to move and how to interact',
+    arrival.toasts.some((t) => /W A S D/.test(t)) &&
+    arrival.live.length > 0 && /press E|tap Use/.test(arrival.live),
+    JSON.stringify({ toasts: arrival.toasts, live: arrival.live.slice(0, 90) }));
+  checks.check('the opening instruction names the person actually nearest',
+    arrival.nearest && arrival.live.includes(arrival.nearest.name),
+    JSON.stringify({ nearest: arrival.nearest.name, live: arrival.live.slice(0, 110) }));
+
+  // The welcome must not repeat itself later in the same session.
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const m = api.npcs.find((n) => n.id === 'mara');
+    api.player.placeAt(m.group.position.x, m.group.position.z + 1.4, 0, 0);
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  await page.keyboard.press('e');
+  await new Promise((r) => setTimeout(r, 500));
+  await page.keyboard.press('1');
+  await new Promise((r) => setTimeout(r, 500));
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 400));
+  const laterToasts = await page.evaluate(() => [...document.querySelectorAll('#toast-stack > *')].map((t) => t.textContent.trim()));
+  checks.check('the opening instruction does not repeat once play is underway',
+    !laterToasts.some((t) => /You are in the plaza/.test(t)),
+    JSON.stringify(laterToasts));
+
+  await capture(page, 'round26-onboarding.png');
+
+  // A returning player must not be re-tutorialised.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 25000 });
+  const continueShown = await page.evaluate(() => !document.getElementById('continue').hidden);
+  await page.click('#continue');
+  await new Promise((r) => setTimeout(r, 1200));
+  const afterContinue = await page.evaluate(() => ({
+    toasts: [...document.querySelectorAll('#toast-stack > *')].map((t) => t.textContent.trim()),
+    lanterns: window.amazingAdventure.getState().quests.lanterns
+  }));
+  checks.check('continuing a saved game does not show the welcome again',
+    continueShown === true && afterContinue.lanterns !== 'none' &&
+    !afterContinue.toasts.some((t) => /You are in the plaza/.test(t)),
+    JSON.stringify(afterContinue));
+
   // --- 27z. The whole interface in the accessibility tree --------------------
   // Round 24 checked the conversation; this checks the rest of the UI the same way,
   // by reading the tree rather than the markup. Two regions were both headed

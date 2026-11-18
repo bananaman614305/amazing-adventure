@@ -29,6 +29,7 @@ export const REQUIRED_FILES = [
   'src/factions.js',
   'src/ambient.js',
   'src/daynight.js',
+  'src/onboard.js',
   'vendor/three.module.min.js',
   'vendor/THREE-LICENSE.txt'
 ];
