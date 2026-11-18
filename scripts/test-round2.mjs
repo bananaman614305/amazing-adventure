@@ -1905,6 +1905,82 @@ try {
     audioSamples.cuePeak > audioSamples.dronePeak && audioSamples.cuePeak < 1,
     JSON.stringify(audioSamples));
 
+  // --- 28a. The real accessibility tree, not just the DOM -------------------
+  // Every earlier accessibility round verified attributes in the DOM. This reads
+  // the accessibility tree the browser actually hands to assistive technology, via
+  // CDP, which is much closer to what a screen reader consumes.
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    document.getElementById('dialogue')?.setAttribute('hidden', '');
+    api.player.frozen = false;
+    const mara = api.npcs.find((n) => n.id === 'mara');
+    api.player.placeAt(mara.group.position.x, mara.group.position.z + 1.4, 0, 0);
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  await page.keyboard.press('e');
+  await new Promise((r) => setTimeout(r, 700));
+
+  const cdp = await page.createCDPSession();
+  await cdp.send('Accessibility.enable');
+  const axTree = async () => (await cdp.send('Accessibility.getFullAXTree')).nodes;
+  let axNodes = await axTree();
+
+  const choiceNodes = () => axNodes.filter((n) => /^Choice \d/.test(n.name?.value || ''));
+  // CDP reports some AX property values as the string "true" rather than boolean
+  // true, so normalise before comparing or the assertions silently never match.
+  const rawProp = (node, key) => (node.properties || []).find((p) => p.name === key)?.value?.value;
+  const propOf = (node, key) => {
+    const v = rawProp(node, key);
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    return v;
+  };
+
+  checks.check('the choices appear in the accessibility tree with a spoken name',
+    choiceNodes().length >= 2 && choiceNodes().every((n) => /^Choice \d of \d: .+/.test(n.name.value)),
+    JSON.stringify(choiceNodes().map((n) => n.name.value)));
+
+  checks.check('a choice name does not run the key digit into the sentence',
+    choiceNodes().every((n) => !/^\d/.test(n.name.value) && !/^Choice \d of \d: ?\d/.test(n.name.value)),
+    JSON.stringify({ names: choiceNodes().map((n) => n.name.value) }));
+
+  checks.check('each choice exposes its shortcut key to assistive tech',
+    choiceNodes().every((n) => typeof propOf(n, 'keyshortcuts') === 'string'),
+    JSON.stringify(choiceNodes().map((n) => propOf(n, 'keyshortcuts'))));
+
+  // The keyboard highlight must be visible as STATE, not only as a CSS class.
+  const checkedChoices = () => choiceNodes().filter((n) => propOf(n, 'checked') === true);
+  checks.check('the checked state is readable from the accessibility tree at all',
+    choiceNodes().some((n) => propOf(n, 'checked') !== undefined),
+    JSON.stringify(choiceNodes().map((n) => rawProp(n, 'checked'))));
+  const firstChecked = checkedChoices();
+  checks.check('the highlighted choice is exposed as checked, with exactly one checked',
+    firstChecked.length === 1 && propOf(firstChecked[0], 'checked') === true,
+    JSON.stringify(choiceNodes().map((n) => ({ name: n.name.value.slice(0, 24), checked: propOf(n, 'checked') }))));
+
+  await page.keyboard.press('s');
+  await new Promise((r) => setTimeout(r, 350));
+  axNodes = await axTree();
+  const movedChecked = checkedChoices();
+  const groupNode = axNodes.find((n) => n.role?.value === 'radiogroup');
+  checks.check('moving the highlight moves the checked state in the accessibility tree',
+    movedChecked.length === 1 && movedChecked[0].name.value !== firstChecked[0].name.value,
+    JSON.stringify({ before: firstChecked[0]?.name?.value?.slice(0, 24), after: movedChecked[0]?.name?.value?.slice(0, 24) }));
+
+  checks.check('the choices are grouped so the set is announced with its context',
+    !!groupNode && (groupNode.name?.value || '').length > 0,
+    JSON.stringify({ group: groupNode?.name?.value, role: groupNode?.role?.value }));
+
+  // The conversation panel itself must be a dialog in the tree, with a name.
+  const dialogNode = axNodes.find((n) => n.role?.value === 'dialog');
+  checks.check('the conversation is a named dialog in the accessibility tree',
+    !!dialogNode && (dialogNode.name?.value || '').length > 0,
+    JSON.stringify({ name: dialogNode?.name?.value, role: dialogNode?.role?.value }));
+
+  await capture(page, 'round24-axtree.png');
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 400));
+
   // --- 29a. The terrace parapet is a real edge ------------------------------
   // The parapet is only 0.55m tall, so the shared "can a person step over it" rule
   // gave it no collider -- but behind it is a 1.2m drop, which is exactly the edge

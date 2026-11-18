@@ -662,6 +662,8 @@ function renderNode() {
   dialogueRole.textContent = activeNPC?.role || '';
   dialogueLine.textContent = activeNode.text;
   dialogueChoices.innerHTML = '';
+  dialogueChoices.setAttribute('role', 'radiogroup');
+  dialogueChoices.setAttribute('aria-label', 'Replies');
   choiceIndex = Math.max(0, Math.min(choiceIndex, (activeNode.choices?.length || 1) - 1));
 
   const choices = activeNode.choices?.length ? activeNode.choices : [{ label: 'Leave', end: true }];
@@ -678,7 +680,21 @@ function renderNode() {
     button.type = 'button';
     button.className = 'choice';
     button.dataset.index = String(index);
-    button.innerHTML = `<span class="num">${index + 1}</span>${escapeHtml(choice.label)}`;
+    button.innerHTML = `<span class="num" aria-hidden="true">${index + 1}</span>${escapeHtml(choice.label)}`;
+    // The visible digit is a key hint, not part of the sentence. Left in the
+    // accessible name it ran straight into the label -- a screen reader said
+    // "two-who are you" -- so it is hidden from assistive tech and spelled out
+    // properly instead. "Choice 2 of 3" tells the reader where they are; the key
+    // itself is covered by the footer hint and the aria-keyshortcuts attribute.
+    button.setAttribute('aria-label', `Choice ${index + 1} of ${choices.length}: ${choice.label}`);
+    button.setAttribute('aria-keyshortcuts', String(index + 1));
+    // The options behave as a single-choice set: W/S move the highlight, E confirms.
+    // role=radio with aria-checked is the pattern Chrome actually exposes in the
+    // accessibility tree (verified against the CDP AX tree: aria-selected on a plain
+    // button and aria-current are both dropped, while radio/checked survives). Without
+    // it the keyboard highlight was invisible to a screen reader.
+    button.setAttribute('role', 'radio');
+    button.setAttribute('aria-checked', String(index === choiceIndex));
     // The pointer is normally locked, so this click is a convenience for
     // players who pause first; keyboard selection is the primary path.
     button.addEventListener('click', (event) => {
@@ -696,7 +712,10 @@ function highlightChoice() {
   const buttons = dialogueChoices.querySelectorAll('.choice');
   buttons.forEach((button, index) => {
     button.classList.toggle('selected', index === choiceIndex);
-    button.setAttribute('aria-selected', String(index === choiceIndex));
+    // aria-selected is only valid on certain roles and was ignored on a plain
+    // <button>: the AX tree exposed no state at all, so the keyboard highlight
+    // was invisible to a screen reader. aria-current is honoured on any element.
+    button.setAttribute('aria-checked', String(index === choiceIndex));
     if (index === choiceIndex) button.scrollIntoView({ block: 'nearest' });
   });
 }
