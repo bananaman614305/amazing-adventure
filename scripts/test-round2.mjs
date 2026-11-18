@@ -1267,6 +1267,7 @@ try {
   await page.evaluate(() => window.amazingAdventure.setClock(20));
   await new Promise((r) => setTimeout(r, 600));
   await capture(page, 'round10-job-board.png');
+
   await page.evaluate(() => window.amazingAdventure.setClock(20));
   await new Promise((r) => setTimeout(r, 250));
 
@@ -1300,6 +1301,69 @@ try {
   checks.check('a time job taken from the board still costs the hour',
     phaseAfter !== phaseBefore, JSON.stringify({ phaseBefore, phaseAfter }));
   await closeDialogue();
+  // --- 24. Sound: synthesised, quiet, and always defeatable ----------------
+  // There are no audio files, so these checks verify that the graph really is
+  // wired and that the player can always silence it -- not that it is pretty.
+  // Capture the game with the sound control visible, in daylight.
+  await page.evaluate(() => window.amazingAdventure.setClock(25));
+  await new Promise((r) => setTimeout(r, 500));
+  await capture(page, 'round11-audio.png');
+
+  const audioState = await page.evaluate(() => ({
+    started: window.amazingAdventure.audio.started,
+    enabled: window.amazingAdventure.audio.enabled,
+    toggleVisible: (() => {
+      const el = document.getElementById('sound-toggle');
+      const box = el.getBoundingClientRect();
+      return box.width > 0 && box.height > 0;
+    })()
+  }));
+  checks.check('audio starts with the game and the mute control is reachable',
+    audioState.started === true && audioState.toggleVisible === true,
+    JSON.stringify(audioState));
+
+  const cueResults = await page.evaluate(() => {
+    const names = ['talk', 'choose', 'close', 'pickup', 'quest', 'refuse', 'work'];
+    return names.map((n) => {
+      try { return { name: n, ok: window.amazingAdventure.audio.play(n) !== false }; }
+      catch (e) { return { name: n, ok: false, error: String(e) }; }
+    });
+  });
+  checks.check('every interaction cue plays without erroring',
+    cueResults.every((r) => r.ok), JSON.stringify(cueResults.filter((r) => !r.ok)));
+
+  // Muting must survive a reload, or a player who hates the sound has to
+  // silence it every single session.
+  await page.evaluate(() => window.amazingAdventure.audio.setEnabled(false));
+  const mutedStored = await page.evaluate(() => localStorage.getItem('amazing-adventure:audio'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 25000 });
+  const afterReload = await page.evaluate(() => ({
+    enabled: window.amazingAdventure.audio.enabled,
+    stored: localStorage.getItem('amazing-adventure:audio')
+  }));
+  checks.check('a muted player stays muted across a reload',
+    mutedStored === 'off' && afterReload.enabled === false && afterReload.stored === 'off',
+    JSON.stringify({ mutedStored, afterReload }));
+
+  // Restore sound and reopen the game for the remaining checks.
+  await page.evaluate(() => window.amazingAdventure.audio.setEnabled(true));
+  await page.click('#play');
+  await new Promise((r) => setTimeout(r, 600));
+
+  const droneFollows = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const seen = [];
+    for (const t of [20, 85, 140]) {
+      api.setClock(t);
+      await new Promise((r) => setTimeout(r, 100));
+      seen.push(api.audio.phase);
+    }
+    return seen;
+  });
+  checks.check('the ambience follows the time of day',
+    droneFollows.length === 3 && new Set(droneFollows).size === 3,
+    JSON.stringify(droneFollows));
 } finally {
   await close();
   await server.stop();

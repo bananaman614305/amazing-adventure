@@ -27,6 +27,7 @@ import {
 import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
 import { createAdaptiveResolution } from './perf.js';
 import { createRecovery, shouldPanicShed } from './resilience.js';
+import { createSoundscape, readPreference } from './audio.js';
 import {
   stickVector, knobOffset, lookDelta, clampPitch, wantsTouchControls,
   interactLabel, STICK_RADIUS
@@ -40,6 +41,7 @@ const $ = (id) => document.getElementById(id);
 const container = $('game');
 const overlay = $('overlay');
 const playButton = $('play');
+const soundToggle = $('sound-toggle');
 const continueButton = $('continue');
 const saveNote = $('save-note');
 const crosshair = $('crosshair');
@@ -104,6 +106,36 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
 
+// --- Sound ---------------------------------------------------------------
+// Synthesised, so there is nothing to download. Browsers refuse to start audio
+// without a gesture, so start() is called from the play/tap handlers below.
+const sound = createSoundscape({
+  AudioContextClass: window.AudioContext || window.webkitAudioContext,
+  preference: readPreference((key) => localStorage.getItem(key)),
+  persist: (key, value) => localStorage.setItem(key, value)
+});
+function cue(name) {
+  // Never let a sound problem surface as a game error, but do report whether a
+  // cue actually played so tests are not left asserting on nothing.
+  try { return sound.play(name); } catch { return false; }
+}
+function syncSoundToggle() {
+  const muted = !sound.enabled;
+  soundToggle.textContent = muted ? '♪̸' : '♪';
+  soundToggle.classList.toggle('muted', muted);
+  soundToggle.setAttribute('aria-pressed', String(!muted));
+  soundToggle.title = muted ? 'Sound off (M)' : 'Sound on (M)';
+}
+syncSoundToggle();
+soundToggle.addEventListener('click', (event) => {
+  event.stopPropagation();
+  // The first press is also a valid gesture to open the audio context.
+  sound.start();
+  sound.toggle();
+  syncSoundToggle();
+  if (sound.enabled) cue('choose');
+});
+
 // --- Graphics context loss -----------------------------------------------
 // Phones drop the WebGL context when the tab is backgrounded under memory
 // pressure or the GPU process restarts. Three.js cannot recover on its own, so
@@ -165,6 +197,8 @@ function syncPhase(force = false) {
   applyPhase(environment, phase.id);
   setNPCRoutine(npcs, phase.id);
   clockPhase.textContent = phase.label;
+  // The drone shifts root and level with the time of day.
+  sound.setPhase(phase.id);
   if (started && phase.id === 'dusk') toast('The lanterns are being lit.');
 }
 
@@ -281,6 +315,7 @@ function openDialogue(npc) {
   player.frozen = true;
   choiceIndex = 0;
   renderNode();
+  cue('talk');
 }
 
 function renderNode() {
@@ -341,6 +376,18 @@ function choose(index) {
     clockSeconds = nextPhaseStart(clockSeconds);
     syncPhase(true);
   }
+  // Distinct sounds for the outcomes a player can tell apart: a refusal, a quest
+  // finishing, a job done, and an ordinary acknowledgement.
+  if (!result.changed && /nothing for you|will not|need \d+ coins|not deal/i.test(result.message || '')) {
+    cue('refuse');
+  } else if (result.changed && /Quest (started|complete)/.test(result.message || '')) {
+    cue('quest');
+  } else if (result.changed && /Reputation:/.test(result.message || '')) {
+    cue('work');
+  } else {
+    cue('choose');
+  }
+
   if (result.changed) {
     toast(result.message);
     refreshHUD();
@@ -362,6 +409,7 @@ function closeDialogue() {
   activeNPC = null;
   player.frozen = false;
   hint.hidden = !player.enabled;
+  cue('close');
 }
 
 // --- Interactables -------------------------------------------------------
@@ -414,6 +462,7 @@ function interactables() {
         run: () => {
           const result = pickUpKey(state);
           toast(result.message);
+          if (result.changed) cue('pickup');
           if (result.changed) {
             environment.setKeyVisible(false);
             refreshHUD();
@@ -580,6 +629,8 @@ if (savedGame) {
 playButton.addEventListener('click', (event) => {
   event.stopPropagation();
   started = true;
+  // A real gesture, so this is where the audio context may legally open.
+  sound.start();
   beginTouchMode();
   player.requestLock();
 });
@@ -588,6 +639,7 @@ overlay.addEventListener('click', () => {
   // touch mode too -- otherwise a phone player who taps beside the button
   // gets an overlay that never goes away.
   started = true;
+  sound.start();
   beginTouchMode();
   player.requestLock();
 });
@@ -854,6 +906,16 @@ document.addEventListener('keydown', (event) => {
       closeDialogue();
       event.preventDefault();
     }
+    return;
+  }
+  if (event.code === 'KeyM') {
+    // Works mid-conversation too: if a sound is bothering you, you should not
+    // have to leave the dialogue to silence it.
+    sound.start();
+    sound.toggle();
+    syncSoundToggle();
+    if (sound.enabled) cue('choose');
+    event.preventDefault();
     return;
   }
   if (!player.enabled) return;
@@ -1172,6 +1234,14 @@ window.amazingAdventure = {
       return touchInteract.hidden ? null : touchInteract.textContent;
     },
     forceTouch: (on) => { touchState.forceTouch = Boolean(on); }
+  },
+  audio: {
+    get enabled() { return sound.enabled; },
+    get started() { return sound.started; },
+    get phase() { return sound.phase; },
+    play: (name) => cue(name),
+    toggle: () => { const on = sound.toggle(); syncSoundToggle(); return on; },
+    setEnabled: (on) => { const value = sound.setEnabled(on); syncSoundToggle(); return value; }
   },
   recovery: {
     get lost() { return recovery.lost; },

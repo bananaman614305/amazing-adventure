@@ -373,7 +373,87 @@ instructions.
 
 ## Current task
 
-Round 10 — The plaza work board: goodwill you can earn *before* you need it.
+Round 11 — Sound: the game was completely silent.
+
+PRs #5–#11 are published and open for the human. Before starting another
+mechanic I audited what already existed, exhaustively:
+
+- **626 dialogue nodes** walked across every NPC in every quest state and with
+  every faction hostile: **zero** crashes, dead ends, or unreachable nodes.
+- Save round-tripping across every quest step with coins and reputation set:
+  **zero** losses.
+- Every branch ending producing a non-empty journal entry: **zero** gaps.
+- Reputation bounds under 600 abuse operations, coins never negative, job costs
+  always enforced: **zero** problems.
+
+That audit turned up the real gap, which was not a bug but an absence: **the game
+had no audio at all.** For a first-person adventure with lanterns, a fountain and
+a market lane, that is a genuine hole in the experience.
+
+### What Round 11 adds
+
+- `src/audio.js` (pure core, 14 unit tests, browser binding): the entire
+  soundscape is **synthesised with the Web Audio API**, so there are still no
+  assets, no downloads and no licensing questions — the self-contained build is
+  unchanged in kind.
+- A **warm drone** that follows the day cycle, shifting root note and level
+  between day, dusk and night, so the plaza never sounds the same twice.
+- **Seven interaction cues** — talk, choose, close, pickup, quest, refuse, work —
+  built on a pentatonic scale, chosen because every interval in it is consonant,
+  so cues never clash with each other or with the drone.
+- A **sound toggle** in the corner (also **M**), reachable by touch at 44 px,
+  which hides itself during dialogue so it never covers the choices.
+- The mute preference persists in `localStorage`, so a player who silences the
+  game does not have to silence it again every session.
+
+### Proof the sound is real, not merely non-crashing
+
+"It did not throw" is worthless evidence for audio. I rendered the same graphs
+through an `OfflineAudioContext` and measured the samples:
+
+| Graph | Peak | RMS |
+| --- | --- | --- |
+| cue: talk | 0.0784 | 0.00561 |
+| cue: quest | 0.0840 | 0.00745 |
+| cue: pickup | 0.0992 | 0.00710 |
+| drone: day / dusk / night | 0.040 / 0.055 / 0.031 | 0.027 / 0.036 / 0.021 |
+
+**No graph rendered silence.** Everything is also deliberately quiet, with hard
+gain ceilings (`MAX_CUE_GAIN 0.14`, `MAX_AMBIENCE_GAIN 0.08`), so the game can
+never startle the player when a dialogue opens.
+
+### Bugs found in my own work
+
+1. **`writePreference(null, …)` returned `true`** — claiming a preference had been
+   saved when there was no storage to save it to. Now reports failure. Caught by a
+   test I wrote to assert the failure path.
+2. **Non-finite gains.** My first test expected `Infinity` to clamp to the maximum,
+   which would mean a corrupt value could make the game as loud as possible. The
+   code already returned 0, which is the safe behaviour; I corrected the test and
+   documented the policy rather than changing the safe code.
+3. **My audio checks broke the board checks.** Inserting them mid-section, when
+   they reload the page, reset the state the later board checks depended on. Moved
+   to the end of the run. Worth stating plainly: the two failures were caused by my
+   test ordering, not by the feature.
+
+### Checks actually run this round
+
+- `npm test` — **248/248 pass** (was 234): 14 new audio cases, including that a
+  missing/broken AudioContext is a safe no-op, that a muted game creates no
+  oscillators, and that every gain is clamped.
+- `npm run test:browser` — **98/98 pass, exit 0** (was 94). Four new checks: audio
+  starts with the game and the toggle is reachable, every cue plays without
+  erroring, a muted player stays muted across a reload, and the ambience follows
+  the time of day.
+- `npm run test:mobile` — **137/137 pass, exit 0**.
+- **Totals: 483 checks — 248 unit, 98 desktop, 137 mobile.**
+
+### Evidence
+
+`artifacts/round11-audio.png`: 1280x800, mean luminance 109.9, 46.2% bright pixels,
+2842 distinct sampled colours.
+
+## Previous round — Round 10: the plaza work board: goodwill you can earn *before* you need it.
 
 PRs #5–#10 are published and open for the human. Real-device testing is still
 blocked on hardware I do not have. Round 9 added a repeatable way to earn standing
@@ -645,10 +725,12 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **Give the lane its own work board, or a second reason to cross the gate.**
-   The plaza board now makes standing earnable early, but the market lane still
-   has no equivalent, so the two areas are not yet symmetrical in how they let a
-   player recover standing.
+2. **Let sound vary by area, not just by time of day.** The drone currently
+   changes only with the phase; the market lane and the plaza sound identical,
+   which undersells them being different places.
+3. **Give the lane its own work board, or a second reason to cross the gate.**
+   The plaza board makes standing earnable early, but the lane has no equivalent,
+   so the two areas are not symmetrical in how a player recovers standing.
 3. **Give the street beyond the gate a second reason to exist.** The gate is still
    the only route between the areas, and the lane's content now loops through the
    plaza, so a third location is the natural next step.

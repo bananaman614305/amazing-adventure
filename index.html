@@ -439,6 +439,27 @@
     /* Pause menu for touch (keyboard uses Esc) */
     /* Shown only if the browser drops the WebGL context and will not give it
        back, which otherwise leaves a permanently blank canvas. */
+    /* Sound toggle: small, out of the way, and reachable by touch. */
+    #sound-toggle {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top, 0px));
+      right: max(12px, env(safe-area-inset-right, 0px));
+      z-index: 30;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 212, 121, 0.35);
+      background: rgba(10, 16, 26, 0.72);
+      color: #ffd479;
+      font-size: 19px; line-height: 1;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity 140ms ease;
+    }
+    #sound-toggle:hover { background: rgba(20, 30, 46, 0.85); }
+    #sound-toggle.muted { opacity: 0.45; color: #7d8ea6; border-color: rgba(125, 142, 166, 0.35); }
+    /* While talking the dialogue owns the screen; the toggle steps aside. */
+    body.dialogue-open #sound-toggle { opacity: 0; pointer-events: none; }
+
     #context-lost {
       position: fixed; inset: 0; z-index: 80;
       display: flex; align-items: center; justify-content: center;
@@ -528,6 +549,8 @@
       </div>
     </div>
   </div>
+
+  <button type="button" id="sound-toggle" title="Toggle sound (M)" aria-label="Toggle sound">♪</button>
 
   <div id="context-lost" hidden role="alert">
     <div class="card">
