@@ -1613,6 +1613,120 @@ try {
     JSON.stringify(panelRows.slice(0, 3)));
 
   await capture(page, 'round14-compass.png');
+
+  // --- 28. Guided travel --------------------------------------------------
+  // Round 14 described routes; a blind player still had to walk them. These checks
+  // assert the route is real, goes around the world's geometry, and actually
+  // delivers the player somewhere useful.
+  await page.evaluate(() => { const a = window.amazingAdventure; a.player.placeAt(0, 0, 0, 0); });
+  await new Promise((r) => setTimeout(r, 400));
+
+  const navGrid = await page.evaluate(() => {
+    const g = window.amazingAdventure.navigationGrid();
+    const walkable = g.walkable.reduce((n, v) => n + v, 0);
+    return { cols: g.cols, rows: g.rows, walkable };
+  });
+  checks.check('the navigation grid is built from the live world and covers the market lane',
+    navGrid.walkable > 1000 && navGrid.rows >= 60,
+    JSON.stringify(navGrid));
+
+  // With the gate shut, the lane must be unreachable rather than faked.
+  const shutGate = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const pf = await import('./src/pathfind.js');
+    api.getState().quests.key = 'none';
+    api.syncGate();
+    const grid = api.navigationGrid();
+    return {
+      ledger: pf.findPath(grid, { x: 0, z: 0 }, { x: 7.6, z: -25 }) ? 'reachable' : 'blocked',
+      bench: pf.findPath(grid, { x: 0, z: 0 }, { x: -7, z: 12 }) ? 'reachable' : 'blocked'
+    };
+  });
+  checks.check('a shut gate really does make the lane unreachable',
+    shutGate.ledger === 'blocked' && shutGate.bench === 'reachable',
+    JSON.stringify(shutGate));
+
+  // Open it: the same route must now exist.
+  const openGate = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const pf = await import('./src/pathfind.js');
+    api.getState().quests.key = 'done';
+    api.syncGate();
+    const grid = api.navigationGrid();
+    const path = pf.findPath(grid, { x: 0, z: 0 }, { x: 7.6, z: -25 });
+    return { reachable: Boolean(path), length: path ? Number(pf.pathLength(path).toFixed(1)) : null };
+  });
+  checks.check('opening the gate opens a real route into the lane',
+    openGate.reachable === true && openGate.length > 20,
+    JSON.stringify(openGate));
+
+  // Guided travel must walk the player, not teleport them, and must deliver them.
+  await page.evaluate(() => { const a = window.amazingAdventure; a.player.placeAt(0, 0, 0, 0); });
+  await new Promise((r) => setTimeout(r, 300));
+  const began = await page.evaluate(() => window.amazingAdventure.startGuidedTravel('bench'));
+  await new Promise((r) => setTimeout(r, 1400));
+  const midway = await page.evaluate(() => {
+    const a = window.amazingAdventure;
+    return { state: a.guidedState(), x: a.player.position.x, z: a.player.position.z };
+  });
+  checks.check('guided travel starts and moves the player gradually rather than instantly',
+    began?.path?.length > 2 && midway.state !== null &&
+    Math.hypot(midway.x, midway.z) > 0.5 && Math.hypot(midway.x, midway.z) < 10,
+    JSON.stringify({ waypoints: began?.path?.length, moved: Number(Math.hypot(midway.x, midway.z).toFixed(2)) }));
+
+  // The walk is about 16 world units and takes roughly eleven seconds; poll rather
+  // than guess a fixed wait, so a slower frame rate cannot make this flaky.
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const stillWalking = await page.evaluate(() => window.amazingAdventure.guidedState() !== null);
+    if (!stillWalking) break;
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  const finished = await page.evaluate(() => {
+    const a = window.amazingAdventure;
+    return {
+      state: a.guidedState(),
+      distanceToBench: Math.hypot(a.player.position.x - (-7), a.player.position.z - 12),
+      spoken: a.srAlertText(),
+      canUseBench: document.getElementById('hint').innerHTML.includes('rest')
+    };
+  });
+  checks.check('guided travel delivers the player to the bench and says so',
+    finished.state === null && finished.distanceToBench < 2.2 && /arrived at the bench/i.test(finished.spoken || ''),
+    JSON.stringify({ distance: Number(finished.distanceToBench.toFixed(2)), spoken: finished.spoken }));
+
+  // Taking the controls must stop the autopilot. Start from somewhere that is not
+  // already the destination, or there is nothing to cancel. Close the journal first:
+  // an earlier block leaves the "walk to" box focused, and typing there is correctly
+  // suppressed -- pressing W in a text field should type, not walk.
+  await page.evaluate(() => { document.getElementById('compass-input')?.blur(); document.activeElement?.blur?.(); });
+  await page.keyboard.press('KeyJ');
+  await new Promise((r) => setTimeout(r, 350));
+  await page.evaluate(() => { const a = window.amazingAdventure; a.player.placeAt(-10, 10, 0, 0); a.startGuidedTravel('fountain'); });
+  await new Promise((r) => setTimeout(r, 900));
+  await page.keyboard.down('KeyW');
+  await new Promise((r) => setTimeout(r, 250));
+  const tookOver = await page.evaluate(() => window.amazingAdventure.guidedState());
+  await page.keyboard.up('KeyW');
+  checks.check('taking the controls stops guided travel', tookOver === null, JSON.stringify(tookOver));
+
+  // An unreachable destination must be refused out loud, not walked into.
+  const refused = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    api.getState().quests.key = 'none';
+    api.syncGate();
+    api.player.placeAt(0, 0, 0, 0);
+    await new Promise((r) => setTimeout(r, 300));
+    const result = api.startGuidedTravel('ledger');
+    return { path: result?.path ?? null };
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  const refusalText = await page.evaluate(() => window.amazingAdventure.srAlertText());
+  checks.check('walking into a shut gate is refused and explained',
+    refused.path === null && /cannot be reached/i.test(refusalText || ''),
+    JSON.stringify({ path: refused.path, spoken: refusalText }));
+
+  await page.evaluate(() => { const a = window.amazingAdventure; a.getState().quests.key = 'done'; a.syncGate(); });
+  await capture(page, 'round15-pathfinding.png');
 } finally {
   await close();
   await server.stop();

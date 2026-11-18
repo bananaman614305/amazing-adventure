@@ -373,7 +373,68 @@ instructions.
 
 ## Current task
 
-Round 14 — The world was unnavigable without sight.
+Round 15 — Guided travel: the compass could describe a route but not walk it.
+
+PRs #5–#15 are published and open for the human. Round 14 gave the world a spoken
+compass, and I flagged its own limit at the time: it **described** a route, and a
+blind player still had to walk it step by step past walls and a ramp they could not
+see. This round supplies the route itself.
+
+### What Round 15 adds
+
+- `src/pathfind.js` (pure, 16 unit tests): `buildGrid()`, `findPath()` (A*),
+  `pathLength()`, `nearestOpenCell()`, `isWalkable()`, `cellCentre()`,
+  `worldToCell()`, `summarisePath()` and `BOUNDS`.
+- **The grid is built from the game's real colliders and step heights**, not a
+  hand-drawn map. Exposed through `navigationGrid()` so tests use the live world.
+- **Guided travel (`G`)** walks the player to a named place, or to the nearest thing
+  worth walking to. It drives `player.setMoveInput()` — the same path a keyboard
+  uses — so it goes through the **existing acceleration, collision and step-height
+  code**. A guided walk cannot end up inside a wall that manual walking stops at.
+- **It refuses out loud** when a target is unreachable ("The ledger spot cannot be
+  reached from here") instead of walking the player into a shut gate.
+- Manual input cancels it: press any movement key and you have the controls back.
+- Spoken distances are phrases, never numerals.
+
+### Three real bugs, all found by testing
+
+1. **The grid was sized to the plaza only.** `HALF` is 17, but the market lane runs
+   to z = -26, so **every route into the lane silently failed** — the exact place
+   the ledger quest lives. Found by checking the real world instead of assuming.
+   `BOUNDS` is now derived from `PLAZA` and `LANE`, with a test named after the bug.
+2. **The last waypoint was being snapped inside the target.** A bench is a solid
+   object, so snapping the final waypoint onto its centre walked the player into it
+   and stalled them ~3 units short with no explanation. The endpoint is now the open
+   cell the search actually reached; only the *start* is snapped.
+3. **The gate was walkable when shut.** Initially a path to the lane existed with
+   the gate closed (26.0 units). After the bounds fix, the gate collider genuinely
+   blocks: closed → `null`, open → 26.2 units, re-closed → `null`. All three states
+   are now committed browser checks.
+
+I also wrote **two more wrong tests** (asserting a walk that takes ~11s would finish
+in 9s, and trying to cancel a walk whose destination was already reached). Both were
+my error, not the game's.
+
+### Checks actually run this round
+
+- `npm test` — **318/318 pass** (was 302): 16 new pathfinding cases.
+- `npm run test:browser` — **124/124 pass, exit 0** (was 117). New checks: the grid
+  covers the lane; **a shut gate really makes the lane unreachable**; opening it opens
+  a real route; guided travel moves the player gradually rather than teleporting;
+  it delivers them to the bench and says so; taking the controls stops it; and an
+  unreachable destination is refused and explained.
+- `npm run test:mobile` — **137/137 pass, exit 0**.
+- **Totals: 579 checks — 318 unit, 124 desktop, 137 mobile.**
+- Manifest test caught `src/pathfind.js`; now 26 files.
+
+### Evidence
+
+`artifacts/round15-pathfinding.png` — 1280x800, mean luminance 53.3, **12.7% of
+pixels bright**, max 247, 4726 distinct colours. This is the most legible frame of
+any round so far (the modal rounds were much darker by design). I am text-only and
+did not inspect it; the travel claims rest on the browser assertions.
+
+## Previous round — Round 14: the spoken compass
 
 PRs #5–#14 are published and open for the human. Round 13 made the game *announce*
 things. I flagged the remaining gap in my own report at the time: announcements tell
@@ -911,9 +972,10 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **Travelling to a place, not just being told where it is.** The compass currently
-   describes a route; a blind player still has to walk it step by step. A guided
-   "take me there" that walks the player would close the loop.
+2. **A real screen reader test.** Rounds 13–15 all rest on verifying live regions
+   and spoken text in the accessibility tree. NVDA or VoiceOver has never been run
+   against this game and that remains the biggest honesty gap in the accessibility
+   work.
 3. **Give the lane its own work board, or a second reason to cross the gate.**
    The plaza board makes standing earnable early, but the lane has no equivalent,
    so the two areas are not symmetrical in how a player recovers standing.

@@ -30,7 +30,8 @@ import { createRecovery, shouldPanicShed } from './resilience.js';
 import { createSoundscape, readPreference } from './audio.js';
 import { buildEpilogue, storyComplete, storyProgress } from './epilogue.js';
 import { describeState, questChanges, coinAnnouncement, interactableAnnouncement, areaAnnouncement } from './announce.js';
-import { nearbyTargets, routeHint, describeTarget } from './compass.js';
+import { nearbyTargets, routeHint, describeTarget, compassBearing, distancePhrase, sentenceCase } from './compass.js';
+import { buildGrid, findPath, pathLength, BOUNDS } from './pathfind.js';
 import {
   stickVector, knobOffset, lookDelta, clampPitch, wantsTouchControls,
   interactLabel, STICK_RADIUS
@@ -61,6 +62,86 @@ const compassResults = $('compass-results');
 const compassList = $('compass-list');
 const compassOptions = $('compass-options');
 const srAlert = $('sr-alert');
+
+// --- Guided travel ---------------------------------------------------------
+// Walking the player to a place, not just telling them where it is. The route is a
+// real A* path around the world's colliders, and it is driven through the same
+// movement and collision code a keyboard uses, so a guided walk cannot end up
+// inside a wall that manual walking would have stopped at.
+let guided = null;
+
+/** Rebuild the navigation grid from the live collider list, gate included. */
+function navigationGrid() {
+  return buildGrid(player.colliders, { cell: 0.5 });
+}
+
+/**
+ * Start walking to a named place. Returns a spoken summary, or a refusal. A refusal
+ * matters: telling a blind player "cannot get there" is better than walking them
+ * into a gate and leaving them confused.
+ */
+function startGuidedTravel(query) {
+  const wanted = String(query || '').trim().toLowerCase();
+  if (!wanted) return null;
+  const match = compassTargets().find((target) =>
+    target.label.toLowerCase().includes(wanted) || target.id.includes(wanted));
+  if (!match) {
+    announce(`There is nothing called ${query} that I know of.`, { urgent: true });
+    return null;
+  }
+  const grid = navigationGrid();
+  const path = findPath(grid, { x: player.position.x, z: player.position.z }, { x: match.x, z: match.z });
+  if (!path || path.length < 2) {
+    announce(`${match.label[0].toUpperCase()}${match.label.slice(1)} cannot be reached from here.`, { urgent: true });
+    return { target: match, path: null };
+  }
+  guided = { target: match, path, index: 1, grid };
+  const length = pathLength(path);
+  // Spoken distances are phrases, never numerals -- these are read aloud.
+  announce(sentenceCase(`${match.label} is ${distancePhrase(length)}. Walking there now; press G or any movement key to stop.`), { urgent: true });
+  return { target: match, path, length };
+}
+
+/** Stop guided travel wherever the player has got to. */
+function stopGuidedTravel({ announceIt = true } = {}) {
+  if (!guided) return false;
+  const name = guided.target.label;
+  guided = null;
+  player.setMoveInput(0, 0);
+  if (announceIt) announce(`Stopped. ${name[0].toUpperCase()}${name.slice(1)} is still where it was.`);
+  return true;
+}
+
+/**
+ * Advance guided travel by one frame. Steering is expressed as movement intent in
+ * the player's own frame so the existing acceleration, collision and step-height
+ * code does all the work.
+ */
+function updateGuidedTravel() {
+  if (!guided) return;
+  const path = guided.path;
+  // Skip waypoints already reached, so a path with dense corners does not stall.
+  while (guided.index < path.length) {
+    const waypoint = path[guided.index];
+    const dx = waypoint.x - player.position.x;
+    const dz = waypoint.z - player.position.z;
+    if (Math.hypot(dx, dz) > 0.55) break;
+    guided.index += 1;
+  }
+  if (guided.index >= path.length) {
+    const name = guided.target.label;
+    guided = null;
+    player.setMoveInput(0, 0);
+    announce(`You have arrived at ${name}.`, { urgent: true });
+    cue('quest');
+    return;
+  }
+  const waypoint = path[guided.index];
+  // Turn to face the waypoint, then walk forward. Setting yaw keeps the camera,
+  // and therefore the player's own sense of direction, consistent with travel.
+  player.yaw = Math.atan2(-(waypoint.x - player.position.x), -(waypoint.z - player.position.z));
+  player.setMoveInput(1, 0);
+}
 
 // --- The spoken compass ----------------------------------------------------
 // The world's walkable places, as coordinates. Built fresh on each use so an NPC
@@ -1185,6 +1266,25 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     return;
   }
+  if (guided && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) {
+    // The player grabbed the controls, so stop steering for them.
+    stopGuidedTravel();
+  }
+  if (event.code === 'KeyG') {
+    // Guided travel: walk me to whatever is most useful, or to a named place from
+    // the journal box. Pressing it again while walking stops.
+    if (!started) return;
+    if (!dialogueEl.hidden) return;
+    if (guided) { stopGuidedTravel(); event.preventDefault(); return; }
+    const query = compassInput?.value?.trim();
+    if (query) { startGuidedTravel(query); event.preventDefault(); return; }
+    // No name given: head for the nearest thing worth walking to.
+    const { from } = compassOrigin();
+    const nearest = nearbyTargets(0, from, compassTargets(), 1)[0];
+    if (nearest) startGuidedTravel(nearest.id);
+    event.preventDefault();
+    return;
+  }
   if (event.code === 'KeyL') {
     // "What is near me?" The spoken equivalent of looking around.
     if (!started) return;
@@ -1380,6 +1480,7 @@ let lastFrameMs = 16;
 function frame() {
   const rawDt = clock.getDelta();
   const dt = Math.min(rawDt, 0.05);
+  updateGuidedTravel();
   player.update(dt);
 
   clockSeconds = wrapClock(clockSeconds + dt);
@@ -1500,6 +1601,10 @@ window.amazingAdventure = {
   compassTargets,
   announceNearby,
   announceRouteTo,
+  startGuidedTravel,
+  stopGuidedTravel,
+  guidedState: () => (guided ? { target: guided.target.id, index: guided.index, total: guided.path.length } : null),
+  navigationGrid,
   announce,
   // Exposed so tests can drive the same announcement path production uses,
   // rather than re-implementing the diff and testing the copy.
