@@ -200,7 +200,10 @@ test('collecting the toll pleases the Watch and angers the Market', () => {
   assert.equal(result.changed, true);
   assert.equal(coins(state), before - TOLL_COST);
   assert.equal(reputation(state, 'watch'), 45);
-  assert.equal(reputation(state, 'trade'), -10);
+  // The Market's displeasure is real but mild: the dues are now paid, and Wren's
+  // ledger says so. A heavier penalty here used to drop the Market below her trust
+  // gate with no action left in the game to raise it again, soft-locking the story.
+  assert.equal(reputation(state, 'trade'), 0);
   assert.equal(questStatus(state, 'toll'), 'collected');
   assert.equal(finishToll(state).changed, true);
   assert.equal(questStatus(state, 'toll'), 'done');

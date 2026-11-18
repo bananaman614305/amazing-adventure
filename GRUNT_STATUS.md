@@ -373,7 +373,82 @@ instructions.
 
 ## Current task
 
-Round 16 — My own accessibility work was desktop-only.
+Round 17 — The game could be made impossible to finish.
+
+PRs #5–#17 are published and open for the human. This round found the most serious
+defect in the whole project, and it was found by **playing the game** rather than by
+reading code.
+
+### The bug: a soft-lock
+
+Every suite until now set quest state directly (`state.quests[id] = 'done'`), which
+means **a quest chain could be impossible to complete and every test would still
+pass.** So this round I wrote a playthrough that drives real dialogue and real state
+functions. It got three quests in and then stopped dead:
+
+> `toll: Halden is not convinced.` → `ledger: Wren looks you over. "Market business
+> is for people the Market trusts."`
+
+The chain:
+
+1. Wren's ledger quest needs **Warm** Market standing (25+).
+2. The market toll offers two resolutions. **Pay it** costs 15 Market standing,
+   taking you from warm (25) back to neutral (10) — below her gate.
+3. From that position, **no remaining action in the entire game raises Market
+   standing again.** I exhausted every dialogue choice with all six NPCs and watched
+   the number not move: 10 → 10.
+4. The ledger is therefore never available, the arrears are gated on the ledger, and
+   **two of the six quests become impossible.**
+
+So choosing the option the menu *offers you* ("Pay 5 coins") makes the game
+unwinnable, and nothing warns you. The other option (waive the toll) is fine.
+
+### The fix
+
+Wren says trust is earned by *"Dues paid. Promises kept. Oswin at his stall with his
+accounts in order."* Paying Oswin's toll out of your purse is **exactly that** — she
+is the toll clerk, and the dues are her book. So:
+
+- Paying the toll now sets a `dues_paid` flag and costs only **5** Market standing
+  instead of 15 (the displeasure is real but mild).
+- `ledgerUnlocked()` accepts settled dues as sufficient, whatever the Market's mood.
+- Her dialogue now **says so**: *"Wren taps her book, where Oswin's dues are now
+  entered. 'Your doing, that.'"* rather than implying you charmed her.
+
+I verified **all 8 combinations** of the three branch choices (toll paid/waived ×
+ledger name/cover × arrears pay/forgive) now finish.
+
+### Proof the new test is real
+
+I reverted the one-line fix and re-ran the suite: **9 of 12 playthrough tests fail.**
+Restored it: 12/12 pass. This is a genuine regression guard, not a test written to
+match whatever the code happens to do.
+
+### Also found: a visible wall with no collider
+
+The terrace parapet is a 0.55 m wall you can walk straight through. Not fixed this
+round (it is cosmetic-adjacent and needs its own careful change); recorded in Next
+steps.
+
+### Checks actually run this round
+
+- `npm test` — **330/330 pass** (was 318): 12 new playthrough cases.
+- `npm run test:browser` — **128/128 pass, exit 0** (was 124): 4 new checks, including
+  a whole playthrough driven inside the browser and the toll trap checked directly.
+- `npm run test:mobile` — **165/165 pass, exit 0**.
+- **Totals: 623 checks — 330 unit, 128 desktop, 165 mobile.**
+- `node scripts/playthrough.mjs` — a standalone playable run; exits 0 and prints the
+  six completions and the epilogue.
+- Self-contained re-verified: 26 files, 972 KB, 0 external requests, 0 errors, and
+  the **full playthrough completes inside the isolated build**.
+
+### Evidence
+
+`artifacts/round17-playthrough.png` — 1280x800, mean luminance 53.3, 12.7% bright,
+max 247, 4715 distinct colours. I am text-only and did not inspect it; the finding
+rests on the playthrough assertions.
+
+## Previous round — Round 16: accessibility controls on a phone
 
 PRs #5–#16 are published and open for the human. Rounds 13–15 built screen-reader
 support, a spoken compass and guided travel — all reachable only through the **C, L
@@ -1024,10 +1099,9 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **A real screen reader test.** Rounds 13–16 all rest on verifying live regions,
-   spoken text and hit targets programmatically. NVDA or VoiceOver has never been run
-   against this game, and on iOS specifically I cannot verify how VoiceOver reads the
-   new buttons. That remains the biggest honesty gap in the work.
+2. **Fix the walk-through parapet.** The terrace has a visible 0.55 m wall with no
+   collider, so the player can walk through it and off the ledge. Found while probing
+   props; needs a collider and a test that the terrace edge stops you.
 3. **Give the lane its own work board, or a second reason to cross the gate.**
    The plaza board makes standing earnable early, but the lane has no equivalent,
    so the two areas are not symmetrical in how a player recovers standing.

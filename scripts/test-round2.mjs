@@ -549,8 +549,11 @@ try {
     return { gatedBefore, afterCollect, status: state.quests.toll };
   });
   checks.check('the toll quest is gated and its outcome shifts two factions',
+    // The Market's penalty is deliberately mild now: a heavier one dropped it below
+    // Wren's trust gate with nothing left in the game to raise it again, which made
+    // the story impossible to finish after paying the toll.
     tollFlow.gatedBefore === true && tollFlow.status === 'done' &&
-    tollFlow.afterCollect.watch > 0 && tollFlow.afterCollect.trade < 0,
+    tollFlow.afterCollect.watch > 0 && tollFlow.afterCollect.trade <= 0,
     JSON.stringify(tollFlow));
 
   // --- 15. Overheard NPC conversation -------------------------------
@@ -1727,6 +1730,100 @@ try {
 
   await page.evaluate(() => { const a = window.amazingAdventure; a.getState().quests.key = 'done'; a.syncGate(); });
   await capture(page, 'round15-pathfinding.png');
+
+  // --- 29. The game can actually be finished -------------------------------
+  // Every other check in this file sets quest state directly, so a chain could be
+  // impossible to complete and all of them would still pass. This drives the real
+  // dialogue and state functions through a whole playthrough in the browser. It is
+  // the check that caught a soft-lock: paying the market toll used to drop Market
+  // standing below Wren's gate with no remaining action able to raise it.
+  const finishedRun = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const S = await import('./src/state.js');
+    const F = await import('./src/factions.js');
+    const D = await import('./src/dialogue.js');
+    const E = await import('./src/epilogue.js');
+
+    const state = S.createInitialState();
+    const steps = [];
+    const talk = (npc, matcher) => {
+      const node = D.startConversation(state, npc);
+      const index = node.choices.findIndex((c) => matcher.test(c.label));
+      if (index === -1) throw new Error(`${npc}: no match for ${matcher}`);
+      const result = D.applyChoice(state, npc, node.choices[index]);
+      steps.push(`${npc}: ${result.message.slice(0, 40)}`);
+      return result;
+    };
+    talk('mara', /lanterns look low/i);
+    talk('oswin', /lantern oil|Pay \d+ coins/i);
+    talk('mara', /oil/i);
+    talk('halden', /lost something/i);
+    S.pickUpKey(state);
+    S.returnKey(state);
+    talk('pip', /special about the lanterns/i);
+    S.watchLanterns(state, 'dusk');
+    S.tellPipAboutLanterns(state);
+    // Pay the toll: this is the path that used to make the game impossible.
+    S.startToll(state);
+    S.collectToll(state);
+    S.finishToll(state);
+    const ledgerOpened = S.startLedger(state, F.tierFor(F.reputation(state, 'trade')).id);
+    steps.push(`ledger gate: ${ledgerOpened.changed}`);
+    if (!ledgerOpened.changed) {
+      return { stuckAt: 'ledger', message: ledgerOpened.message, steps };
+    }
+    S.hearLedgerRumour(state);
+    S.recoverLedger(state);
+    S.returnLedger(state, 'name');
+    S.startArrears(state);
+    S.deliverArrears(state, 'pay');
+    S.finishArrears(state);
+    return {
+      counts: S.questCounts(state),
+      complete: E.storyComplete(state),
+      epilogue: E.buildEpilogue(state)?.title ?? null,
+      branches: E.buildEpilogue(state)?.branches?.length ?? 0,
+      coins: state.flags.coins,
+      steps
+    };
+  });
+  checks.check('a whole playthrough finishes the story, having paid the toll',
+    finishedRun.complete === true && finishedRun.counts?.done === 6,
+    JSON.stringify({ complete: finishedRun.complete, counts: finishedRun.counts, stuckAt: finishedRun.stuckAt, message: finishedRun.message }));
+  checks.check('finishing by real play reaches the ending with all branches recorded',
+    finishedRun.epilogue !== null && finishedRun.branches === 3,
+    JSON.stringify({ epilogue: finishedRun.epilogue, branches: finishedRun.branches }));
+  checks.check('real play never leaves the player in debt',
+    typeof finishedRun.coins === 'number' && finishedRun.coins >= 0,
+    JSON.stringify({ coins: finishedRun.coins }));
+
+  // Paying the toll is the specific trap, so it is checked on its own too.
+  const tollTrap = await page.evaluate(async () => {
+    const S = await import('./src/state.js');
+    const F = await import('./src/factions.js');
+    const D = await import('./src/dialogue.js');
+    const state = S.createInitialState();
+    const talk = (npc, matcher) => {
+      const node = D.startConversation(state, npc);
+      const i = node.choices.findIndex((c) => matcher.test(c.label));
+      return D.applyChoice(state, npc, node.choices[i]);
+    };
+    talk('mara', /lanterns look low/i);
+    talk('oswin', /Pay \d+ coins/i);
+    talk('mara', /oil/i);
+    talk('halden', /lost something/i);
+    S.pickUpKey(state); S.returnKey(state);
+    talk('pip', /special/i);
+    S.watchLanterns(state, 'dusk'); S.tellPipAboutLanterns(state);
+    S.startToll(state); S.collectToll(state); S.finishToll(state);
+    const tier = F.tierFor(F.reputation(state, 'trade')).id;
+    return { tier, market: F.reputation(state, 'trade'), unlocked: S.ledgerUnlocked(state, tier) };
+  });
+  checks.check('paying the toll leaves Wren still willing to deal with you',
+    tollTrap.unlocked === true,
+    JSON.stringify(tollTrap));
+
+  await capture(page, 'round17-playthrough.png');
 } finally {
   await close();
   await server.stop();
