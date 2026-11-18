@@ -373,7 +373,91 @@ instructions.
 
 ## Current task
 
-Round 23 — The audio system's contract, which had never been tested.
+Round 24 — Reading the real accessibility tree instead of the DOM.
+
+PRs #5–#24 are published and open for the human. For nine rounds I have reported "no
+real screen reader test" as the biggest honest gap. This round narrows it materially:
+Chrome exposes the **accessibility tree it actually hands to assistive technology**,
+reachable over CDP. Reading that instead of the DOM immediately found two real defects.
+
+### What the AX tree showed
+
+```
+[button] "2Who are you?"        <-- the key digit ran into the sentence
+[button] "3Leave"                     a reader says "two-who are you"
+(no checked/selected/current state anywhere in the tree)
+```
+
+1. **Choice names were malformed.** The visible number was a bare `<span>` inside the
+   button, so the accessible name concatenated digit + label with no separator.
+2. **The keyboard highlight was invisible to assistive tech.** The code set
+   `aria-selected` on a plain `<button>`, which is not a valid ARIA attribute there;
+   Chrome dropped it entirely. I then tried `aria-current`, which Chrome also drops.
+
+I probed which pattern Chrome *does* expose, rather than guessing:
+
+| Markup | Exposed in AX tree? |
+| --- | --- |
+| `button aria-selected` | **no** |
+| `button aria-current` | **no** |
+| `button aria-pressed` | yes (`pressed`) |
+| `role=radio aria-checked` | **yes** (`checked`) |
+| `role=option aria-selected` (in listbox) | yes (`selected`) |
+
+The options behave as a single-choice set (W/S move the highlight, E confirms), so
+`role="radio"` + `aria-checked` inside a `role="radiogroup"` labelled "Replies" is the
+correct pattern — and it is the one Chrome propagates.
+
+### The fix
+
+- The visible digit is `aria-hidden`, and each choice gets an explicit
+  `aria-label="Choice 2 of 3: Who are you?"` plus `aria-keyshortcuts="2"`.
+- Choices are `role="radio"` with `aria-checked`, updated by `highlightChoice()`, inside
+  a labelled `radiogroup`.
+
+Verified in the AX tree that the checked state **follows the highlight**:
+
+```
+before S: Choice 1 checked=true
+after  S: Choice 2 checked=true  (and 1 back to false)
+```
+
+### Proof the tests are real
+
+Restoring the original semantics makes **4 committed desktop checks fail**, with the
+tree showing no usable names and no state at all:
+
+```
+FAIL the choices appear in the accessibility tree with a spoken name — []
+FAIL the checked state is readable from the accessibility tree at all — []
+FAIL the highlighted choice is exposed as checked, with exactly one checked — []
+FAIL moving the highlight moves the checked state in the accessibility tree — {}
+```
+
+### A bug in my own test
+
+My first version compared `checked` to boolean `true`, but CDP returns the *string*
+`"true"`, so two assertions silently never matched. Caught because the failure output
+printed the raw values. Normalised with an explicit coercion, and added a guard check
+that the property is legible at all, so this class of silent no-match fails loudly.
+
+### Checks actually run this round
+
+- `npm test` — **353/353 pass**.
+- `npm run test:browser` — **157/157 pass, exit 0** (was 149): **8 new AX-tree checks**.
+- `npm run test:mobile` — **185/185 pass, exit 0**.
+- **Totals: 695 checks — 353 unit, 157 desktop, 185 mobile.**
+- `scripts/playthrough.mjs` and `scripts/reachability.mjs` both still exit 0.
+- Self-contained re-verified: 26 files, 980 KB, 0 external requests, with the AX
+  contract holding in the isolated build.
+
+### Evidence
+
+`artifacts/round24-axtree.png` — 1280x800, mean luminance 35.6, 2.6% bright, 8826
+distinct colours. I am text-only and did not inspect it; the claims rest on the CDP
+accessibility-tree dumps quoted above.
+
+## Previous round — Round 23: the audio system's contract
 
 PRs #5–#23 are published and open for the human. Round 22's Next steps flagged that
 the round-11 soundscape had **no behavioural test at all** — only that the context
@@ -1501,8 +1585,10 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **A real screen reader test.** Eight rounds of accessibility work rest on
-   programmatic verification only — the single largest honesty gap remaining.
+2. **A real screen reader test.** Round 24 now verifies the browser's accessibility
+   tree, which is much closer to what a screen reader consumes — but no actual NVDA or
+   VoiceOver session has been run, so verbosity, punctuation handling and announcement
+   ordering remain unverified.
 3. **A real screen reader test** remains the largest gap: nine rounds of accessibility
    work rest on programmatic verification only.
 3. **Give the lane its own work board, or a second reason to cross the gate.**
