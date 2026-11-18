@@ -27,6 +27,11 @@ export class Player {
     this.enabled = false;
     // Set while a dialogue or menu owns the input, so the player stands still.
     this.frozen = false;
+    // Analog input from the on-screen stick, -1..1. Kept separate from `keys` so
+    // desktop and touch can both drive movement without fighting each other.
+    this.moveInput = { forward: 0, strafe: 0 };
+    // Touch mode: there is no pointer lock, so `enabled` is set directly.
+    this.touchMode = false;
 
     this._onLock = onLock;
     this._onUnlock = onUnlock;
@@ -65,7 +70,35 @@ export class Player {
   }
 
   requestLock() {
+    if (this.touchMode) {
+      // No pointer lock on phones; the game is simply enabled once play starts.
+      this.enabled = true;
+      this._onLock?.();
+      return;
+    }
     document.body.requestPointerLock?.();
+  }
+
+  /** Enables or disables touch driving without touching pointer lock. */
+  setTouchMode(on) {
+    this.touchMode = Boolean(on);
+    if (!this.touchMode) {
+      this.moveInput.forward = 0;
+      this.moveInput.strafe = 0;
+    }
+  }
+
+  /** Applies a look-drag delta in radians (already scaled by touch.js). */
+  applyLook(yawDelta, pitchDelta) {
+    if (!this.enabled) return;
+    this.yaw += yawDelta;
+    this.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, this.pitch + pitchDelta));
+  }
+
+  /** Sets analog movement intent, clamped to the unit square. */
+  setMoveInput(forward, strafe) {
+    this.moveInput.forward = Math.max(-1, Math.min(1, Number(forward) || 0));
+    this.moveInput.strafe = Math.max(-1, Math.min(1, Number(strafe) || 0));
   }
 
   isMoving() {
@@ -74,8 +107,14 @@ export class Player {
 
   update(dt) {
     const moving = this.enabled && !this.frozen;
-    const forward = moving ? Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')) : 0;
-    const strafe = moving ? Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')) : 0;
+    // Keyboard is digital, the stick is analog; take whichever asks for more so
+    // holding W and pushing the stick do not add up to double speed.
+    const keyForward = moving ? Number(this.keys.has('KeyW')) - Number(this.keys.has('KeyS')) : 0;
+    const keyStrafe = moving ? Number(this.keys.has('KeyD')) - Number(this.keys.has('KeyA')) : 0;
+    const touchForward = moving ? this.moveInput.forward : 0;
+    const touchStrafe = moving ? this.moveInput.strafe : 0;
+    const forward = Math.abs(keyForward) >= Math.abs(touchForward) ? keyForward : touchForward;
+    const strafe = Math.abs(keyStrafe) >= Math.abs(touchStrafe) ? keyStrafe : touchStrafe;
 
     // Movement is relative to where the camera is looking, flat on the ground.
     const sin = Math.sin(this.yaw);
@@ -85,10 +124,13 @@ export class Player {
     const wishLength = Math.hypot(wishX, wishZ);
 
     if (moving && wishLength > 0) {
+      // Normalise the direction but keep the magnitude, so half-pushing the
+      // stick walks at half speed instead of snapping to full speed.
+      const strength = Math.min(1, wishLength);
       const nx = wishX / wishLength;
       const nz = wishZ / wishLength;
-      this.velocity.x += nx * ACCELERATION * dt;
-      this.velocity.z += nz * ACCELERATION * dt;
+      this.velocity.x += nx * ACCELERATION * dt * strength;
+      this.velocity.z += nz * ACCELERATION * dt * strength;
     }
 
     // Cap the speed and apply damping so stopping feels immediate but not stiff.

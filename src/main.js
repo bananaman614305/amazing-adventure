@@ -26,7 +26,12 @@ import {
 } from './ambient.js';
 import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
 import { createAdaptiveResolution } from './perf.js';
+import {
+  stickVector, knobOffset, lookDelta, clampPitch, wantsTouchControls,
+  interactLabel, STICK_RADIUS
+} from './touch.js';
 import { onTerrace } from './terrain.js';
+import { VERSION, BUILD_NAME, RELEASE_CHANNEL, ENTRY_POINT } from './version.js';
 
 // --- DOM ------------------------------------------------------------------
 const $ = (id) => document.getElementById(id);
@@ -55,6 +60,17 @@ const dialogueName = $('dialogue-name');
 const dialogueRole = $('dialogue-role');
 const dialogueLine = $('dialogue-line');
 const dialogueChoices = $('dialogue-choices');
+const touchRoot = $('touch');
+const stickZone = $('stick-zone');
+const stickBase = $('stick-base');
+const stickKnob = $('stick-knob');
+const lookZone = $('look-zone');
+const touchInteract = $('touch-interact');
+const touchJournal = $('touch-journal');
+const touchPauseButton = $('touch-pause-button');
+const touchPause = $('touch-pause');
+const touchResume = $('touch-resume');
+const touchSave = $('touch-save');
 
 // --- World, player, state -------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -112,7 +128,15 @@ const player = new Player(camera, colliders, {
   onLock: () => {
     overlay.hidden = true;
     for (const el of [crosshair, hint, clockEl, tracker]) el.hidden = false;
+    if (touchState.active) {
+      // No pointer lock on a phone, so show the touch HUD instead of the
+      // mouse crosshair and keyboard hint.
+      crosshair.hidden = true;
+      hint.hidden = true;
+      touchRoot.hidden = false;
+    }
     refreshHUD();
+    refreshTouchInteract();
   },
   onUnlock: () => {
     crosshair.hidden = true;
@@ -479,20 +503,261 @@ if (savedGame) {
     started = true;
     syncPickups();
     refreshHUD();
+    beginTouchMode();
     player.requestLock();
   });
 }
 
 playButton.addEventListener('click', (event) => {
   event.stopPropagation();
-  if (!started && !savedGame) started = true;
   started = true;
+  beginTouchMode();
   player.requestLock();
 });
 overlay.addEventListener('click', () => {
   started = true;
   player.requestLock();
 });
+
+// --- Touch controls -------------------------------------------------------
+// Pointer lock does not exist on a phone, so touch drives the same Player:
+// the left thumb sets analog movement and a right-side drag turns the view.
+// The maths lives in touch.js; this is the DOM plumbing.
+const touchState = {
+  active: false,
+  stickId: null,
+  lookId: null,
+  originX: 0,
+  originY: 0,
+  lookX: 0,
+  lookY: 0
+};
+
+function touchEnabled() {
+  if (touchState.forceTouch) return true;
+  return wantsTouchControls({
+    maxTouchPoints: navigator.maxTouchPoints || 0,
+    coarsePointer: window.matchMedia?.('(pointer: coarse)')?.matches || false
+  });
+}
+
+function beginTouchMode() {
+  if (!touchEnabled()) return false;
+  touchState.active = true;
+  player.setTouchMode(true);
+  touchRoot.hidden = false;
+  crosshair.hidden = true;
+  // The interact hint is replaced by a thumb button on touch.
+  hint.hidden = true;
+  return true;
+}
+
+function showTouchPause(show) {
+  touchPause.hidden = !show;
+  if (show) {
+    // The sheet covers the screen, so the controls underneath must not keep
+    // receiving thumbs -- otherwise a player can walk while "paused".
+    touchState.stickId = null;
+    touchState.lookId = null;
+    player.setMoveInput(0, 0);
+    player.frozen = true;
+    resetStick();
+    if (!dialogueEl.hidden) closeDialogue();
+    saveGame();
+  } else if (!dialogueEl.hidden) {
+    player.frozen = true;
+  } else {
+    player.frozen = false;
+  }
+}
+
+/** Places the stick base where the thumb first touched, within the zone. */
+function placeStick(clientX, clientY) {
+  const rect = stickZone.getBoundingClientRect();
+  const localX = Math.min(Math.max(clientX - rect.left, 64), rect.width - 24);
+  const localY = Math.min(Math.max(clientY - rect.top, 64), rect.height - 24);
+  stickBase.style.left = `${localX}px`;
+  stickBase.style.top = `${localY}px`;
+  stickBase.style.bottom = 'auto';
+  stickBase.style.margin = '-56px 0 0 -56px';
+  stickBase.classList.add('active');
+  return { x: rect.left + localX, y: rect.top + localY };
+}
+
+function resetStick() {
+  touchState.stickId = null;
+  stickBase.classList.remove('active');
+  stickKnob.style.transform = 'translate(0px, 0px)';
+  player.setMoveInput(0, 0);
+}
+
+function touching(id, list) {
+  for (const touch of list) if (touch.identifier === id) return touch;
+  return null;
+}
+
+stickZone.addEventListener('pointerdown', (event) => {
+  if (!player.enabled || player.frozen || !dialogueEl.hidden) return;
+  if (touchState.stickId !== null) return;
+  event.preventDefault();
+  touchState.stickId = event.pointerId;
+  const centre = placeStick(event.clientX, event.clientY);
+  touchState.originX = centre.x;
+  touchState.originY = centre.y;
+  stickZone.setPointerCapture?.(event.pointerId);
+});
+
+stickZone.addEventListener('pointermove', (event) => {
+  if (event.pointerId !== touchState.stickId) return;
+  event.preventDefault();
+  const dx = event.clientX - touchState.originX;
+  const dy = event.clientY - touchState.originY;
+  const vector = stickVector(dx, dy);
+  player.setMoveInput(vector.forward, vector.strafe);
+  const knob = knobOffset(dx, dy);
+  stickKnob.style.transform = `translate(${knob.x}px, ${knob.y}px)`;
+});
+
+for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
+  stickZone.addEventListener(type, (event) => {
+    if (event.pointerId !== touchState.stickId) return;
+    resetStick();
+  });
+}
+
+lookZone.addEventListener('pointerdown', (event) => {
+  if (!player.enabled || player.frozen || !dialogueEl.hidden) return;
+  if (touchState.lookId !== null) return;
+  event.preventDefault();
+  touchState.lookId = event.pointerId;
+  touchState.lookX = event.clientX;
+  touchState.lookY = event.clientY;
+  lookZone.setPointerCapture?.(event.pointerId);
+});
+
+lookZone.addEventListener('pointermove', (event) => {
+  if (event.pointerId !== touchState.lookId) return;
+  event.preventDefault();
+  const dx = event.clientX - touchState.lookX;
+  const dy = event.clientY - touchState.lookY;
+  touchState.lookX = event.clientX;
+  touchState.lookY = event.clientY;
+  const delta = lookDelta(dx, dy);
+  player.applyLook(delta.yaw, delta.pitch);
+  player.pitch = clampPitch(player.pitch);
+});
+
+for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
+  lookZone.addEventListener(type, (event) => {
+    if (event.pointerId !== touchState.lookId) return;
+    touchState.lookId = null;
+  });
+}
+
+// Touch events are the fallback only when Pointer Events are missing. On a
+// browser that supports both (every current iOS and Android release does) the
+// same finger would otherwise drive both handlers and the stick would jitter
+// between two origins. Feature-detect rather than fire both.
+const usesPointerEvents = typeof window.PointerEvent === 'function';
+if (!usesPointerEvents) touchEventsFallback();
+else {
+  // Nothing to add: pointer events already cover mouse, touch and pen.
+}
+
+function touchEventsFallback() {
+stickZone.addEventListener('touchstart', (event) => {
+  if (!player.enabled || player.frozen || touchState.stickId !== null || !dialogueEl.hidden) return;
+  const touch = event.changedTouches[0];
+  if (!touch) return;
+  event.preventDefault();
+  touchState.stickId = `touch-${touch.identifier}`;
+  const centre = placeStick(touch.clientX, touch.clientY);
+  touchState.originX = centre.x;
+  touchState.originY = centre.y;
+}, { passive: false });
+
+stickZone.addEventListener('touchmove', (event) => {
+  if (touchState.stickId === null) return;
+  const touch = event.changedTouches[0];
+  if (!touch) return;
+  event.preventDefault();
+  const dx = touch.clientX - touchState.originX;
+  const dy = touch.clientY - touchState.originY;
+  const vector = stickVector(dx, dy);
+  player.setMoveInput(vector.forward, vector.strafe);
+  const knob = knobOffset(dx, dy);
+  stickKnob.style.transform = `translate(${knob.x}px, ${knob.y}px)`;
+}, { passive: false });
+
+for (const type of ['touchend', 'touchcancel']) {
+  stickZone.addEventListener(type, () => {
+    if (String(touchState.stickId).startsWith('touch-')) resetStick();
+  }, { passive: false });
+}
+
+// Same drag-to-look behaviour for browsers without Pointer Events.
+lookZone.addEventListener('touchstart', (event) => {
+  if (!player.enabled || player.frozen || !dialogueEl.hidden) return;
+  const t = event.changedTouches[0];
+  if (!t) return;
+  touchState.lookId = `touch-${t.identifier}`;
+  touchState.lookX = t.clientX;
+  touchState.lookY = t.clientY;
+}, { passive: true });
+
+lookZone.addEventListener('touchmove', (event) => {
+  if (touchState.lookId === null) return;
+  const t = event.changedTouches[0];
+  if (!t) return;
+  event.preventDefault();
+  const delta = lookDelta(t.clientX - touchState.lookX, t.clientY - touchState.lookY);
+  touchState.lookX = t.clientX;
+  touchState.lookY = t.clientY;
+  player.applyLook(delta.yaw, delta.pitch);
+  player.pitch = clampPitch(player.pitch);
+}, { passive: false });
+
+for (const type of ['touchend', 'touchcancel']) {
+  lookZone.addEventListener(type, () => { touchState.lookId = null; }, { passive: true });
+}
+}
+
+touchInteract.addEventListener('click', (event) => {
+  event.preventDefault();
+  if (!nearestInteractable) return;
+  nearestInteractable.run();
+  refreshHint();
+  refreshTouchInteract();
+});
+
+touchJournal.addEventListener('click', (event) => {
+  event.preventDefault();
+  panel.hidden = !panel.hidden;
+  refreshHUD();
+});
+
+touchPauseButton.addEventListener('click', (event) => {
+  event.preventDefault();
+  showTouchPause(true);
+});
+touchResume.addEventListener('click', (event) => {
+  event.preventDefault();
+  showTouchPause(false);
+});
+touchSave.addEventListener('click', (event) => {
+  event.preventDefault();
+  saveGame();
+  toast('Progress saved.');
+});
+
+/** Keeps the thumb button label in sync with whatever is in reach. */
+function refreshTouchInteract() {
+  if (!touchState.active) return;
+  const target = player.enabled ? nearestInteractable : null;
+  const show = Boolean(target) && dialogueEl.hidden;
+  touchInteract.hidden = !show;
+  if (show) touchInteract.textContent = interactLabel(target.kind);
+}
 
 // --- Input ---------------------------------------------------------------
 document.addEventListener('keydown', (event) => {
@@ -699,6 +964,7 @@ function frame() {
 
   syncPickups();
   refreshHint();
+  refreshTouchInteract();
 
   // Track which area the player is in every frame, so area-gated UI and tests
   // see the change immediately rather than on the next throttled HUD refresh.
@@ -724,6 +990,16 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) return;
+  if (!started) return;
+  if (touchState.active) {
+    showTouchPause(true);
+  } else if (player.enabled) {
+    document.exitPointerLock?.();
+  }
+});
+
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -736,6 +1012,10 @@ frame();
 
 // Exposed for the browser smoke test.
 window.amazingAdventure = {
+  version: VERSION,
+  buildName: BUILD_NAME,
+  releaseChannel: RELEASE_CHANNEL,
+  entryPoint: ENTRY_POINT,
   player,
   npcs,
   renderer,
@@ -769,6 +1049,30 @@ window.amazingAdventure = {
   isGateOpen: () => isGateOpen(state),
   syncGate,
   syncPickups,
+  touch: {
+    get active() { return touchState.active; },
+    get rootHidden() { return touchRoot.hidden; },
+    get moveInput() { return { ...player.moveInput }; },
+    enter: beginTouchMode,
+    pause: showTouchPause,
+    interact: () => {
+      if (!nearestInteractable) return false;
+      nearestInteractable.run();
+      refreshHint();
+      refreshTouchInteract();
+      return true;
+    },
+    get interactLabel() { return touchInteract.hidden ? null : touchInteract.textContent; },
+    /** Recomputes what the thumb button offers right now.
+     *  The frame loop calls this every tick; tests and touch handlers call it
+     *  directly so the label never depends on frame timing. */
+    refresh() {
+      refreshHint();
+      refreshTouchInteract();
+      return touchInteract.hidden ? null : touchInteract.textContent;
+    },
+    forceTouch: (on) => { touchState.forceTouch = Boolean(on); }
+  },
   resolution: {
     get ratio() { return resolution.ratio; },
     get changes() { return resolution.changes; },

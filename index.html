@@ -2,13 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0d1420">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101826'/%3E%3Cpath d='M16 5 27 25H5z' fill='%23ffd479'/%3E%3C/svg%3E">
-  <title>Amazing Adventure — Round 2</title>
+  <title>Amazing Adventure</title>
   <script type="importmap">
     {
       "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        "three": "./vendor/three.module.min.js"
       }
     }
   </script>
@@ -20,7 +24,16 @@
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     html, body { height: 100%; }
-    body { margin: 0; overflow: hidden; background: #0d1420; color: #f4f7fb; }
+    body {
+      margin: 0; overflow: hidden; background: #0d1420; color: #f4f7fb;
+      /* Stop the browser stealing drags for scrolling or zooming on a phone. */
+      touch-action: none;
+      -webkit-user-select: none; user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+    #game { position: fixed; inset: 0; }
+    #game canvas, #game { touch-action: none; }
     #game canvas { display: block; }
 
     #crosshair {
@@ -291,6 +304,115 @@
     #overlay button:hover { background: #ffe2a3; }
     #overlay button.ghost:hover { background: rgba(255, 212, 121, 0.14); }
     #overlay .save-note { margin: 16px 0 0; font-size: 12px; color: #8698ae; }
+    /* --- Touch controls (phones and tablets only) ---------------------- */
+    #touch {
+      position: fixed; inset: 0; pointer-events: none; z-index: 40;
+      padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+               max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    }
+    #touch[hidden] { display: none !important; }
+
+    #stick-zone {
+      position: absolute; left: 0; bottom: 0;
+      width: 55%; height: 62%;
+      pointer-events: auto;
+      touch-action: none;
+    }
+    #stick-base {
+      position: absolute; left: 96px; bottom: 96px;
+      width: 112px; height: 112px; margin: -56px 0 0 -56px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 212, 121, 0.35);
+      background: rgba(13, 20, 32, 0.32);
+      -webkit-backdrop-filter: blur(2px);
+      backdrop-filter: blur(2px);
+      transition: opacity 0.18s ease;
+      opacity: 0.75;
+    }
+    #stick-base.active { opacity: 1; border-color: rgba(255, 212, 121, 0.75); }
+    #stick-knob {
+      position: absolute; left: 50%; top: 50%;
+      width: 52px; height: 52px; margin: -26px 0 0 -26px;
+      border-radius: 50%;
+      background: rgba(255, 212, 121, 0.82);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+      will-change: transform;
+    }
+
+    #look-zone {
+      position: absolute; right: 0; bottom: 0;
+      width: 45%; height: 70%;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    #touch-buttons {
+      position: absolute; right: 16px; bottom: 24px;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+      padding-right: env(safe-area-inset-right);
+    }
+    .touch-button {
+      pointer-events: auto;
+      touch-action: manipulation;
+      min-width: 62px; min-height: 56px;
+      padding: 0 16px;
+      border-radius: 28px;
+      border: 1px solid rgba(255, 212, 121, 0.5);
+      background: rgba(13, 20, 32, 0.66);
+      color: #ffd479;
+      font: inherit; font-size: 15px; font-weight: 600;
+      display: inline-flex; align-items: center; justify-content: center;
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+    }
+    .touch-button:active { background: rgba(255, 212, 121, 0.22); }
+    #touch-interact {
+      min-width: 92px; min-height: 68px; border-radius: 34px;
+      background: rgba(255, 212, 121, 0.9); color: #1a1206;
+      font-size: 16px;
+    }
+    #touch-interact[hidden] { display: none !important; }
+    #touch-row { display: flex; gap: 10px; }
+
+    /* Dialogues become a full-width sheet on a phone so choices are thumb-sized. */
+    @media (max-width: 760px), (pointer: coarse) {
+      #dialogue {
+        left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom));
+        max-height: 62vh; overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      #dialogue .choices button { min-height: 48px; font-size: 15px; }
+      #dialogue .foot { display: none; }
+      #hint { bottom: auto; top: calc(64px + env(safe-area-inset-top)); font-size: 13px; }
+      #panel { left: 8px; right: 8px; top: 8px; max-height: 76vh; overflow-y: auto; }
+      #quest-tracker { max-width: 58vw; font-size: 12px; }
+      #overheard { font-size: 13px; }
+      .touch-only { display: initial; }
+    }
+    .touch-only { display: none; }
+    @media (max-width: 760px), (pointer: coarse) { .desktop-only { display: none; } }
+    @media (hover: hover) and (pointer: fine) { .touch-only { display: none !important; } }
+
+    /* Pause menu for touch (keyboard uses Esc) */
+    #touch-pause {
+      position: fixed; inset: 0; z-index: 60;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(6, 10, 16, 0.82);
+      padding: 24px;
+    }
+    #touch-pause[hidden] { display: none !important; }
+    #touch-pause .menu {
+      background: #131c2b; border: 1px solid #2b3a52; border-radius: 14px;
+      padding: 22px; max-width: 340px; width: 100%; text-align: center;
+    }
+    #touch-pause h2 { margin: 0 0 6px; font-size: 18px; }
+    #touch-pause p { margin: 0 0 18px; color: #98a9c0; font-size: 13px; }
+    #touch-pause button {
+      width: 100%; margin-top: 10px; padding: 14px; border-radius: 10px;
+      border: 1px solid rgba(255, 212, 121, 0.5); background: transparent;
+      color: #ffd479; font: inherit; font-size: 15px; font-weight: 600;
+    }
+    #touch-pause button.primary { background: #ffd479; color: #1a1206; border-color: #ffd479; }
   </style>
 </head>
 <body>
@@ -325,6 +447,29 @@
 
   <div id="toast-stack"></div>
 
+  <div id="touch" hidden>
+    <div id="stick-zone" aria-hidden="true">
+      <div id="stick-base"><div id="stick-knob"></div></div>
+    </div>
+    <div id="look-zone" aria-hidden="true"></div>
+    <div id="touch-buttons">
+      <button type="button" class="touch-button" id="touch-interact" hidden>Use</button>
+      <div id="touch-row">
+        <button type="button" class="touch-button" id="touch-journal">Journal</button>
+        <button type="button" class="touch-button" id="touch-pause-button">Pause</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="touch-pause" hidden>
+    <div class="menu">
+      <h2>Paused</h2>
+      <p>Your progress is saved automatically.</p>
+      <button type="button" class="primary" id="touch-resume">Resume</button>
+      <button type="button" id="touch-save">Save now</button>
+    </div>
+  </div>
+
   <div id="dialogue" hidden>
     <div class="name" id="dialogue-name"></div>
     <div class="role" id="dialogue-role"></div>
@@ -336,14 +481,19 @@
   <div id="overlay">
     <div class="card">
       <h1>Amazing Adventure</h1>
-      <p class="round">Round 2 — People and quests</p>
-      <p class="controls">
+      <p class="round">A living world · v0.3.0</p>
+      <p class="controls desktop-only">
         W A S D walk &nbsp;·&nbsp; mouse look &nbsp;·&nbsp; Shift run<br>
         E talk / interact &nbsp;·&nbsp; J journal &nbsp;·&nbsp; Esc pause<br>
         At a bench, E rests until the next hour
       </p>
+      <p class="controls touch-only">
+        Left thumb to walk &nbsp;·&nbsp; drag the right side to look<br>
+        Tap <b>Talk</b> to speak to people &nbsp;·&nbsp; <b>Journal</b> to check your quests<br>
+        <b>Pause</b> at the top right saves and stops
+      </p>
       <div class="buttons">
-        <button type="button" id="play">Click to play</button>
+        <button type="button" id="play">Play</button>
         <button type="button" id="continue" class="ghost" hidden>Continue saved game</button>
       </div>
       <p class="save-note" id="save-note">Progress saves automatically.</p>
