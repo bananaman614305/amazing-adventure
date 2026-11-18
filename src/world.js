@@ -274,6 +274,10 @@ export function buildWorld(renderer) {
   }
 
   // Low parapet along the terrace lip, split either side of the ramp opening.
+  // It is only 0.55m tall, so addBox's "can a person step over it" rule would leave
+  // it walk-through -- and behind it is a 1.2m drop, which is exactly the edge the
+  // wall exists to mark. These get colliders explicitly for that reason: walking off
+  // the terrace should take the ramp, not the shortest line over the lip.
   for (const [from, to] of [[TERRACE.minX, TERRACE.ramp.minX], [TERRACE.ramp.maxX, TERRACE.maxX]]) {
     addBox(scene, [], {
       size: [to - from, 0.55, 0.22],
@@ -281,6 +285,9 @@ export function buildWorld(renderer) {
       material: parapetMaterial,
       castShadow: true
     });
+    // The collider is a thin line at the lip itself, spanning the open width so the
+    // player cannot squeeze past the end of the parapet either.
+    colliders.push(boxCollider(from, TERRACE.maxZ - 0.22, to, TERRACE.maxZ));
   }
   for (const x of [TERRACE.minX, TERRACE.maxX]) {
     addBox(scene, [], {

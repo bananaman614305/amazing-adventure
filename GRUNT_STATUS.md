@@ -373,7 +373,75 @@ instructions.
 
 ## Current task
 
-Round 21 — The game ignored the user's font size entirely.
+Round 22 — A walk-through terrace edge, carried since round 17.
+
+PRs #5–#22 are published and open for the human. Rounds 17–21 fixed defects found by
+auditing behaviour. This round closes the one defect I had **flagged but not fixed**
+in round 17 and repeated in five subsequent Next-steps lists: the terrace parapet.
+
+### The bug (now confirmed, not just suspected)
+
+The parapet is a real 0.55m wall drawn along the terrace lip. It was added with
+`addBox(scene, [], ...)` — an empty collider list — because the shared helper only
+creates colliders for things **taller than 0.9m**, on the rule that a person can step
+over anything shorter.
+
+That rule is wrong *here*: the parapet is not an obstacle, it marks a **1.2m drop**.
+Measured at x=4 (well outside the ramp opening, which spans x −1.9…1.9):
+
+```
+before: x=4 pushed south -> z=-5.17, ground=0     (walked over the lip, dropped)
+after:  x=4 pushed south -> z=-13.84, ground=1.2  (held on the terrace)
+```
+
+So yes — the player could walk off the terrace edge anywhere, bypassing the ramp.
+
+### The fix
+
+An explicit thin collider at the lip, spanning each parapet half, so the wall blocks
+where it is drawn rather than relying on the height rule. Verified held at x = −5,
+−3.5, +3, +5 (ground stays 1.2), and that the ramp opening still works **both ways**
+(up: ground 1.2; down: ground 0).
+
+### Proof the test is real
+
+Removing the collider line makes the committed desktop check fail with all four probe
+points escaping to ground 0:
+
+```
+FAIL the terrace parapet stops the player everywhere except the ramp
+     — {"lipZ":-13.2,"outsideRamp":[{"tried":-5,"z":-9.1,"ground":0}, ...4 of them]}
+```
+
+### Rounds 20–22 audit notes (things checked that were already sound)
+
+- **No resource leak**: 60 open/close cycles — geometries stayed 119, textures 1,
+  scene children 98, JS heap 9.5→8.4 MB.
+- **Save is validated**: versioned key, corrupt/array/malformed saves refused.
+- **Two tabs**: tab B starting a fresh game does *not* wipe tab A's saved progress.
+- **Keyboard-only play**: start, all four WASD directions (0.45 units each), `E` to
+  talk, `J`/`L`/`C`/`P`/`M` all respond.
+- **My own probe was wrong twice**: pressing w,a,s,d *in sequence* cancelled out
+  (0.06 units, "no movement"); and `placeAt()` always sets y=0, so my first parapet
+  test never actually put the player on the terrace. Both corrected before concluding.
+
+### Checks actually run this round
+
+- `npm test` — **343/343 pass**.
+- `npm run test:browser` — **145/145 pass, exit 0** (was 142): **3 new checks**.
+- `npm run test:mobile` — **185/185 pass, exit 0**.
+- **Totals: 673 checks — 343 unit, 145 desktop, 185 mobile.**
+- `scripts/playthrough.mjs` and `scripts/reachability.mjs` both still exit 0.
+- Self-contained re-verified: 26 files, 980 KB, 0 external requests, with the parapet
+  holding in the isolated build.
+
+### Evidence
+
+`artifacts/round22-parapet.png` — 1280x800, mean luminance 130.1, 67.4% bright, 2372
+distinct colours. I am text-only and did not inspect it; the fix rests on the
+position/ground measurements above.
+
+## Previous round — Round 21: text ignored the user's font size
 
 PRs #5–#21 are published and open for the human. Round 20 fixed focus. This round
 audited the other half of accessible text: **does enlarging your default font do
@@ -1357,11 +1425,10 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **Give the terrace parapet a collider.** It is drawn but has none. Testing showed
-   the player cannot actually walk through it (the step-height rule blocks the drop),
-   so it is cosmetic rather than a hole — but the geometry should match what is drawn.
-3. **A real screen reader test.** Six rounds of accessibility work rest on
-   programmatic verification only.
+2. **A real screen reader test.** Eight rounds of accessibility work rest on
+   programmatic verification only — the single largest honesty gap remaining.
+3. **Audio coverage.** The round-11 soundscape has had no behavioural test at all
+   (only that the context starts and toggles).
 3. **Give the lane its own work board, or a second reason to cross the gate.**
    The plaza board makes standing earnable early, but the lane has no equivalent,
    so the two areas are not symmetrical in how a player recovers standing.
