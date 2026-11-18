@@ -373,7 +373,76 @@ instructions.
 
 ## Current task
 
-Round 19 — Backgrounding the app left the game permanently stuck.
+Round 20 — The dialog claimed to be modal but never took focus.
+
+PRs #5–#20 are published and open for the human. Round 13 added `role="dialog"` and
+`aria-modal="true"` to the conversation panel. This round tested whether that
+declaration is actually true, and it was not.
+
+### The bug
+
+`aria-modal="true"` tells assistive technology that everything outside the dialog is
+inert and that the user is now inside it. That is only honest if focus really moves
+there. Measured: opening a conversation by keyboard left focus on `<body>`, and the
+panel had no `tabindex`, so it could not hold focus at all.
+
+```
+focus when dialogue opens: {"active":"BODY","inDialogue":false}
+dialog element: {role:"dialog", ariaModal:"true", tabindex:null}
+```
+
+A screen reader user was told "Mara, dialog" and then left with focus outside the
+panel — announced a modal they could not enter. Closing made it worse: the panel
+became `hidden` while focus may still have been inside it, where keystrokes go nowhere.
+
+### The fix
+
+- Panel gets `tabindex="-1"` (focusable, but not added to the tab order) and is
+  focused when it opens.
+- `closeDialogue()` checks whether focus was inside, and hands it back to the game
+  canvas; the canvas gets `tabIndex = -1` so it *can* receive focus without joining
+  the tab order.
+- Verified the surrounding behaviour still holds: number keys still take choices with
+  focus inside the panel, Escape closes, focus does not land on a hidden element, and
+  the player can walk afterwards (1.37 units moved).
+
+### A correction to my own probe
+
+I first reported "number keys do not work". **That was wrong** — I pressed `2`
+("Who are you?"), a choice that changes no state. Pressing `1` sets
+`lanterns: none → started`. The handler `/^Digit[1-9]$/` was there all along. I also
+wrote one bogus check that compared `lanterns` `done` to `done` because an earlier
+check had already advanced the quest; fixed by resetting to a clean state first.
+
+### Proof the tests are real
+
+Reverting just the focus fix makes **2 committed desktop checks fail**:
+
+```
+FAIL opening a conversation moves focus into the dialog — {"inDialogue":false,"activeId":"BODY"}
+FAIL the dialog is focusable and still declares its modal role — {"tabindex":null}
+```
+
+### Checks actually run this round
+
+- `npm test` — **343/343 pass**.
+- `npm run test:browser` — **138/138 pass, exit 0** (was 132): **6 new checks** — focus
+  enters the dialog, the panel is focusable and still `role=dialog`, number keys work
+  with focus inside, closing does not strand focus, the canvas holds focus without
+  joining the tab order, and walking still works afterwards.
+- `npm run test:mobile` — **177/177 pass, exit 0**.
+- **Totals: 658 checks — 343 unit, 138 desktop, 177 mobile.**
+- `scripts/playthrough.mjs` and `scripts/reachability.mjs` both still exit 0.
+- Self-contained re-verified: 26 files, 976 KB, 0 external requests, 0 errors, with
+  focus moving correctly in the isolated build.
+
+### Evidence
+
+`artifacts/round20-dialog-focus.png` — 1280x800, mean luminance 34.3, 1.8% bright
+(the dialogue is a dim overlay on a night-time frame), 7898 distinct colours. I am
+text-only and did not inspect it; the fix rests on the focus assertions above.
+
+## Previous round — Round 19: backgrounding the app left the game stuck
 
 PRs #5–#19 are published and open for the human. Rounds 14–18 hardened *what* the
 game does. This round fixes the most common real-world failure on a phone: the game
