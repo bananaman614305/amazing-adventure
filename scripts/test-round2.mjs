@@ -935,6 +935,121 @@ try {
   await page.keyboard.press('KeyE');
   await new Promise((r) => setTimeout(r, 900));
   await capture(page, 'round4-wren-dialogue.png');
+
+  // --- 20. The lane's arrears: a quest that crosses both areas ---------
+  // This is the first objective that cannot be finished in one place. The
+  // player must carry the pouch south to Mara, then carry her mark back north
+  // to Wren, so the two areas depend on each other instead of the lane being a
+  // dead end. Driven through the real dialogue buttons, not by calling state.
+  const clickChoice = async (pattern) => {
+    const index = await page.evaluate((p) => [...document.querySelectorAll('#dialogue-choices button')]
+      .findIndex((b) => new RegExp(p, 'i').test(b.textContent)), pattern);
+    if (index < 0) return { ok: false, labels: await page.evaluate(() => [...document.querySelectorAll('#dialogue-choices button')].map((b) => b.textContent.trim())) };
+    await page.evaluate((i) => document.querySelectorAll('#dialogue-choices button')[i].click(), index);
+    await new Promise((r) => setTimeout(r, 250));
+    return { ok: true };
+  };
+  const talkToNpc = async (npcId) => {
+    await page.evaluate((id) => {
+      const api = window.amazingAdventure;
+      const npc = api.npcs.find((n) => n.id === id);
+      api.player.placeAt(npc.group.position.x, npc.group.position.z + 1.7, 0, -0.05);
+    }, npcId);
+    await new Promise((r) => setTimeout(r, 300));
+    await page.evaluate(() => window.amazingAdventure.touch.interact());
+    await new Promise((r) => setTimeout(r, 300));
+    return page.evaluate(() => ({
+      name: document.getElementById('dialogue-name').textContent,
+      line: document.getElementById('dialogue-line').textContent,
+      visible: !document.getElementById('dialogue').hidden
+    }));
+  };
+  const closeDialogue = async () => {
+    await page.evaluate(() => document.getElementById('dialogue-close')?.click() ?? null);
+    await new Promise((r) => setTimeout(r, 200));
+  };
+
+  // Close Wren's own ledger first, which is what unlocks the arrears.
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const s = await import('./src/state.js');
+    const state = api.getState();
+    s.startLedger(state, 'warm'); s.hearLedgerRumour(state); s.recoverLedger(state);
+    s.returnLedger(state, 'cover');
+    api.refreshHUD();
+  });
+  await closeDialogue();
+
+  const wrenOffer = await talkToNpc('wren');
+  checks.check('Wren offers to send the lane’s arrears to Mara once her ledger is closed',
+    wrenOffer.visible && /arrears|behind to Mara|three weeks/i.test(wrenOffer.line),
+    wrenOffer.line.slice(0, 90));
+
+  const arrearsAccepted = await clickChoice('carry it');
+  const carried = await page.evaluate(() => ({
+    status: window.amazingAdventure.getState().quests.arrears,
+    pouch: window.amazingAdventure.getState().inventory.includes('arrears_pouch')
+  }));
+  checks.check('accepting the arrears puts the pouch in the pack',
+    arrearsAccepted.ok && carried.status === 'started' && carried.pouch === true, JSON.stringify(carried));
+  await closeDialogue();
+
+  const maraDelivery = await talkToNpc('mara');
+  checks.check('Mara receives the arrears in the plaza, across the gate from the lane',
+    maraDelivery.visible && /lane’s money|pouch|Wren send you/i.test(maraDelivery.line),
+    maraDelivery.line.slice(0, 90));
+
+  const paid = await clickChoice('full amount');
+  const afterPay = await page.evaluate(() => ({
+    status: window.amazingAdventure.getState().quests.arrears,
+    pouch: window.amazingAdventure.getState().inventory.includes('arrears_pouch'),
+    receipt: window.amazingAdventure.getState().inventory.includes('keeper_receipt')
+  }));
+  checks.check('paying in full hands over the pouch and gives a receipt',
+    paid.ok && afterPay.status === 'delivered' && afterPay.pouch === false && afterPay.receipt === true,
+    JSON.stringify(afterPay));
+  await closeDialogue();
+
+  const coinBefore = await page.evaluate(() => window.amazingAdventure.getState().flags.coins);
+  const wrenBack = await talkToNpc('wren');
+  const handedOver = await clickChoice('Hand over');
+  const afterFinish = await page.evaluate(() => ({
+    status: window.amazingAdventure.getState().quests.arrears,
+    receipt: window.amazingAdventure.getState().inventory.includes('keeper_receipt'),
+    coins: window.amazingAdventure.getState().flags.coins,
+    journal: [...document.querySelectorAll('#journal-list li')]
+      .map((li) => li.textContent).find((t) => /Arrears/i.test(t)) || ''
+  }));
+  checks.check('carrying Mara’s mark back north finishes the quest and pays the reward',
+    handedOver.ok && afterFinish.status === 'done' &&
+    afterFinish.receipt === false && afterFinish.coins === coinBefore + 3,
+    JSON.stringify(afterFinish));
+  checks.check('the journal describes the arrears ending that actually happened',
+    /balance|signed|in full/i.test(afterFinish.journal), afterFinish.journal.slice(0, 100));
+  await closeDialogue();
+
+  // A player who loses Mara's mark must never be stuck with a quest they cannot
+  // finish, so the plaza side offers to write it out again.
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const state = api.getState();
+    state.inventory = state.inventory.filter((id) => id !== 'keeper_receipt');
+    state.quests.arrears = 'delivered';
+    api.refreshHUD();
+  });
+  const reissued = await talkToNpc('mara');
+  const tookFresh = await clickChoice('fresh mark');
+  const afterReissue = await page.evaluate(() => ({
+    receipt: window.amazingAdventure.getState().inventory.includes('keeper_receipt'),
+    status: window.amazingAdventure.getState().quests.arrears
+  }));
+  checks.check('a player who loses Mara’s mark can get a replacement instead of being stuck',
+    /lost my mark|write it out again/i.test(reissued.line) &&
+    tookFresh.ok && afterReissue.receipt === true,
+    JSON.stringify(afterReissue));
+  await closeDialogue();
+
+  await capture(page, 'round6-lane-arrears.png');
 } finally {
   await close();
   await server.stop();
