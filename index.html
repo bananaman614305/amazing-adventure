@@ -65,7 +65,7 @@
       border-radius: 8px;
       background: rgba(10, 16, 26, 0.82);
       border: 1px solid rgba(255, 255, 255, 0.18);
-      font-size: 15px;
+      font-size: 0.9375rem;
       letter-spacing: 0.01em;
       white-space: nowrap;
       pointer-events: none;
@@ -86,14 +86,14 @@
       font-variant-numeric: tabular-nums;
       pointer-events: none;
     }
-    #clock .time { font-weight: 700; font-size: 16px; }
+    #clock .time { font-weight: 700; font-size: 1rem; }
     #clock .phase {
-      font-size: 11px;
+      font-size: 0.6875rem;
       text-transform: uppercase;
       letter-spacing: 0.14em;
       color: #ffd479;
     }
-    #coin-count { font-size: 13px; color: #ffe2a3; }
+    #coin-count { font-size: 0.8125rem; color: #ffe2a3; }
     #coin-count::before { content: "◈ "; }
 
     #quest-tracker {
@@ -105,13 +105,13 @@
       border-radius: 12px;
       background: rgba(10, 16, 26, 0.66);
       border: 1px solid rgba(255, 255, 255, 0.12);
-      font-size: 13px;
+      font-size: 0.8125rem;
       line-height: 1.45;
       pointer-events: none;
     }
     #quest-tracker h2 {
       margin: 0 0 6px;
-      font-size: 10px;
+      font-size: 0.625rem;
       letter-spacing: 0.16em;
       text-transform: uppercase;
       color: #9fb0c6;
@@ -134,11 +134,11 @@
       background: rgba(9, 15, 25, 0.8);
       border: 1px solid rgba(255, 255, 255, 0.12);
       pointer-events: none;
-      font-size: 14px;
+      font-size: 0.875rem;
       line-height: 1.6;
     }
     #overheard .overheard-label {
-      font-size: 10px;
+      font-size: 0.625rem;
       letter-spacing: 0.16em;
       text-transform: uppercase;
       color: #8698ae;
@@ -166,7 +166,7 @@
       background: rgba(18, 28, 44, 0.94);
       border: 1px solid rgba(255, 212, 121, 0.55);
       color: #ffe9bd;
-      font-size: 14px;
+      font-size: 0.875rem;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
       animation: toast-in 180ms ease-out;
     }
@@ -185,7 +185,7 @@
       border-radius: 20px;
       border: 1px solid rgba(255, 255, 255, 0.22);
       background: rgba(255, 255, 255, 0.06);
-      color: #cfe0f5; font: inherit; font-size: 17px; line-height: 1;
+      color: #cfe0f5; font: inherit; font-size: 1.0625rem; line-height: 1;
       cursor: pointer;
     }
     #dialogue-close:hover { background: rgba(255, 255, 255, 0.14); }
@@ -202,17 +202,23 @@
       background: rgba(11, 18, 30, 0.95);
       border: 1px solid rgba(255, 255, 255, 0.2);
       box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+      /* The panel is anchored to the bottom, so without a ceiling a long line at a
+         large user font size grows off the top of the screen and the first options
+         become unreachable. Scroll inside the panel instead of losing them. */
+      max-height: 82vh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
     #dialogue .name {
-      font-size: 13px;
+      font-size: 0.8125rem;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.14em;
       color: #ffd479;
       margin-bottom: 2px;
     }
-    #dialogue .role { font-size: 11px; color: #8698ae; margin-bottom: 10px; }
-    #dialogue .line { font-size: 19px; line-height: 1.5; min-height: 56px; }
+    #dialogue .role { font-size: 0.6875rem; color: #8698ae; margin-bottom: 10px; }
+    #dialogue .line { font-size: 1.1875rem; line-height: 1.5; min-height: 56px; }
     #dialogue .choices { margin: 14px 0 0; display: flex; flex-direction: column; gap: 6px; }
     #dialogue .choice {
       font: inherit;
@@ -236,7 +242,7 @@
     #dialogue .choice .num { color: #ffd479; font-weight: 700; margin-right: 8px; }
     #dialogue .foot {
       margin-top: 10px;
-      font-size: 12px;
+      font-size: 0.75rem;
       color: #9fb0c6;
       text-align: right;
     }
@@ -252,11 +258,11 @@
       border-radius: 12px;
       background: rgba(9, 15, 25, 0.92);
       border: 1px solid rgba(255, 255, 255, 0.16);
-      font-size: 13px;
+      font-size: 0.8125rem;
       line-height: 1.5;
       pointer-events: none;
     }
-    #panel h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: #9fb0c6; }
+    #panel h3 { margin: 0 0 8px; font-size: 0.6875rem; letter-spacing: 0.16em; text-transform: uppercase; color: #9fb0c6; }
     #panel h3 + h3, #panel ul + h3 { margin-top: 14px; }
     #panel ul { margin: 0; padding: 0; list-style: none; }
     #panel li { margin-bottom: 9px; }
@@ -295,16 +301,16 @@
       box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
       max-width: min(560px, calc(100vw - 40px));
     }
-    #overlay h1 { margin: 0; font-size: 38px; letter-spacing: -0.02em; }
+    #overlay h1 { margin: 0; font-size: 2.375rem; letter-spacing: -0.02em; }
     #overlay .round {
       margin: 8px 0 20px;
       color: #ffd479;
-      font-size: 13px;
+      font-size: 0.8125rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.18em;
     }
-    #overlay .controls { margin: 0 0 22px; color: #c7d4e4; font-size: 14px; line-height: 1.9; }
+    #overlay .controls { margin: 0 0 22px; color: #c7d4e4; font-size: 0.875rem; line-height: 1.9; }
     #overlay .buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
     #overlay button {
       font: inherit;
@@ -319,7 +325,7 @@
     #overlay button.ghost { background: transparent; color: #ffd479; border: 1px solid rgba(255, 212, 121, 0.6); }
     #overlay button:hover { background: #ffe2a3; }
     #overlay button.ghost:hover { background: rgba(255, 212, 121, 0.14); }
-    #overlay .save-note { margin: 16px 0 0; font-size: 12px; color: #8698ae; }
+    #overlay .save-note { margin: 16px 0 0; font-size: 0.75rem; color: #8698ae; }
     /* --- Touch controls (phones and tablets only) ---------------------- */
     #touch {
       position: fixed; inset: 0; pointer-events: none; z-index: 40;
@@ -379,7 +385,7 @@
       border: 1px solid rgba(255, 212, 121, 0.5);
       background: rgba(13, 20, 32, 0.66);
       color: #ffd479;
-      font: inherit; font-size: 15px; font-weight: 600;
+      font: inherit; font-size: 0.9375rem; font-weight: 600;
       display: inline-flex; align-items: center; justify-content: center;
       -webkit-backdrop-filter: blur(3px);
       backdrop-filter: blur(3px);
@@ -388,7 +394,7 @@
     #touch-interact {
       min-width: 92px; min-height: 68px; border-radius: 34px;
       background: rgba(255, 212, 121, 0.9); color: #1a1206;
-      font-size: 16px;
+      font-size: 1rem;
     }
     #touch-interact[hidden] { display: none !important; }
     #touch-row { display: flex; gap: 10px; }
@@ -397,7 +403,7 @@
        main row because they are secondary, but still a full 44px touch target. */
     #touch-row-a11y .touch-button {
       min-width: 0; min-height: 44px;
-      padding: 0 10px; font-size: 12px; font-weight: 500;
+      padding: 0 10px; font-size: 0.75rem; font-weight: 500;
       border-radius: 22px;
       border-color: rgba(143, 176, 216, 0.45);
       color: #b8c6d8;
@@ -423,14 +429,14 @@
       /* Hide the action/journal cluster while a conversation is open: the
          dialogue sheet owns the bottom of the screen. */
       #touch.dialogue-open #touch-buttons { opacity: 0.25; }
-      #dialogue .choices button { min-height: 48px; font-size: 15px; }
+      #dialogue .choices button { min-height: 48px; font-size: 0.9375rem; }
       #dialogue-close { display: flex; }
       #dialogue .foot { display: none; }
       #dialogue { padding-right: 52px; }
-      #hint { bottom: auto; top: calc(64px + env(safe-area-inset-top)); font-size: 13px; }
+      #hint { bottom: auto; top: calc(64px + env(safe-area-inset-top)); font-size: 0.8125rem; }
       #panel { left: 8px; right: 8px; top: 8px; max-height: 76vh; overflow-y: auto; z-index: 50; }
-      #quest-tracker { max-width: 58vw; font-size: 12px; }
-      #overheard { font-size: 13px; }
+      #quest-tracker { max-width: 58vw; font-size: 0.75rem; }
+      #overheard { font-size: 0.8125rem; }
       .touch-only { display: initial; }
     }
     .touch-only { display: none; }
@@ -460,7 +466,7 @@
       border: 1px solid rgba(255, 212, 121, 0.35);
       background: rgba(10, 16, 26, 0.72);
       color: #ffd479;
-      font-size: 19px; line-height: 1;
+      font-size: 1.1875rem; line-height: 1;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       transition: opacity 140ms ease;
@@ -477,23 +483,23 @@
     #compass-list li {
       display: flex; justify-content: space-between; gap: 10px;
       padding: 5px 0; border-bottom: 1px solid #1e2a3c;
-      font-size: 13px; color: #b8c6d8;
+      font-size: 0.8125rem; color: #b8c6d8;
     }
     #compass-list .compass-bearing { color: #ffd479; font-variant-numeric: tabular-nums; }
     #compass-ask { margin: 0 0 12px; }
-    #compass-ask label { display: block; font-size: 12px; color: #93a4bb; margin-bottom: 4px; }
+    #compass-ask label { display: block; font-size: 0.75rem; color: #93a4bb; margin-bottom: 4px; }
     #compass-ask input {
       width: 100%; box-sizing: border-box; padding: 9px 10px; border-radius: 8px;
       background: #0c1420; color: #e6eefb; border: 1px solid #2b3a52;
-      font: inherit; font-size: 13px;
+      font: inherit; font-size: 0.8125rem;
     }
-    #compass-results { margin-top: 6px; font-size: 12px; color: #8fb0d8; min-height: 16px; }
+    #compass-results { margin-top: 6px; font-size: 0.75rem; color: #8fb0d8; min-height: 16px; }
 
     #ending-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid #2b3a52; }
-    #ending-section p { margin: 0 0 10px; color: #c8d4e4; font-size: 13px; line-height: 1.55; }
+    #ending-section p { margin: 0 0 10px; color: #c8d4e4; font-size: 0.8125rem; line-height: 1.55; }
     #ending-section button {
       width: 100%; padding: 12px; border-radius: 9px; cursor: pointer;
-      background: transparent; color: #ffd479; font: inherit; font-size: 14px;
+      background: transparent; color: #ffd479; font: inherit; font-size: 0.875rem;
       border: 1px solid rgba(255, 212, 121, 0.5);
     }
 
@@ -508,17 +514,17 @@
       background: #101a28; border: 1px solid #2b3a52; border-radius: 14px;
       padding: 26px; max-width: 560px; width: 100%;
     }
-    #epilogue h2 { margin: 0 0 14px; font-size: 22px; letter-spacing: -0.01em; }
-    #epilogue p { margin: 0 0 14px; color: #c8d4e4; font-size: 14px; line-height: 1.65; }
+    #epilogue h2 { margin: 0 0 14px; font-size: 1.375rem; letter-spacing: -0.01em; }
+    #epilogue p { margin: 0 0 14px; color: #c8d4e4; font-size: 0.875rem; line-height: 1.65; }
     #epilogue .epilogue-line {
       margin: 0 0 10px; padding-left: 12px; border-left: 2px solid #3a4c66;
-      color: #b8c6d8; font-size: 13px; line-height: 1.6;
+      color: #b8c6d8; font-size: 0.8125rem; line-height: 1.6;
     }
-    #epilogue .epilogue-standing { color: #93a4bb; font-size: 13px; line-height: 1.6; margin: 0 0 8px; }
+    #epilogue .epilogue-standing { color: #93a4bb; font-size: 0.8125rem; line-height: 1.6; margin: 0 0 8px; }
     #epilogue button.primary {
       width: 100%; margin-top: 8px; padding: 14px; border-radius: 10px;
       background: #ffd479; color: #1a1206; border: 1px solid #ffd479;
-      font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+      font: inherit; font-size: 0.9375rem; font-weight: 600; cursor: pointer;
     }
 
     /* Visually hidden but read aloud. Standard clipping pattern: display:none
@@ -552,16 +558,16 @@
       background: #131c2b; border: 1px solid #2b3a52; border-radius: 14px;
       padding: 24px; max-width: 360px; width: 100%; text-align: center;
     }
-    #context-lost h2 { margin: 0 0 8px; font-size: 19px; }
-    #context-lost p { margin: 0 0 16px; color: #98a9c0; font-size: 13px; line-height: 1.5; }
+    #context-lost h2 { margin: 0 0 8px; font-size: 1.1875rem; }
+    #context-lost p { margin: 0 0 16px; color: #98a9c0; font-size: 0.8125rem; line-height: 1.5; }
     #context-lost button {
       width: 100%; margin-top: 10px; padding: 14px; border-radius: 10px;
       border: 1px solid rgba(255, 212, 121, 0.5); background: transparent;
-      color: #ffd479; font: inherit; font-size: 15px; font-weight: 600;
+      color: #ffd479; font: inherit; font-size: 0.9375rem; font-weight: 600;
       cursor: pointer;
     }
     #context-lost button.primary { background: #ffd479; color: #1a1206; border-color: #ffd479; }
-    #context-lost .hint-line { margin: 14px 0 0; font-size: 12px; color: #7d8ea6; }
+    #context-lost .hint-line { margin: 14px 0 0; font-size: 0.75rem; color: #7d8ea6; }
 
     #touch-pause {
       position: fixed; inset: 0; z-index: 60;
@@ -574,15 +580,15 @@
       background: #131c2b; border: 1px solid #2b3a52; border-radius: 14px;
       padding: 22px; max-width: 340px; width: 100%; text-align: center;
     }
-    #touch-pause h2 { margin: 0 0 6px; font-size: 18px; }
-    #touch-pause p { margin: 0 0 18px; color: #98a9c0; font-size: 13px; }
+    #touch-pause h2 { margin: 0 0 6px; font-size: 1.125rem; }
+    #touch-pause p { margin: 0 0 18px; color: #98a9c0; font-size: 0.8125rem; }
     #touch-pause button {
       width: 100%; margin-top: 10px; padding: 14px; border-radius: 10px;
       border: 1px solid rgba(255, 212, 121, 0.5); background: transparent;
-      color: #ffd479; font: inherit; font-size: 15px; font-weight: 600;
+      color: #ffd479; font: inherit; font-size: 0.9375rem; font-weight: 600;
     }
     #touch-pause button.primary { background: #ffd479; color: #1a1206; border-color: #ffd479; }
-    #touch-pause .hint-line { margin: 14px 0 0; font-size: 12px; color: #7d8ea6; }
+    #touch-pause .hint-line { margin: 14px 0 0; font-size: 0.75rem; color: #7d8ea6; }
   </style>
 </head>
 <body>
