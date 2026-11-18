@@ -21,6 +21,7 @@ export const REQUIRED_FILES = [
   'src/state.js',
   'src/refusal.js',
   'src/repair.js',
+  'src/audio.js',
   'src/factions.js',
   'src/ambient.js',
   'src/daynight.js',
