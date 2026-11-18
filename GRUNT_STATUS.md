@@ -373,7 +373,56 @@ instructions.
 
 ## Current task
 
-Round 9 — Earning standing back: closing the dead-end I flagged last round.
+Round 10 — The plaza work board: goodwill you can earn *before* you need it.
+
+PRs #5–#10 are published and open for the human. Real-device testing is still
+blocked on hardware I do not have. Round 9 added a repeatable way to earn standing
+back, but left it in the wrong place, which I noted at the time: **work was only
+offered by a *refused* NPC, so goodwill could only be earned after it was already
+too late.** A player had to hit a wall before they could start climbing.
+
+### What Round 10 adds
+
+- `JOB_BOARD` in `src/areas.js` at (-3.4, 8.6): inside the plaza, on the walk
+  between the gate and Mara, 1.65 m clear of the nearest barrel and 4.95 m from
+  the bench, so it neither clips a prop nor blocks a path.
+- The board mesh in `src/world.js`: two posts, a pinned face and three paper
+  slips, so it reads as a job board from a distance rather than a plain panel.
+- `JOB_BOARD_SPEAKER` and an exported `workMenu(state, npcId, name, intro)` in
+  `src/dialogue.js`, so the board reuses the existing dialogue UI and offers
+  exactly the same jobs as a refusal menu — but with board copy instead of a
+  shopkeeper scolding the player.
+- `applyChoice` now only writes NPC memory when `DIALOGUE[npcId]` exists, so the
+  board cannot invent a phantom `job_board` NPC in the save. Verified: memory
+  stays `[]` after taking board work.
+- `openDialogue` uses `npc.talk ? npc.talk(state) : startConversation(...)`; world
+  NPCs have no `.talk`, so the ordinary conversation path is untouched.
+
+### Checks actually run this round
+
+- `npm test` — **234/234 pass** (was 223): 11 new board cases, including that the
+  board stays reachable when an NPC would refuse, that board work alone can lift a
+  player out of a refusal, that it is never free, and that it invents no NPC.
+- `npm run test:browser` — **94/94 pass, exit 0** (was 89). Five new checks: the
+  board is a findable interactable, it opens as a board with three jobs, a neutral
+  player gains standing and pays 2 coins, no phantom NPC appears, and a time job
+  still costs the hour.
+- `npm run test:mobile` — **137/137 pass, exit 0**.
+- **Totals: 465 checks — 234 unit, 94 desktop, 137 mobile.**
+- Walkability confirmed with real key input: walking south reaches 0.21 m from the
+  post and `read the work board` appears. An earlier 1.8 s probe stopped 2.05 m
+  short and showed nothing — a test-setup error, not a bug, which I re-ran before
+  drawing any conclusion.
+
+### Evidence
+
+`artifacts/round10-job-board.png` captures the board menu itself in daylight,
+verified programmatically at 93.9 mean luminance, 35.0% bright pixels and 3851
+distinct sampled colours. My first attempt placed the capture after the
+time-costing job had moved the clock to dusk (the same weak-evidence mistake I
+made in Round 9), so I moved it to the moment the menu is on screen.
+
+## Previous round — Round 9: earning standing back
 
 PRs #5–#9 are published and open for the human. Real-device testing is still
 blocked on hardware I do not have. Round 8 gave reputation teeth but left a real
@@ -596,10 +645,10 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **Make the odd jobs visible in the world, not only inside a refusal.** Right
-   now work is offered by a refused NPC. A notice board job listing, or Mara
-   handing out work to anyone regardless of standing, would let a player build
-   goodwill *before* they need it, which is how a real reputation works.
+2. **Give the lane its own work board, or a second reason to cross the gate.**
+   The plaza board now makes standing earnable early, but the market lane still
+   has no equivalent, so the two areas are not yet symmetrical in how they let a
+   player recover standing.
 3. **Give the street beyond the gate a second reason to exist.** The gate is still
    the only route between the areas, and the lane's content now loops through the
    plaza, so a third location is the natural next step.
