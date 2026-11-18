@@ -28,6 +28,7 @@ import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
 import { createAdaptiveResolution } from './perf.js';
 import { createRecovery, shouldPanicShed } from './resilience.js';
 import { createSoundscape, readPreference } from './audio.js';
+import { buildEpilogue, storyComplete, storyProgress } from './epilogue.js';
 import {
   stickVector, knobOffset, lookDelta, clampPitch, wantsTouchControls,
   interactLabel, STICK_RADIUS
@@ -42,6 +43,16 @@ const container = $('game');
 const overlay = $('overlay');
 const playButton = $('play');
 const soundToggle = $('sound-toggle');
+const endingSection = $('ending-section');
+const endingText = $('ending-text');
+const endingOpen = $('ending-open');
+const epilogueEl = $('epilogue');
+const epilogueTitle = $('epilogue-title');
+const epilogueOpening = $('epilogue-opening');
+const epilogueBranches = $('epilogue-branches');
+const epilogueClosers = $('epilogue-closers');
+const epilogueClosing = $('epilogue-closing');
+const epilogueClose = $('epilogue-close');
 const continueButton = $('continue');
 const saveNote = $('save-note');
 const crosshair = $('crosshair');
@@ -287,7 +298,54 @@ function refreshHUD() {
     </li>`)
     .join('');
   standingList.dataset.tiers = reputationView(state).map((f) => f.tier).join(',');
+
+  // The ending. Shown only when every quest is finished, and read out once as an
+  // overlay so a player who completes the story is actually told they finished it
+  // rather than being left in silence.
+  const progress = storyProgress(state);
+  const epilogue = buildEpilogue(state);
+  endingSection.hidden = !progress.complete;
+  if (progress.complete) {
+    endingText.textContent = `All ${progress.total} errands are done. There is nothing left that the plaza needs from you.`;
+  }
+  if (epilogue && !endingSeen) {
+    endingSeen = true;
+    showEpilogue(epilogue);
+  }
 }
+
+// Set once per session so the ending does not reappear every HUD refresh, but a
+// player can always reopen it from the journal with the button.
+let endingSeen = false;
+
+function showEpilogue(epilogue) {
+  epilogueTitle.textContent = epilogue.title;
+  epilogueOpening.textContent = epilogue.opening;
+  const branchHtml = epilogue.branches
+    .map((branch) => `<p class="epilogue-line">${escapeHtml(branch.text)}</p>`)
+    .join('');
+  // If the save has no record of the choices made, say so rather than presenting
+  // a shorter ending as if it were the whole story.
+  epilogueBranches.innerHTML = epilogue.branchesUnrecorded
+    ? `${branchHtml}<p class="epilogue-line">Some of what you did here was not written down, and the record of it is gone.</p>`
+    : branchHtml;
+  epilogueClosers.innerHTML = epilogue.closers
+    .map((closer) => `<p class="epilogue-standing"><strong>${escapeHtml(closer.name)}.</strong> ${escapeHtml(closer.text)}</p>`)
+    .join('');
+  epilogueClosing.textContent = epilogue.closing;
+  epilogueEl.hidden = false;
+  cue('quest');
+}
+
+function closeEpilogue() {
+  epilogueEl.hidden = true;
+}
+
+endingOpen.addEventListener('click', () => {
+  const epilogue = buildEpilogue(state);
+  if (epilogue) showEpilogue(epilogue);
+});
+epilogueClose.addEventListener('click', closeEpilogue);
 
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (char) => ({

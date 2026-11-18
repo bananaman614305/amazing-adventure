@@ -373,7 +373,63 @@ instructions.
 
 ## Current task
 
-Round 11 — Sound: the game was completely silent.
+Round 12 — The ending: six quests used to just stop.
+
+PRs #5–#12 are published and open for the human. Round 11 gave the game sound.
+This round fixes the biggest remaining narrative gap: **there was no ending at
+all.** A player who finished all six quests got silence. No acknowledgement, no
+conclusion, nothing — which makes a complete game read as an unfinished one.
+
+### What Round 12 adds
+
+- `src/epilogue.js` (pure, 16 unit tests): `storyComplete()`, `storyProgress()`,
+  `branchLines()`, `standingSummary()`, `factionClosers()` and `buildEpilogue()`.
+- **The ending is composed from what the player actually did**, not written once
+  for everybody:
+  - one line per **branch** taken (ledger: named vs covered; toll: collected vs
+    waived; arrears: paid vs forgiven);
+  - a closing line for **each faction**, per tier — so a player the Watch hates
+    reads "Halden has written your description in the gate ledger, underlined"
+    while a trusted player reads "Halden salutes you at the gate";
+  - a best/worst standing summary, and a closing paragraph about leaving.
+- Two players finishing the same six quests get **materially different endings**.
+  Verified by comparing two full playthroughs in unit tests.
+- The epilogue appears once as a quiet paper-toned overlay on completion, and is
+  **re-readable from the journal** at any time afterwards.
+- It **cannot appear early**: `buildEpilogue()` returns `null` until every quest is
+  done, asserted both in unit tests and in the browser.
+
+### A truthfulness bug I caught in my own work
+
+A save finished *before* branch outcomes were recorded — or a hand-edited one —
+has no `outcomes`, so the ending rendered with **zero branch lines**: a shorter
+ending presented as the whole story, silently implying the player made no
+choices. It now sets `branchesUnrecorded` and says so in the text: "Some of what
+you did here was not written down, and the record of it is gone."
+
+### Checks actually run this round
+
+- `npm test` — **264/264 pass** (was 248): 16 new epilogue cases, including that
+  the ending withholds itself until the story is complete, never mentions a branch
+  that was not taken, ignores unknown outcomes from a hand-edited save, admits an
+  incomplete record, and differs between two full playthroughs.
+- `npm run test:browser` — **103/103 pass, exit 0** (was 98). Five new checks: no
+  ending before completion, the epilogue appears on completion, it reports the
+  branches actually taken and not the others, it is honest about a hostile faction,
+  and it can be dismissed and reopened from the journal.
+- `npm run test:mobile` — **137/137 pass, exit 0**.
+- **Totals: 504 checks — 264 unit, 103 desktop, 137 mobile.**
+- The manifest test again caught the new `src/epilogue.js` missing from
+  `requiredFiles`; regenerated, now 23 files.
+
+### Evidence
+
+`artifacts/round12-ending.png`: the overlay is deliberately dark (mean luminance
+21.3 over the whole frame, as designed for a modal), so I measured the **card
+region separately**: mean luminance 41.8, **11.2% text pixels above 90**, max
+luminance 247, 1272 distinct colours — real rendered text, not a blank sheet.
+
+## Previous round — Round 11: sound
 
 PRs #5–#11 are published and open for the human. Before starting another
 mechanic I audited what already existed, exhaustively:
@@ -725,9 +781,9 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **Let sound vary by area, not just by time of day.** The drone currently
-   changes only with the phase; the market lane and the plaza sound identical,
-   which undersells them being different places.
+2. **A new game plus, or a reason to start again.** The ending now closes the
+   story, but there is nothing that rewards a second run knowing what the branches
+   lead to.
 3. **Give the lane its own work board, or a second reason to cross the gate.**
    The plaza board makes standing earnable early, but the lane has no equivalent,
    so the two areas are not symmetrical in how a player recovers standing.
