@@ -57,7 +57,15 @@ export class Player {
       this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
     });
 
+    // Typing in a text field must not walk the player. The compass box is the only
+    // text input, but this guard belongs at the movement source rather than relying
+    // on every other listener to remember it.
+    const isTyping = (event) => event.target instanceof HTMLInputElement
+      || event.target instanceof HTMLTextAreaElement
+      || event.target?.isContentEditable === true;
+
     this._onKeyDown = (event) => {
+      if (isTyping(event)) return;
       this.keys.add(event.code);
     };
     this._onKeyUp = (event) => {

@@ -461,6 +461,24 @@
     body.dialogue-open #sound-toggle { opacity: 0; pointer-events: none; }
 
     /* The ending is deliberately quiet: paper, not fireworks. */
+    /* The compass panel. Text, not a minimap: it has to work for a player who
+       cannot see the 3D view, and reading a list is the accessible equivalent. */
+    #compass-list { margin: 0 0 10px; padding: 0; list-style: none; }
+    #compass-list li {
+      display: flex; justify-content: space-between; gap: 10px;
+      padding: 5px 0; border-bottom: 1px solid #1e2a3c;
+      font-size: 13px; color: #b8c6d8;
+    }
+    #compass-list .compass-bearing { color: #ffd479; font-variant-numeric: tabular-nums; }
+    #compass-ask { margin: 0 0 12px; }
+    #compass-ask label { display: block; font-size: 12px; color: #93a4bb; margin-bottom: 4px; }
+    #compass-ask input {
+      width: 100%; box-sizing: border-box; padding: 9px 10px; border-radius: 8px;
+      background: #0c1420; color: #e6eefb; border: 1px solid #2b3a52;
+      font: inherit; font-size: 13px;
+    }
+    #compass-results { margin-top: 6px; font-size: 12px; color: #8fb0d8; min-height: 16px; }
+
     #ending-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid #2b3a52; }
     #ending-section p { margin: 0 0 10px; color: #c8d4e4; font-size: 13px; line-height: 1.55; }
     #ending-section button {
@@ -580,6 +598,14 @@
     <ul id="journal-list"></ul>
     <h3>Standing</h3>
     <ul id="standing-list"></ul>
+    <h3>Where things are</h3>
+    <div id="compass-list"></div>
+    <div id="compass-ask">
+      <label for="compass-input">Walk to…</label>
+      <input type="text" id="compass-input" list="compass-options" autocomplete="off" placeholder="a place or person">
+      <datalist id="compass-options"></datalist>
+      <div id="compass-results" role="status" aria-live="polite"></div>
+    </div>
     <div id="ending-section" hidden>
       <h3>The end</h3>
       <p id="ending-text"></p>
@@ -660,7 +686,7 @@
       <p class="round">A living world · v0.3.0</p>
       <p class="controls desktop-only">
         W A S D walk &nbsp;·&nbsp; mouse look &nbsp;·&nbsp; Shift run<br>
-        E talk / interact &nbsp;·&nbsp; J journal &nbsp;·&nbsp; C describe &nbsp;·&nbsp; Esc pause<br>
+        E talk / interact &nbsp;·&nbsp; J journal &nbsp;·&nbsp; C describe &nbsp;·&nbsp; L nearby &nbsp;·&nbsp; Esc pause<br>
         At a bench, E rests until the next hour
       </p>
       <p class="controls touch-only">

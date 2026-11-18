@@ -373,7 +373,67 @@ instructions.
 
 ## Current task
 
-Round 13 — The game was unplayable with a screen reader.
+Round 14 — The world was unnavigable without sight.
+
+PRs #5–#14 are published and open for the human. Round 13 made the game *announce*
+things. I flagged the remaining gap in my own report at the time: announcements tell
+you what changed, but there was still **no way to move through the world without
+sight**. Walking is WASD against a canvas. This round fixes that.
+
+### What Round 14 adds
+
+- `src/compass.js` (pure, 22 unit tests): `bearingDegrees()`, `compassBearing()`,
+  `facingDegrees()`, `relativeDirection()`, `distanceTo()`, `distancePhrase()`,
+  `describeTarget()`, `nearbyTargets()`, `routeHint()` and `sentenceCase()`.
+- **Directions are computed from real coordinates and asserted against the actual
+  map.** The world's axes are north = -Z (the wall and lane beyond it), east = +X
+  (the market stalls). A flipped axis would send a blind player the wrong way with
+  no way to notice, so tests check the gate really does read north-ish from the
+  plaza centre and the lane really is at more negative z.
+- **Two ways to use it**, both derived from one source so they cannot disagree:
+  - **Spoken:** `L` lists what is nearby with relative direction, distance and
+    world bearing; `compassTargets()` includes every NPC **where they actually are
+    at this hour**, not where they spawned.
+  - **Written:** a compass list in the journal panel, plus a "walk to…" box that
+    takes a place or person's name and reports the route in text and aloud.
+- Distances are phrases ("a few steps away", "across the plaza"), never numerals,
+  because these are read aloud.
+
+### Two real bugs I found, both by testing rather than reading
+
+1. **Typing walked the player and ate the letters.** The compass box is the game's
+   first text input, and it exposed a latent problem: global hotkeys were handled
+   with no check for a focused field. Typing `bench` arrived as **`benh`** — the
+   `c` triggered "describe" — and typing `wwww` physically moved the player.
+   Fixed **at the movement source** in `player.js` (and in the global handler),
+   so no future input field can reintroduce it.
+2. **My own tests were wrong three times.** I asserted the gate was due *north* of
+   the plaza centre (it is at x = 9.5, so it is **north-east**) and that the job
+   board was south-west-ish (facing north it is **behind** you). The code was
+   right; I corrected the tests to assert what is actually true. I also wrote
+   lowercase expectations that my own capitalisation fix then broke.
+
+### Checks actually run this round
+
+- `npm test` — **302/302 pass** (was 280): 22 new compass cases.
+- `npm run test:browser` — **117/117 pass, exit 0** (was 109). New checks: the
+  compass knows real landmarks and NPC positions; facing north reports the gate
+  ahead; turning around **flips the relative direction but not the world bearing**;
+  asking for a place names it with a bearing; **typing does not move the player**;
+  the written and spoken answers are identical; an unknown place is reported; and
+  the journal shows a written compass list.
+- `npm run test:mobile` — **137/137 pass, exit 0**.
+- **Totals: 556 checks — 302 unit, 117 desktop, 137 mobile.**
+- Manifest test caught `src/compass.js`; now 25 files.
+
+### Evidence
+
+`artifacts/round14-compass.png` — 1280x800, mean luminance 34.7, max 247, **5817
+distinct colours**: a real rendered frame. I am text-only and did not inspect it;
+the compass claims rest on the browser assertions above, including the
+direction-reversal check.
+
+## Previous round — Round 13: screen-reader support
 
 PRs #5–#13 are published and open for the human. Round 12 closed the story.
 This round addresses the one thing that made the game **not merely awkward but
@@ -851,9 +911,9 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **A text alternative to the 3D scene.** Screen readers now get state changes,
-   but there is still no way to move through the world without sight: walking is
-   WASD against a canvas. A compass or "walk to" list would be a real step further.
+2. **Travelling to a place, not just being told where it is.** The compass currently
+   describes a route; a blind player still has to walk it step by step. A guided
+   "take me there" that walks the player would close the loop.
 3. **Give the lane its own work board, or a second reason to cross the gate.**
    The plaza board makes standing earnable early, but the lane has no equivalent,
    so the two areas are not symmetrical in how a player recovers standing.

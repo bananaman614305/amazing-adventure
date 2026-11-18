@@ -24,6 +24,7 @@ export const REQUIRED_FILES = [
   'src/audio.js',
   'src/epilogue.js',
   'src/announce.js',
+  'src/compass.js',
   'src/factions.js',
   'src/ambient.js',
   'src/daynight.js',

@@ -30,6 +30,7 @@ import { createRecovery, shouldPanicShed } from './resilience.js';
 import { createSoundscape, readPreference } from './audio.js';
 import { buildEpilogue, storyComplete, storyProgress } from './epilogue.js';
 import { describeState, questChanges, coinAnnouncement, interactableAnnouncement, areaAnnouncement } from './announce.js';
+import { nearbyTargets, routeHint, describeTarget } from './compass.js';
 import {
   stickVector, knobOffset, lookDelta, clampPitch, wantsTouchControls,
   interactLabel, STICK_RADIUS
@@ -55,7 +56,67 @@ const epilogueClosers = $('epilogue-closers');
 const epilogueClosing = $('epilogue-closing');
 const epilogueClose = $('epilogue-close');
 const srLive = $('sr-live');
+const compassInput = $('compass-input');
+const compassResults = $('compass-results');
+const compassList = $('compass-list');
+const compassOptions = $('compass-options');
 const srAlert = $('sr-alert');
+
+// --- The spoken compass ----------------------------------------------------
+// The world's walkable places, as coordinates. Built fresh on each use so an NPC
+// is reported where they actually are at this hour, not where they spawned.
+function compassTargets() {
+  const targets = [
+    { id: 'fountain', label: 'the fountain', x: 0, z: 0 },
+    { id: 'gate', label: 'the north gate', x: GATE.x, z: GATE.z },
+    { id: 'bench', label: 'the bench', x: BENCH.x, z: BENCH.z },
+    { id: 'ledger', label: 'the ledger spot', x: LEDGER_SPOT.x, z: LEDGER_SPOT.z },
+    { id: 'jobboard', label: 'the job board', x: JOB_BOARD.x, z: JOB_BOARD.z },
+    { id: 'noticeboard', label: 'the notice board', x: NOTICE_BOARD.x, z: NOTICE_BOARD.z },
+    { id: 'key', label: 'the place the key was lost', x: KEY_SPOT.x, z: KEY_SPOT.z }
+  ];
+  for (const npc of npcs) {
+    targets.push({
+      id: npc.id,
+      label: npc.name,
+      x: npc.group.position.x,
+      z: npc.group.position.z
+    });
+  }
+  return targets;
+}
+
+/** Where the player is and which way they face, as the compass needs it. */
+function compassOrigin() {
+  return { from: { x: player.position.x, z: player.position.z }, yaw: player.yaw };
+}
+
+/** Speak the nearest things worth walking to. */
+function announceNearby(count = 4) {
+  const { from, yaw } = compassOrigin();
+  const list = nearbyTargets(yaw, from, compassTargets(), count);
+  if (!list.length) {
+    announce('Nothing marked is close by.');
+    return [];
+  }
+  announce(list.map((entry) => entry.phrase).join(' '));
+  return list;
+}
+
+/** Speak the way to one named thing, which is what a stuck player actually needs. */
+function announceRouteTo(query) {
+  const { from, yaw } = compassOrigin();
+  const wanted = String(query || '').trim().toLowerCase();
+  if (!wanted) return null;
+  const match = compassTargets().find((target) =>
+    target.label.toLowerCase().includes(wanted) || target.id.includes(wanted));
+  if (!match) {
+    announce(`There is nothing called ${query} that I know of.`, { urgent: true });
+    return null;
+  }
+  announce(routeHint(yaw, from, match) || `${match.label} is right where you are.`, { urgent: true });
+  return match;
+}
 
 // --- Screen-reader announcements -----------------------------------------
 // The game is first-person and drawn to a canvas, so nearly everything it
@@ -378,6 +439,22 @@ function refreshHUD() {
     .join('');
   standingList.dataset.tiers = reputationView(state).map((f) => f.tier).join(',');
 
+  // The compass panel. Derived from the same function the spoken compass uses, so
+  // the written list and the spoken directions can never disagree.
+  const { from, yaw } = compassOrigin();
+  const headings = nearbyTargets(yaw, from, compassTargets(), 6);
+  compassList.innerHTML = headings.length
+    ? headings
+        .map((entry) => `<li><span>${escapeHtml(entry.label)}</span><span class="compass-bearing">${
+          escapeHtml(entry.relative)} · ${escapeHtml(entry.bearing)}</span></li>`)
+        .join('')
+    : '<li class="muted">Nothing marked nearby.</li>';
+  if (compassOptions) {
+    compassOptions.innerHTML = compassTargets()
+      .map((target) => `<option value="${escapeHtml(target.label)}"></option>`)
+      .join('');
+  }
+
   // The ending. Shown only when every quest is finished, and read out once as an
   // overlay so a player who completes the story is actually told they finished it
   // rather than being left in silence.
@@ -419,6 +496,35 @@ function showEpilogue(epilogue) {
 function closeEpilogue() {
   epilogueEl.hidden = true;
 }
+
+// The "walk to" box is the written form of the same spoken command. Typing a place
+// and pressing enter reports the route in the panel and out loud.
+function runCompassQuery() {
+  const query = compassInput.value.trim();
+  if (!query) return;
+  const { from, yaw } = compassOrigin();
+  const wanted = query.toLowerCase();
+  const match = compassTargets().find((target) =>
+    target.label.toLowerCase().includes(wanted) || target.id.includes(wanted));
+  if (!match) {
+    compassResults.textContent = `Nothing called “${query}” is known.`;
+    announce(`There is nothing called ${query} that I know of.`, { urgent: true });
+    return;
+  }
+  const described = describeTarget(yaw, from, match);
+  compassResults.textContent = described.phrase;
+  announce(described.phrase, { urgent: true });
+}
+
+compassInput.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  event.stopPropagation();
+  runCompassQuery();
+});
+compassInput.addEventListener('change', () => {
+  compassResults.textContent = '';
+});
 
 endingOpen.addEventListener('click', () => {
   const epilogue = buildEpilogue(state);
@@ -1050,6 +1156,13 @@ function refreshTouchInteract() {
 
 // --- Input ---------------------------------------------------------------
 document.addEventListener('keydown', (event) => {
+  // While the player is typing in the "walk to" box, every global hotkey must stay
+  // out of the way: W/A/S/D moved the player, and M, J, C and L all fired mid-word
+  // (typing "bench" arrived as "benh"). Escape still works, to leave the field.
+  if (event.target instanceof HTMLInputElement) {
+    if (event.code === 'Escape') event.target.blur();
+    return;
+  }
   if (event.code === 'Escape') {
     if (!touchPause.hidden) {
       showTouchPause(false);
@@ -1069,6 +1182,14 @@ document.addEventListener('keydown', (event) => {
     // there is genuinely nowhere to be.
     if (!started) return;
     announce(describeState(state, areaAt(player.position.x, player.position.z) || 'outside', nearestInteractable), { urgent: true });
+    event.preventDefault();
+    return;
+  }
+  if (event.code === 'KeyL') {
+    // "What is near me?" The spoken equivalent of looking around.
+    if (!started) return;
+    if (!dialogueEl.hidden) return;
+    announceNearby();
     event.preventDefault();
     return;
   }
@@ -1376,6 +1497,9 @@ window.amazingAdventure = {
   TERRACE,
   areaAt: () => areaAt(player.position.x, player.position.z),
   describe: () => describeState(state, areaAt(player.position.x, player.position.z) || 'outside', nearestInteractable),
+  compassTargets,
+  announceNearby,
+  announceRouteTo,
   announce,
   // Exposed so tests can drive the same announcement path production uses,
   // rather than re-implementing the diff and testing the copy.
