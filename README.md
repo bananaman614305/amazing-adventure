@@ -51,6 +51,15 @@ desktop.
 Desktop controls are unchanged: WASD, mouse look, Shift to run, E to interact,
 J journal, Esc pause, P to toggle adaptive resolution.
 
+### A quest that crosses the gate
+
+The market lane is not a dead end. Once Wren's ledger is closed she asks you to
+carry three weeks of overdue toll money south to Mara in the plaza, and then to
+carry Mara's mark back north to her. Both the pouch and the mark are real items,
+so the quest is gated on what you are holding rather than on what the game
+remembers. Paying in full and forgiving the debt end differently, and each pleases
+a different faction.
+
 ### When a phone drops the graphics context
 
 Mobile browsers throw away the WebGL context under memory pressure or when the

@@ -373,10 +373,41 @@ instructions.
 
 ## Current task
 
-Round 6 — mobile resilience. The v0.3.0 playtest candidate is published as PR #6.
-This round hardens the phone build against the way mobile WebGL actually fails:
-the browser dropping the graphics context, which previously left a permanently
-blank canvas with no explanation.
+Round 7 — The Lane's Arrears: the two areas now depend on each other.
+
+PR #6 (v0.3.0 phone candidate) and PR #7 (context-loss recovery + release
+manifest) are published and open for the human. Real-device testing is still
+blocked on hardware I do not have, so this round returns to the game itself and
+closes the biggest design gap left in it: the market lane was a dead end. Its one
+quest resolved inside the lane and nothing ever took you back to the plaza.
+
+### What Round 7 adds
+
+- **A sixth quest, *The Lane's Arrears***, that cannot be finished in one place.
+  Wren hands you a pouch of three weeks' overdue toll money; you must carry it
+  **south through the gate** to Mara in the plaza, then carry **her mark back
+  north** to Wren. The pouch and the mark are real inventory items, so the quest
+  is gated on what you are physically holding, not on what the state remembers.
+- **Two endings with different consequences on both sides of the gate.** Paying in
+  full backs the books and pleases the Watch (+5 Watch); forgiving the debt pleases
+  the Keepers but leaves a shortfall the Watch will ask about (−5 Watch). The
+  journal reports the ending you actually reached.
+- Unlocked only by finishing Wren's ledger, so it continues that story rather than
+  sitting beside it.
+
+### Bugs found and fixed while reviewing my own work
+
+1. **A player could be permanently stranded.** If Mara's mark left the pack (a
+   dropped save, a bug, a hand-edited file), Mara still said "take my mark back to
+   Wren", Wren offered nothing, and the quest could never be finished — with no
+   prompt, no error, and no way out. Mara now notices the empty hands, says so, and
+   writes the mark out again; `reissueArrearsMark()` restores the *correct* item for
+   the ending you chose (a note on the forgiving branch, never a receipt). Found by
+   deliberately probing stuck states, not by a passing test.
+2. **A false alarm I chased down rather than assumed**: a reputation message
+   looked like it applied "+1" for a delta of 10, which would have been a real
+   scaling bug — my own `.slice(0, 60)` had truncated "+10". Verified the scaling
+   was correct before changing anything.
 
 ### What Round 6 adds
 
@@ -435,16 +466,21 @@ hosting step to guess, the release now describes itself:
 
 ### Checks actually run this round
 
-- `npm test` — **171/171 pass** (was 151): 9 resilience cases, 2 `force()` cases
-  and 9 manifest cases (plus a 10th added alongside).
-- `npm run test:browser` — **70/70 pass, exit 0**.
+- `npm test` — **191/191 pass** (was 171): 20 new arrears cases, including the
+  stranding and re-issue paths, both endings, save/reload of a carried pouch, and
+  an unknown quest step falling back safely.
+- `npm run test:browser` — **77/77 pass, exit 0**: 7 new checks play the whole
+  arrears loop through the real dialogue buttons — Wren's offer, the pouch
+  landing in the pack, Mara receiving it across the gate, the receipt appearing,
+  the reward being paid on the walk back, the journal matching the ending, and a
+  lost mark being replaceable.
 - `npm run test:mobile` — **137/137 pass, exit 0** across four emulated profiles.
   Five new checks per profile drive the real `WEBGL_lose_context` extension: the
   recovery message appears, progress is saved at the moment of loss, the recovery
   sheet offers a *usable* reload button (visible, labelled, at least 44 px tall),
   the sheet tells the player their progress is kept, and the game recovers when
   the context returns.
-- **Totals: 378 checks — 171 unit, 70 desktop, 137 mobile.**
+- **Totals: 405 checks — 191 unit, 77 desktop, 137 mobile.**
 
 ## Next steps
 
@@ -452,8 +488,9 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **Surface a play-test entry point in the dashboard.** The owner wants to launch
-   the preview from a Play tab; the release metadata the Play tab needs is already
-   in `RELEASE.md` and the publication request.
-3. Then return to game content: let reputation refuse plaza content too, and give
-   the two areas something to carry between them so the lane is not a dead end.
+2. **Let reputation refuse plaza content, not just lane content.** Wren refuses
+   below Warm Market; no plaza NPC refuses anything yet, so the reputation built
+   in the lane only ever opens doors, never closes them. Making one plaza NPC
+   turn the player away at Cold would make the system cut both ways.
+3. Then widen the walk itself: the gate is the only route between the areas, so
+   the next content should give the street beyond it a second reason to exist.

@@ -29,6 +29,12 @@ import {
   ledgerUnlocked,
   LEDGER_REWARD,
   TOLL_COST,
+  ARREARS_REWARD,
+  arrearsUnlocked,
+  startArrears,
+  deliverArrears,
+  finishArrears,
+  reissueArrearsMark,
   remember
 } from './state.js';
 import { npcTier, FACTIONS, NPC_FACTION } from './factions.js';
@@ -81,6 +87,51 @@ const mara = {
   talk(state, ctx) {
     const status = questStatus(state, 'lanterns');
     const mem = memoryFor(state, 'mara');
+    const arrears = questStatus(state, 'arrears');
+
+    // The arrears arrive from the lane, so Mara is the far end of a walk the
+    // player has to actually make. Paying in full and forgiving the debt lead
+    // to different reputations, and to a different note carried back north.
+    if (arrears === 'started' && hasItem(state, 'arrears_pouch')) {
+      return node(
+        'Mara the Keeper',
+        'Mara looks at the pouch, then at you. “That is the lane’s money. Three weeks late and carried by a stranger. Did Wren send you?”',
+        [
+          {
+            label: 'She did. Here is the full amount.',
+            do: () => deliverArrears(state, 'pay'),
+            next: () => node('Mara the Keeper', 'She counts it twice, then signs her mark on the slip and presses it into your hand. “Then we are square, and the books will say so. Take this back to her.”')
+          },
+          {
+            label: 'She did. But the lane cannot pay this.',
+            do: () => deliverArrears(state, 'forgive'),
+            next: () => node('Mara the Keeper', 'Mara is quiet for a while. “Then I will write it off, and the Watch can ask me why the lanterns are short this quarter.” She hands you a folded note. “Give her this. She will not like it.”')
+          },
+          end('Not yet')
+        ]
+      );
+    }
+
+    if (arrears === 'delivered') {
+      const holding = hasItem(state, 'keeper_note') || hasItem(state, 'keeper_receipt');
+      return node(
+        'Mara the Keeper',
+        !holding
+          ? 'Mara looks at your empty hands. “You have lost my mark. Very well. I will write it out again — do not lose this one.”'
+          : hasItem(state, 'keeper_note')
+            ? '“Give Wren the note. She will argue. Let her.”'
+            : '“Take my mark back to Wren. She will want it in her own hand, not my word.”',
+        [
+          // Never leave the player holding a quest they cannot finish.
+          ...(!holding ? [{
+            label: 'Take a fresh mark.',
+            do: () => reissueArrearsMark(state),
+            next: () => node('Mara the Keeper', 'She presses it into your hand and closes her fingers around it. “North. Past the gate.”')
+          }] : []),
+          end('Leave')
+        ]
+      );
+    }
 
     if (status === 'oil_bought' && hasItem(state, 'lantern_oil')) {
       return node(
@@ -520,6 +571,55 @@ const wren = {
             label: 'Cover for the trader. (Market +20, Watch -10)',
             do: () => returnLedger(state, 'cover')
           },
+          end('Not yet')
+        ]
+      );
+    }
+
+    // With the ledger closed, Wren has a bigger problem: the lane owes Mara.
+    const arrears = questStatus(state, 'arrears');
+    if (status === 'done' && arrears === 'none' && arrearsUnlocked(state)) {
+      return node(
+        'Wren the Toll Clerk',
+        'Wren closes the ledger and rubs her eyes. “One thing settled, one thing not. The lane is three weeks behind to Mara in the plaza, and she will not come north to ask.”',
+        [
+          {
+            label: 'I could carry it to her.',
+            do: () => startArrears(state),
+            next: () => node('Wren the Toll Clerk', 'She weighs a canvas pouch in one hand and sets it on the counter. “Count it if you like. Do not lose it. Go out the gate, south past the fountain, and give it to Mara herself.”')
+          },
+          { label: 'Why not send it with someone?', next: () => node('Wren the Toll Clerk', '“Because whoever carries it has to look Mara in the eye and explain why it is late. Nobody here will do that.”') },
+          end('Leave')
+        ]
+      );
+    }
+
+    if (arrears === 'started') {
+      return node(
+        'Wren the Toll Clerk',
+        '“Still carrying it? Mara is south, past the gate and across the plaza. The fountain. You cannot miss her.”',
+        [ end('Leave') ]
+      );
+    }
+
+    if (arrears === 'delivered') {
+      const receipt = hasItem(state, 'keeper_receipt');
+      const note = hasItem(state, 'keeper_note');
+      return node(
+        'Wren the Toll Clerk',
+        receipt
+          ? 'Wren reads Mara’s mark twice. “Paid in full. She signed it herself.” She sounds more relieved than pleased.'
+          : note
+            ? 'Wren reads Mara’s note and her jaw tightens. “Forgiven. So the books stay short and the Watch will want to know why.”'
+            : '“You came back without anything from Mara. Go and see her before you come to me.”',
+        [
+          ...(receipt || note ? [{
+            label: `Hand over Mara’s ${receipt ? 'receipt' : 'note'}. (${ARREARS_REWARD} coins)`,
+            do: () => finishArrears(state),
+            next: () => node('Wren the Toll Clerk', receipt
+              ? '“Then the lane is square. Take this for the walk — and for not making me do it.”'
+              : '“Then I will write it up as forgiven, and let the Watch make of it what they will. Take this.”')
+          }] : []),
           end('Not yet')
         ]
       );

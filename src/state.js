@@ -10,10 +10,13 @@ export const ITEMS = {
   keeper_promise: { name: 'Keeper’s Promise', description: 'Mara’s word that the plaza owes you a favour.' },
   pip_ribbon: { name: 'Pip’s Ribbon', description: 'A green ribbon. Pip tied it on and would not take it back.' },
   oswin_marker: { name: 'Trader’s Marker', description: 'A wooden token from Oswin. Good for one favour, whenever you ask.' },
-  toll_ledger: { name: 'Toll Ledger', description: 'Wren’s missing ledger. The last page names someone, and it is not Oswin.' }
+  toll_ledger: { name: 'Toll Ledger', description: 'Wren’s missing ledger. The last page names someone, and it is not Oswin.' },
+  arrears_pouch: { name: 'Pouch of Arrears', description: 'Three weeks of lane toll money, sewn into a canvas pouch. Mara is owed this.' },
+  keeper_receipt: { name: 'Keeper’s Receipt', description: 'Mara’s mark, dated and countersigned. Proof the plaza took the arrears in full.' },
+  keeper_note: { name: 'Keeper’s Note', description: 'Mara’s writing, forgiving the lane’s arrears this quarter. Wren will not like the reason.' }
 };
 
-export const QUEST_ORDER = ['lanterns', 'key', 'cheer', 'toll', 'ledger'];
+export const QUEST_ORDER = ['lanterns', 'key', 'cheer', 'toll', 'ledger', 'arrears'];
 
 export const QUESTS = {
   lanterns: {
@@ -69,6 +72,18 @@ export const QUESTS = {
       collected: 'You paid Oswin’s toll out of your own purse. Halden has the money; Oswin is not grateful.',
       waived: 'You talked Halden into waiving the toll. Oswin owes you again.'
     }
+  },
+  arrears: {
+    title: 'The Lane’s Arrears',
+    giver: 'wren',
+    steps: [
+      { id: 'started', journal: 'Wren gave you a pouch of lane arrears for Mara in the plaza. Carry it south through the gate.' },
+      { id: 'delivered', journal: 'Mara has settled the arrears. Carry her mark back north to Wren in the market lane.' }
+    ],
+    doneBy: {
+      pay: 'Mara took the lane’s arrears in full and signed for them. Wren’s books balance for the first time in a month.',
+      forgive: 'Mara forgave the arrears instead of taking them. Wren has her note, and the Watch will have questions about the shortfall.'
+    }
   }
 };
 
@@ -79,7 +94,7 @@ export const TOLL_COST = 5;
 export function createInitialState() {
   return {
     version: 2,
-    quests: { lanterns: 'none', key: 'none', cheer: 'none', toll: 'none', ledger: 'none' },
+    quests: { lanterns: 'none', key: 'none', cheer: 'none', toll: 'none', ledger: 'none', arrears: 'none' },
     inventory: [],
     perks: {},
     flags: { coins: 6 },
@@ -423,6 +438,105 @@ export function returnLedger(state, choice = 'name') {
     message: `Wren writes the name down. ${standing.message}`,
     topic: 'ledger_named', opinion: 1,
     reward: LEDGER_REWARD
+  };
+}
+
+// --- The arrears: carrying between the two areas -------------------------
+//
+// Wren's ledger is only half the lane's problem. The toll money is owed to Mara
+// in the plaza, and the only way to settle it is to walk it there -- so this
+// quest exists to make the two areas depend on each other, in both directions.
+// The pouch must physically be in the pack to hand over, and Mara's mark must
+// physically be in the pack to close it out.
+
+export const ARREARS_REWARD = 3;
+
+/** Wren only trusts you with the pouch once her own ledger trouble is over. */
+export function arrearsUnlocked(state) {
+  return questStatus(state, 'ledger') === 'done';
+}
+
+export function startArrears(state) {
+  if (questStatus(state, 'arrears') !== 'none') return noChange('Wren has already given you the pouch.');
+  if (!arrearsUnlocked(state)) return noChange('Wren is still waiting on her ledger.');
+  setQuestStep(state, 'arrears', 'started');
+  addItem(state, 'arrears_pouch');
+  return { changed: true, message: 'Quest started: The Lane’s Arrears', topic: 'arrears_started' };
+}
+
+/**
+ * Handing the pouch to Mara. Paying in full pleases the Watch because the books
+ * balance; forgiving it pleases the Keepers but leaves a shortfall the Watch
+ * will ask about. Neither is free, and both are remembered.
+ */
+export function deliverArrears(state, choice = 'pay') {
+  if (questStatus(state, 'arrears') !== 'started') return noChange('You are not carrying anything for Mara.');
+  if (!hasItem(state, 'arrears_pouch')) return noChange('The pouch is not in your pack.');
+  removeItem(state, 'arrears_pouch');
+  state.outcomes.arrears = choice === 'forgive' ? 'forgive' : 'pay';
+  setQuestStep(state, 'arrears', 'delivered');
+  if (choice === 'forgive') {
+    addItem(state, 'keeper_note');
+    const standing = applyStanding(state, {
+      factionId: 'keepers', delta: 10, rivals: [{ id: 'trade', delta: -5 }]
+    });
+    return {
+      changed: true,
+      message: `Mara writes off the arrears. ${standing.message}`,
+      topic: 'arrears_forgiven', opinion: 1
+    };
+  }
+  addItem(state, 'keeper_receipt');
+  const standing = applyStanding(state, {
+    factionId: 'keepers', delta: 10, rivals: [{ id: 'watch', delta: 5 }]
+  });
+  return {
+    changed: true,
+    message: `Mara takes the arrears and signs. ${standing.message}`,
+    topic: 'arrears_paid', opinion: 1
+  };
+}
+
+/**
+ * Mara re-issues her mark if it somehow left the pack (a dropped save, a bug, a
+ * hand-edited file). Without this the quest dead-ends: Mara tells you to take
+ * something back to Wren that you no longer have, and neither of them offers it
+ * again. Cheap insurance against a permanently stuck player.
+ */
+export function reissueArrearsMark(state) {
+  if (questStatus(state, 'arrears') !== 'delivered') return noChange('Mara has nothing to re-issue.');
+  if (hasItem(state, 'keeper_receipt') || hasItem(state, 'keeper_note')) {
+    return noChange('You still have Mara’s mark.');
+  }
+  const item = state.outcomes?.arrears === 'forgive' ? 'keeper_note' : 'keeper_receipt';
+  addItem(state, item);
+  return { changed: true, message: 'Mara writes out her mark again.', topic: 'arrears_reissued' };
+}
+
+/** Closing the loop needs Mara's mark in hand, not just a memory of it. */
+export function finishArrears(state) {
+  const status = questStatus(state, 'arrears');
+  if (status !== 'delivered') return noChange('Wren is not waiting on you for anything.');
+  const paid = hasItem(state, 'keeper_receipt');
+  const forgiven = hasItem(state, 'keeper_note');
+  if (!paid && !forgiven) return noChange('You have nothing from Mara to show her.');
+  removeItem(state, 'keeper_receipt');
+  removeItem(state, 'keeper_note');
+  setQuestStep(state, 'arrears', 'done');
+  addCoins(state, ARREARS_REWARD);
+  // Forgiving the debt costs the lane's standing with the Watch, and paying it
+  // costs nothing: the choice the player made on the plaza side decides this.
+  const standing = applyStanding(state, {
+    factionId: 'trade',
+    delta: 15,
+    rivals: paid ? [] : [{ id: 'watch', delta: -5 }]
+  });
+  return {
+    changed: true,
+    message: `Quest complete: The Lane’s Arrears. ${standing.message}`,
+    topic: 'arrears_done',
+    opinion: 2,
+    reward: ARREARS_REWARD
   };
 }
 
