@@ -19,6 +19,7 @@ export const REQUIRED_FILES = [
   'src/npcs.js',
   'src/dialogue.js',
   'src/state.js',
+  'src/refusal.js',
   'src/factions.js',
   'src/ambient.js',
   'src/daynight.js',

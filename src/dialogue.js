@@ -30,6 +30,7 @@ import {
   LEDGER_REWARD,
   TOLL_COST,
   ARREARS_REWARD,
+  REFUSAL_RULES,
   arrearsUnlocked,
   startArrears,
   deliverArrears,
@@ -38,6 +39,7 @@ import {
   remember
 } from './state.js';
 import { npcTier, FACTIONS, NPC_FACTION } from './factions.js';
+import { refusalFor, refusalHint } from './refusal.js';
 
 /**
  * A one-line greeting suffix that reflects how the NPC's faction currently
@@ -62,6 +64,25 @@ function standingGreeting(state, npcId) {
 }
 
 const node = (speaker, text, choices = []) => ({ speaker, text, choices });
+
+/**
+ * Builds the node shown when an NPC will not deal with the player. It always
+ * names the faction and says what would help, so the Standing panel is
+ * discoverable from the refusal itself rather than being a hidden system.
+ */
+function refusalNode(state, npcId, name, flavour) {
+  const refusal = refusalFor(state, npcId, REFUSAL_RULES);
+  if (!refusal) return null;
+  return node(name, `${flavour} ${refusalHint(refusal)}`, [
+    {
+      label: 'What would change your mind?',
+      next: () => node(name, refusal.shortfall >= 2
+        ? 'Do something for the people I answer to. Words will not move me, and neither will apologies.'
+        : 'One good turn. Help someone I trust and I will hear about it soon enough.')
+    },
+    end('Leave')
+  ]);
+}
 
 const say = (text) => ({ label: text, do: () => ({}) });
 const end = (label) => ({ label, end: true });
@@ -199,6 +220,11 @@ const oswin = {
     const status = questStatus(state, 'lanterns');
     const mem = memoryFor(state, 'oswin');
 
+    // Reputation cuts both ways: a player the Market distrusts cannot shop.
+    const refused = refusalNode(state, 'oswin', 'Oswin the Trader',
+      'Oswin looks up, recognises you, and goes back to folding cloth. “I have nothing for you.”');
+    if (refused) return refused;
+
     if (status === 'started') {
       return node('Oswin the Trader', `Lantern oil? The good stuff. Four coins${state.perks.oswin_debt ? ', or another promise' : ' — or a promise I can call in later'}.`, [
         {
@@ -308,6 +334,10 @@ const halden = {
   talk(state) {
     const status = questStatus(state, 'key');
     const mem = memoryFor(state, 'halden');
+
+    const refused = refusalNode(state, 'halden', 'Halden the Guard',
+      'Halden plants his spear and does not move aside. “Not you.”');
+    if (refused) return refused;
 
     if (status === 'found' && hasItem(state, 'brass_key')) {
       return node('Halden the Guard', 'That is my key. Where — never mind. Hand it here.', [

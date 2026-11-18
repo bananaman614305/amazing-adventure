@@ -373,7 +373,59 @@ instructions.
 
 ## Current task
 
-Round 7 — The Lane's Arrears: the two areas now depend on each other.
+Round 8 — Reputation refuses content, and cannot soft-lock the game.
+
+PRs #5–#8 are published and open for the human. Real-device testing is still
+blocked on hardware I do not have. Last round closed the lane's dead end; this
+round fixes the other half of the standing system.
+
+Until now standing only ever **opened** doors: Wren hands out her ledger above
+Warm Market, and nothing anywhere turned the player away. A reputation that can
+never be lost in any practical sense is not really a reputation.
+
+### What Round 8 adds
+
+- `src/refusal.js` (pure, 15 unit tests): a general refusal rule set with
+  `refusalFor()`, `refusalHint()` and `belowTier()`. `required` is the lowest tier
+  that still gets served, so `'warm'` refuses everything below Warm.
+- Two live rules in `REFUSAL_RULES`: Oswin turns away anyone the Market rates Cold
+  or worse, and Halden will not do business with a Hostile Watch.
+- A refusal **always explains itself and always offers a way forward** — it names
+  the faction, says whether the player is merely disliked or fully shut out, and
+  answers "what would change your mind?". The Standing panel is therefore
+  discoverable from the refusal instead of being a hidden system.
+- Verified in the real UI: with the Market at Cold, Oswin refuses and the
+  Standing panel reads `The Market — Cold −40`.
+
+### The soft-lock bug this round could have introduced, and the guard
+
+Refusals are dangerous: Oswin sells the **only oil** the first quest needs, and
+Halden holds the key to the **only route north**. A player who soured the Market
+or the Watch early could have been left permanently unable to buy the oil or
+return the key — soft-locking both the tutorial and the whole market lane.
+
+I checked whether that was actually reachable before shipping it: the worst
+negative-Trade sequence available before finishing the lanterns reaches about −15,
+so it is not reachable today, but it was one content change away. Rather than
+relying on that, every rule now has an `exempt` predicate for the critical path —
+Oswin serves you while the oil quest is in progress, and Halden always accepts the
+key back if you are carrying it. Both are covered by unit and browser tests.
+
+### Checks actually run this round
+
+- `npm test` — **207/207 pass** (was 191): 15 new refusal cases, plus 1 more
+  faction-grammar case. The existing manifest test caught me adding
+  `src/refusal.js` without listing it — its whole purpose — and the greeting test
+  failed legitimately because Oswin's Cold greeting is now replaced by a refusal.
+  I moved the grammar coverage to NPCs that never refuse rather than weakening it.
+- `npm run test:browser` — **83/83 pass, exit 0** (was 77). Six new checks: a
+  neutral Market is served, a Cold Market refuses, the refusal explains itself,
+  the Standing panel shows Cold, and the critical path stays open at Hostile for
+  both the oil and the key.
+- `npm run test:mobile` — **137/137 pass, exit 0**.
+- **Totals: 427 checks — 207 unit, 83 desktop, 137 mobile.**
+
+## Previous round — Round 7: The Lane's Arrears
 
 PR #6 (v0.3.0 phone candidate) and PR #7 (context-loss recovery + release
 manifest) are published and open for the human. Real-device testing is still
@@ -488,9 +540,10 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **Let reputation refuse plaza content, not just lane content.** Wren refuses
-   below Warm Market; no plaza NPC refuses anything yet, so the reputation built
-   in the lane only ever opens doors, never closes them. Making one plaza NPC
-   turn the player away at Cold would make the system cut both ways.
-3. Then widen the walk itself: the gate is the only route between the areas, so
-   the next content should give the street beyond it a second reason to exist.
+2. **Give the player a way to deliberately repair a bad reputation.** Refusals are
+   now escapable, but only through quests they may have already finished. A
+   repeatable way to earn standing back would stop a hostile plaza from being a
+   dead end in practice as well as in theory.
+3. **Give the street beyond the gate a second reason to exist.** The gate is still
+   the only route between the areas, and the lane's content now loops through the
+   plaza, so a third location is the natural next step.
