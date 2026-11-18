@@ -322,14 +322,20 @@ export function collectToll(state) {
   if (coins(state) < TOLL_COST) return noChange(`Oswin counts out what he owes. You would need ${TOLL_COST} coins to cover it.`);
   addCoins(state, -TOLL_COST);
   setQuestStep(state, 'toll', 'collected');
+  // Paying the toll out of your own purse settles Oswin's dues with the Watch.
+  // The Market is mildly put out at being covered for, but Wren -- whose ledger is
+  // literally the toll book -- records that the dues are paid. Without this, paying
+  // the toll dropped the Market below her trust gate and there was then no action
+  // left anywhere in the game that could raise it again: a soft-lock.
+  setFlag(state, 'dues_paid', true);
   const standing = applyStanding(state, {
     factionId: 'watch',
     delta: 20,
-    rivals: [{ id: 'trade', delta: -15 }]
+    rivals: [{ id: 'trade', delta: -5 }]
   });
   return {
     changed: true,
-    message: `You pay Oswin’s toll out of your own purse. ${standing.message}`,
+    message: `You pay Oswin’s toll out of your own purse. The dues are on Wren’s book now. ${standing.message}`,
     topic: 'toll_collected',
     opinion: -1
   };
@@ -373,10 +379,21 @@ export function finishToll(state) {
 // Two resolutions change who she is angry with, and both move standing.
 
 export const LEDGER_MIN_TIER = 'warm';
+
+/**
+ * Wren says trust is earned by "dues paid, promises kept, Oswin at his stall with
+ * his accounts in order". Settling Oswin's toll yourself is exactly that, so it
+ * qualifies even though the Market's own goodwill dips: she is the toll clerk, and
+ * a paid due is a paid due.
+ */
+export function duesSettleTheBook(state) {
+  return getFlag(state, 'dues_paid') === true;
+}
 export const LEDGER_REWARD = 4;
 
 /** Whether Wren will hand out her quest at all, given standing. */
 export function ledgerUnlocked(state, tierId) {
+  if (duesSettleTheBook(state)) return true;
   const rank = { hostile: 0, cold: 1, neutral: 2, warm: 3, trusted: 4 };
   return rank[tierId] >= rank[LEDGER_MIN_TIER];
 }

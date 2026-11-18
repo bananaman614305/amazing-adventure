@@ -27,6 +27,7 @@ import {
   recoverLedger,
   returnLedger,
   ledgerUnlocked,
+  duesSettleTheBook,
   LEDGER_REWARD,
   TOLL_COST,
   ARREARS_REWARD,
@@ -611,11 +612,16 @@ const wren = {
           ]
         );
       }
+      // Arriving with the dues already settled reads differently from arriving on
+      // good standing, and she is the person whose book that fact lives in.
+      const opening = duesSettleTheBook(state)
+        ? `Wren taps her book, where Oswin’s dues are now entered. “Your doing, that. So I will ask you: my toll ledger is missing. A quarter of the lane’s takings, gone, and every trader here suddenly cannot remember their own name.”${greeting}`
+        : `Wren runs a finger down a column of numbers. “My toll ledger is missing. A quarter of the lane’s takings, gone, and every trader here suddenly cannot remember their own name.”${greeting}`;
       return node(
         'Wren the Toll Clerk',
         mem.talks > 0
           ? `Wren marks her page. “Back again. Still nobody has owned up.”${greeting}`
-          : `Wren runs a finger down a column of numbers. “My toll ledger is missing. A quarter of the lane’s takings, gone, and every trader here suddenly cannot remember their own name.”${greeting}`,
+          : opening,
         [
           {
             label: 'I could look for it.',
