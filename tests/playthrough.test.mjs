@@ -17,6 +17,7 @@ import {
 import { reputation, tierFor } from '../src/factions.js';
 import { startConversation, applyChoice } from '../src/dialogue.js';
 import { runPlaythrough } from '../scripts/playthrough.mjs';
+import { findDeadEnds } from '../scripts/reachability.mjs';
 import { storyComplete, buildEpilogue } from '../src/epilogue.js';
 
 function talk(state, npcId, matcher) {
@@ -185,4 +186,19 @@ test('the ledger is still gated for a player who has done nothing for the lane',
   // The dues shortcut must not become a blanket unlock, or Wren's gate means nothing.
   const fresh = createInitialState();
   assert.equal(ledgerUnlocked(fresh, 'neutral'), false);
+});
+
+test('no reachable game state is a dead end, not just the one route I played', () => {
+  // Round 17 found a soft-lock by following a single playthrough, and its report
+  // noted honestly that only completion was tested, not every path. This is the
+  // exhaustive version: breadth-first over every legal action from the start state,
+  // then reverse-reachability to find any state that can never finish the story.
+  const result = findDeadEnds({ maxStates: 20000 });
+  assert.ok(result.explored > 100, `the search actually covered ground, found ${result.explored}`);
+  assert.equal(result.startReachable, true, 'the game is winnable from the start');
+  if (result.deadEnds.length > 0) {
+    const sample = result.deadEnds.slice(0, 3).map((dead) =>
+      `${JSON.stringify(dead.quests)} coins=${dead.coins} rep=${JSON.stringify(dead.reputation)}`);
+    assert.fail(`${result.deadEnds.length} unreachable-to-completion states, e.g. ${sample.join(' ; ')}`);
+  }
 });

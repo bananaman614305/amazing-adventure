@@ -91,6 +91,15 @@ export const PHASES = ['day', 'dusk', 'night'];
 
 export const TOLL_COST = 5;
 
+/**
+ * The most coins a save is allowed to carry. A finished playthrough ends with
+ * around seven, so this is far beyond anything reachable by playing. It exists
+ * because the economy is finite and a hand-edited save claiming 1e308 coins should
+ * not be treated as legitimate: coin balance is clamped at the bottom already,
+ * and clamping only one end is arbitrary rather than safe.
+ */
+export const MAX_COINS = 9999;
+
 export function createInitialState() {
   return {
     version: 2,
@@ -744,7 +753,9 @@ export function deserialize(raw) {
   }
   const saved = parsed && parsed.state;
   if (!saved || typeof saved !== 'object') return null;
-  if (!saved.quests || typeof saved.quests !== 'object') return null;
+  // An array is an object to `typeof`, so a save with `"quests": []` used to pass
+  // this check and load as a fresh game. It is a corrupt save, not an empty one.
+  if (!saved.quests || typeof saved.quests !== 'object' || Array.isArray(saved.quests)) return null;
 
   const state = createInitialState();
   for (const questId of QUEST_ORDER) {
@@ -773,7 +784,8 @@ export function deserialize(raw) {
       }
     }
     if (!Number.isFinite(state.flags.coins)) state.flags.coins = 6;
-    state.flags.coins = Math.max(0, Math.floor(state.flags.coins));
+    // Clamp both ends: a floor of zero alone lets a doctored save carry infinities.
+    state.flags.coins = Math.max(0, Math.min(MAX_COINS, Math.floor(state.flags.coins)));
   }
   if (saved.reputation && typeof saved.reputation === 'object') {
     for (const factionId of Object.keys(FACTIONS)) {

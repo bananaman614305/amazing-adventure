@@ -1824,6 +1824,51 @@ try {
     JSON.stringify(tollTrap));
 
   await capture(page, 'round17-playthrough.png');
+
+  // --- 30. Save hardening and exhaustive reachability ----------------------
+  // Save loading is the only place untrusted data enters the game, and a coin
+  // balance that is finite but absurd slipped through the floor-only clamp.
+  const hardening = await page.evaluate(async () => {
+    const S = await import('./src/state.js');
+    const mk = (coins) => S.deserialize(JSON.stringify({ state: { quests: {}, flags: { coins } } }));
+    return {
+      max: S.MAX_COINS,
+      huge: S.coins(mk(1e308)),
+      negative: S.coins(mk(-50)),
+      ordinary: S.coins(mk(7)),
+      arrayQuests: S.deserialize(JSON.stringify({ state: { quests: [] } })),
+      fractional: S.coins(mk(2.9))
+    };
+  });
+  checks.check('an absurd coin balance is clamped instead of trusted',
+    hardening.huge === hardening.max && hardening.negative === 0 && hardening.ordinary === 7,
+    JSON.stringify(hardening));
+  checks.check('a corrupt save with an array of quests is refused, not half-loaded',
+    hardening.arrayQuests === null, JSON.stringify({ loaded: hardening.arrayQuests !== null }));
+  checks.check('a fractional balance is floored rather than rounded up',
+    hardening.fractional === 2, JSON.stringify({ fractional: hardening.fractional }));
+
+  // The exhaustive search itself runs under Node (see the playthrough suite), because
+  // scripts/ is deliberately not part of the shipped build -- the release manifest
+  // contains only src/ and index.html, so importing it from the page would mean
+  // serving the test harness to players. What is checked here is that the same
+  // state functions the search relies on are present and behave in the shipped build.
+  const reachableApi = await page.evaluate(async () => {
+    const S = await import('./src/state.js');
+    return {
+      hasCreate: typeof S.createInitialState === 'function',
+      hasCounts: typeof S.questCounts === 'function',
+      hasDeliver: typeof S.deliverArrears === 'function',
+      hasLedger: typeof S.ledgerUnlocked === 'function',
+      quests: S.QUEST_ORDER.length
+    };
+  });
+  checks.check('the shipped build exposes the state functions the reachability proof covers',
+    reachableApi.hasCreate && reachableApi.hasCounts && reachableApi.hasDeliver &&
+    reachableApi.hasLedger && reachableApi.quests === 6,
+    JSON.stringify(reachableApi));
+
+  await capture(page, 'round18-reachability.png');
 } finally {
   await close();
   await server.stop();
