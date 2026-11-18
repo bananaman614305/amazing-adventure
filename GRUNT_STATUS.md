@@ -373,7 +373,83 @@ instructions.
 
 ## Current task
 
-Round 22 — A walk-through terrace edge, carried since round 17.
+Round 23 — The audio system's contract, which had never been tested.
+
+PRs #5–#23 are published and open for the human. Round 22's Next steps flagged that
+the round-11 soundscape had **no behavioural test at all** — only that the context
+starts and toggles. This round closes that.
+
+### The bug
+
+`play()` documented itself as doing nothing "if sound is off **or unstarted**", but
+only checked that the context and master node existed. After `stop()` the drone is
+gone while the context and master still exist, so cues kept scheduling notes onto an
+output the caller believed was shut down:
+
+```
+before stop: started=true
+after  stop: started=false
+play() after stop -> true   <-- scheduled sound onto a stopped soundscape
+```
+
+Honest scoping: the game never calls `stop()` internally, so this was a **latent
+contract violation, not a live player-facing bug**. It matters because `stop()` is
+exported on the debug API, and because a doc comment the code does not honour is a trap
+for whoever touches this next.
+
+### The fix
+
+One clause: `!started` is now part of the guard. Verified that stop → play is blocked,
+restart → play works, and starting twice does not build a second drone.
+
+### What is now actually tested
+
+The 14 existing audio tests covered the pure maths and the no-Web-Audio paths. New:
+
+- **10 unit tests** against a *recording* fake — a cue is silent before `start()` and
+  creates no oscillator; `stop()` truly stops; restart works; double-start is a no-op;
+  mute silences and unmute restores; the preference is written on toggle and a throwing
+  writer does not take the game down; every cue name the game uses exists; every phase
+  has a tone; a phase set while stopped is remembered; ambience stays under the cue
+  ceiling.
+- **4 browser checks** against the **real Web Audio API**, so the fake cannot drift
+  from the browser: the start/stop/restart contract, phase changes reaching the
+  soundscape, and — importantly — **rendered samples** from an `OfflineAudioContext`,
+  not just "the call returned true". Drone peak 0.057 at a claimed gain of 0.05, cue
+  peak 0.120: audible, and the cue sits above the drone without clipping.
+
+### Proof the test is real
+
+Removing the `!started` clause makes the committed unit test fail:
+
+```
+not ok 16 - stop() really stops: cues cannot play onto a shut-down output
+```
+
+### A measurement of mine that was wrong first
+
+My first attempt to measure output attached an `AnalyserNode` that was never connected
+to the graph, so it reported a peak of `0` — which looks exactly like "audio is broken".
+It was my probe that was broken. Rendered samples via `OfflineAudioContext` are the
+right tool, and they show real signal.
+
+### Checks actually run this round
+
+- `npm test` — **353/353 pass** (was 343): **10 new audio tests**.
+- `npm run test:browser` — **149/149 pass, exit 0** (was 145): **4 new checks**.
+- `npm run test:mobile` — **185/185 pass, exit 0**.
+- **Totals: 687 checks — 353 unit, 149 desktop, 185 mobile.**
+- `scripts/playthrough.mjs` and `scripts/reachability.mjs` both still exit 0.
+- Self-contained re-verified: 26 files, 980 KB, 0 external requests, with the audio
+  contract holding in the isolated build.
+
+### Evidence
+
+`artifacts/round23-audio.png` — 1280x800, mean luminance 53.3, 12.7% bright, 4722
+distinct colours. I am text-only and did not inspect it; the audio claims rest on the
+rendered sample peaks and the contract checks above.
+
+## Previous round — Round 22: a walk-through terrace edge
 
 PRs #5–#22 are published and open for the human. Rounds 17–21 fixed defects found by
 auditing behaviour. This round closes the one defect I had **flagged but not fixed**
@@ -1427,8 +1503,8 @@ hosting step to guess, the release now describes itself:
    an actual GPU.
 2. **A real screen reader test.** Eight rounds of accessibility work rest on
    programmatic verification only — the single largest honesty gap remaining.
-3. **Audio coverage.** The round-11 soundscape has had no behavioural test at all
-   (only that the context starts and toggles).
+3. **A real screen reader test** remains the largest gap: nine rounds of accessibility
+   work rest on programmatic verification only.
 3. **Give the lane its own work board, or a second reason to cross the gate.**
    The plaza board makes standing earnable early, but the lane has no equivalent,
    so the two areas are not symmetrical in how a player recovers standing.

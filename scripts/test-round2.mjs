@@ -1825,6 +1825,86 @@ try {
 
   await capture(page, 'round17-playthrough.png');
 
+  // --- 28b. The audio contract, against the browser's real Web Audio ---------
+  // The unit tests use a recording fake; this uses the actual AudioContext so a
+  // disagreement between the fake and the browser cannot hide.
+  const audioLive = await page.evaluate(async () => {
+    const a = await import('./src/audio.js');
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return { noWebAudio: true };
+    const sound = a.createSoundscape({
+      AudioContextClass: Ctx,
+      preference: { enabled: true, volume: 0.7 }
+    });
+    const beforeStart = sound.play('quest');
+    const started = sound.start();
+    const afterStart = sound.play('quest');
+    const phases = [];
+    for (const p of ['dusk', 'night', 'day']) { sound.setPhase(p); phases.push(sound.phase); }
+    sound.stop();
+    const afterStop = sound.play('quest');
+    const restarted = sound.start();
+    const afterRestart = sound.play('quest');
+    sound.stop();
+    return { beforeStart, started, afterStart, phases, afterStop, restarted, afterRestart };
+  });
+  checks.check('the real Web Audio graph plays cues only while started',
+    audioLive.beforeStart === false && audioLive.started === true &&
+    audioLive.afterStart === true && audioLive.afterStop === false &&
+    audioLive.afterRestart === true,
+    JSON.stringify(audioLive));
+  checks.check('phase changes reach the soundscape',
+    Array.isArray(audioLive.phases) && audioLive.phases.join(',') === 'dusk,night,day',
+    JSON.stringify({ phases: audioLive.phases }));
+
+  // Rendered offline, so this measures real samples rather than "the call returned".
+  const audioSamples = await page.evaluate(async () => {
+    const a = await import('./src/audio.js');
+    const render = async (fn, seconds = 1.1) => {
+      const ctx = new OfflineAudioContext(1, Math.ceil(44100 * seconds), 44100);
+      fn(ctx);
+      const buf = await ctx.startRendering();
+      const d = buf.getChannelData(0);
+      let peak = 0;
+      for (const v of d) { const m = Math.abs(v); if (m > peak) peak = m; }
+      return +peak.toFixed(5);
+    };
+    const tone = a.phaseTone('day');
+    const dronePeak = await render((ctx) => {
+      const g = ctx.createGain(); g.gain.value = tone.gain;
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 420; f.Q.value = 0.6;
+      const o1 = ctx.createOscillator(); o1.type = 'sine'; o1.frequency.value = a.noteFrequency(tone.root); o1.detune.value = tone.detune;
+      const o2 = ctx.createOscillator(); o2.type = 'triangle'; o2.frequency.value = a.noteFrequency(tone.root + 12);
+      const bg = ctx.createGain(); bg.gain.value = 0.18;
+      o1.connect(f); o2.connect(bg); bg.connect(f); f.connect(g); g.connect(ctx.destination);
+      o1.start(); o2.start();
+    });
+    const cue = a.CUES.quest;
+    const env = a.envelope(a.cueGain(cue));
+    const cuePeak = await render((ctx) => {
+      const freq = a.noteFrequency(a.pentatonicNote(tone.root + 24, cue.degree));
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, 0);
+      g.gain.linearRampToValueAtTime(env.peak, env.attack);
+      g.gain.linearRampToValueAtTime(env.peak * 0.6, env.attack + env.hold);
+      g.gain.exponentialRampToValueAtTime(0.0001, env.attack + env.hold + cue.length + env.release);
+      g.connect(ctx.destination);
+      for (const [multiple, level] of cue.partials) {
+        const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = freq * multiple;
+        const pg = ctx.createGain(); pg.gain.value = level;
+        osc.connect(pg); pg.connect(g); osc.start(0); osc.stop(a.cueDuration(cue) + 0.05);
+      }
+    });
+    return { dronePeak, cuePeak, droneGain: tone.gain, cueGain: +env.peak.toFixed(5) };
+  });
+  checks.check('the drone renders audible signal at the level it claims',
+    audioSamples.dronePeak > 0.005 && audioSamples.dronePeak < 0.25,
+    JSON.stringify(audioSamples));
+  await capture(page, 'round23-audio.png');
+  checks.check('a cue renders above the drone without clipping',
+    audioSamples.cuePeak > audioSamples.dronePeak && audioSamples.cuePeak < 1,
+    JSON.stringify(audioSamples));
+
   // --- 29a. The terrace parapet is a real edge ------------------------------
   // The parapet is only 0.55m tall, so the shared "can a person step over it" rule
   // gave it no collider -- but behind it is a 1.2m drop, which is exactly the edge
