@@ -23,7 +23,8 @@ export const QUESTS = {
       { id: 'started', journal: 'Mara says the north lantern is failing. Oswin sells the only oil in the plaza.' },
       { id: 'oil_bought', journal: 'You have lantern oil. Mara is waiting by the fountain.' },
       { id: 'delivered', journal: 'Mara has the oil. The lanterns will burn through the night.' }
-    ]
+    ],
+    done: 'Mara has the oil. The lanterns burn all night without a flicker.'
   },
   key: {
     title: 'Halden’s Missing Key',
@@ -31,7 +32,8 @@ export const QUESTS = {
     steps: [
       { id: 'started', journal: 'Halden dropped the brass gate key near the crates south-east of the fountain.' },
       { id: 'found', journal: 'You found the brass key in the grass by the crates. Halden is at his post.' }
-    ]
+    ],
+    done: 'Halden has his brass key back, and the north gate stands open.'
   },
   cheer: {
     title: 'Pip’s Small Favour',
@@ -39,7 +41,8 @@ export const QUESTS = {
     steps: [
       { id: 'started', journal: 'Pip wants to hear what the lanterns look like from the north wall at dusk. Stand there when the sky turns.' },
       { id: 'watched', journal: 'You watched the lanterns from the north wall at dusk. Tell Pip.' }
-    ]
+    ],
+    done: 'You told Pip how the lanterns light up the plaza from the wall. Pip has not stopped talking about it.'
   },
   ledger: {
     title: 'The Missing Ledger',
@@ -48,7 +51,11 @@ export const QUESTS = {
       { id: 'started', journal: 'Wren needs the toll ledger that went missing from her stall. Nobody in the lane will own up.' },
       { id: 'booked', journal: 'You promised Wren a name. The ledger quarter is somewhere in the lane.' },
       { id: 'recovered', journal: 'You have the toll ledger. Wren is at her stall in the lane.' }
-    ]
+    ],
+    doneBy: {
+      name: 'You gave Wren the trader’s name and collected the reward. The lane’s accounts are square with the Watch.',
+      cover: 'You gave Wren the ledger and kept the trader’s name out of it. The lane remembers that.'
+    }
   },
   toll: {
     title: 'The Market Toll',
@@ -57,7 +64,11 @@ export const QUESTS = {
       { id: 'started', journal: 'Halden says Oswin has not paid the gate toll in weeks. Fetch it, or talk Oswin round.' },
       { id: 'collected', journal: 'You have Oswin’s toll money for the Watch.' },
       { id: 'waived', journal: 'You talked Halden into waiving the toll. Oswin owes you again.' }
-    ]
+    ],
+    doneBy: {
+      collected: 'You paid Oswin’s toll out of your own purse. Halden has the money; Oswin is not grateful.',
+      waived: 'You talked Halden into waiving the toll. Oswin owes you again.'
+    }
   }
 };
 
@@ -75,7 +86,10 @@ export function createInitialState() {
     // NPC memory: how often you have talked, the last topic, and small opinions.
     memory: {},
     // Faction standing, separate from personal opinion. See factions.js.
-    reputation: createInitialReputation()
+    reputation: createInitialReputation(),
+    // Which resolution a branching quest ended on, so the journal can describe
+    // what actually happened instead of guessing at the last listed step.
+    outcomes: {}
   };
 }
 
@@ -331,6 +345,8 @@ export function waiveToll(state, tierId) {
 export function finishToll(state) {
   const status = questStatus(state, 'toll');
   if (status !== 'collected' && status !== 'waived') return noChange('The toll business is not finished yet.');
+  // Remember the branch before collapsing the status to 'done'.
+  state.outcomes.toll = status;
   setQuestStep(state, 'toll', 'done');
   return { changed: true, message: 'Quest complete: The Market Toll' };
 }
@@ -379,6 +395,7 @@ export function recoverLedger(state) {
  */
 export function returnLedger(state, choice = 'name') {
   if (questStatus(state, 'ledger') !== 'recovered') return noChange('Wren is not waiting on you for anything.');
+  state.outcomes.ledger = choice === 'cover' ? 'cover' : 'name';
   setQuestStep(state, 'ledger', 'done');
   removeItem(state, 'toll_ledger');
   if (choice === 'cover') {
@@ -459,13 +476,20 @@ export function journalEntries(state) {
     const status = questStatus(state, questId);
     if (status === 'none') continue;
     const quest = QUESTS[questId];
-    const step = status === 'done'
-      ? quest.steps[quest.steps.length - 1]
-      : quest.steps.find((s) => s.id === status) || quest.steps[0];
+    let text;
+    if (status === 'done') {
+      // Branching quests record which ending was reached; the journal must
+      // report that ending, not whichever step happens to be listed last.
+      const outcome = state.outcomes?.[questId];
+      text = (outcome && quest.doneBy?.[outcome]) || quest.done || quest.steps[quest.steps.length - 1].journal;
+    } else {
+      const step = quest.steps.find((s) => s.id === status) || quest.steps[0];
+      text = step.journal;
+    }
     entries.push({
       id: questId,
       title: quest.title,
-      text: step.journal,
+      text,
       done: status === 'done'
     });
   }
@@ -560,6 +584,11 @@ export function deserialize(raw) {
   if (Array.isArray(saved.inventory)) {
     for (const id of saved.inventory) {
       if (ITEMS[id] && !state.inventory.includes(id)) state.inventory.push(id);
+    }
+  }
+  if (saved.outcomes && typeof saved.outcomes === 'object') {
+    for (const [questId, outcome] of Object.entries(saved.outcomes)) {
+      if (QUESTS[questId]?.doneBy?.[outcome]) state.outcomes[questId] = outcome;
     }
   }
   if (saved.perks && typeof saved.perks === 'object') {

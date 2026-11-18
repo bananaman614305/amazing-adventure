@@ -128,6 +128,13 @@ barrels, and it only appears once Wren has told you where to look.
 | `src/areas.js` | The plaza and market lane boxes, the north gate, lane props and notice-board text. Pure. |
 | `src/perf.js` | Adaptive resolution rules: clamping, stepping, hysteresis and smoothing. Pure. |
 
+### The journal tells the truth
+
+Quests with more than one ending record which ending you reached, and the journal
+(press J) reports that. Pay Oswin's toll and the journal says you paid it; talk
+Halden into waiving it and the journal says that instead. The same applies to
+Wren's ledger: naming the trader and covering for him produce different entries.
+
 ### Running on weak hardware
 
 The game is fill-rate bound, not draw-call bound: measured in this environment,

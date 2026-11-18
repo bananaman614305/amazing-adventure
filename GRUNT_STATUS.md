@@ -253,10 +253,43 @@ hardware (integrated GPUs, high-DPI laptops).
    or convergence is impossible by construction. The tests now model frame time
    as proportional to pixel count, and assert that the controller settles.
 
+## Chunk 5 — the journal was lying about what happened
+
+Found by read-only review while a publish request was pending. `journalEntries()`
+resolved a completed quest to `quest.steps[quest.steps.length - 1]`, i.e. the
+last *listed* step. For the two quests with alternative endings that is simply
+the wrong sentence:
+
+| Quest played | Journal said |
+| --- | --- |
+| toll **paid** | "You talked Halden into waiving the toll. Oswin owes you again." |
+| toll waived | same (correct by luck) |
+| ledger, name given | "You have the toll ledger. Wren is at her stall in the lane." |
+| ledger, trader covered | same |
+| cheer completed | "You watched the lanterns… Tell Pip." |
+
+So paying a toll was recorded as waiving it, and finished quests still read as
+instructions.
+
+- `src/state.js`: quests now declare completion text — `done` for linear quests
+  and `doneBy: { branch: text }` for branching ones. `finishToll` and
+  `returnLedger` record the branch in a new `state.outcomes` map before
+  collapsing the status to `done`, and `journalEntries` prefers the recorded
+  branch. `deserialize` sanitises `outcomes` against the known branches, so a
+  corrupt or invented branch is dropped rather than displayed. Old saves with no
+  recorded outcome fall back to the last step, which keeps them working.
+- Checks: `npm test` **131/131 pass** (6 new: paid is never journalled as
+  waived, waived never as paid, the two ledger endings differ and are truthful,
+  every quest declares distinct completion text for every ending, outcomes
+  survive a save round-trip, and a legacy save still opens a journal entry).
+  `npm run test:browser` **70/70 pass, exit 0** (4 new: paid text, waived text,
+  no instructional text on a finished quest, and the rendered journal panel
+  itself showing what really happened).
+
 ## Next task
 
-1. Publish `grunt/round4` as a stacked PR once `grunt/round3-living-world` is
-   picked up (see the publication queue above).
+1. Publish the branch as a single PR (see the publication queue above), and do
+   not touch the tree again until the result lands.
 2. Let reputation refuse content in the plaza too, not only in the lane, so
    standing matters where the player starts.
 3. Give the next round a real objective loop: something to carry between the two

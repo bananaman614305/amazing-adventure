@@ -830,7 +830,53 @@ try {
   checks.check('adaptive resolution can be turned back on',
     reEnabled.on === true && reEnabled.stored === 'auto', JSON.stringify(reEnabled));
 
-  // --- 19. Final screenshots ----------------------------------------
+  // --- 19. Journal text matches the branch actually played ----------
+  const journalTruth = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const s = await import('./src/state.js');
+    localStorage.clear();
+    api.saves.clear();
+    const state = s.createInitialState();
+    s.startKey(state); s.pickUpKey(state); s.returnKey(state);
+    s.startToll(state); s.collectToll(state); s.finishToll(state);
+    const paidText = s.journalEntries(state).find((e) => e.id === 'toll').text;
+
+    const waived = s.createInitialState();
+    s.startKey(waived); s.pickUpKey(waived); s.returnKey(waived);
+    s.startToll(waived); s.waiveToll(waived, 'warm'); s.finishToll(waived);
+    const waivedText = s.journalEntries(waived).find((e) => e.id === 'toll').text;
+
+    const cheer = s.createInitialState();
+    s.startCheer(cheer); s.watchLanterns(cheer, 'dusk'); s.tellPipAboutLanterns(cheer);
+    const cheerText = s.journalEntries(cheer).find((e) => e.id === 'cheer').text;
+    return { paidText, waivedText, cheerText };
+  });
+  checks.check('a paid toll is journalled as paid, not as waived',
+    /paid/i.test(journalTruth.paidText) && !/waiv/i.test(journalTruth.paidText),
+    JSON.stringify(journalTruth.paidText));
+  checks.check('a waived toll is journalled as waived, not as paid',
+    /waiv/i.test(journalTruth.waivedText) && !/purse/i.test(journalTruth.waivedText),
+    JSON.stringify(journalTruth.waivedText));
+  checks.check('a finished quest is not journalled as an instruction',
+    !/tell Pip/i.test(journalTruth.cheerText), JSON.stringify(journalTruth.cheerText));
+
+  // The panel itself must render that truthful text, not just the helper.
+  const journalPanelText = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const s = await import('./src/state.js');
+    const state = api.getState();
+    state.quests.toll = 'done';
+    state.outcomes.toll = 'collected';
+    api.refreshHUD();
+    document.getElementById('panel').hidden = false;
+    api.refreshHUD();
+    return document.getElementById('journal-list').textContent;
+  });
+  checks.check('the journal panel shows what really happened',
+    /paid Oswin/i.test(journalPanelText || '') && !/talked Halden into waiving/i.test(journalPanelText || ''),
+    JSON.stringify((journalPanelText || '').replace(/\s+/g, ' ').slice(0, 120)));
+
+  // --- 20. Final screenshots ----------------------------------------
   await page.evaluate(() => {
     window.amazingAdventure.setClock(20);
     window.amazingAdventure.player.placeAt(2, 12, 0.2, -0.04);
