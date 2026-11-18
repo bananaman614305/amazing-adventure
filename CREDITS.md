@@ -46,3 +46,10 @@ test uses the already-present `/opt/google/chrome/chrome` (override with
 
 The `round2-*.png` and `round3-*.png` files in `artifacts/` are real screenshots
 of this game taken by that test. They are not game assets.
+
+## Vendored dependency
+
+`vendor/three.module.min.js` is the official Three.js r160 browser build (MIT
+licence, `vendor/THREE-LICENSE.txt`), included so the game can be served as a
+self-contained static preview with no CDN or network dependency. It is
+third-party code and is not modified.

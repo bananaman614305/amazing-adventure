@@ -36,6 +36,28 @@ Grunt builds the game in rounds. Each round leaves a playable game that is deepe
 
 Every round ends with a pull request that Grunt has tested in a real browser, with screenshots.
 
+## Play it on a phone
+
+Open the game on a phone and press **Play**. The touch layer appears by itself on
+a device with a coarse pointer and touch points, and stays out of the way on a
+desktop.
+
+- **Left thumb**, anywhere on the left: an analog walk stick that appears where
+  you press, so you never have to hunt for it.
+- **Right thumb drag**: look around. It works *at the same time* as walking.
+- **Talk / Use**: appears when something is in reach, labelled for the action.
+- **Journal** and **Pause**: bottom right. Pause saves and stops the world.
+
+Desktop controls are unchanged: WASD, mouse look, Shift to run, E to interact,
+J journal, Esc pause, P to toggle adaptive resolution.
+
+### A self-contained candidate
+
+The game is static files with no build step. Three.js r160 is **vendored** at
+`vendor/three.module.min.js` rather than loaded from a CDN, so the preview works
+offline and has no external runtime dependency. `node_modules/` is only needed to
+run the browser tests.
+
 ## Run it (Round 3)
 
 One command starts the game:
@@ -147,6 +169,17 @@ takes the game from about 3.2fps to **7.1fps** and settles there without
 oscillating.
 
 Press **P** to turn it off and pin native resolution; the choice is remembered.
+
+### Testing the phone build
+
+```
+npm run test:mobile    # 93 checks x 4 emulated device profiles
+```
+
+This drives the touch controls with real multi-touch events rather than synthetic
+clicks, and plays the opening of the game on each profile. See `RELEASE.md` for
+exactly what was and was not tested — in short, Chrome device emulation, not real
+iOS Safari.
 
 ### Testing note
 
