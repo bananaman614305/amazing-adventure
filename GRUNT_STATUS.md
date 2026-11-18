@@ -373,7 +373,81 @@ instructions.
 
 ## Current task
 
-Round 20 — The dialog claimed to be modal but never took focus.
+Round 21 — The game ignored the user's font size entirely.
+
+PRs #5–#21 are published and open for the human. Round 20 fixed focus. This round
+audited the other half of accessible text: **does enlarging your default font do
+anything at all?**
+
+### The bug
+
+I first computed WCAG contrast for every visible text element (18 of them, 6.25:1 to
+18.45:1 — **zero AA failures**). Then I tested text resize, which AA also requires, and
+found the gap:
+
+```
+font-size declarations: 49 (47 absolute px, 0 rem)
+root font 16px -> 32px: clock box 28x12 -> 28x12  (nothing changed)
+```
+
+Every size was an absolute `px` value, so a low-vision player who sets a larger
+default font in their browser got **no larger text whatsoever**. This is the standard
+"px everywhere" accessibility bug, and the game was a clean example of it.
+
+### The fix
+
+- All 47 text sizes converted to `rem` at base 16, so default rendering is
+  pixel-identical but the text now follows the user's setting. Measured after:
+  clock span 28x12 → **54x24** at 200%.
+- A second, deeper problem surfaced once text could grow: `#dialogue` is anchored to
+  the **bottom** with no `max-height`, so a long line at a large font size grows
+  *upward off the top of the screen*, taking the first options with it.
+  Added `max-height: 82vh; overflow-y: auto`.
+
+### Verified across sizes, not just one
+
+| Case | Result |
+| --- | --- |
+| Desktop 1280x800, 100/150/200% | no non-scrollable clipping; choices 38→55px tall, all in view |
+| Desktop 1024x**560**, up to 300% text | panel stays inside viewport at every size; scrolls when needed |
+| iPhone SE 320x568, 200% | panel 398px in a 568px screen; scrolling **does** reach the last option |
+| iPhone 13 390x844, 200% | all options in view |
+
+The only elements flagged as clipped are `#sr-live`/`#sr-alert`, which are the
+intentional 1x1 screen-reader regions.
+
+### Proof the tests are real
+
+Restoring the original px sizes makes **2 committed desktop checks fail**, including
+one that measured the text sitting at exactly `16px` even at 200%:
+
+```
+FAIL font sizes are relative, so a user font setting is respected
+     — {"total":49,"px":47,"rem":0}
+FAIL doubling the user font setting actually doubles the text
+     — {"at100":{"size":16},"at200":{"size":16}}
+```
+
+### Checks actually run this round
+
+- `npm test` — **343/343 pass**.
+- `npm run test:browser` — **142/142 pass, exit 0** (was 138): **4 new checks** — sizes
+  are relative, doubling the setting doubles the text, the panel stays inside the
+  viewport at 200%, and every option stays reachable.
+- `npm run test:mobile` — **185/185 pass, exit 0** (was 177): **8 new checks** across 4
+  profiles for enlarged text on small screens.
+- **Totals: 670 checks — 343 unit, 142 desktop, 185 mobile.**
+- `scripts/playthrough.mjs` and `scripts/reachability.mjs` both still exit 0.
+- Self-contained re-verified: 26 files, 980 KB, 0 external requests, 0 errors, with the
+  clock font scaling 16→32px in the isolated build.
+
+### Evidence
+
+`artifacts/round21-text-200.png` — 1280x800, mean luminance 36.2, 3.2% bright, 7158
+distinct colours. I am text-only and did not inspect it; the fix rests on the
+measured font sizes and the reachability assertions.
+
+## Previous round — Round 20: a dialog that never took focus
 
 PRs #5–#20 are published and open for the human. Round 13 added `role="dialog"` and
 `aria-modal="true"` to the conversation panel. This round tested whether that

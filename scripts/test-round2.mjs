@@ -1922,6 +1922,92 @@ try {
     Math.hypot(walkAfter.x - walkBefore.x, walkAfter.z - walkBefore.z) > 0.2,
     JSON.stringify({ from: walkBefore, to: walkAfter }));
 
+  // --- 29c. Text must honour the user's font size ---------------------------
+  // Every font size used to be an absolute px value, so a low-vision player who
+  // enlarges their browser's default font got no larger text at all: 48 declarations
+  // and zero rem/em. These checks assert the text really scales, and that growing it
+  // does not push the conversation's options out of reach.
+  const remReport = await page.evaluate(() => {
+    const sheet = [...document.styleSheets].flatMap((s) => {
+      try { return [...s.cssRules]; } catch { return []; }
+    });
+    const walk = (rules, out) => {
+      for (const rule of rules) {
+        if (rule.cssRules) walk([...rule.cssRules], out);
+        if (rule.style && rule.style.fontSize) out.push(rule.style.fontSize);
+      }
+      return out;
+    };
+    const sizes = walk(sheet, []);
+    return {
+      total: sizes.length,
+      px: sizes.filter((v) => v.endsWith('px')).length,
+      rem: sizes.filter((v) => v.endsWith('rem')).length
+    };
+  });
+  checks.check('font sizes are relative, so a user font setting is respected',
+    remReport.px === 0 && remReport.rem > 40,
+    JSON.stringify(remReport));
+
+  const measureText = () => page.evaluate(() => {
+    const el = document.getElementById('clock-time');
+    const r = el.getBoundingClientRect();
+    return { h: Math.round(r.height), w: Math.round(r.width), size: parseFloat(getComputedStyle(el).fontSize) };
+  });
+  await page.evaluate(() => { document.documentElement.style.fontSize = '16px'; });
+  await new Promise((r) => setTimeout(r, 400));
+  const textAt100 = await measureText();
+  await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+  await new Promise((r) => setTimeout(r, 500));
+  const textAt200 = await measureText();
+  checks.check('doubling the user font setting actually doubles the text',
+    textAt200.size >= textAt100.size * 1.9 && textAt200.h > textAt100.h,
+    JSON.stringify({ at100: textAt100, at200: textAt200 }));
+
+  // With the text still enlarged, open a conversation and prove every option can be
+  // reached -- scrolled into view if necessary -- rather than being pushed off screen.
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const mara = api.npcs.find((n) => n.id === 'mara');
+    api.player.placeAt(mara.group.position.x, mara.group.position.z + 1.4, 0, 0);
+    api.player.frozen = false;
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  await page.keyboard.press('e');
+  await new Promise((r) => setTimeout(r, 700));
+
+  const enlargedPanel = await page.evaluate(() => {
+    const panel = document.getElementById('dialogue');
+    const pr = panel.getBoundingClientRect();
+    const scrollEl = panel.scrollHeight > panel.clientHeight ? panel : null;
+    if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+    const choices = [...document.querySelectorAll('#dialogue .choice')];
+    const last = choices[choices.length - 1]?.getBoundingClientRect();
+    const first = choices[0]?.getBoundingClientRect();
+    return {
+      open: !panel.hidden,
+      panelInside: pr.top >= -1 && pr.bottom <= window.innerHeight + 1,
+      panelTop: Math.round(pr.top),
+      panelBottom: Math.round(pr.bottom),
+      vh: window.innerHeight,
+      lastReachable: last ? last.bottom <= window.innerHeight + 1 : null,
+      firstReachable: first ? first.top >= -1 : null,
+      count: choices.length
+    };
+  });
+  checks.check('a conversation opened at 200% text stays inside the viewport',
+    enlargedPanel.open === true && enlargedPanel.panelInside === true,
+    JSON.stringify(enlargedPanel));
+  checks.check('every conversation option is reachable at 200% text',
+    enlargedPanel.count >= 2 && enlargedPanel.firstReachable === true && enlargedPanel.lastReachable === true,
+    JSON.stringify(enlargedPanel));
+
+  await capture(page, 'round21-text-200.png');
+  await page.evaluate(() => { document.documentElement.style.fontSize = '16px'; });
+  await new Promise((r) => setTimeout(r, 400));
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 400));
+
   // --- 30. Save hardening and exhaustive reachability ----------------------
   // Save loading is the only place untrusted data enters the game, and a coin
   // balance that is finite but absurd slipped through the floor-only clamp.

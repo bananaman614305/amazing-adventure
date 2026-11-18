@@ -215,6 +215,49 @@ async function playSession(browser, server, profile) {
   });
   await wait(400);
 
+  // --- Enlarged text must stay usable on a small screen ---------------------
+  // The game's text now scales with the user's font setting. On the smallest phone
+  // that means a conversation can outgrow the panel, so the options have to remain
+  // reachable by scrolling rather than being pushed off the bottom of the screen.
+  await page.evaluate(() => { document.documentElement.style.fontSize = '32px'; });
+  await wait(600);
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const mara = api.npcs.find((n) => n.id === 'mara');
+    api.player.placeAt(mara.group.position.x, mara.group.position.z + 1.4, 0, 0);
+    api.player.frozen = false;
+  });
+  await wait(350);
+  await page.evaluate(() => window.amazingAdventure.touch.interact());
+  await wait(700);
+  const bigText = await page.evaluate(() => {
+    const panel = document.getElementById('dialogue');
+    const pr = panel.getBoundingClientRect();
+    const choices = [...document.querySelectorAll('#dialogue .choice')];
+    if (panel.scrollHeight > panel.clientHeight) panel.scrollTop = panel.scrollHeight;
+    const last = choices[choices.length - 1]?.getBoundingClientRect();
+    const first = choices[0]?.getBoundingClientRect();
+    return {
+      open: !panel.hidden,
+      panelInside: pr.top >= -1 && pr.bottom <= window.innerHeight + 1,
+      firstReachable: first ? first.top >= -1 : null,
+      lastReachable: last ? last.bottom <= window.innerHeight + 1 : null,
+      count: choices.length,
+      scaled: parseFloat(getComputedStyle(choices[0] || panel).fontSize) > 16
+    };
+  });
+  checks.check(`${profile.name}: text grows at 200% and the panel stays within the screen`,
+    bigText.open === true && bigText.scaled === true && bigText.panelInside === true,
+    JSON.stringify(bigText));
+  checks.check(`${profile.name}: every option stays reachable at 200% text`,
+    bigText.count >= 2 && bigText.firstReachable === true && bigText.lastReachable === true,
+    JSON.stringify(bigText));
+  await page.evaluate(() => {
+    document.getElementById('dialogue-close')?.click();
+    document.documentElement.style.fontSize = '16px';
+  });
+  await wait(400);
+
   // --- Backgrounding the app must not leave the game stuck ------------------
   // A phone user checks a message, comes back, and the game must still work. The
   // handler that froze the world on hide had no matching branch on return, so the

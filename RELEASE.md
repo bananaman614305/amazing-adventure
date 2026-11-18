@@ -160,8 +160,8 @@ preview as final.
 - The build identifies itself as `0.3.0` both in code and on the page.
 
 Everything above is re-run by `npm run test:mobile` (177 checks across 4
-profiles) and `npm run test:browser` (138 desktop checks), plus 343 Node unit
-tests. 658 checks in total.
+profiles) and `npm run test:browser` (142 desktop checks), plus 343 Node unit
+tests. 670 checks in total.
 
 ## A note on frame rate
 
