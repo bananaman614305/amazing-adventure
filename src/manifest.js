@@ -20,6 +20,7 @@ export const REQUIRED_FILES = [
   'src/dialogue.js',
   'src/state.js',
   'src/refusal.js',
+  'src/repair.js',
   'src/factions.js',
   'src/ambient.js',
   'src/daynight.js',
