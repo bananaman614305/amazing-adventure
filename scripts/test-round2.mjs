@@ -1229,6 +1229,77 @@ try {
   checks.check('the player Oswin refused is served again after working',
     !/nothing for you/i.test(served.line) && served.visible, served.line.slice(0, 90));
   await closeDialogue();
+
+  // --- 23. The plaza work board: goodwill before it is needed --------------
+  // Standing work was previously reachable only through a refused NPC, which
+  // meant goodwill could only be earned after it was already too late. The board
+  // is open to everyone, so a neutral player can build standing up early.
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const state = api.getState();
+    // Neutral on every front, with nothing that exempts a refusal in the pack.
+    state.reputation = { keepers: 0, trade: 0, watch: 0 };
+    state.inventory = state.inventory.filter((id) => id !== 'oswin_marker');
+    state.flags.coins = 30;
+    api.refreshHUD();
+    api.player.placeAt(-3.4, 10.4, 0, 0);
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  const boardSeen = await page.evaluate(() => window.amazingAdventure.interactables().map((i) => i.label));
+  checks.check('the work board is a findable interactable in the plaza',
+    boardSeen.includes('read the work board'), JSON.stringify(boardSeen));
+
+  await page.evaluate(() => window.amazingAdventure.touch.interact());
+  await new Promise((r) => setTimeout(r, 350));
+  const boardNode = await page.evaluate(() => ({
+    name: document.getElementById('dialogue-name').textContent,
+    line: document.getElementById('dialogue-line').textContent,
+    choices: [...document.querySelectorAll('#dialogue-choices button')].map((b) => b.textContent.trim())
+  }));
+  checks.check('the board opens as a board, not as a person',
+    /Work Board/i.test(boardNode.name) &&
+    boardNode.choices.filter((c) => /Sweep|Carry|Drill/.test(c)).length === 3,
+    JSON.stringify({ name: boardNode.name, choices: boardNode.choices.slice(0, 3) }));
+
+  // Capture the board menu itself, in daylight, while it is on screen. Taking
+  // the shot later would land after the time-costing job has moved the clock to
+  // dusk, producing a dim frame that shows the room rather than the feature.
+  await page.evaluate(() => window.amazingAdventure.setClock(20));
+  await new Promise((r) => setTimeout(r, 600));
+  await capture(page, 'round10-job-board.png');
+  await page.evaluate(() => window.amazingAdventure.setClock(20));
+  await new Promise((r) => setTimeout(r, 250));
+
+  const neutralBefore = await page.evaluate(() => ({
+    trade: window.amazingAdventure.getState().reputation.trade,
+    coins: window.amazingAdventure.getState().flags.coins,
+    memory: Object.keys(window.amazingAdventure.getState().memory)
+  }));
+  await clickChoiceRegex('Carry crates');
+  const neutralAfter = await page.evaluate(() => ({
+    trade: window.amazingAdventure.getState().reputation.trade,
+    coins: window.amazingAdventure.getState().flags.coins,
+    memory: Object.keys(window.amazingAdventure.getState().memory)
+  }));
+  checks.check('a neutral player can build standing at the board before they need it',
+    neutralAfter.trade > neutralBefore.trade &&
+    neutralAfter.coins === neutralBefore.coins - 2,
+    JSON.stringify({ neutralBefore, neutralAfter }));
+  checks.check('taking board work invents no phantom NPC in the save',
+    JSON.stringify(neutralAfter.memory) === JSON.stringify(neutralBefore.memory) &&
+    !neutralAfter.memory.includes('job_board'),
+    JSON.stringify(neutralAfter.memory));
+  await closeDialogue();
+
+  // A time job must still cost the hour when taken from the board.
+  const phaseBefore = await page.evaluate(() => window.amazingAdventure.getClock().phase);
+  await page.evaluate(() => window.amazingAdventure.touch.interact());
+  await new Promise((r) => setTimeout(r, 350));
+  await clickChoiceRegex('Sweep');
+  const phaseAfter = await page.evaluate(() => window.amazingAdventure.getClock().phase);
+  checks.check('a time job taken from the board still costs the hour',
+    phaseAfter !== phaseBefore, JSON.stringify({ phaseBefore, phaseAfter }));
+  await closeDialogue();
 } finally {
   await close();
   await server.stop();

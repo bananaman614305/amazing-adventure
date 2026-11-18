@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
-  GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT
+  GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD
 } from './areas.js';
 
 // Everything you can see and bump into is built here from plain primitives.
@@ -334,6 +334,41 @@ export function buildWorld(renderer) {
   addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [5, 0.6, 8], material: wood, castShadow: true });
   addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [5, 1.8, 8], material: wood, castShadow: true });
   addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [6.4, 0.6, 8.3], material: wood, castShadow: true });
+
+  // The plaza work board: a post with a pinned list of odd jobs. Placed on the
+  // walk between the gate and Mara so it is hard to miss, and usable at any
+  // standing -- it is the one way to build goodwill before you need it.
+  {
+    const postHeight = JOB_BOARD.height;
+    addBox(scene, colliders, {
+      size: [0.22, postHeight, 0.22],
+      position: [JOB_BOARD.x - 0.55, postHeight / 2, JOB_BOARD.z],
+      material: wood,
+      castShadow: true
+    });
+    addBox(scene, colliders, {
+      size: [0.22, postHeight, 0.22],
+      position: [JOB_BOARD.x + 0.55, postHeight / 2, JOB_BOARD.z],
+      material: wood,
+      castShadow: true
+    });
+    // The pinned face itself, angled to look down the plaza.
+    const boardFace = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.2, 0.9),
+      new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.95 })
+    );
+    boardFace.position.set(JOB_BOARD.x, 1.3, JOB_BOARD.z + 0.13);
+    scene.add(boardFace);
+    // Pinned slips of paper, so it reads as a job board from a distance.
+    for (let i = 0; i < 3; i += 1) {
+      const slip = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.22, 0.3),
+        new THREE.MeshStandardMaterial({ color: 0xf2ead6, roughness: 1 })
+      );
+      slip.position.set(JOB_BOARD.x - 0.34 + i * 0.34, 1.26 + (i % 2) * 0.14, JOB_BOARD.z + 0.14);
+      scene.add(slip);
+    }
+  }
 
   // A bench on the west side: resting here skips to the next phase.
   addBox(scene, colliders, { size: [2.2, 0.5, 0.7], position: [BENCH.x, 0.25, BENCH.z], material: wood, castShadow: true });

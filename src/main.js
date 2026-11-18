@@ -14,9 +14,9 @@ import {
   inventoryItems,
   questCounts
 } from './state.js';
-import { startConversation, applyChoice } from './dialogue.js';
+import { startConversation, applyChoice, JOB_BOARD_SPEAKER } from './dialogue.js';
 import { reputationView, npcTier } from './factions.js';
-import { GATE, isGateOpen, gateHint, areaAt, NOTICE_BOARD, noticeText, LEDGER_SPOT } from './areas.js';
+import { GATE, isGateOpen, gateHint, areaAt, NOTICE_BOARD, noticeText, LEDGER_SPOT, JOB_BOARD } from './areas.js';
 import {
   chooseAmbientPair,
   buildExchange,
@@ -270,7 +270,9 @@ let choiceIndex = 0;
 
 function openDialogue(npc) {
   activeNPC = npc;
-  activeNode = startConversation(state, npc.id);
+  // The work board is a notice, not a person: it reuses the dialogue UI but has
+  // no memory, so it provides its own opening node.
+  activeNode = npc.talk ? npc.talk(state) : startConversation(state, npc.id);
   if (!activeNode) return;
   dialogueEl.hidden = false;
   touchRoot.classList.add('dialogue-open');
@@ -449,6 +451,19 @@ function interactables() {
       run: () => {
         toast(noticeText(state, npcTier(state, 'halden').id));
       }
+    });
+  }
+
+  // The plaza work board: available at any standing, which is the point. A
+  // player can earn goodwill here before they need it, instead of only after a
+  // refusal makes it urgent.
+  const boardJobDistance = Math.hypot(JOB_BOARD.x - player.position.x, JOB_BOARD.z - player.position.z);
+  if (boardJobDistance < JOB_BOARD.range) {
+    list.push({
+      kind: 'jobboard',
+      distance: boardJobDistance,
+      label: 'read the work board',
+      run: () => openDialogue({ ...JOB_BOARD_SPEAKER, role: 'Odd jobs, posted daily' })
     });
   }
 

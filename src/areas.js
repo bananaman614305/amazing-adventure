@@ -72,6 +72,14 @@ export const LANE_PROPS = [
 /** Where the missing toll ledger is tucked away, behind the far barrels. */
 export const LEDGER_SPOT = { x: 7.6, z: -25.0, range: 1.7 };
 
+/**
+ * The work board in the plaza. Unlike a refused NPC, this is usable at any
+ * standing, so a player can build goodwill *before* they need it — which is how
+ * a real reputation works. Positioned by the fountain, on the walk between the
+ * gate and Mara, where the player will actually pass it.
+ */
+export const JOB_BOARD = { x: -3.4, z: 8.6, range: 2.0, height: 1.9 };
+
 /** The notice board in the lane that the player can read. */
 export const NOTICE_BOARD = { x: 13.3, z: -23.2, range: 1.9, height: 1.9 };
 

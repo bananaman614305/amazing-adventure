@@ -95,7 +95,7 @@ function refusalNode(state, npcId, name, flavour) {
  * one place. Each job also nudges a rival faction down, which is what keeps the
  * choice of who to work for meaningful.
  */
-function workMenu(state, npcId, name) {
+export function workMenu(state, npcId, name, intro = '“Work is work. Pick something.”') {
   const jobs = Object.values(JOBS);
   const choices = jobs.map((job) => {
     const allowed = canWork(job, state);
@@ -122,7 +122,7 @@ function workMenu(state, npcId, name) {
           ]))
     };
   });
-  return node(name, '“Work is work. Pick something.”', [...choices, end('Leave')]);
+  return node(name, intro, [...choices, end('Leave')]);
 }
 
 /** Runs a job and folds in its time cost, which only the caller can apply. */
@@ -739,9 +739,27 @@ export function applyChoice(state, npcId, choice) {
   if (typeof choice?.do === 'function') {
     result = choice.do() || result;
   }
-  remember(state, npcId, { topic: result.topic, opinionDelta: result.opinion || 0 });
+  // The plaza job board is not a person, so it has no memory to update. Without
+  // this guard it would invent a phantom NPC called 'job_board' in the save.
+  if (npcId && DIALOGUE[npcId]) {
+    remember(state, npcId, { topic: result.topic, opinionDelta: result.opinion || 0 });
+  }
   return result;
 }
+
+/**
+ * The plaza job board as a conversation-shaped object. It reuses the dialogue
+ * UI so the board looks and behaves like every other interaction, but it grants
+ * no personal opinion: the board is a notice, not a person.
+ */
+export const JOB_BOARD_SPEAKER = {
+  id: 'job_board',
+  name: 'The Work Board',
+  talk(state) {
+    return workMenu(state, null, 'The Work Board',
+      'Tacked to the board are three slips, each with a job and what it pays. Nobody is watching who takes one down.');
+  }
+};
 
 /** Starts talking to an NPC and returns the opening node, or null. */
 export function startConversation(state, npcId) {
