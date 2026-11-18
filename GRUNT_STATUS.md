@@ -373,7 +373,85 @@ instructions.
 
 ## Current task
 
-Round 24 — Reading the real accessibility tree instead of the DOM.
+Round 25 — The rest of the interface, read through the accessibility tree.
+
+PRs #5–#25 are published and open for the human. Round 24 pointed the accessibility
+tree at the conversation panel and found two real defects. This round points it at
+**everything else** — the HUD, the journal panel, the standing list — which had never
+been inspected that way.
+
+### The bug
+
+Two separate regions were both headed **"Journal"**, and both are visible at the same
+time:
+
+```
+h2 "JOURNAL"        <- always-on quest tracker
+h3 "JOURNAL"        <- the full journal panel
+h3 "INVENTORY"
+h3 "STANDING"
+```
+
+A screen reader user navigating by heading heard "Journal" twice with nothing to tell
+them apart: one is a compact live tracker, the other the full panel. And the four lists
+were **completely unnamed**:
+
+```
+[list] name=""   [list] name=""   [list] name=""
+```
+
+so a reader said "list" without saying what was in it.
+
+### The fix
+
+- The always-on tracker heading is now **"Quests"**, which is what it actually shows.
+  The panel keeps "Journal".
+- Every list is tied to its own heading with `aria-labelledby`, so the tree carries
+  names: `INVENTORY`, `JOURNAL`, `STANDING`, `WHERE THINGS ARE`.
+- The compass list was a `<div>` of `<li>`s with no list role at all; it now has
+  `role="list"` with labelled children.
+
+Verified in the tree afterwards: five unique headings, four named lists, every list
+containing real listitems.
+
+### One thing I checked and did NOT report as a bug
+
+My first pass flagged 11 listitems as having "no accessible name". That was **my
+instrument, not the game**: `<li>` elements carry their text in child nodes, so a bare
+`name` field is empty while the content is perfectly readable. Walking the subtree
+confirmed they read as full sentences ("The Keepers Neutral", "the bench to your left ·
+west"). I would rather say I was wrong about this than pad the round with a defect that
+does not exist.
+
+### Proof the tests are real
+
+Restoring the original headings makes **2 committed desktop checks fail**, and the
+failure output shows exactly the duplicate heading and the unnamed lists:
+
+```
+FAIL no two visible regions share the same heading name
+     — {"headings":["JOURNAL","INVENTORY","JOURNAL","STANDING","WHERE THINGS ARE","THE END"]}
+FAIL every list is labelled so a reader knows what it contains
+     — {"lists":["","",""]}
+```
+
+### Checks actually run this round
+
+- `npm test` — **353/353 pass**.
+- `npm run test:browser` — **161/161 pass, exit 0** (was 157): **4 new checks**.
+- `npm run test:mobile` — **185/185 pass, exit 0**.
+- **Totals: 699 checks — 353 unit, 161 desktop, 185 mobile.**
+- `scripts/playthrough.mjs` and `scripts/reachability.mjs` both still exit 0.
+- Self-contained re-verified: 26 files, 980 KB, 0 external requests, with the heading
+  outline correct in the isolated build.
+
+### Evidence
+
+`artifacts/round25-headings.png` — 1280x800, mean luminance 51.2, 12.5% bright, 4498
+distinct colours. I am text-only and did not inspect it; the claims rest on the CDP
+accessibility-tree dumps above.
+
+## Previous round — Round 24: the accessibility tree
 
 PRs #5–#24 are published and open for the human. For nine rounds I have reported "no
 real screen reader test" as the biggest honest gap. This round narrows it materially:
