@@ -140,3 +140,149 @@ test('a cue never plays while sound is off', () => {
   assert.equal(sound.play('quest'), true, 'unmuted, the cue plays');
   assert.ok(started > before, 'oscillators were created for it');
 });
+
+// --- The soundscape's own contract, checked with a recording fake --------------
+// The pure maths above is well covered; these cover the browser-facing object,
+// where the doc comments make promises the code has to keep.
+function recordingContext() {
+  const made = { oscillators: [], gains: [], filters: [], ramps: [] };
+  class Fake {
+    constructor() { this.state = 'running'; this.currentTime = 0; this.destination = { name: 'dest' }; this.sampleRate = 44100; }
+    createGain() {
+      const node = {
+        gain: {
+          value: 1,
+          setValueAtTime(v, t) { made.ramps.push(['set', v, t]); },
+          linearRampToValueAtTime(v, t) { made.ramps.push(['linear', v, t]); },
+          exponentialRampToValueAtTime(v, t) { made.ramps.push(['exp', v, t]); },
+          cancelScheduledValues(t) { made.ramps.push(['cancel', t]); },
+          setTargetAtTime(v, t) { made.ramps.push(['target', v, t]); }
+        },
+        connect(target) { node.connectedTo = target; }
+      };
+      made.gains.push(node);
+      return node;
+    }
+    createOscillator() {
+      const node = {
+        type: '', frequency: { value: 0, setTargetAtTime() {} },
+        detune: { value: 0, setTargetAtTime() {} },
+        connect(t) { node.connectedTo = t; },
+        start(t) { node.startedAt = t; }, stop(t) { node.stoppedAt = t; }
+      };
+      made.oscillators.push(node);
+      return node;
+    }
+    createBiquadFilter() {
+      const node = { type: '', frequency: { value: 0 }, Q: { value: 0 }, connect(t) { node.connectedTo = t; } };
+      made.filters.push(node);
+      return node;
+    }
+    resume() {}
+  }
+  return { Fake, made };
+}
+
+test('a cue is silent until start() has been called', () => {
+  const { Fake, made } = recordingContext();
+  const sound = createSoundscape({ AudioContextClass: Fake, preference: { enabled: true, volume: 0.7 } });
+  assert.equal(sound.play('quest'), false, 'nothing is running yet');
+  assert.equal(made.oscillators.length, 0, 'and no oscillator was created');
+  assert.equal(sound.start(), true);
+  assert.equal(sound.play('quest'), true, 'after start it plays');
+  assert.ok(made.oscillators.length > 0, 'a real oscillator was scheduled');
+});
+
+test('stop() really stops: cues cannot play onto a shut-down output', () => {
+  // After stop() the context and master still exist, so checking only those let
+  // play() keep scheduling notes onto an output the caller believes is closed.
+  const { Fake, made } = recordingContext();
+  const sound = createSoundscape({ AudioContextClass: Fake, preference: { enabled: true, volume: 0.7 } });
+  sound.start();
+  assert.equal(sound.play('quest'), true);
+  sound.stop();
+  assert.equal(sound.started, false);
+  const before = made.oscillators.length;
+  assert.equal(sound.play('quest'), false, 'a stopped soundscape must not play');
+  assert.equal(made.oscillators.length, before, 'and must not create oscillators either');
+});
+
+test('the soundscape can be started again after stopping', () => {
+  const { Fake } = recordingContext();
+  const sound = createSoundscape({ AudioContextClass: Fake, preference: { enabled: true, volume: 0.7 } });
+  sound.start();
+  sound.stop();
+  assert.equal(sound.start(), true, 'restart is allowed');
+  assert.equal(sound.started, true);
+  assert.equal(sound.play('quest'), true, 'and it plays again');
+});
+
+test('starting twice does not build a second drone', () => {
+  const { Fake, made } = recordingContext();
+  const sound = createSoundscape({ AudioContextClass: Fake, preference: { enabled: true, volume: 0.7 } });
+  sound.start();
+  const afterFirst = made.oscillators.length;
+  sound.start();
+  assert.equal(made.oscillators.length, afterFirst, 'the second start is a no-op');
+});
+
+test('muting silences cues and unmuting restores them', () => {
+  const { Fake } = recordingContext();
+  const sound = createSoundscape({ AudioContextClass: Fake, preference: { enabled: true, volume: 0.7 } });
+  sound.start();
+  assert.equal(sound.setEnabled(false), false);
+  assert.equal(sound.play('quest'), false, 'muted means silent');
+  assert.equal(sound.setEnabled(true), true);
+  assert.equal(sound.play('quest'), true, 'unmuted plays again');
+});
+
+test('the saved preference is written when it is toggled, and failures are reported', () => {
+  const { Fake } = recordingContext();
+  const written = [];
+  const sound = createSoundscape({
+    AudioContextClass: Fake,
+    preference: { enabled: true, volume: 0.7 },
+    persist: (key, value) => written.push([key, value])
+  });
+  sound.start();
+  sound.toggle();
+  assert.deepEqual(written, [[AUDIO_KEY, 'off']], 'the choice is remembered');
+  sound.toggle();
+  assert.deepEqual(written[1], [AUDIO_KEY, 'on']);
+
+  // A writer that throws must not take the game down with it.
+  const fragile = createSoundscape({
+    AudioContextClass: Fake,
+    preference: { enabled: true, volume: 0.7 },
+    persist: () => { throw new Error('storage disabled'); }
+  });
+  fragile.start();
+  assert.equal(fragile.toggle(), false, 'still toggles despite a broken writer');
+});
+
+test('every cue the game asks for actually exists', () => {
+  // A typo in a cue name fails silently at runtime, so check the list directly.
+  const used = ['choose', 'close', 'pickup', 'quest', 'refuse', 'talk', 'work'];
+  for (const name of used) assert.ok(CUES[name], `cue "${name}" is used by the game but not defined`);
+});
+
+test('every phase the game can enter has a tone', () => {
+  for (const phase of ['day', 'dusk', 'night']) {
+    assert.ok(PHASE_TONES[phase], `phase "${phase}" has no tone`);
+  }
+});
+
+test('changing phase while stopped is remembered for the next start', () => {
+  const { Fake } = recordingContext();
+  const sound = createSoundscape({ AudioContextClass: Fake, preference: { enabled: true, volume: 0.7 } });
+  sound.setPhase('night');
+  assert.equal(sound.phase, 'night', 'the phase tracks even before audio starts');
+  sound.start();
+  assert.equal(sound.phase, 'night', 'and start() uses it');
+});
+
+test('the drone stays quieter than the cues that sit on top of it', () => {
+  // A drone that competes with feedback cues makes the game harder to follow, and
+  // the two ceilings are the only thing keeping that balance.
+  assert.ok(MAX_AMBIENCE_GAIN < MAX_CUE_GAIN, 'ambience must stay under the cue ceiling');
+});

@@ -253,7 +253,11 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
     /** Plays one of CUES. Silently does nothing if sound is off or unstarted. */
     play(name) {
       const cue = CUES[name];
-      if (!cue || !enabled || !ctx || !master) return false;
+      // `started` is part of this contract, not just a convenience flag: after
+      // stop() the drone is gone but the context and master still exist, so
+      // without this check a cue would keep scheduling notes onto an output the
+      // caller believes is shut down.
+      if (!cue || !enabled || !ctx || !master || !started) return false;
       if (ctx.state === 'suspended') ctx.resume?.();
       const tone = phaseTone(currentPhase);
       const midi = pentatonicNote(tone.root + 24, cue.degree);
