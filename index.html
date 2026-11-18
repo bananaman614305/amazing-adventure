@@ -437,6 +437,30 @@
     }
 
     /* Pause menu for touch (keyboard uses Esc) */
+    /* Shown only if the browser drops the WebGL context and will not give it
+       back, which otherwise leaves a permanently blank canvas. */
+    #context-lost {
+      position: fixed; inset: 0; z-index: 80;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(6, 10, 16, 0.94);
+      padding: 24px;
+    }
+    #context-lost[hidden] { display: none !important; }
+    #context-lost .card {
+      background: #131c2b; border: 1px solid #2b3a52; border-radius: 14px;
+      padding: 24px; max-width: 360px; width: 100%; text-align: center;
+    }
+    #context-lost h2 { margin: 0 0 8px; font-size: 19px; }
+    #context-lost p { margin: 0 0 16px; color: #98a9c0; font-size: 13px; line-height: 1.5; }
+    #context-lost button {
+      width: 100%; margin-top: 10px; padding: 14px; border-radius: 10px;
+      border: 1px solid rgba(255, 212, 121, 0.5); background: transparent;
+      color: #ffd479; font: inherit; font-size: 15px; font-weight: 600;
+      cursor: pointer;
+    }
+    #context-lost button.primary { background: #ffd479; color: #1a1206; border-color: #ffd479; }
+    #context-lost .hint-line { margin: 14px 0 0; font-size: 12px; color: #7d8ea6; }
+
     #touch-pause {
       position: fixed; inset: 0; z-index: 60;
       display: flex; align-items: center; justify-content: center;
@@ -502,6 +526,15 @@
         <button type="button" class="touch-button" id="touch-journal">Journal</button>
         <button type="button" class="touch-button" id="touch-pause-button">Pause</button>
       </div>
+    </div>
+  </div>
+
+  <div id="context-lost" hidden role="alert">
+    <div class="card">
+      <h2>Screen went blank</h2>
+      <p id="context-lost-message">The graphics context was lost. Restoring…</p>
+      <button type="button" class="primary" id="context-lost-reload">Reload the game</button>
+      <p class="hint-line">Your progress is already saved — reload, then choose Continue.</p>
     </div>
   </div>
 

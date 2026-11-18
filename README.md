@@ -51,6 +51,13 @@ desktop.
 Desktop controls are unchanged: WASD, mouse look, Shift to run, E to interact,
 J journal, Esc pause, P to toggle adaptive resolution.
 
+### When a phone drops the graphics context
+
+Mobile browsers throw away the WebGL context under memory pressure or when the
+GPU process restarts. Rather than leaving a blank screen, the game saves your
+progress, shows a recovery sheet, and carries on if the browser hands the context
+back. If it does not, the sheet offers a reload that resumes from the save.
+
 ### A self-contained candidate
 
 The game is static files with no build step. Three.js r160 is **vendored** at

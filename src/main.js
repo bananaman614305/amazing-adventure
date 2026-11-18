@@ -26,12 +26,14 @@ import {
 } from './ambient.js';
 import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
 import { createAdaptiveResolution } from './perf.js';
+import { createRecovery, shouldPanicShed } from './resilience.js';
 import {
   stickVector, knobOffset, lookDelta, clampPitch, wantsTouchControls,
   interactLabel, STICK_RADIUS
 } from './touch.js';
 import { onTerrace } from './terrain.js';
 import { VERSION, BUILD_NAME, RELEASE_CHANNEL, ENTRY_POINT } from './version.js';
+import { buildManifest } from './manifest.js';
 
 // --- DOM ------------------------------------------------------------------
 const $ = (id) => document.getElementById(id);
@@ -72,6 +74,9 @@ const touchPauseButton = $('touch-pause-button');
 const touchPause = $('touch-pause');
 const touchResume = $('touch-resume');
 const touchSave = $('touch-save');
+const contextLostEl = $('context-lost');
+const contextLostMessage = $('context-lost-message');
+const contextLostReload = $('context-lost-reload');
 
 // --- World, player, state -------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -98,6 +103,47 @@ document.body.dataset.pixelRatio = String(resolution.ratio);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
+
+// --- Graphics context loss -----------------------------------------------
+// Phones drop the WebGL context when the tab is backgrounded under memory
+// pressure or the GPU process restarts. Three.js cannot recover on its own, so
+// without this the canvas stays blank forever with no explanation.
+const recovery = createRecovery();
+let contextWatchdog = 0;
+
+function showContextLost(show) {
+  contextLostEl.hidden = !show;
+  if (show && recovery.message()) contextLostMessage.textContent = recovery.message();
+}
+
+renderer.domElement.addEventListener('webglcontextlost', (event) => {
+  // Preventing the default is what lets the browser hand the context back.
+  event.preventDefault();
+  if (!recovery.begin('webglcontextlost')) return;
+  showContextLost(true);
+  // Saving here is deliberate: the save data is plain JSON and the player
+  // should never lose progress to a renderer fault.
+  saveGame();
+  clearTimeout(contextWatchdog);
+  contextWatchdog = setTimeout(() => {
+    if (!recovery.lost) return;
+    contextLostMessage.textContent =
+      'The graphics context could not be restored. Reload to carry on where you left off.';
+  }, recovery.timeoutMs);
+});
+
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+  clearTimeout(contextWatchdog);
+  recovery.restored();
+  showContextLost(false);
+  toast('Restored.');
+});
+
+// A reload is the only guaranteed way back once the context is gone, and the
+// save made at the moment of loss is what makes that safe.
+contextLostReload.addEventListener('click', () => {
+  window.location.reload();
+});
 
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 200);
 const world = buildWorld(renderer);
@@ -1004,9 +1050,16 @@ function frame() {
   // Adapt resolution from the real frame time, not the clamped game delta. The
   // first few frames are dropped by the controller itself so shader compiles do
   // not count against the machine.
+  lastFrameMs = rawDt * 1000;
   if (adaptiveResolution) {
-    lastFrameMs = rawDt * 1000;
-    applyResolution(resolution.sample(lastFrameMs));
+    // If a frame is catastrophically long, shed resolution immediately instead
+    // of waiting for the smoothed average to catch up.
+    if (shouldPanicShed(lastFrameMs, resolution.ratio <= 0.5)) {
+      // Go through the controller so its reported ratio stays truthful.
+      applyResolution(resolution.force(0.5));
+    } else {
+      applyResolution(resolution.sample(lastFrameMs));
+    }
   }
 
   requestAnimationFrame(frame);
@@ -1041,6 +1094,8 @@ window.amazingAdventure = {
   buildName: BUILD_NAME,
   releaseChannel: RELEASE_CHANNEL,
   entryPoint: ENTRY_POINT,
+  // A dashboard can read this to learn how to serve the preview.
+  manifest: buildManifest(),
   player,
   npcs,
   renderer,
@@ -1097,6 +1152,13 @@ window.amazingAdventure = {
       return touchInteract.hidden ? null : touchInteract.textContent;
     },
     forceTouch: (on) => { touchState.forceTouch = Boolean(on); }
+  },
+  recovery: {
+    get lost() { return recovery.lost; },
+    get attempts() { return recovery.attempts; },
+    begin: (reason) => recovery.begin(reason),
+    restored: () => recovery.restored(),
+    message: () => recovery.message()
   },
   resolution: {
     get ratio() { return resolution.ratio; },

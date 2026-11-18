@@ -398,6 +398,58 @@ async function playSession(browser, server, profile) {
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 30000 });
 
+  // --- Recovering from a dropped graphics context -----------------------
+  // Phones drop the WebGL context under memory pressure. Without handling it
+  // the canvas stays blank with no explanation, so this is a real phone risk.
+  const contextLoss = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const ext = api.renderer.getContext().getExtension('WEBGL_lose_context');
+    if (!ext) return { supported: false };
+    const overlay = document.getElementById('context-lost');
+    ext.loseContext();
+    await new Promise((r) => setTimeout(r, 400));
+    const reloadButton = document.getElementById('context-lost-reload');
+    const reloadBox = reloadButton.getBoundingClientRect();
+    const during = {
+      shown: !overlay.hidden,
+      message: document.getElementById('context-lost-message').textContent,
+      saved: api.saves.loadSave() !== null,
+      hint: (overlay.querySelector('.hint-line') || {}).textContent || '',
+      // An element that exists but is unlabelled, zero-sized or hidden is not a
+      // usable way out, so check the things a player actually needs.
+      reload: {
+        label: (reloadButton.textContent || '').trim(),
+        width: Math.round(reloadBox.width),
+        height: Math.round(reloadBox.height),
+        visible: reloadBox.width > 0 && reloadBox.height > 0 &&
+          getComputedStyle(reloadButton).visibility !== 'hidden' &&
+          getComputedStyle(reloadButton).display !== 'none'
+      }
+    };
+    ext.restoreContext();
+    await new Promise((r) => setTimeout(r, 1000));
+    return { supported: true, during, after: { hidden: overlay.hidden } };
+  });
+  checks.check(`${profile.name}: losing the graphics context shows a recovery message`,
+    contextLoss.supported === false ||
+    (contextLoss.during.shown === true && /lost|restor/i.test(contextLoss.during.message)),
+    JSON.stringify(contextLoss.during || contextLoss));
+  checks.check(`${profile.name}: progress is saved when the context is lost`,
+    contextLoss.supported === false || contextLoss.during.saved === true,
+    JSON.stringify(contextLoss.during || contextLoss));
+  checks.check(`${profile.name}: the recovery sheet offers a usable reload`,
+    contextLoss.supported === false ||
+    (contextLoss.during.reload.visible === true &&
+      contextLoss.during.reload.height >= 44 &&
+      /reload/i.test(contextLoss.during.reload.label)),
+    JSON.stringify(contextLoss.during?.reload));
+  checks.check(`${profile.name}: the recovery sheet tells the player their progress is kept`,
+    contextLoss.supported === false || /saved|continue/i.test(contextLoss.during.hint),
+    JSON.stringify(contextLoss.during?.hint));
+  checks.check(`${profile.name}: the game recovers when the context comes back`,
+    contextLoss.supported === false || contextLoss.after.hidden === true,
+    JSON.stringify(contextLoss.after || contextLoss));
+
   // Evidence should show the game being played, not a menu. The reload above
   // left the game on the title overlay, so start it again and stand by Mara
   // with the touch controls on screen.

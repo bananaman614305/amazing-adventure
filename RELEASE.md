@@ -27,6 +27,28 @@ runtime: `node_modules/` is **not** required to play, only to run the browser
 tests. That is deliberate, so the preview can be published without shipping a
 dependency tree or contacting a CDN.
 
+## Machine-readable manifest
+
+For a dashboard Play tab that should not hard-code file lists, the release
+describes itself in two places:
+
+- `release-manifest.json` at the repository root — generated, committed, and
+  held to the real files by a test so it cannot drift. Regenerate with
+  `npm run release:manifest`.
+- `src/manifest.js` — the same data in code, exposed at runtime as
+  `window.amazingAdventure.manifest`.
+
+It declares the entry point, the exact required-file list, the directories that
+are not needed at runtime, the control scheme, and the fact that there is no
+build step. `verifyManifest()` fails loudly if a listed file is absent, so a
+release step can refuse to serve a preview that would 404.
+
+I verified the list is genuinely sufficient by copying **only** those 19 files
+into an empty directory (868 KB), serving it with `python3 -m http.server`, and
+playing it with every off-origin request aborted: 0 external requests, 0 failed
+requests, 0 console errors, two-thumb movement and look both working, and the
+Talk button appearing at Mara.
+
 ## Files to serve
 
 Required, and sufficient:
@@ -137,9 +159,9 @@ preview as final.
   interception test that aborts every off-origin request, then playing the game).
 - The build identifies itself as `0.3.0` both in code and on the page.
 
-Everything above is re-run by `npm run test:mobile` (117 checks across 4
-profiles = 29 per profile) and `npm run test:browser` (70 desktop checks), plus
-151 Node unit tests. 338 checks in total.
+Everything above is re-run by `npm run test:mobile` (137 checks across 4
+profiles) and `npm run test:browser` (70 desktop checks), plus 171 Node unit
+tests. 378 checks in total.
 
 ## A note on frame rate
 
