@@ -159,9 +159,9 @@ preview as final.
   interception test that aborts every off-origin request, then playing the game).
 - The build identifies itself as `0.3.0` both in code and on the page.
 
-Everything above is re-run by `npm run test:mobile` (165 checks across 4
+Everything above is re-run by `npm run test:mobile` (177 checks across 4
 profiles) and `npm run test:browser` (132 desktop checks), plus 343 Node unit
-tests. 640 checks in total.
+tests. 652 checks in total.
 
 ## A note on frame rate
 

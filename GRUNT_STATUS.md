@@ -373,7 +373,70 @@ instructions.
 
 ## Current task
 
-Round 18 — Proving there are no other soft-locks, and hardening save loading.
+Round 19 — Backgrounding the app left the game permanently stuck.
+
+PRs #5–#19 are published and open for the human. Rounds 14–18 hardened *what* the
+game does. This round fixes the most common real-world failure on a phone: the game
+**died silently** when the player switched away and came back.
+
+### The bug
+
+The visibility handler froze the player whenever the tab or app went to the
+background:
+
+```js
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) return;        // <-- on return, does nothing
+  ...
+  player.frozen = true;                // <-- freeze applied
+});
+```
+
+There was **no branch for coming back.** `frozen` was only ever cleared by
+`showTouchPause(false)` — and that sheet was never shown. So on a phone: check a
+message, return to the game, and **the player cannot move at all**, with no pause
+sheet and no hint about why. Every tap, stick drag and keyboard key did nothing.
+
+Measured before/after: `frozen: true` on return, and 15 frames of held forward input
+moved the player **0.000** units.
+
+### The fix
+
+A `frozenByVisibility` flag so returning only undoes a freeze *it* applied, and never
+resumes the world when a conversation or the pause sheet legitimately owns the pause:
+
+- tab/app hidden → freeze, remember that we did it
+- tab/app visible → unfreeze **only** if we froze it, and **not** while a dialogue or
+  the pause sheet is open
+
+All four cases verified in a real mobile viewport: plain hide/return resumes walking
+(2.09 units moved); an open conversation survives and stays paused; the pause sheet
+survives and stays paused; an explicit resume still works normally.
+
+### Proof the test is real
+
+Reverting just this handler makes **8 committed mobile checks fail** across the four
+profiles. Restored, all pass. A genuine regression guard.
+
+### Checks actually run this round
+
+- `npm test` — **343/343 pass** (unchanged; this is UI lifecycle, proven in the browser).
+- `npm run test:browser` — **132/132 pass, exit 0** (no desktop regressions).
+- `npm run test:mobile` — **177/177 pass, exit 0** (was 165): **12 new checks across
+  4 profiles** — returning unfreezes the world, the player can actually walk again,
+  and a conversation survives backgrounding and stays paused.
+- **Totals: 652 checks — 343 unit, 132 desktop, 177 mobile.**
+- Self-contained re-verified: 26 files, 972 KB, 0 external requests, 0 errors, with
+  hide/return working in the isolated build.
+
+### Evidence
+
+`artifacts/mobile-iphone-13-portrait.png` (1170x2532, mean luminance 95.4, 11067
+colours) and `artifacts/mobile-iphone-se-small.png` (640x1136). Measured **32.5%** and
+**28.3%** of pixels bright — the most legible mobile frames so far. I am text-only and
+did not inspect them; the fix rests on the committed lifecycle checks.
+
+## Previous round — Round 18: reachability proof and save hardening
 
 PRs #5–#18 are published and open for the human. Round 17 fixed a soft-lock found by
 a single playthrough, and its own report said honestly: *"I tested completion, not
@@ -1154,6 +1217,8 @@ hosting step to guess, the release now describes itself:
 2. **Give the terrace parapet a collider.** It is drawn but has none. Testing showed
    the player cannot actually walk through it (the step-height rule blocks the drop),
    so it is cosmetic rather than a hole — but the geometry should match what is drawn.
+3. **A real screen reader test.** Six rounds of accessibility work rest on
+   programmatic verification only.
 3. **Give the lane its own work board, or a second reason to cross the gate.**
    The plaza board makes standing earnable early, but the lane has no equivalent,
    so the two areas are not symmetrical in how a player recovers standing.

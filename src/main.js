@@ -1565,17 +1565,33 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
+// Set when the world was stopped because the tab or app went away, so coming back
+// knows whose job it is to un-stop it.
+let frozenByVisibility = false;
+
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) return;
-  if (!started) return;
-  if (touchState.active) {
-    // Do not tear down an open conversation: a phone user checking a message
-    // should find their dialogue where they left it. Just stop the world.
-    player.setMoveInput(0, 0);
-    player.frozen = true;
-  } else if (player.enabled) {
-    document.exitPointerLock?.();
+  if (document.hidden) {
+    if (!started) return;
+    if (touchState.active) {
+      // Do not tear down an open conversation: a phone user checking a message
+      // should find their dialogue where they left it. Just stop the world.
+      player.setMoveInput(0, 0);
+      frozenByVisibility = true;
+      player.frozen = true;
+    } else if (player.enabled) {
+      document.exitPointerLock?.();
+    }
+    return;
   }
+
+  // Coming back. This branch used to be missing entirely, so on a phone the app
+  // froze the player on background and never unfroze them: the game was silently
+  // stuck, with no pause sheet to resume from. Only undo a freeze we applied, and
+  // leave the world stopped if a conversation or the pause sheet owns it.
+  if (!frozenByVisibility) return;
+  frozenByVisibility = false;
+  if (!dialogueEl.hidden || !touchPause.hidden) return;
+  player.frozen = false;
 });
 
 window.addEventListener('resize', () => {

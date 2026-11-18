@@ -215,6 +215,80 @@ async function playSession(browser, server, profile) {
   });
   await wait(400);
 
+  // --- Backgrounding the app must not leave the game stuck ------------------
+  // A phone user checks a message, comes back, and the game must still work. The
+  // handler that froze the world on hide had no matching branch on return, so the
+  // player stayed frozen forever with no pause sheet to resume from.
+  const hide = () => page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const show = () => page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => false });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    document.getElementById('dialogue')?.setAttribute('hidden', '');
+    api.touch.pause(false);
+    api.player.placeAt(0, 0, 0, 0);
+  });
+  await wait(300);
+  await hide();
+  await wait(250);
+  const whileHidden = await page.evaluate(() => window.amazingAdventure.player.frozen);
+  await show();
+  await wait(350);
+  const afterReturn = await page.evaluate(() => window.amazingAdventure.player.frozen);
+  checks.check(`${profile.name}: returning from the background unfreezes the world`,
+    whileHidden === true && afterReturn === false,
+    JSON.stringify({ whileHidden, afterReturn }));
+
+  // And the player can actually move, not merely be unfrozen on paper.
+  const posBeforeReturn = await page.evaluate(() => {
+    const p = window.amazingAdventure.player.position;
+    return { x: p.x, z: p.z };
+  });
+  for (let i = 0; i < 12; i += 1) {
+    await page.evaluate(() => window.amazingAdventure.player.setMoveInput(1, 0));
+    await wait(50);
+  }
+  await page.evaluate(() => window.amazingAdventure.player.setMoveInput(0, 0));
+  await wait(200);
+  const movedAfterReturn = await page.evaluate(() => {
+    const p = window.amazingAdventure.player.position;
+    return { x: p.x, z: p.z };
+  });
+  checks.check(`${profile.name}: the player can walk again after returning`,
+    Math.hypot(movedAfterReturn.x - posBeforeReturn.x, movedAfterReturn.z - posBeforeReturn.z) > 0.2,
+    JSON.stringify({ from: posBeforeReturn, to: movedAfterReturn }));
+
+  // A conversation must survive backgrounding and stay paused, rather than being
+  // torn down or leaving the world running behind the sheet.
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const mara = api.npcs.find((n) => n.id === 'mara');
+    api.player.placeAt(mara.group.position.x, mara.group.position.z + 1.4, 0, 0);
+  });
+  await wait(300);
+  await page.evaluate(() => window.amazingAdventure.touch.interact());
+  await wait(500);
+  const dialogueBefore = await page.evaluate(() => !document.getElementById('dialogue').hidden);
+  await hide();
+  await wait(250);
+  await show();
+  await wait(350);
+  const dialogueAfter = await page.evaluate(() => ({
+    open: !document.getElementById('dialogue').hidden,
+    frozen: window.amazingAdventure.player.frozen
+  }));
+  checks.check(`${profile.name}: a conversation survives backgrounding and stays paused`,
+    dialogueBefore === true && dialogueAfter.open === true && dialogueAfter.frozen === true,
+    JSON.stringify(dialogueAfter));
+  await page.evaluate(() => document.getElementById('dialogue-close')?.click());
+  await wait(350);
+
   // --- Walk to Mara and talk with the touch button --------------------------
   const talked = await page.evaluate(async () => {
     const api = window.amazingAdventure;
