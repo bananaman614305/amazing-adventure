@@ -392,6 +392,16 @@
     }
     #touch-interact[hidden] { display: none !important; }
     #touch-row { display: flex; gap: 10px; }
+    #touch-row-a11y { display: flex; gap: 8px; }
+    /* These three are the phone equivalent of C, L and G. Slightly smaller than the
+       main row because they are secondary, but still a full 44px touch target. */
+    #touch-row-a11y .touch-button {
+      min-width: 0; min-height: 44px;
+      padding: 0 10px; font-size: 12px; font-weight: 500;
+      border-radius: 22px;
+      border-color: rgba(143, 176, 216, 0.45);
+      color: #b8c6d8;
+    }
 
     /* Dialogues become a full-width sheet on a phone so choices are thumb-sized. */
     @media (max-width: 760px), (pointer: coarse) {
@@ -646,6 +656,14 @@
       <div id="touch-row">
         <button type="button" class="touch-button" id="touch-journal">Journal</button>
         <button type="button" class="touch-button" id="touch-pause-button">Pause</button>
+      </div>
+      <!-- The keyboard shortcuts C, L and G have no key on a phone. VoiceOver on
+           iOS is the most common screen reader there is, so these need to exist as
+           buttons or the whole accessibility feature is desktop-only. -->
+      <div id="touch-row-a11y">
+        <button type="button" class="touch-button" id="touch-describe" aria-label="Describe where I am">Where am I</button>
+        <button type="button" class="touch-button" id="touch-nearby" aria-label="What is nearby">Nearby</button>
+        <button type="button" class="touch-button" id="touch-travel" aria-label="Walk to the nearest place of interest">Take me</button>
       </div>
     </div>
   </div>

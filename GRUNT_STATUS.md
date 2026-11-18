@@ -373,7 +373,59 @@ instructions.
 
 ## Current task
 
-Round 15 — Guided travel: the compass could describe a route but not walk it.
+Round 16 — My own accessibility work was desktop-only.
+
+PRs #5–#16 are published and open for the human. Rounds 13–15 built screen-reader
+support, a spoken compass and guided travel — all reachable only through the **C, L
+and G keys**. A phone has none of those keys, and **VoiceOver on iOS is the most
+widely used screen reader in the world.** So the single largest accessibility
+audience got none of that work. This round fixes a gap I created myself.
+
+### What Round 16 adds
+
+- Three touch buttons in the mobile control cluster: **Where am I** (C), **Nearby**
+  (L) and **Take me** (G). All 44px touch targets with `aria-label`s.
+- **Take me** starts guided travel, and tapping it again stops it — the same
+  behaviour as G.
+- Verified at **all four emulated profiles including iPhone SE (320x568)**, where
+  the buttons genuinely overlap the stick and look zones. Geometry alone was not
+  enough: the meaningful check is that `elementFromPoint` at each button's centre
+  returns **that button**, not the look zone beneath it. All three pass.
+
+### Bugs I found in my own test work this round
+
+1. **I inserted my checks between an action and its assertion.** My block landed
+   between `touch.interact()` and the check that reads its result, so the dialogue
+   checks failed with `open: false`. Nothing was wrong with the game; I had split a
+   two-step test.
+2. **Cached tap coordinates went stale.** The interact button appears and disappears,
+   which shifts the row, so coordinates captured earlier landed on the wrong control.
+   Tapping by selector fixed it.
+3. The "Take me" test then left the player standing in a conversation, which broke
+   every later dialogue check. The block now resets the world when it finishes.
+
+### Checks actually run this round
+
+- `npm test` — **318/318 pass** (unchanged; this round is UI wiring, proven in the
+  browser rather than by new pure functions).
+- `npm run test:browser` — **124/124 pass, exit 0** (unchanged, no desktop regressions).
+- `npm run test:mobile` — **165/165 pass, exit 0** (was 137): **28 new checks across
+  4 profiles.** New: the three controls exist; they are thumb-sized and on screen;
+  each has an accessible name; **taps actually reach them rather than the look
+  zone**; Where am I speaks the area and gate; Nearby names somewhere with a
+  direction; Take me starts and stops guided travel.
+- **Totals: 607 checks — 318 unit, 124 desktop, 165 mobile.**
+- 26 files, 968 KB, self-contained re-verified (0 external requests, 0 errors).
+
+### Evidence
+
+`artifacts/mobile-iphone-13-portrait.png` (1170x2532, mean luminance 95.4, 11141
+colours) and `artifacts/mobile-iphone-se-small.png` (640x1136). Measuring the
+bottom-right **button corner separately**: 17.0% and 62.7% of pixels above 90
+luminance — the buttons are really drawn with readable text, not just present in the
+DOM. I am text-only and did not inspect them.
+
+## Previous round — Round 15: guided travel
 
 PRs #5–#15 are published and open for the human. Round 14 gave the world a spoken
 compass, and I flagged its own limit at the time: it **described** a route, and a
@@ -972,10 +1024,10 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **A real screen reader test.** Rounds 13–15 all rest on verifying live regions
-   and spoken text in the accessibility tree. NVDA or VoiceOver has never been run
-   against this game and that remains the biggest honesty gap in the accessibility
-   work.
+2. **A real screen reader test.** Rounds 13–16 all rest on verifying live regions,
+   spoken text and hit targets programmatically. NVDA or VoiceOver has never been run
+   against this game, and on iOS specifically I cannot verify how VoiceOver reads the
+   new buttons. That remains the biggest honesty gap in the work.
 3. **Give the lane its own work board, or a second reason to cross the gate.**
    The plaza board makes standing earnable early, but the lane has no equivalent,
    so the two areas are not symmetrical in how a player recovers standing.

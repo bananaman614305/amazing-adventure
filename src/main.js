@@ -60,6 +60,9 @@ const srLive = $('sr-live');
 const compassInput = $('compass-input');
 const compassResults = $('compass-results');
 const compassList = $('compass-list');
+const touchDescribe = $('touch-describe');
+const touchNearby = $('touch-nearby');
+const touchTravel = $('touch-travel');
 const compassOptions = $('compass-options');
 const srAlert = $('sr-alert');
 
@@ -1204,6 +1207,32 @@ touchInteract.addEventListener('click', (event) => {
   nearestInteractable.run();
   refreshHint();
   refreshTouchInteract();
+});
+
+// The phone equivalents of C, L and G. Without these the accessibility work of
+// rounds 13-15 simply did not exist on a phone, which is where VoiceOver -- the
+// most widely used screen reader -- actually runs.
+touchDescribe.addEventListener('click', (event) => {
+  event.preventDefault();
+  if (!started) return;
+  announce(describeState(state, areaAt(player.position.x, player.position.z) || 'outside', nearestInteractable), { urgent: true });
+});
+
+touchNearby.addEventListener('click', (event) => {
+  event.preventDefault();
+  if (!started) return;
+  announceNearby();
+});
+
+touchTravel.addEventListener('click', (event) => {
+  event.preventDefault();
+  if (!started) return;
+  if (guided) { stopGuidedTravel(); return; }
+  const query = compassInput?.value?.trim();
+  if (query) { startGuidedTravel(query); return; }
+  const { from } = compassOrigin();
+  const nearest = nearbyTargets(0, from, compassTargets(), 1)[0];
+  if (nearest) startGuidedTravel(nearest.id);
 });
 
 touchJournal.addEventListener('click', (event) => {

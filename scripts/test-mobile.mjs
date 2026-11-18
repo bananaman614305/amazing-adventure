@@ -119,6 +119,102 @@ async function playSession(browser, server, profile) {
     journalViaButton.w >= 44 && journalViaButton.h >= 44,
     `${Math.round(journalViaButton.w)}x${Math.round(journalViaButton.h)}`);
 
+  // --- The accessibility controls must exist on a phone ---------------------
+  // Start clean: no conversation, nobody guided, and somewhere with space around.
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    api.stopGuidedTravel?.({ announceIt: false });
+    document.getElementById('dialogue')?.setAttribute('hidden', '');
+    api.player.frozen = false;
+    api.player.placeAt(0, 6, 0, 0);
+  });
+  await wait(400);
+
+  // Rounds 13-15 added C, L and G as keyboard shortcuts. A phone has none of those
+  // keys, and VoiceOver on iOS is the most widely used screen reader, so without
+  // these buttons the whole accessibility feature was desktop-only.
+  const a11yButtons = await page.evaluate(() => {
+    const ids = ['touch-describe', 'touch-nearby', 'touch-travel'];
+    return ids.map((id) => {
+      const el = document.getElementById(id);
+      if (!el) return { id, missing: true };
+      const rect = el.getBoundingClientRect();
+      return {
+        id,
+        visible: rect.width > 0 && rect.height > 0 && !el.hidden,
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        // A control that is off screen cannot be tapped, however good its size.
+        onScreen: rect.top >= 0 && rect.bottom <= window.innerHeight &&
+          rect.left >= 0 && rect.right <= window.innerWidth,
+        labelled: Boolean(el.getAttribute('aria-label') || el.textContent.trim())
+      };
+    });
+  });
+  checks.check(`${profile.name}: the describe, nearby and travel controls exist on a phone`,
+    a11yButtons.length === 3 && a11yButtons.every((b) => b.visible && !b.missing),
+    JSON.stringify(a11yButtons));
+  checks.check(`${profile.name}: the accessibility controls are thumb sized and on screen`,
+    a11yButtons.every((b) => b.height >= 44 && b.width >= 44 && b.onScreen),
+    JSON.stringify(a11yButtons.map((b) => `${b.id} ${b.width}x${b.height} on=${b.onScreen}`)));
+  checks.check(`${profile.name}: every accessibility control has an accessible name`,
+    a11yButtons.every((b) => b.labelled), JSON.stringify(a11yButtons.map((b) => b.id)));
+
+  // Geometry alone is not enough: the buttons sit over the stick and look zones on a
+  // small screen, so what matters is that a tap at their centre actually arrives.
+  const tappable = await page.evaluate(() => {
+    return ['touch-describe', 'touch-nearby', 'touch-travel'].map((id) => {
+      const rect = document.getElementById(id).getBoundingClientRect();
+      const top = document.elementFromPoint(
+        rect.x + rect.width / 2, rect.y + rect.height / 2);
+      return { id, reaches: top?.id === id, top: top?.id || top?.tagName };
+    });
+  });
+  checks.check(`${profile.name}: taps reach the accessibility controls, not the look zone`,
+    tappable.every((t) => t.reaches), JSON.stringify(tappable));
+
+  // Tapping "Where am I" must speak real state, not nothing. Tap by selector: the
+  // interact button comes and goes, which shifts the row, so cached coordinates can
+  // land on the wrong control.
+  await page.tap('#touch-describe');
+  await wait(400);
+  const spokenDescribe = await page.evaluate(() => window.amazingAdventure.srAlertText());
+  checks.check(`${profile.name}: tapping Where am I speaks the area and the gate`,
+    /Plaza|Lane/.test(spokenDescribe || '') && /gate is (open|locked)/.test(spokenDescribe || ''),
+    JSON.stringify(spokenDescribe?.slice(0, 80)));
+
+  // Tapping "Nearby" must name something with a direction.
+  await page.tap('#touch-nearby');
+  await wait(600);
+  const spokenNearby = await page.evaluate(() => window.amazingAdventure.srLiveText());
+  checks.check(`${profile.name}: tapping Nearby names somewhere with a direction`,
+    /(ahead|behind|left|right|within reach)/.test(spokenNearby || ''),
+    JSON.stringify(spokenNearby?.slice(0, 80)));
+
+  // Tapping "Take me" must start walking, and tapping again must stop. Check the
+  // second tap happens while the first walk is still running, or it is a new walk,
+  // not a stop.
+  await page.tap('#touch-travel');
+  await wait(500);
+  const travelling = await page.evaluate(() => window.amazingAdventure.guidedState());
+  await page.tap('#touch-travel');
+  await wait(500);
+  const stopped = await page.evaluate(() => window.amazingAdventure.guidedState());
+  checks.check(`${profile.name}: tapping Take me starts guided travel and tapping again stops it`,
+    travelling !== null && stopped === null,
+    JSON.stringify({ travelling, stopped }));
+
+  // Reset the world before the rest of the suite: guided travel may have walked the
+  // player into a conversation, and the later checks expect a clean plaza.
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    api.stopGuidedTravel({ announceIt: false });
+    document.getElementById('dialogue')?.setAttribute('hidden', '');
+    api.player.placeAt(0, 0, 0, 0);
+    api.player.frozen = false;
+  });
+  await wait(400);
+
   // --- Walk to Mara and talk with the touch button --------------------------
   const talked = await page.evaluate(async () => {
     const api = window.amazingAdventure;
