@@ -339,6 +339,11 @@ applyResolution(resolution.ratio);
 document.body.dataset.pixelRatio = String(resolution.ratio);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// The canvas is where play happens and where focus returns after a conversation
+// closes, so it has to be able to hold focus. It is not in the tab order (a keyboard
+// user reaches the game through the Play button) but programmatic focus needs it
+// to be focusable at all.
+renderer.domElement.tabIndex = -1;
 container.appendChild(renderer.domElement);
 
 // --- Sound ---------------------------------------------------------------
@@ -642,6 +647,12 @@ function openDialogue(npc) {
   player.frozen = true;
   choiceIndex = 0;
   renderNode();
+  // Move focus into the dialog. The panel declares aria-modal, which tells assistive
+  // tech that everything outside it is inert -- but that is only true if focus is
+  // actually inside. It used to stay on <body>, so a screen reader user was told the
+  // dialog existed and then left with no way to reach its choices. tabindex="-1"
+  // makes the panel itself focusable without adding it to the tab order.
+  dialogueEl.focus({ preventScroll: true });
   cue('talk');
 }
 
@@ -743,12 +754,17 @@ function choose(index) {
 }
 
 function closeDialogue() {
+  const hadFocus = dialogueEl.contains(document.activeElement);
   dialogueEl.hidden = true;
   touchRoot.classList.remove('dialogue-open');
   activeNode = null;
   activeNPC = null;
   player.frozen = false;
   hint.hidden = !player.enabled;
+  // Hand focus back rather than leaving it on a hidden element, where keystrokes go
+  // nowhere. The canvas is the game, so that is where it belongs.
+  if (hadFocus) renderer.domElement?.focus?.({ preventScroll: true });
+  else document.activeElement?.blur?.();
   cue('close');
 }
 

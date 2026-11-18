@@ -1825,6 +1825,103 @@ try {
 
   await capture(page, 'round17-playthrough.png');
 
+  // --- 29b. Dialog focus management -----------------------------------------
+  // The dialogue panel declares role=dialog and aria-modal=true, which tells
+  // assistive tech that everything outside is inert. That is only honest if focus
+  // is genuinely inside it: it used to stay on <body>, so a screen reader user was
+  // told the dialog existed and then left unable to reach its choices.
+  // Earlier checks leave the world in whatever state they finished in, so reset to a
+  // clean game before testing focus: assuming a pristine `lanterns` step made this
+  // check compare 'done' to 'done' and prove nothing.
+  await page.evaluate(async () => {
+    const S = await import('./src/state.js');
+    const api = window.amazingAdventure;
+    document.getElementById('dialogue')?.setAttribute('hidden', '');
+    api.setState(S.createInitialState());
+    api.player.placeAt(0, 0, 0, 0);
+    api.player.frozen = false;
+    api.refreshHUD();
+  });
+  await new Promise((r) => setTimeout(r, 250));
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const mara = api.npcs.find((n) => n.id === 'mara');
+    api.player.placeAt(mara.group.position.x, mara.group.position.z + 1.4, 0, 0);
+  });
+  await new Promise((r) => setTimeout(r, 300));
+  await page.keyboard.press('e');
+  await new Promise((r) => setTimeout(r, 600));
+
+  const focusOnOpen = await page.evaluate(() => ({
+    open: !document.getElementById('dialogue').hidden,
+    inDialogue: !!document.activeElement?.closest('#dialogue'),
+    activeId: document.activeElement?.id || document.activeElement?.tagName
+  }));
+  checks.check('opening a conversation moves focus into the dialog',
+    focusOnOpen.open === true && focusOnOpen.inDialogue === true,
+    JSON.stringify(focusOnOpen));
+
+  const canHoldFocus = await page.evaluate(() => {
+    const el = document.getElementById('dialogue');
+    return { tabindex: el.getAttribute('tabindex'), role: el.getAttribute('role') };
+  });
+  checks.check('the dialog is focusable and still declares its modal role',
+    canHoldFocus.tabindex === '-1' && canHoldFocus.role === 'dialog',
+    JSON.stringify(canHoldFocus));
+
+  await capture(page, 'round20-dialog-focus.png');
+
+  // Keyboard choice selection must still reach the game with focus inside the panel.
+  const lanternsBefore = await page.evaluate(() => window.amazingAdventure.getState().quests.lanterns);
+  await page.keyboard.press('1');
+  await new Promise((r) => setTimeout(r, 600));
+  const lanternsAfter = await page.evaluate(() => window.amazingAdventure.getState().quests.lanterns);
+  checks.check('number keys still take a choice while focus is inside the dialog',
+    lanternsBefore === 'none' && lanternsAfter !== 'none',
+    JSON.stringify({ before: lanternsBefore, after: lanternsAfter }));
+
+  // Closing must not strand focus on a hidden element, where keystrokes go nowhere.
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 500));
+  const focusOnClose = await page.evaluate(() => {
+    const active = document.activeElement;
+    return {
+      tag: active?.tagName,
+      onHiddenElement: !!active?.closest('[hidden]'),
+      dialogueHidden: document.getElementById('dialogue').hidden
+    };
+  });
+  checks.check('closing a conversation hands focus back instead of stranding it',
+    focusOnClose.dialogueHidden === true && focusOnClose.onHiddenElement === false,
+    JSON.stringify(focusOnClose));
+
+  // The canvas is the fallback focus target, so it must not have entered the tab order.
+  const canvasTabIndex = await page.evaluate(() => {
+    const canvas = document.querySelector('#game canvas');
+    return canvas ? canvas.tabIndex : null;
+  });
+  checks.check('the canvas can hold focus without joining the tab order',
+    canvasTabIndex === -1, JSON.stringify({ tabIndex: canvasTabIndex }));
+
+  // And play continues normally afterwards.
+  const walkBefore = await page.evaluate(() => {
+    const p = window.amazingAdventure.player.position;
+    return { x: p.x, z: p.z };
+  });
+  for (let i = 0; i < 12; i += 1) {
+    await page.evaluate(() => window.amazingAdventure.player.setMoveInput(1, 0));
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  await page.evaluate(() => window.amazingAdventure.player.setMoveInput(0, 0));
+  await new Promise((r) => setTimeout(r, 200));
+  const walkAfter = await page.evaluate(() => {
+    const p = window.amazingAdventure.player.position;
+    return { x: p.x, z: p.z };
+  });
+  checks.check('the player can walk after a conversation closed',
+    Math.hypot(walkAfter.x - walkBefore.x, walkAfter.z - walkBefore.z) > 0.2,
+    JSON.stringify({ from: walkBefore, to: walkAfter }));
+
   // --- 30. Save hardening and exhaustive reachability ----------------------
   // Save loading is the only place untrusted data enters the game, and a coin
   // balance that is finite but absurd slipped through the floor-only clamp.
