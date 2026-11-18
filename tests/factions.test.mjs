@@ -260,12 +260,16 @@ test('finishing the toll early is refused', () => {
 
 test('NPC greetings change with faction standing, with correct grammar', async () => {
   const { startConversation } = await import('../src/dialogue.js');
+  // These NPCs have no reputation refusal rule, so their greetings are always
+  // reachable. Refusing NPCs are covered separately below -- a greeting that is
+  // unreachable at a tier is not a greeting worth asserting on.
   const cases = [
-    { npc: 'mara', faction: 'keepers', neutral: true },
-    { npc: 'oswin', faction: 'trade', neutral: true },
-    { npc: 'halden', faction: 'watch', neutral: true }
+    { npc: 'mara', faction: 'keepers' },
+    { npc: 'pip', faction: 'trade' },
+    { npc: 'halden', faction: 'watch', refusesAt: 'hostile' }
   ];
-  for (const { npc, faction } of cases) {
+  const tiers = ['neutral', 'warm', 'cold', 'trusted', 'hostile'];
+  for (const { npc, faction, refusesAt } of cases) {
     const neutralState = createInitialState();
     const neutralLine = startConversation(neutralState, npc).text;
     // Neutral standing must not append any standing commentary.
@@ -285,18 +289,45 @@ test('NPC greetings change with faction standing, with correct grammar', async (
     assert.match(coldLine, /careful around you/);
     assert.match(coldLine, /\bthe (keepers|market|watch) have been careful/, 'plural verb after collective');
 
-    const hostileState = createInitialState();
-    changeReputation(hostileState, faction, -90);
-    const hostileLine = startConversation(hostileState, npc).text;
-    assert.match(hostileLine, /Every (Keeper|trader|guard) in this plaza/);
-    assert.match(hostileLine, /none of it is kind/);
-
     const trustedState = createInitialState();
     changeReputation(trustedState, faction, 70);
     const trustedLine = startConversation(trustedState, npc).text;
     assert.match(trustedLine, /for the (keepers|market|watch) that nobody questions you now/);
     assert.equal(/for The /.test(trustedLine), false, 'no capitalised article mid-sentence');
+
+    // Hostile is a refusal for some NPCs, so only check the greeting where the
+    // NPC still speaks.
+    if (refusesAt !== 'hostile') {
+      const hostileState = createInitialState();
+      changeReputation(hostileState, faction, -90);
+      const hostileLine = startConversation(hostileState, npc).text;
+      assert.match(hostileLine, /Every (Keeper|trader|guard) in this plaza/);
+      assert.match(hostileLine, /none of it is kind/);
+    }
   }
+});
+
+test('a refusing NPC says why instead of greeting, and still proves the grammar', async () => {
+  const { startConversation } = await import('../src/dialogue.js');
+  // Halden refuses a hostile Watch. The refusal keeps the same faction-correct
+  // wording, so the grammar is still exercised through the refusal line.
+  const hostile = createInitialState();
+  changeReputation(hostile, 'watch', -90);
+  const line = startConversation(hostile, 'halden').text;
+  assert.match(line, /Not you|spear|does not move aside/i);
+  assert.match(line, /watch|Watch/i, 'the refusal names the faction');
+  assert.equal(/EveryThe|TheThe|\wThe\w/.test(line), false, 'no missing space in the refusal');
+
+  // Holding the key lifts the refusal so the key can always be returned. It does
+  // not produce a greeting: Halden's key branch takes precedence, which is the
+  // correct behaviour and is asserted here rather than assumed away.
+  const { startKey, pickUpKey } = await import('../src/state.js');
+  startKey(hostile);
+  pickUpKey(hostile);
+  const withKey = startConversation(hostile, 'halden');
+  assert.match(withKey.text, /That is my key/i);
+  assert.ok(withKey.choices.some((c) => /Here it is/.test(c.label)),
+    'the key can still be handed over at hostile standing');
 });
 
 test('every faction exposes the name forms the dialogue needs', () => {

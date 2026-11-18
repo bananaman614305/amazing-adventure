@@ -441,6 +441,40 @@ export function returnLedger(state, choice = 'name') {
   };
 }
 
+// --- Reputation refusals -------------------------------------------------
+//
+// The other half of the standing system. Until now standing only opened doors;
+// these rules close them, so a player who treats the plaza badly finds the
+// plaza closing around them. Every refusal is escapable: acting well lifts the
+// tier and the NPC serves you again.
+//
+// `required` is the lowest tier that still gets served, so 'neutral' turns away
+// Cold and Hostile while 'cold' turns away Hostile only.
+
+export const REFUSAL_RULES = [
+  {
+    npcIds: ['oswin'],
+    required: 'neutral',
+    reason: 'Oswin will not deal with you.',
+    // His ledger is the plaza's shop, so his refusal is about money and trust.
+    until: (state) => hasItem(state, 'oswin_marker'),
+    // Never block the only oil in the plaza: Mara's first quest needs it, and a
+    // player who soured the Market early must still be able to finish the
+    // tutorial and earn their way back into everyone's good books.
+    exempt: (state) => questStatus(state, 'lanterns') === 'started'
+      || questStatus(state, 'lanterns') === 'oil_bought'
+  },
+  {
+    npcIds: ['halden'],
+    required: 'cold',
+    reason: 'Halden will not do business with you.',
+    until: (state) => isQuestDone(state, 'key'),
+    // The key opens the only route to the market lane, so returning it has to
+    // stay possible or the whole northern half of the game becomes unreachable.
+    exempt: (state) => hasItem(state, 'brass_key')
+  }
+];
+
 // --- The arrears: carrying between the two areas -------------------------
 //
 // Wren's ledger is only half the lane's problem. The toll money is owed to Mara

@@ -1050,6 +1050,83 @@ try {
   await closeDialogue();
 
   await capture(page, 'round6-lane-arrears.png');
+
+  // --- 21. Reputation refuses content, not only unlocking it --------------
+  // Standing previously only ever opened doors. These checks prove it can close
+  // one too, that the refusal is explained, and that the critical path stays
+  // open so a disliked player can still finish the game and earn their way back.
+  const setFaction = async (factionId, score) => page.evaluate(async (id, value) => {
+    const api = window.amazingAdventure;
+    const { changeReputation } = await import('./src/factions.js');
+    const state = api.getState();
+    state.reputation[id] = 0;
+    changeReputation(state, id, value);
+    api.refreshHUD();
+  }, factionId, score);
+
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    // Clear both the oil quest and Oswin's marker: each is an intentional
+    // exemption from his refusal, so leaving either in place would (correctly)
+    // mean he keeps serving the player.
+    const state = api.getState();
+    state.quests.lanterns = 'none';
+    state.inventory = state.inventory.filter((id) => id !== 'oswin_marker');
+    api.refreshHUD();
+  });
+  await closeDialogue();
+
+  await setFaction('trade', 0);
+  const neutralOswin = await talkToNpc('oswin');
+  checks.check('a neutral Market is served normally',
+    /Stall is open|oil|haggl/i.test(neutralOswin.line) &&
+    !/nothing for you/i.test(neutralOswin.line), neutralOswin.line.slice(0, 80));
+  await closeDialogue();
+
+  await setFaction('trade', -40);
+  const coldOswin = await talkToNpc('oswin');
+  checks.check('a Cold Market makes Oswin refuse to deal with the player',
+    /nothing for you|goes back to folding/i.test(coldOswin.line), coldOswin.line.slice(0, 90));
+
+  const explained = await page.evaluate(() => {
+    const buttons = [...document.querySelectorAll('#dialogue-choices button')];
+    const index = buttons.findIndex((b) => /change your mind/i.test(b.textContent));
+    if (index < 0) return { ok: false };
+    buttons[index].click();
+    return { ok: true };
+  });
+  await new Promise((r) => setTimeout(r, 250));
+  const explanation = await page.evaluate(() => document.getElementById('dialogue-line').textContent);
+  checks.check('the refusal explains what would earn the NPC round',
+    explained.ok && /good turn|help|change your mind/i.test(explanation), explanation.slice(0, 90));
+
+  const marketStanding = await page.evaluate(() => document.getElementById('standing-list').textContent);
+  checks.check('the Standing panel shows the Market has gone Cold',
+    /Market/i.test(marketStanding) && /Cold/i.test(marketStanding), marketStanding.replace(/\s+/g, ' ').slice(0, 90));
+  await capture(page, 'round8-refusal.png');
+  await closeDialogue();
+
+  // The critical path must survive a hostile plaza: the oil and the key both
+  // have to stay obtainable or the game cannot be finished at all.
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const s = await import('./src/state.js');
+    api.getState().reputation.trade = -90;
+    s.startLanterns(api.getState());
+    s.startKey(api.getState());
+    s.pickUpKey(api.getState());
+    api.refreshHUD();
+  });
+  const hostileOswin = await talkToNpc('oswin');
+  checks.check('hostile standing still lets the player buy the oil the first quest needs',
+    /oil|4 coins|owe you/i.test(hostileOswin.line) && !/nothing for you/i.test(hostileOswin.line),
+    hostileOswin.line.slice(0, 90));
+  await closeDialogue();
+
+  const hostileHalden = await talkToNpc('halden');
+  checks.check('hostile standing still lets the player hand back the gate key',
+    /That is my key/i.test(hostileHalden.line), hostileHalden.line.slice(0, 90));
+  await closeDialogue();
 } finally {
   await close();
   await server.stop();
