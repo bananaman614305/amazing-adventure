@@ -1421,6 +1421,95 @@ try {
   checks.check('the epilogue can be dismissed and read again from the journal',
     closed === true && reopened === true, JSON.stringify({ closed, reopened }));
   await page.evaluate(() => document.getElementById('epilogue-close')?.click() ?? null);
+
+  // --- 26. Screen-reader support ------------------------------------------
+  // The game is first-person and drawn to a canvas, so without live regions a
+  // blind player gets nothing at all: not the area, not who is nearby, not that a
+  // quest moved on.
+  const aria = await page.evaluate(() => {
+    const d = document.getElementById('dialogue');
+    const live = document.getElementById('sr-live');
+    const alert = document.getElementById('sr-alert');
+    return {
+      dialogueRole: d.getAttribute('role'),
+      ariaModal: d.getAttribute('aria-modal'),
+      labelledBy: d.getAttribute('aria-labelledby'),
+      live: live?.getAttribute('aria-live'),
+      alert: alert?.getAttribute('role'),
+      // A live region only works if it is in the tree; display:none silences it.
+      liveInTree: live ? live.offsetParent !== null || getComputedStyle(live).position === 'absolute' : false,
+      hintRole: document.getElementById('hint').getAttribute('role')
+    };
+  });
+  checks.check('the dialogue panel is announced as a modal dialog',
+    aria.dialogueRole === 'dialog' && aria.ariaModal === 'true' && aria.labelledBy === 'dialogue-name',
+    JSON.stringify(aria));
+  checks.check('there are live regions for spoken progress, and they stay in the accessibility tree',
+    aria.live === 'polite' && aria.alert === 'alert' && aria.liveInTree === true,
+    JSON.stringify({ live: aria.live, alert: aria.alert, inTree: aria.liveInTree }));
+
+  // The "describe where I am" key must report real state, not atmosphere.
+  await page.evaluate(() => document.getElementById('epilogue')?.setAttribute('hidden', ''));
+  await page.keyboard.press('KeyC');
+  await new Promise((r) => setTimeout(r, 350));
+  const described = await page.evaluate(() => window.amazingAdventure.srAlertText());
+  checks.check('the describe key reports the area, the gate and the player’s coins',
+    /Plaza|Lane/.test(described) && /gate is (open|locked)/.test(described) && /coins/.test(described),
+    JSON.stringify(described?.slice(0, 90)));
+
+  // A dialogue must be spoken: the line and its numbered options.
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const mara = api.npcs.find((n) => n.id === 'mara');
+    api.player.position.x = mara.group.position.x;
+    api.player.position.z = mara.group.position.z + 1.2;
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  await page.keyboard.press('KeyE');
+  await new Promise((r) => setTimeout(r, 500));
+  const spoken = await page.evaluate(() => ({
+    text: window.amazingAdventure.srAlertText(),
+    open: !document.getElementById('dialogue').hidden
+  }));
+  checks.check('a conversation is spoken aloud, with its options',
+    spoken.open === true && /Mara/.test(spoken.text || '') && /1\./.test(spoken.text || ''),
+    JSON.stringify(spoken.text?.slice(0, 80)));
+  await page.evaluate(() => document.getElementById('dialogue-close').click());
+  await new Promise((r) => setTimeout(r, 250));
+
+  // Quest progression used to be entirely silent. Drive the real announcement
+  // path (the same function the dialogue uses), not a re-implementation of it.
+  const questAnnounce = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const st = api.getState();
+    st.quests.lanterns = 'none';
+    api.srLiveText();
+    api.withAnnouncements(() => { st.quests.lanterns = 'done'; });
+    return st.quests.lanterns;
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  // Completion is urgent by design, so it lands in the assertive region.
+  const announced = await page.evaluate(() => window.amazingAdventure.srAlertText());
+  checks.check('finishing a quest is announced to a screen reader',
+    questAnnounce === 'done' && /Quest complete/i.test(announced || ''),
+    JSON.stringify({ questAnnounce, announced: announced?.slice(0, 60) }));
+
+  // Reduced motion must be honoured, not ignored.
+  const reduced = await page.evaluate(() => {
+    const found = [];
+    for (const sheet of document.styleSheets) {
+      try {
+        for (const rule of sheet.cssRules) {
+          if (rule.conditionText && /prefers-reduced-motion/.test(rule.conditionText)) found.push(rule.conditionText);
+        }
+      } catch { /* cross-origin sheet, not ours */ }
+    }
+    return found;
+  });
+  checks.check('the interface honours prefers-reduced-motion',
+    reduced.some((c) => /prefers-reduced-motion: reduce/.test(c)), JSON.stringify(reduced));
+
+  await capture(page, 'round13-access.png');
 } finally {
   await close();
   await server.stop();
