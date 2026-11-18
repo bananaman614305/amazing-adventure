@@ -145,3 +145,23 @@ test('the controller passes through a comfortable middle ratio', () => {
   assert.equal(ctl.ratio, 1);
   assert.equal(ctl.changes, 0);
 });
+
+test('force() jumps straight to a ratio and keeps the report truthful', () => {
+  const ctl = createAdaptiveResolution({ start: 1 });
+  assert.equal(ctl.ratio, 1);
+  const ratio = ctl.force(0.5);
+  assert.equal(ratio, MIN_RATIO);
+  assert.equal(ctl.ratio, MIN_RATIO, 'the controller agrees with what it returned');
+  assert.ok(ctl.changes > 0, 'the change is counted');
+  // Forced values are clamped like any other:
+  assert.equal(ctl.force(9), MAX_RATIO);
+  assert.equal(ctl.force(-1), MIN_RATIO);
+});
+
+test('after force() the controller continues adapting from the new ratio', () => {
+  const ctl = createAdaptiveResolution({ start: 1 });
+  ctl.force(0.5);
+  // A comfortable frame time should let it climb back up.
+  for (let i = 0; i < 400; i += 1) ctl.sample(14);
+  assert.ok(ctl.ratio > MIN_RATIO, `climbed back to ${ctl.ratio}`);
+});

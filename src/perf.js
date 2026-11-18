@@ -77,6 +77,17 @@ export function createAdaptiveResolution({ start = 1, settleFrames = SETTLE_FRAM
     get changes() {
       return changes;
     },
+    /** Jumps straight to a ratio (used for emergency shedding) so the
+     *  controller's reported ratio always matches what is really rendering. */
+    force(value) {
+      ratio = clampRatio(value);
+      smoothed = NaN;
+      frames = 0;
+      slowStreak = 0;
+      fastStreak = 0;
+      changes += 1;
+      return ratio;
+    },
     reset(nextStart = ratio) {
       ratio = clampRatio(nextStart);
       smoothed = NaN;
