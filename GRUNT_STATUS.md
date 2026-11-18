@@ -373,7 +373,83 @@ instructions.
 
 ## Current task
 
-Round 25 — The rest of the interface, read through the accessibility tree.
+Round 26 — A new player was told nothing.
+
+PRs #5–#26 are published and open for the human. Ten rounds were accessibility. This
+round asks a product question no round had asked: **having just pressed Play, does a
+player know what to do?**
+
+### The bug
+
+Measured at spawn, with nothing touched:
+
+```
+pos: (0, 13)   yaw: 0 (facing the plaza)
+nearest NPC: 5.2m away    talk range: 2.6m
+interactables in range: 0
+hint: ""  (hidden)    toasts: 0    live region: ""
+```
+
+So out of the box a first-time player got **no visible instruction and no spoken
+one**. The "E — talk to …" prompt only appears within 2.6m, and the spawn point is
+5.2m from the nearest person, so it stays hidden until the player has already worked
+out what to do. The only guidance was a small line in the quest tracker.
+
+### The fix
+
+A new pure module, `src/onboard.js`, with `isFreshStart()`, `openingLine()`,
+`firstGoal()` and `welcome()`. It is pure so the wording is unit-testable without a
+DOM, and it takes the **device** so it never tells a phone to press E:
+
+- keyboard → "Walk with W A S D or the arrow keys, and press E when someone is close."
+- touch → "Walk with the left thumb, look with the right, and tap Use when someone is close."
+- goal → names the person who is *actually* nearest ("walk up to Sable the Cartographer")
+
+`main.js` shows both lines as toasts and announces the same text, once, from a single
+helper both start paths call.
+
+### Things the tests caught in my own work
+
+1. My first `welcome()` produced **"press E"** on a phone, because the goal ignored
+   the device it had just been told about. The unit test for the touch wording failed.
+2. My first wiring showed only the *goal* as a toast, leaving the controls in the live
+   region only — so a player who cannot hear it would never be told how to move. A
+   browser check failed on exactly that and I put both lines on screen.
+3. The manifest test failed immediately on the new `src/onboard.js`, as it has every
+   round since round 8.
+
+### Proof the tests are real
+
+Removing the `welcomeIfFresh()` call makes **3 committed desktop checks fail**, and the
+output is the empty state I originally measured:
+
+```
+FAIL the first thing a new player sees out of range is an instruction
+     — {"toasts":[],"live":"","hintShown":false,"interactables":0}
+FAIL the opening instruction says how to move and how to interact — {"toasts":[],"live":""}
+FAIL the opening instruction names the person actually nearest — {"live":""}
+```
+
+### Checks actually run this round
+
+- `npm test` — **363/363 pass** (was 353): **10 new onboarding tests**.
+- `npm run test:browser` — **166/166 pass, exit 0** (was 161): **5 new checks**.
+- `npm run test:mobile` — **185/185 pass, exit 0**.
+- **Totals: 714 checks — 363 unit, 166 desktop, 185 mobile.**
+- `scripts/playthrough.mjs` and `scripts/reachability.mjs` both still exit 0.
+- Touch wording verified on a real 390x844 mobile viewport: says "thumb" and "tap Use",
+  never "press E".
+- A returning player gets **no** welcome: continuing a save with progress shows no
+  toast and no re-tutorial (asserted).
+- Self-contained re-verified: **27 files** (new module), 984 KB, 0 external requests.
+
+### Evidence
+
+`artifacts/round26-onboarding.png` — 1280x800, mean luminance 129.1, 63.3% bright, 5180
+distinct colours. I am text-only and did not inspect it; the claims rest on the
+measured text and the assertions above.
+
+## Previous round — Round 25: heading outline in the accessibility tree
 
 PRs #5–#25 are published and open for the human. Round 24 pointed the accessibility
 tree at the conversation panel and found two real defects. This round points it at

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { buildWorld, applyPhase, KEY_SPOT, KEY_PICKUP_RANGE, floorHeightAt, TERRACE, STEP_HEIGHT, BENCH } from './world.js';
 import { Player } from './player.js';
 import { createNPCs, updateNPCs, setNPCRoutine, TALK_RANGE } from './npcs.js';
+import { welcome } from './onboard.js';
 import {
   createInitialState,
   createSaveStore,
@@ -1005,6 +1006,33 @@ if (savedGame) {
   });
 }
 
+// Says what to do on arrival. The plaza drops you a few metres from anyone, so the
+// interaction hint stays hidden at spawn and a first-time player was told nothing.
+let welcomed = false;
+function welcomeIfFresh() {
+  if (welcomed) return null;
+  welcomed = true;
+  const nearestNpc = npcs
+    .map((npc) => ({
+      name: npc.name,
+      distance: Math.hypot(npc.group.position.x - player.position.x, npc.group.position.z - player.position.z)
+    }))
+    .sort((a, b) => a.distance - b.distance)[0];
+  const message = welcome({
+    state,
+    nearest: nearestNpc ? { name: nearestNpc.name } : null,
+    device: touchState.active ? 'touch' : 'keyboard'
+  });
+  if (!message) return null;
+  // Both lines go on screen: the controls are as much a part of the welcome as the
+  // goal, and a player who cannot hear the live region would otherwise only ever see
+  // where to go, never how to get there.
+  toast(message.opening);
+  toast(message.goal);
+  announce(message.spoken, { urgent: false });
+  return message;
+}
+
 playButton.addEventListener('click', (event) => {
   event.stopPropagation();
   started = true;
@@ -1012,6 +1040,7 @@ playButton.addEventListener('click', (event) => {
   sound.start();
   beginTouchMode();
   player.requestLock();
+  welcomeIfFresh();
 });
 overlay.addEventListener('click', () => {
   // Any tap on the overlay is a request to start, so this path must set up
@@ -1021,6 +1050,7 @@ overlay.addEventListener('click', () => {
   sound.start();
   beginTouchMode();
   player.requestLock();
+  welcomeIfFresh();
 });
 
 // --- Touch controls -------------------------------------------------------
