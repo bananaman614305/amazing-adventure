@@ -1364,6 +1364,63 @@ try {
   checks.check('the ambience follows the time of day',
     droneFollows.length === 3 && new Set(droneFollows).size === 3,
     JSON.stringify(droneFollows));
+
+  // --- 25. The ending -----------------------------------------------------
+  // Six quests used to just stop. A player who finished everything got silence,
+  // which reads as unfinished rather than complete.
+  const endingBefore = await page.evaluate(() => ({
+    section: document.getElementById('ending-section').hidden,
+    overlay: document.getElementById('epilogue').hidden
+  }));
+  checks.check('there is no ending before the story is finished',
+    endingBefore.section === true && endingBefore.overlay === true, JSON.stringify(endingBefore));
+
+  // Finish every quest with specific branches, as real play would.
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const s = await import('./src/state.js');
+    const state = api.getState();
+    for (const id of s.QUEST_ORDER) state.quests[id] = 'done';
+    state.outcomes = { ledger: 'cover', toll: 'waived', arrears: 'forgive' };
+    state.reputation = { keepers: 25, trade: 65, watch: -45 };
+    api.refreshHUD();
+  });
+  await new Promise((r) => setTimeout(r, 400));
+
+  const epilogueShot = await page.evaluate(() => ({
+    overlay: !document.getElementById('epilogue').hidden,
+    section: !document.getElementById('ending-section').hidden,
+    title: document.getElementById('epilogue-title').textContent,
+    branches: [...document.querySelectorAll('#epilogue-branches .epilogue-line')].map((e) => e.textContent),
+    closers: [...document.querySelectorAll('#epilogue-closers .epilogue-standing')].map((e) => e.textContent)
+  }));
+  checks.check('finishing the story shows the epilogue',
+    epilogueShot.overlay === true && epilogueShot.section === true && epilogueShot.title.length > 0 && epilogueShot.branches.length === 3,
+    JSON.stringify({ overlay: epilogueShot.overlay, branches: epilogueShot.branches.length }));
+
+  checks.check('the epilogue reports the branches actually taken, not the others',
+    epilogueShot.branches.some((b) => /kept the trader’s name out/i.test(b)) &&
+    epilogueShot.branches.some((b) => /waiving the toll/i.test(b)) &&
+    epilogueShot.branches.some((b) => /wrote them off/i.test(b)) &&
+    !epilogueShot.branches.some((b) => /wrote the trader’s name/i.test(b)),
+    JSON.stringify(epilogueShot.branches.map((b) => b.slice(0, 40))));
+
+  checks.check('the epilogue is honest about a faction that dislikes you',
+    epilogueShot.closers.some((c) => /Watch/.test(c) && /searches you|written your description|will not/i.test(c)),
+    JSON.stringify(epilogueShot.closers.map((c) => c.slice(0, 45))));
+
+  await capture(page, 'round12-ending.png');
+
+  // The ending can be dismissed and reopened from the journal.
+  await page.evaluate(() => document.getElementById('epilogue-close').click());
+  await new Promise((r) => setTimeout(r, 250));
+  const closed = await page.evaluate(() => document.getElementById('epilogue').hidden);
+  await page.evaluate(() => document.getElementById('ending-open').click());
+  await new Promise((r) => setTimeout(r, 250));
+  const reopened = await page.evaluate(() => !document.getElementById('epilogue').hidden);
+  checks.check('the epilogue can be dismissed and read again from the journal',
+    closed === true && reopened === true, JSON.stringify({ closed, reopened }));
+  await page.evaluate(() => document.getElementById('epilogue-close')?.click() ?? null);
 } finally {
   await close();
   await server.stop();

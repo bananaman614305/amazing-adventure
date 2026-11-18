@@ -460,6 +460,39 @@
     /* While talking the dialogue owns the screen; the toggle steps aside. */
     body.dialogue-open #sound-toggle { opacity: 0; pointer-events: none; }
 
+    /* The ending is deliberately quiet: paper, not fireworks. */
+    #ending-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid #2b3a52; }
+    #ending-section p { margin: 0 0 10px; color: #c8d4e4; font-size: 13px; line-height: 1.55; }
+    #ending-section button {
+      width: 100%; padding: 12px; border-radius: 9px; cursor: pointer;
+      background: transparent; color: #ffd479; font: inherit; font-size: 14px;
+      border: 1px solid rgba(255, 212, 121, 0.5);
+    }
+
+    #epilogue {
+      position: fixed; inset: 0; z-index: 85;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(5, 9, 15, 0.92); padding: 24px;
+      overflow-y: auto;
+    }
+    #epilogue[hidden] { display: none !important; }
+    #epilogue .card {
+      background: #101a28; border: 1px solid #2b3a52; border-radius: 14px;
+      padding: 26px; max-width: 560px; width: 100%;
+    }
+    #epilogue h2 { margin: 0 0 14px; font-size: 22px; letter-spacing: -0.01em; }
+    #epilogue p { margin: 0 0 14px; color: #c8d4e4; font-size: 14px; line-height: 1.65; }
+    #epilogue .epilogue-line {
+      margin: 0 0 10px; padding-left: 12px; border-left: 2px solid #3a4c66;
+      color: #b8c6d8; font-size: 13px; line-height: 1.6;
+    }
+    #epilogue .epilogue-standing { color: #93a4bb; font-size: 13px; line-height: 1.6; margin: 0 0 8px; }
+    #epilogue button.primary {
+      width: 100%; margin-top: 8px; padding: 14px; border-radius: 10px;
+      background: #ffd479; color: #1a1206; border: 1px solid #ffd479;
+      font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+    }
+
     #context-lost {
       position: fixed; inset: 0; z-index: 80;
       display: flex; align-items: center; justify-content: center;
@@ -527,6 +560,22 @@
     <ul id="journal-list"></ul>
     <h3>Standing</h3>
     <ul id="standing-list"></ul>
+    <div id="ending-section" hidden>
+      <h3>The end</h3>
+      <p id="ending-text"></p>
+      <button type="button" id="ending-open">Read the epilogue</button>
+    </div>
+  </div>
+
+  <div id="epilogue" hidden role="dialog" aria-labelledby="epilogue-title">
+    <div class="card">
+      <h2 id="epilogue-title"></h2>
+      <p id="epilogue-opening"></p>
+      <div id="epilogue-branches"></div>
+      <div id="epilogue-closers"></div>
+      <p id="epilogue-closing"></p>
+      <button type="button" class="primary" id="epilogue-close">Back to the plaza</button>
+    </div>
   </div>
 
   <div id="overheard" hidden>
