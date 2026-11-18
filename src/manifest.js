@@ -23,6 +23,7 @@ export const REQUIRED_FILES = [
   'src/repair.js',
   'src/audio.js',
   'src/epilogue.js',
+  'src/announce.js',
   'src/factions.js',
   'src/ambient.js',
   'src/daynight.js',

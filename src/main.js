@@ -29,6 +29,7 @@ import { createAdaptiveResolution } from './perf.js';
 import { createRecovery, shouldPanicShed } from './resilience.js';
 import { createSoundscape, readPreference } from './audio.js';
 import { buildEpilogue, storyComplete, storyProgress } from './epilogue.js';
+import { describeState, questChanges, coinAnnouncement, interactableAnnouncement, areaAnnouncement } from './announce.js';
 import {
   stickVector, knobOffset, lookDelta, clampPitch, wantsTouchControls,
   interactLabel, STICK_RADIUS
@@ -53,6 +54,84 @@ const epilogueBranches = $('epilogue-branches');
 const epilogueClosers = $('epilogue-closers');
 const epilogueClosing = $('epilogue-closing');
 const epilogueClose = $('epilogue-close');
+const srLive = $('sr-live');
+const srAlert = $('sr-alert');
+
+// --- Screen-reader announcements -----------------------------------------
+// The game is first-person and drawn to a canvas, so nearly everything it
+// communicates is invisible to assistive technology. These helpers put the same
+// facts into live regions. `polite` for ordinary progress, `assertive` for things
+// the player must not miss.
+let lastAnnouncedArea = null;
+let lastAnnouncedInteractable = null;
+
+// Quiet announcements are queued rather than set immediately. Setting the region
+// directly meant a "quest complete" could be replaced a frame later by a passing
+// "you can talk to Mara", and the player would never hear the thing that mattered.
+const politeQueue = [];
+let politeBusy = false;
+
+function announce(text, { urgent = false } = {}) {
+  if (!text) return;
+  if (urgent) {
+    // Urgent beats the queue: clearing and re-setting lets a repeated message
+    // re-announce instead of being treated as unchanged text.
+    srAlert.textContent = '';
+    requestAnimationFrame(() => { srAlert.textContent = text; });
+    return;
+  }
+  // Do not queue the same sentence twice: a player who walks back and forth past
+  // the same bench should not hear it repeated every time.
+  if (politeQueue[politeQueue.length - 1] !== text) politeQueue.push(text);
+  if (!politeBusy) drainPoliteQueue();
+}
+
+function drainPoliteQueue() {
+  const next = politeQueue.shift();
+  if (next === undefined) { politeBusy = false; return; }
+  politeBusy = true;
+  srLive.textContent = '';
+  requestAnimationFrame(() => {
+    srLive.textContent = next;
+    // Give the reader time to speak it before the next one replaces it.
+    setTimeout(drainPoliteQueue, 1200);
+  });
+}
+
+function announceArea(areaId) {
+  if (areaId === lastAnnouncedArea) return;
+  lastAnnouncedArea = areaId;
+  announce(areaAnnouncement(state, areaId));
+}
+
+function announceInteractable(interactable) {
+  const label = interactable ? interactable.label : null;
+  if (label === lastAnnouncedInteractable) return;
+  lastAnnouncedInteractable = label;
+  if (label) announce(interactableAnnouncement(interactable));
+}
+
+// Quest and coin changes are announced by diffing the state around a mutating
+// action, because those are the only places progression actually happens.
+function withAnnouncements(mutate) {
+  const before = snapshotForAnnouncements();
+  const result = mutate();
+  const after = snapshotForAnnouncements();
+  for (const change of questChanges(before, after)) {
+    announce(change.text, { urgent: change.kind === 'done' });
+  }
+  const coins = coinAnnouncement(before, after);
+  if (coins) announce(coins);
+  return result;
+}
+
+/** Just the parts of state announcements care about, copied so they cannot change under us. */
+function snapshotForAnnouncements() {
+  return {
+    quests: { ...state.quests },
+    flags: { ...state.flags }
+  };
+}
 const continueButton = $('continue');
 const saveNote = $('save-note');
 const crosshair = $('crosshair');
@@ -385,6 +464,14 @@ function renderNode() {
   choiceIndex = Math.max(0, Math.min(choiceIndex, (activeNode.choices?.length || 1) - 1));
 
   const choices = activeNode.choices?.length ? activeNode.choices : [{ label: 'Leave', end: true }];
+
+  // Speak the line and the options. The dialogue panel is a role=dialog, so a
+  // screen reader reads it on focus, but the options are rebuilt every node and
+  // are not otherwise announced.
+  const speaker = activeNode.speaker || activeNPC?.name || '';
+  const options = choices.map((choice, index) => `${index + 1}. ${choice.label}`).join('. ');
+  announce(`${speaker ? speaker + ': ' : ''}${activeNode.text} ${options}`, { urgent: true });
+
   choices.forEach((choice, index) => {
     const button = document.createElement('button');
     button.type = 'button';
@@ -428,7 +515,9 @@ function choose(index) {
   if (!choice) return;
 
   const npcId = activeNPC.id;
-  const result = applyChoice(state, npcId, choice);
+  // Wrapping the mutation is what makes quest and coin changes audible. It is
+  // the only place in the game where progression actually happens.
+  const result = withAnnouncements(() => applyChoice(state, npcId, choice));
   // Odd jobs take a stretch of the day, and only this side owns the clock.
   if (result.advanceTime) {
     clockSeconds = nextPhaseStart(clockSeconds);
@@ -448,6 +537,9 @@ function choose(index) {
 
   if (result.changed) {
     toast(result.message);
+    // The toast carries real information and vanishes after three seconds; put
+    // the same sentence into the live region so it is not lost.
+    announce(result.message);
     refreshHUD();
     autoSave();
   }
@@ -603,6 +695,7 @@ function refreshHint() {
   if (!dialogueEl.hidden) return;
   const list = interactables();
   nearestInteractable = list[0] || null;
+  announceInteractable(nearestInteractable);
   if (nearestInteractable) {
     hint.innerHTML = `<b>E</b> — ${escapeHtml(nearestInteractable.label)}`;
     hint.hidden = !player.enabled;
@@ -633,6 +726,9 @@ function checkDuskWatch() {
   const result = watchLanterns(state, phase.id);
   if (result.changed) {
     toast(result.message);
+    // The toast carries real information and vanishes after three seconds; put
+    // the same sentence into the live region so it is not lost.
+    announce(result.message);
     refreshHUD();
     autoSave();
   }
@@ -966,6 +1062,16 @@ document.addEventListener('keydown', (event) => {
     }
     return;
   }
+  if (event.code === 'KeyC') {
+    // "Where am I?" A blind player cannot glance around, so this reports the same
+    // facts a sighted player would take in at a glance: the area, the gate, the
+    // nearest thing to use, and their money. Silent before the game starts, when
+    // there is genuinely nowhere to be.
+    if (!started) return;
+    announce(describeState(state, areaAt(player.position.x, player.position.z) || 'outside', nearestInteractable), { urgent: true });
+    event.preventDefault();
+    return;
+  }
   if (event.code === 'KeyM') {
     // Works mid-conversation too: if a sound is bothering you, you should not
     // have to leave the dialogue to silence it.
@@ -1177,7 +1283,10 @@ function frame() {
   // Track which area the player is in every frame, so area-gated UI and tests
   // see the change immediately rather than on the next throttled HUD refresh.
   const area = areaAt(player.position.x, player.position.z) || 'outside';
-  if (document.body.dataset.area !== area) document.body.dataset.area = area;
+  if (document.body.dataset.area !== area) {
+    document.body.dataset.area = area;
+    if (started) announceArea(area);
+  }
 
   hudTimer += dt;
   if (hudTimer > 0.2) {
@@ -1266,6 +1375,13 @@ window.amazingAdventure = {
   KEY_SPOT,
   TERRACE,
   areaAt: () => areaAt(player.position.x, player.position.z),
+  describe: () => describeState(state, areaAt(player.position.x, player.position.z) || 'outside', nearestInteractable),
+  announce,
+  // Exposed so tests can drive the same announcement path production uses,
+  // rather than re-implementing the diff and testing the copy.
+  withAnnouncements,
+  srLiveText: () => srLive.textContent,
+  srAlertText: () => srAlert.textContent,
   isGateOpen: () => isGateOpen(state),
   syncGate,
   syncPickups,

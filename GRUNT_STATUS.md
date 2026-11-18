@@ -373,7 +373,77 @@ instructions.
 
 ## Current task
 
-Round 12 — The ending: six quests used to just stop.
+Round 13 — The game was unplayable with a screen reader.
+
+PRs #5–#13 are published and open for the human. Round 12 closed the story.
+This round addresses the one thing that made the game **not merely awkward but
+completely unplayable** for a blind player.
+
+### The gap
+
+The game is first-person and drawn entirely to a canvas. Nearly everything it
+communicates — the plaza around you, who is nearby, what you can interact with,
+that a quest moved on, that you gained coins — went to a canvas or to a toast that
+faded after three seconds. I probed a real browser and confirmed the worst case:
+**no ARIA roles, no live region, focus never moved, and zero `prefers-reduced-motion`
+support.** A screen-reader user got silence from start to finish.
+
+### What Round 13 adds
+
+- `src/announce.js` (pure, no DOM, 16 unit tests): `areaName()`,
+  `areaAnnouncement()`, `interactableAnnouncement()`, `questChanges()`,
+  `coinAnnouncement()` and `describeState()`.
+- **Announcements are diffed from real state, never invented.** Quest changes are
+  announced by comparing state before and after the mutation, so nothing is
+  reported that did not happen. Quest titles are read from the **same `QUESTS`
+  table the journal uses**, so spoken and written names cannot drift apart.
+- **Live regions in the markup**, visually hidden with the standard clipping
+  pattern (not `display:none`, which screen readers ignore): a polite region for
+  progress and an assertive `role="alert"` for things that must not be missed.
+- **The dialogue is spoken** — the speaker, the line, and the numbered options — and
+  the panel is now a proper `role="dialog" aria-modal="true"` labelled by the
+  speaker name.
+- **A "describe where I am" key (C)** reports the area, whether the gate is open,
+  the nearest thing to use, and the coin balance — the same facts a sighted player
+  takes in at a glance. Silent before the game starts, when there is nowhere to be.
+- Area changes and nearby interactables are announced as they happen.
+- **`prefers-reduced-motion` is honoured** (there was no support at all).
+
+### Two bugs I found in my own work
+
+1. **Quiet announcements clobbered each other.** "Quest complete" was set into the
+   live region and then replaced a frame later by a passing "you can talk to Mara",
+   so the thing that mattered was never heard. Found by a committed browser check,
+   not by inspection. Fixed with a small queue that speaks one at a time, plus
+   dedupe so walking past the same bench does not repeat itself.
+2. The C key answered on the title screen, describing a plaza the player had not
+   entered. Guarded on `started`.
+
+I also caught myself writing a **bogus test**: an earlier block in the same suite
+had already set every quest to `done`, so my "quest changed" check was comparing
+`done` to `done` and could never fail. Replaced with a test that drives the real
+`withAnnouncements()` production path instead of a copy of it.
+
+### Checks actually run this round
+
+- `npm test` — **280/280 pass** (was 264): 16 new announcement cases.
+- `npm run test:browser` — **109/109 pass, exit 0** (was 103). New checks: the
+  dialogue is announced as a modal, live regions exist and stay in the
+  accessibility tree, the describe key reports area/gate/coins, a conversation is
+  spoken with its options, finishing a quest is announced, and
+  `prefers-reduced-motion` is honoured.
+- `npm run test:mobile` — **137/137 pass, exit 0**.
+- **Totals: 526 checks — 280 unit, 109 desktop, 137 mobile.**
+- Manifest test caught `src/announce.js` missing again; regenerated, now 24 files.
+
+### Evidence
+
+`artifacts/round13-access.png` — 1280x800, mean luminance 40.1, max 255, **7895
+distinct colours**: a real rendered frame. I am text-only and did not visually
+inspect it; the accessibility claims are backed by the ARIA assertions and live-
+region reads above, not by the picture.
+
+## Previous round — Round 12: the ending
 
 PRs #5–#12 are published and open for the human. Round 11 gave the game sound.
 This round fixes the biggest remaining narrative gap: **there was no ending at
@@ -781,9 +851,9 @@ hosting step to guess, the release now describes itself:
    no physical phone or iOS Safari was available here; a real-device pass should
    confirm touch gestures, safe-area insets on a notched phone, and frame rate on
    an actual GPU.
-2. **A new game plus, or a reason to start again.** The ending now closes the
-   story, but there is nothing that rewards a second run knowing what the branches
-   lead to.
+2. **A text alternative to the 3D scene.** Screen readers now get state changes,
+   but there is still no way to move through the world without sight: walking is
+   WASD against a canvas. A compass or "walk to" list would be a real step further.
 3. **Give the lane its own work board, or a second reason to cross the gate.**
    The plaza board makes standing earnable early, but the lane has no equivalent,
    so the two areas are not symmetrical in how a player recovers standing.
