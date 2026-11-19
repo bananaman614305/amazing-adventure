@@ -541,6 +541,42 @@ export async function loadHouse({ THREE, loadGlb, url = HOUSE_ASSET, fetchImpl =
   }
 }
 
+/** Cast model per NPC id; loaded by loadCast. */
+export const CAST_ASSETS = {
+  mara: 'assets/npc_mara.glb',
+  oswin: 'assets/npc_oswin.glb',
+  pip: 'assets/npc_pip.glb',
+  halden: 'assets/npc_halden.glb',
+  sable: 'assets/npc_sable.glb',
+  wren: 'assets/npc_wren.glb'
+};
+
+/**
+ * Loads one cast model. Same contract as the other model loaders: never throws.
+ * There is no collider to respect, so the checks are the honest ones: the file
+ * exists, parses, and carries the joint-contract meshes (limbs authored around
+ * their joints so the game can animate them).
+ */
+export async function loadCast({ THREE, loadGlb, url, fetchImpl = fetch }) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const names = new Set(meshes.map((m) => m.name));
+    for (const required of ['Torso', 'Head', 'LimbArmL', 'LimbArmR', 'LimbLegL', 'LimbLegR']) {
+      if (!names.has(required)) {
+        return { ok: false, reason: `cast model missing ${required}`, url };
+      }
+    }
+    return { ok: true, meshes, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
 /**
  * Loads a set of three maps (albedo / normal / roughness) for one material family.
  * Shared by stone, wood and brick; `files` selects which family.
