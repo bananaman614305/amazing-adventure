@@ -2058,6 +2058,28 @@ try {
     JSON.stringify({ bulbs: lamps.bulbs, emissive: lamps.emissive, intensity: lamps.intensity }));
 
   await capture(page, 'round33-lamps.png');
+  // --- 28c. The modelled market stalls --------------------------------------
+  // The two plaza counters (east 4 m, west 3 m) swap a box for the model. The
+  // model is authored at the larger size and scaled down for the smaller one,
+  // so both must load from one GLB and both must hide their stand-ins.
+  const marketStalls = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    let models = 0;
+    let hidden = 0;
+    api.scene.traverse((o) => {
+      if (o.name === 'market-stall-model') models += 1;
+      if (o.userData && o.userData.marketStallStandin && !o.visible) hidden += 1;
+    });
+    return { state: api.assetState(), models, hidden };
+  }));
+  checks.check('the modelled market stalls replace both procedural counters',
+    marketStalls.state.marketStalls === 'model' && marketStalls.models === 2 &&
+    marketStalls.hidden === 2,
+    JSON.stringify({ state: marketStalls.state.marketStalls, models: marketStalls.models,
+                    hidden: marketStalls.hidden }));
+
+  await capture(page, 'round34-market-stalls.png');
+
   // The lane walls carry the third Kaggle family (plaster). Same contract as
   // the other families: three maps, white base so nothing is double-tinted.
   const plaster = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {

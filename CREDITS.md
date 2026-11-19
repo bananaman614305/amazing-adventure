@@ -92,3 +92,11 @@ round 31; pixel content is unchanged.
 Every model and texture is an **upgrade, never a dependency**: if a fetch
 fails, a decoder is missing, or a model exceeds its collider, the game keeps
 its procedural stand-in or flat colour and stays fully playable.
+
+### Round 34 addition
+
+- `assets/market_stall.glb` — `art/blender/make_market_stall.py`. 72 tris,
+  6 meshes, 3 materials (MarketWood/MarketRoof/MarketIron), 7.4 KB. Built from
+  the same tapered-post + pitched-awning pattern as the lane stall, authored at
+  the larger (4.0 m) counter size and scaled down for the 3.0 m one. Same
+  licence as the game (generated, not downloaded).
