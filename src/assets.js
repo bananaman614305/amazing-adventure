@@ -24,6 +24,16 @@ export const STONE_TEXTURE_FILES = {
 };
 
 export const FOUNTAIN_ASSET = 'assets/fountain.glb';
+export const BARREL_ASSET = 'assets/barrel.glb';
+
+/** Authored size of the barrel model, so instances can be scaled to fit. */
+export const BARREL_MODEL_SIZE = { radius: 0.46, height: 1.30 };
+
+export const WOOD_TEXTURE_FILES = {
+  map: 'assets/textures/wood_albedo.png',
+  normalMap: 'assets/textures/wood_normal.png',
+  roughnessMap: 'assets/textures/wood_rough.png'
+};
 
 /**
  * Whether the current context can load local assets at all. `fetch` is absent in
@@ -144,6 +154,33 @@ export async function loadFountain({ THREE, loadGlb, url = FOUNTAIN_ASSET, fetch
   } catch (error) {
     // Offline, blocked, corrupt, or a browser without fetch: all the same to the
     // caller. Report, do not throw -- the procedural fountain is still there.
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
+/**
+ * Loads the barrel GLB. Same contract as loadFountain: never throws, reports
+ * what happened, and refuses a model that does not fit the collider the game
+ * already registers for barrels (1.1 x 1.1, so a 0.55 half-extent).
+ */
+export async function loadBarrel({ THREE, loadGlb, url = BARREL_ASSET, fetchImpl = fetch }) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const footprint = fountainFootprint(meshes);
+    const reach = footprint
+      ? Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX),
+                 Math.abs(footprint.minZ), Math.abs(footprint.maxZ))
+      : Infinity;
+    if (reach > 0.55) {
+      return { ok: false, reason: 'barrel exceeds its collider', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
     return { ok: false, reason: String(error && error.message ? error.message : error), url };
   }
 }

@@ -5,7 +5,8 @@ import {
 } from './areas.js';
 import {
   FOUNTAIN_SPOT, FOUNTAIN_COLLIDER, canLoadAssets, textureRepeat,
-  stoneMaterialParams, loadFountain, loadStoneTextures
+  stoneMaterialParams, loadFountain, loadStoneTextures,
+  BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, WOOD_TEXTURE_FILES
 } from './assets.js';
 import { loadGlb } from './glb.js';
 
@@ -520,8 +521,10 @@ export function buildWorld(renderer) {
   const assetState = {
     fountain: 'stand-in',
     stone: 'flat',
+    barrels: 'cylinders',
     fountainDetail: null,
-    stoneDetail: null
+    stoneDetail: null,
+    barrelDetail: null
   };
 
   function upgradeFountain() {
@@ -560,6 +563,65 @@ export function buildWorld(renderer) {
         bytes: result.bytes,
         height: Number(result.footprint.height.toFixed(2)),
         width: Number(result.footprint.width.toFixed(2))
+      };
+      return assetState;
+    });
+  }
+
+  // --- Barrel upgrade (asynchronous, never required) -----------------------
+  // The plaza and lane barrels are plain cylinders today. The modelled barrel
+  // replaces each one when it loads; the procedural cylinder stays otherwise.
+  const barrelInstances = [
+    // plaza barrels
+    { x: -5, z: 9, height: 1.3, radius: 0.55, collider: true },
+    { x: -6.2, z: 9.4, height: 1.3, radius: 0.55, collider: true },
+    { x: 3, z: -7.5, height: 1.3, radius: 0.55, collider: true },
+    // lane barrels
+    { x: 6.9, z: -24.4, height: 1.2, radius: 0.5, collider: true },
+  ];
+  const barrelGroup = new THREE.Group();
+  barrelGroup.name = 'barrels';
+  scene.add(barrelGroup);
+
+  function upgradeBarrels() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.barrels = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadBarrel({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.barrels = 'cylinders';
+        assetState.barrelDetail = result.reason;
+        return assetState;
+      }
+      // Remove the procedural cylinders so the model is what you see.
+      const standins = scene.children.filter((c) => c.name === 'barrel-standin');
+      for (const s of standins) scene.remove(s);
+      for (const inst of barrelInstances) {
+        const group = new THREE.Group();
+        group.name = 'barrel-model';
+        const scale = inst.radius / BARREL_MODEL_SIZE.radius;
+        for (const { name, geometry, material } of result.meshes) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = name;
+          mesh.scale.set(scale, inst.height / BARREL_MODEL_SIZE.height, scale);
+          mesh.position.set(0, 0, 0);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          group.add(mesh);
+        }
+        group.position.set(inst.x, 0, inst.z);
+        barrelGroup.add(group);
+      }
+      assetState.barrels = 'model';
+      assetState.barrelDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: barrelInstances.length
       };
       return assetState;
     });
@@ -638,7 +700,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeStone()]).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStone()]).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {
