@@ -86,11 +86,11 @@ export function build({ outDir = OUT, quiet = false } = {}) {
     version: MANIFEST.version || null,
     build: MANIFEST.build || null,
     entryPoint: MANIFEST.entryPoint || 'index.html',
-    // `commit` names the commit whose *sources* this build came from. It cannot name
-    // the commit that contains dist/ (a file cannot contain its own hash), so the
-    // authoritative identity of the artefact is `sourceDigest`; the drift test
-    // compares that, and it never goes stale.
-    builtFromCommit: commit,
+    // No commit hash here on purpose. `dist/` is committed, so a hash naming "the
+    // commit this was built from" can never equal the commit that contains it — a file
+    // cannot contain its own hash — and every rebuild would dirty the artefact again.
+    // The authoritative identity is `sourceDigest`, which is a pure function of the
+    // game bytes: the drift test compares it, and it is stable across rebuilds.
     workingTreeClean: !dirty,
     fileCount: files.length,
     sourceDigest,

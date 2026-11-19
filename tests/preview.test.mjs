@@ -76,9 +76,10 @@ test('the preview is accompanied by machine-readable metadata', () => {
     assert.equal(meta.entryPoint, 'index.html', 'the startup file is stated');
     assert.match(meta.digest, /^[0-9a-f]{64}$/, 'there is a sha-256 of the contents');
     assert.ok(meta.fileCount > 20, 'the file count is real');
-    assert.ok(typeof meta.builtFromCommit === 'string' && meta.builtFromCommit.length >= 7,
-      'the source commit is recorded');
-    assert.ok(typeof meta.sourceDigest === 'string', 'and the content digest that identifies the artefact');
+    // The digest is the identity. A commit hash would be self-referential, since
+    // dist/ is committed, so it must not be present to go stale.
+    assert.equal(meta.builtFromCommit, undefined, 'no self-referential commit field');
+    assert.match(meta.sourceDigest, /^[0-9a-f]{64}$/, 'the content digest identifies the artefact');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
