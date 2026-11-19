@@ -7,7 +7,8 @@ import {
   FOUNTAIN_SPOT, FOUNTAIN_COLLIDER, canLoadAssets, textureRepeat,
   stoneMaterialParams, loadFountain, loadMaterialTextures,
   BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, STALL_ASSET, STALL_MODEL_SIZE, loadStall,
-  LAMP_ASSET, LAMP_MODEL_SIZE, loadLamp,
+  LAMP_ASSET, LAMP_MODEL_SIZE, loadLamp, MARKET_STALL_ASSET, MARKET_STALL_MODEL_SIZE,
+  loadMarketStall,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES
 } from './assets.js';
 import { loadGlb } from './glb.js';
@@ -373,12 +374,14 @@ export function buildWorld(renderer) {
   addBox(scene, colliders, { size: [1.4, 2.2, 0.3], position: [-10.5, 1.1, -6.35], material: stone });
 
   // Market stalls east and west.
-  addBox(scene, colliders, { size: [4, 1, 0.4], position: [11, 0.5, -3], material: wood, castShadow: true });
+  const eastCounter = addBox(scene, colliders, { size: [4, 1, 0.4], position: [11, 0.5, -3], material: wood, castShadow: true });
+  eastCounter.userData = { marketStallStandin: true, marketStallSize: 'large' };
   addBox(scene, colliders, { size: [4.4, 0.3, 2.6], position: [11, 2.2, -3], material: roof, castShadow: true });
   addBox(scene, colliders, { size: [0.2, 2.2, 0.2], position: [9.3, 1.1, -4.1], material: wood });
   addBox(scene, colliders, { size: [0.2, 2.2, 0.2], position: [12.7, 1.1, -4.1], material: wood });
 
-  addBox(scene, colliders, { size: [3, 0.9, 0.4], position: [-11, 0.45, 6], material: wood, castShadow: true });
+  const westCounter = addBox(scene, colliders, { size: [3, 0.9, 0.4], position: [-11, 0.45, 6], material: wood, castShadow: true });
+  westCounter.userData = { marketStallStandin: true, marketStallSize: 'small' };
   addBox(scene, colliders, { size: [3.4, 0.3, 2.2], position: [-11, 1.7, 6], material: roof, castShadow: true });
 
   // Crates south-east break up sightlines and hide the brass key nearby.
@@ -544,6 +547,7 @@ export function buildWorld(renderer) {
     stalls: 'boxes',
     lamps: 'spheres',
     plaster: 'flat',
+    marketStalls: 'boxes',
     wood: 'flat',
     brick: 'flat',
     fountainDetail: null,
@@ -809,6 +813,62 @@ export function buildWorld(renderer) {
     });
   }
 
+  function upgradeMarketStalls() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.marketStalls = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMarketStall({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.marketStalls = 'boxes';
+        assetState.marketStallDetail = result.reason;
+        return assetState;
+      }
+      // Hide the procedural counters; keep their colliders.
+      const standins = scene.children.filter((c) => c.userData && c.userData.marketStallStandin);
+      for (const c of standins) c.visible = false;
+      // Place the model at each standin's position, scaled to fit that counter.
+      const instances = [];
+      for (const c of standins) {
+        instances.push({
+          x: c.position.x,
+          z: c.position.z,
+          height: c.position.y * 2,
+          size: c.userData.marketStallSize
+        });
+      }
+      for (const inst of instances) {
+        const group = new THREE.Group();
+        group.name = 'market-stall-model';
+        const sx = inst.size === 'small'
+          ? 3.0 / MARKET_STALL_MODEL_SIZE.width
+          : 4.0 / MARKET_STALL_MODEL_SIZE.width;
+        const sy = inst.height / MARKET_STALL_MODEL_SIZE.height;
+        for (const { name, geometry, material } of result.meshes) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = name;
+          mesh.scale.set(sx, sy, sx);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          group.add(mesh);
+        }
+        group.position.set(inst.x, 0, inst.z);
+        scene.add(group);
+      }
+      assetState.marketStalls = 'model';
+      assetState.marketStallDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: instances.length
+      };
+      return assetState;
+    });
+  }
+
   function upgradeStone() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -914,7 +974,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {

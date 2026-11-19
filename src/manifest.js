@@ -35,6 +35,7 @@ export const REQUIRED_FILES = [
   'assets/fountain.glb',
   'assets/barrel.glb',
   'assets/stall.glb',
+  'assets/market_stall.glb',
   'assets/lamp.glb',
   'assets/textures/wood_albedo.png',
   'assets/textures/wood_normal.png',
