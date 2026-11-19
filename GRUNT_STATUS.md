@@ -405,8 +405,10 @@ Caught by `npm test`, fixed by ordering the constants before the exports.
 ### Browser evidence
 
 - `npm test`: 406/406 pass (397 + 9 new).
-- Desktop vs committed dist under /amazing-adventure/: 183/183 pass.
-- Mobile: re-run in progress at checkpoint time.
+- Desktop vs committed dist under /amazing-adventure/: 184/184 pass, including
+  the new footstep render check (OfflineAudioContext peak 0.01876, gain 0.05).
+- Mobile vs committed dist under /amazing-adventure/: 185/185 pass across
+  4 profiles.
 - Preview: 46 files, 2.78 MB. Byte-identical rebuild verified.
 
 ### Honest limits
