@@ -288,7 +288,12 @@ export async function loadMarketStall({ THREE, loadGlb, url = MARKET_STALL_ASSET
     }
     const buffer = await response.arrayBuffer();
     const meshes = loadGlb(buffer, THREE);
-    const footprint = fountainFootprint(meshes);
+    // Only the counter and posts must fit the collider; the awning overhangs.
+    const baseMeshes = meshes.filter((m) =>
+      m.name === 'MarketCounter' || m.name === 'MarketShelf' ||
+      m.name.startsWith('MarketPost'));
+    const check = baseMeshes.length ? baseMeshes : meshes;
+    const footprint = fountainFootprint(check);
     const reachX = footprint
       ? Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX))
       : Infinity;
