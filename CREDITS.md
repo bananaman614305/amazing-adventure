@@ -100,3 +100,10 @@ its procedural stand-in or flat colour and stays fully playable.
   the same tapered-post + pitched-awning pattern as the lane stall, authored at
   the larger (4.0 m) counter size and scaled down for the 3.0 m one. Same
   licence as the game (generated, not downloaded).
+
+### Round 37 addition
+
+- `assets/bench.glb` — `art/blender/make_bench.py`. 96 tris, 8 meshes, 2
+  materials (BenchWood/BenchIron), 9.4 KB. Built from the same box primitives
+  as the previous models: four legs, a slatted seat slab, a backrest slab, and
+  two iron brackets. Same licence as the game (generated, not downloaded).
