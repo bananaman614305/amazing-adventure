@@ -450,6 +450,17 @@ Screenshots (measured programmatically, not visually inspected -- I am text-only
   (e.g. learning a tileable latent) would need a separate submission and a
   licence check before anything ships.
 
+### A publication request I broke myself
+
+After Round 28 I "corrected" the publication request down to four fields
+(`branch`, `base`, `body`, `head`) on a wrong assumption that `title` was extra.
+The supervisor rejected it: `{"status":"needs_attention","reason":"Invalid
+publication fields"}`. The request needs **five** fields including `title`. Fixed
+in the same turn and re-verified against a clean tree: `bc758e5` on
+`grunt/round28-graphics`, based on `grunt/round27-preview-package`. Lesson: the
+publication contract is `branch`, `base`, `title`, `body`, `head` — exactly those
+five, no more, no fewer.
+
 ## Previous round — Round 27: a GitHub Pages preview, tested under the project subpath
 ## Previous round — Round 26: a new player was told nothing
 
