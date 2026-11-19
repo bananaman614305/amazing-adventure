@@ -813,18 +813,44 @@ try {
     `ratio=${adaptive.ratio} base=${adaptive.base}`);
 
   // The manual override must restore native sharpness and persist the choice.
+  // It must also leave the controller's *reported* ratio agreeing with the renderer:
+  // a pin that bypasses the controller made `resolution.ratio` go stale, which is a
+  // lie about what is on screen rather than a cosmetic detail.
   const fixed = await page.evaluate(() => {
-    const on = window.amazingAdventure.resolution.setAdaptive(false);
+    const api = window.amazingAdventure;
+    const on = api.resolution.setAdaptive(false);
     return {
       on,
-      ratio: window.amazingAdventure.renderer.getPixelRatio(),
-      base: window.amazingAdventure.basePixelRatio,
+      reported: api.resolution.ratio,
+      ratio: api.renderer.getPixelRatio(),
+      dataset: document.body.dataset.pixelRatio,
+      base: api.basePixelRatio,
       stored: localStorage.getItem('amazing-adventure:resolution')
     };
   });
   checks.check('turning adaptive off restores native resolution and remembers it',
     fixed.on === false && fixed.ratio === fixed.base && fixed.stored === 'fixed',
     JSON.stringify(fixed));
+  checks.check('a pinned resolution is reported honestly, not stale',
+    fixed.reported === fixed.ratio &&
+    Number(fixed.dataset) === fixed.ratio,
+    JSON.stringify(fixed));
+
+  // And the pin has to survive being pinned from an already-reduced ratio, which is
+  // the state the capture helper leaves the page in.
+  await page.evaluate(() => window.amazingAdventure.resolution.setAdaptive(true));
+  const pinnedAgain = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    api.resolution.setAdaptive(false);
+    return {
+      reported: api.resolution.ratio,
+      actual: api.renderer.getPixelRatio(),
+      base: api.basePixelRatio
+    };
+  });
+  checks.check('pinning from any state lands on the base ratio and says so',
+    pinnedAgain.reported === pinnedAgain.base && pinnedAgain.actual === pinnedAgain.base,
+    JSON.stringify(pinnedAgain));
 
   const reEnabled = await page.evaluate(() => {
     const on = window.amazingAdventure.resolution.setAdaptive(true);

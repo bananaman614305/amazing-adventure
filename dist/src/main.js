@@ -1770,7 +1770,12 @@ window.amazingAdventure = {
     setAdaptive(on) {
       adaptiveResolution = Boolean(on);
       localStorage.setItem(RESOLUTION_KEY, adaptiveResolution ? 'auto' : 'fixed');
-      if (!adaptiveResolution) applyResolution(basePixelRatio);
+      // Turning adaptive off pins the image at native sharpness. That has to go
+      // through the controller rather than straight to the renderer: otherwise the
+      // controller keeps reporting whatever ratio it last chose, and `resolution.ratio`
+      // silently disagrees with the pixels actually being drawn. Anyone reading the
+      // reported value — the HUD, a test, a future bug report — would be misled.
+      if (!adaptiveResolution) applyResolution(resolution.force(basePixelRatio));
       return adaptiveResolution;
     }
   },
