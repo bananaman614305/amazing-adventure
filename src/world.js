@@ -6,8 +6,8 @@ import {
 import {
   FOUNTAIN_SPOT, FOUNTAIN_COLLIDER, canLoadAssets, textureRepeat,
   stoneMaterialParams, loadFountain, loadMaterialTextures,
-  BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES,
-  BRICK_TEXTURE_FILES
+  BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, STALL_ASSET, STALL_MODEL_SIZE, loadStall,
+  WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES
 } from './assets.js';
 import { loadGlb } from './glb.js';
 
@@ -194,12 +194,19 @@ export function buildWorld(renderer) {
         castShadow: true
       });
       if (prop.kind === 'stall') {
-        addBox(scene, [], {
+        const roofBox = addBox(scene, [], {
           size: [prop.width + 0.5, 0.25, prop.depth + 0.4],
           position: [prop.x, prop.height + 0.15, prop.z],
           material: laneRoof,
           castShadow: true
         });
+        roofBox.userData = { stallStandin: true };
+        // The counter box added just above is the previous scene child.
+        const counterBox = scene.children[scene.children.length - 2];
+        if (counterBox && counterBox.isMesh) {
+          counterBox.userData = counterBox.userData || {};
+          counterBox.userData.stallStandin = true;
+        }
       }
     }
   }
@@ -526,6 +533,7 @@ export function buildWorld(renderer) {
     fountain: 'stand-in',
     stone: 'flat',
     barrels: 'cylinders',
+    stalls: 'boxes',
     wood: 'flat',
     brick: 'flat',
     fountainDetail: null,
@@ -661,6 +669,70 @@ export function buildWorld(renderer) {
     return applied;
   }
 
+  function upgradeStalls() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.stalls = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadStall({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.stalls = 'boxes';
+        assetState.stallDetail = result.reason;
+        return assetState;
+      }
+      // Hide the procedural lane stall boxes so only the model shows.
+      for (const c of scene.children) {
+        if (c.userData && c.userData.stallStandin) c.visible = false;
+      }
+      // Discover lane stall positions from the lane props data.
+      const laneStallPositions = [];
+      // We re-derive from the same LANE_PROPS the build loop used; simpler to
+      // scan the scene for standin markers' positions.
+      for (const c of scene.children) {
+        if (c.userData && c.userData.stallStandin && c.position) {
+          // counter box centre -> model origin at ground
+          laneStallPositions.push({ x: c.position.x, z: c.position.z, height: 1.0 });
+        }
+      }
+      // Deduplicate (counter + roof both marked) by rounding.
+      const seen = new Set();
+      const unique = [];
+      for (const p of laneStallPositions) {
+        const key = `${p.x.toFixed(2)},${p.z.toFixed(2)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(p);
+      }
+      const positions = unique.length ? unique : [{ x: 7.4, z: -21.5, height: 1.0 }];
+      for (const inst of positions) {
+        const group = new THREE.Group();
+        group.name = 'stall-model';
+        const scale = 1;
+        for (const { name, geometry, material } of result.meshes) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = name;
+          mesh.scale.set(scale, inst.height / STALL_MODEL_SIZE.height, scale);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          group.add(mesh);
+        }
+        group.position.set(inst.x, 0, inst.z);
+        scene.add(group);
+      }
+      assetState.stalls = 'model';
+      assetState.stallDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: positions.length
+      };
+      return assetState;
+    });
+  }
+
   function upgradeStone() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -755,7 +827,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {

@@ -29,6 +29,11 @@ export const BARREL_ASSET = 'assets/barrel.glb';
 /** Authored size of the barrel model, so instances can be scaled to fit. */
 export const BARREL_MODEL_SIZE = { radius: 0.46, height: 1.30 };
 
+export const STALL_ASSET = 'assets/stall.glb';
+
+/** Authored size of the stall model, so instances can be scaled to fit. */
+export const STALL_MODEL_SIZE = { width: 1.2, depth: 3.2, height: 1.35 };
+
 export const WOOD_TEXTURE_FILES = {
   map: 'assets/textures/wood_albedo.png',
   normalMap: 'assets/textures/wood_normal.png',
@@ -184,6 +189,35 @@ export async function loadBarrel({ THREE, loadGlb, url = BARREL_ASSET, fetchImpl
       : Infinity;
     if (reach > 0.55) {
       return { ok: false, reason: 'barrel exceeds its collider', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
+/**
+ * Loads the stall GLB. Same contract as loadBarrel: never throws, reports what
+ * happened, and refuses a model that does not fit the collider the game already
+ * registers for stalls (1.2 x 3.2, so a 0.6 wide / 1.6 deep half-extent).
+ */
+export async function loadStall({ THREE, loadGlb, url = STALL_ASSET, fetchImpl = fetch }) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const footprint = fountainFootprint(meshes);
+    const reachX = footprint
+      ? Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX))
+      : Infinity;
+    const reachZ = footprint
+      ? Math.max(Math.abs(footprint.minZ), Math.abs(footprint.maxZ))
+      : Infinity;
+    if (reachX > 0.61 || reachZ > 1.61) {
+      return { ok: false, reason: 'stall exceeds its collider', footprint, url };
     }
     return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
   } catch (error) {
