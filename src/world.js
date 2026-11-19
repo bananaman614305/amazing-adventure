@@ -7,6 +7,7 @@ import {
   FOUNTAIN_SPOT, FOUNTAIN_COLLIDER, canLoadAssets, textureRepeat,
   stoneMaterialParams, loadFountain, loadMaterialTextures,
   BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, STALL_ASSET, STALL_MODEL_SIZE, loadStall,
+  LAMP_ASSET, LAMP_MODEL_SIZE, loadLamp,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES
 } from './assets.js';
 import { loadGlb } from './glb.js';
@@ -435,6 +436,12 @@ export function buildWorld(renderer) {
 
   // Lantern posts around the plaza. Their lights are stored so the day/night
   // cycle can turn them up at dusk.
+  // Where the model's lantern actually ends up, in metres from the post origin.
+  // Derived from art/blender/make_lamp.py: arm at post_height-0.15, lantern
+  // centred half a lantern below that. Kept as constants so the PointLight and
+  // the emissive bulb stay together if the model is ever re-proportioned.
+  const LAMP_LANTERN_OFFSET = 0.6;
+  const LAMP_LANTERN_Y = LAMP_MODEL_SIZE.postHeight - 0.15 - LAMP_MODEL_SIZE.lanternHeight / 2 + 0.05;
   const lamps = [];
   for (const [x, z] of [[7, 7], [-7, 7], [7, -7], [-7, -7]]) {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3, 10), wood);
@@ -447,12 +454,13 @@ export function buildWorld(renderer) {
       new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xffb43a, emissiveIntensity: 1.6 })
     );
     lamp.position.set(x, 3.15, z);
+    lamp.userData = { lampStandin: true };
     scene.add(lamp);
 
     const point = new THREE.PointLight(0xffc46b, 0, 16, 2);
     point.position.set(x, 3.15, z);
     scene.add(point);
-    lamps.push({ light: point, mesh: lamp });
+    lamps.push({ light: point, mesh: lamp, standinPost: post });
 
     colliders.push(boxCollider(x - 0.2, z - 0.2, x + 0.2, z + 0.2));
   }
@@ -534,6 +542,7 @@ export function buildWorld(renderer) {
     stone: 'flat',
     barrels: 'cylinders',
     stalls: 'boxes',
+    lamps: 'spheres',
     wood: 'flat',
     brick: 'flat',
     fountainDetail: null,
@@ -733,6 +742,65 @@ export function buildWorld(renderer) {
     });
   }
 
+  function upgradeLamps() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.lamps = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadLamp({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.lamps = 'spheres';
+        assetState.lampDetail = result.reason;
+        return assetState;
+      }
+      // Swap each procedural post+sphere for the model. The PointLight and the
+      // day/night emissive hook stay exactly where they are: the model provides
+      // a LampBulb mesh whose material emissiveIntensity we drive instead.
+      for (const lamp of lamps) {
+        if (lamp.standinPost) {
+          lamp.standinPost.visible = false;
+          lamp.standinPost = null;
+        }
+        if (lamp.mesh && lamp.mesh.userData && lamp.mesh.userData.lampStandin) {
+          lamp.mesh.visible = false;
+        }
+        const group = new THREE.Group();
+        group.name = 'lamp-model';
+        let bulb = null;
+        for (const { name, geometry, material } of result.meshes) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = name;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          group.add(mesh);
+          if (name === 'LampBulb') bulb = mesh;
+        }
+        // The model's arm reaches +0.6 m in local x and the lantern hangs at
+        // 2.625 m, so the group sits on the post and the light moves under the
+        // lantern rather than staying on top of the (now hidden) post.
+        group.position.set(lamp.light.position.x, 0, lamp.light.position.z);
+        lamp.light.position.set(lamp.light.position.x + LAMP_LANTERN_OFFSET, LAMP_LANTERN_Y,
+                                lamp.light.position.z);
+        // Drive the bulb's emissive instead of the old sphere's; applyPhase()
+        // writes emissiveIntensity to whatever mesh we store here.
+        if (bulb) lamp.mesh = bulb;
+        lamp.modelGroup = group;
+        scene.add(group);
+      }
+      assetState.lamps = 'model';
+      assetState.lampDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: lamps.length
+      };
+      return assetState;
+    });
+  }
+
   function upgradeStone() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -827,7 +895,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {
