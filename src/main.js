@@ -1629,6 +1629,8 @@ function frame() {
   const area = areaAt(player.position.x, player.position.z) || 'outside';
   if (document.body.dataset.area !== area) {
     document.body.dataset.area = area;
+    // The market lane has its own low bed; everywhere else it fades out.
+    sound.setArea(area);
     if (started) announceArea(area);
   }
 
@@ -1785,6 +1787,8 @@ window.amazingAdventure = {
     get phase() { return sound.phase; },
     play: (name) => cue(name),
     step: (opts) => { try { return sound.step(opts); } catch { return false; } },
+    get area() { return sound.area; },
+    setArea: (area) => { try { return sound.setArea(area); } catch { return null; } },
     toggle: () => { const on = sound.toggle(); syncSoundToggle(); return on; },
     setEnabled: (on) => { const value = sound.setEnabled(on); syncSoundToggle(); return value; }
   },

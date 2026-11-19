@@ -94,6 +94,18 @@ export function ambienceGain(phase, muted, volume = 1) {
   return clampGain(tone.gain * clampGain(volume, 1), MAX_AMBIENCE_GAIN);
 }
 
+// --- Lane market ambience ---------------------------------------------------
+// A second, optional bed that plays only while the player is in the lane. It is
+// synthesised (filtered noise + a slow LFO) so there are no files to download,
+// and it sits well under the drone so feedback cues stay on top.
+export const LANE_BED_GAIN = 0.03;
+export const LANE_BED_CUTOFF = 260;
+
+export function laneBedGain(area, muted, volume = 1) {
+  if (muted || area !== 'lane') return 0;
+  return clampGain(LANE_BED_GAIN * clampGain(volume, 1), MAX_AMBIENCE_GAIN);
+}
+
 // --- Footsteps ------------------------------------------------------------
 
 /**
@@ -194,9 +206,11 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
   let ctx = null;
   let master = null;
   let drone = null;
+  let bed = null;
   let enabled = preference?.enabled ?? true;
   let volume = preference?.volume ?? 0.7;
   let currentPhase = 'day';
+  let currentArea = 'plaza';
   let started = false;
 
   function ensureContext() {
@@ -241,6 +255,27 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
     return { gain, oscA, oscB, filter, phase };
   }
 
+  /** A low, filtered noise bed for the market lane: chatter and clatter. */
+  function buildBed() {
+    if (!ctx || typeof ctx.createBufferSource !== 'function') return null;
+    const buffer = getNoiseBuffer();
+    if (!buffer) return null;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = LANE_BED_CUTOFF;
+    filter.Q.value = 0.7;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    try { source.start(); } catch { return null; }
+    return { gain, source, filter };
+  }
+
   function fade(node, to, seconds = 1.2) {
     if (!ctx) return;
     const now = ctx.currentTime;
@@ -272,6 +307,7 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
     get enabled() { return enabled; },
     get started() { return started; },
     get phase() { return currentPhase; },
+    get area() { return currentArea; },
 
     /** Must be called from a user gesture. Safe to call repeatedly. */
     start() {
@@ -280,14 +316,22 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
       if (ctx.state === 'suspended') ctx.resume?.();
       drone = buildDrone(currentPhase);
       fade(drone.gain, enabled ? phaseTone(currentPhase).gain : 0, 1.6);
+      bed = buildBed();
+      if (bed) fade(bed.gain, enabled ? laneBedGain(currentArea, false, volume) : 0, 1.6);
       started = true;
       return true;
     },
 
     stop() {
-      if (!ctx || !drone) return;
-      try { drone.oscA.stop(); drone.oscB.stop(); } catch { /* already stopped */ }
+      if (!ctx) return;
+      if (drone) {
+        try { drone.oscA.stop(); drone.oscB.stop(); } catch { /* already stopped */ }
+      }
+      if (bed) {
+        try { bed.source.stop(); } catch { /* already stopped */ }
+      }
       drone = null;
+      bed = null;
       started = false;
     },
 
@@ -298,6 +342,7 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
       if (persist) writePreference(persist, enabled);
       if (!ctx || !master) return enabled;
       master.gain.setTargetAtTime(enabled ? clampGain(volume, 1) : 0, ctx.currentTime, 0.08);
+      if (bed) fade(bed.gain, enabled ? laneBedGain(currentArea, false, volume) : 0, 0.3);
       return enabled;
     },
 
@@ -306,6 +351,7 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
     setVolume(next) {
       volume = clampGain(next, 1);
       if (ctx && master && enabled) master.gain.setTargetAtTime(volume, ctx.currentTime, 0.08);
+      if (ctx && bed && enabled) fade(bed.gain, laneBedGain(currentArea, false, volume), 0.3);
       return volume;
     },
 
@@ -325,6 +371,14 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
           fade(drone.gain, enabled ? tone.gain : 0, 0.9);
         } catch { /* context closed mid-fade */ }
       }, 0);
+    },
+
+    /** Follows the player's location: the market bed plays only in the lane. */
+    setArea(area) {
+      currentArea = area || currentArea;
+      if (!ctx || !bed || !started) return currentArea;
+      fade(bed.gain, enabled ? laneBedGain(currentArea, false, volume) : 0, 1.0);
+      return currentArea;
     },
 
     /**

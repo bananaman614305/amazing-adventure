@@ -373,61 +373,57 @@ instructions.
 
 ## Current task
 
-Round 35 — audio polish: distance-driven footsteps.
+Round 36 — lane market ambience bed.
 
 ### What made it into the game
 
-- `src/audio.js`: pure `createStepClock` (accumulates distance, not time, so
-  pushing into a wall is silent and half-speed walking gives half the steps),
-  `FOOTSTEP` constants, `footstepGain` (scales with speed, clamped under the
-  cue ceiling), and a `step()` method on the soundscape that renders a filtered
-  noise thud. Same safety contract as `play()`: silent when off, unstarted, or
-  when the platform cannot make noise.
-- `src/player.js`: `WALK_SPEED`/`RUN_SPEED` constants exported; `isRunning()`;
-  Shift now actually raises the speed cap (the HUD already advertised "Shift
-  run" but the cap was walk-only - a real gap fixed).
-- `src/main.js`: the game loop advances the step clock from the player's real
-  speed and fires `sound.step()` on stride boundaries, alternating the filter
-  variant so left/right feet differ. Resets the accumulator when the player
-  stops.
-- `tests/audio.test.mjs`: 9 new tests covering stride boundaries, min-speed
-  silence, non-finite deltas, multi-step frames, reset, gain scaling, the
-  footstep ceiling, and the step method's no-op safety (including a context
-  without `createBuffer`).
+- `src/audio.js`: a second, optional soundscape bed (`laneBedGain`, `LANE_BED_GAIN`,
+  `LANE_BED_CUTOFF`, `buildBed`, `setArea`). It is synthesised - looping white
+  noise through a lowpass at 260 Hz - so there are no files to download, and it
+  sits well under the drone (0.03 vs 0.05) and the cues. It plays only while
+  `currentArea === 'lane'`, follows mute and volume, and is torn down by `stop()`.
+- `src/main.js`: the area-tracking block calls `sound.setArea(area)` on every
+  change, so entering the lane fades the bed in and leaving fades it out. The
+  debug API exposes `audio.area` and `audio.setArea`.
+- `tests/audio.test.mjs`: 6 new tests covering lane-only gating, the level
+  hierarchy, volume scaling, area tracking before `start()`, no-context survival,
+  and `stop()` tearing down the bed.
+- `scripts/test-round2.mjs`: 2 new browser checks (23c) rendering the bed through
+  an `OfflineAudioContext` and confirming the game tracks the player's area.
+- `CREDITS.md`: no new outside assets (the bed is synthesised).
 
-### Real bug fixed along the way
+### Real safety fix along the way
 
-The first pass put `export const WALK_SPEED_EXPORT = WALK_SPEED` *before* the
-`const WALK_SPEED` declaration, which threw a temporal-dead-zone
-`ReferenceError` and took down every test that imports `player.js` (pathfind).
-Caught by `npm test`, fixed by ordering the constants before the exports.
+`stop()` previously early-returned when `!ctx || !drone`, which meant a bed
+built without a drone (or a stop after a partial start) could keep running. It
+now tears down each node independently and clears `started`.
 
 ### Browser evidence
 
-- `npm test`: 406/406 pass (397 + 9 new).
-- Desktop vs committed dist under /amazing-adventure/: 184/184 pass, including
-  the new footstep render check (OfflineAudioContext peak 0.01876, gain 0.05).
+- `npm test`: 412/412 pass (406 + 6 new).
+- Desktop vs committed dist under /amazing-adventure/: 186/186 pass.
 - Mobile vs committed dist under /amazing-adventure/: 185/185 pass across
   4 profiles.
 - Preview: 46 files, 2.78 MB. Byte-identical rebuild verified.
 
 ### Honest limits
 
-- Text-only model: no auditory inspection. The step clock maths and the
-  soundscape's safety contract are unit-tested; the actual timbre of the
-  noise thud is not something I can judge.
-- The footstep uses white noise through a lowpass; it is a thud, not a
-  sampled shoe-on-stone recording. Deliberate: no audio files, no licensing.
-- `STEP_RATE` is exported but no longer used by the loop (the stride is fixed,
-  so cadence emerges from distance). Kept as documentation of intent.
+- Text-only model: no auditory inspection; the bed's maths and gating are tested,
+  but the timbre of filtered noise is not judged.
+- Chrome device emulation only; no physical phone or iOS Safari.
+- The bed is a low muffled wash, not market chatter - a real ambience layer
+  would need voices, which means assets or a sampler. Deliberately kept to
+  synthesised noise to preserve the no-download invariant.
 
 ## Next steps
 
-1. **Owner: push the tested dist to gh-pages** and confirm footsteps are
-   audible on a real phone while walking.
+1. **Owner: push the tested dist to gh-pages** and confirm on a real phone.
 2. **A real-device pass** on physical hardware (biggest honest gap).
 3. **A real screen reader session** (NVDA/VoiceOver).
-4. **Market ambience layer**: a second, optional soundscape bed for the lane.
+4. **More polish candidates**: a second Kaggle job for a learned experiment,
+   or a new model (bench, notice board, or a crate stack).
+
+## Previous round — Round 35: audio polish: distance-driven footsteps.
 
 ## Previous round — Round 34: modelled market stalls (plaza counters)
 
