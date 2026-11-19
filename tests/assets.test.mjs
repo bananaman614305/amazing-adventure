@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   FOUNTAIN_COLLIDER, FOUNTAIN_SPOT, FOUNTAIN_ASSET, STONE_TEXTURE_FILES,
   canLoadAssets, textureRepeat, stoneMaterialParams, fountainFootprint,
-  footprintFitsCollider, loadFountain, loadStoneTextures
+  footprintFitsCollider, loadFountain, loadStoneTextures, boxProjectUvs
 } from '../src/assets.js';
 
 // Minimal fake Three.js: only what these functions touch.
@@ -215,4 +215,52 @@ test('the texture list covers the three maps the material uses', () => {
   for (const url of Object.values(STONE_TEXTURE_FILES)) {
     assert.match(url, /^assets\/textures\/.+\.png$/, `${url} is a served relative path`);
   }
+});
+// --- boxProjectUvs: box projection for untextured prop models ---------------
+
+test('boxProjectUvs gives a flat quad sensible UVs whatever the winding', () => {
+  // A 2 m x 2 m quad in the z = 0 plane, both triangles counter-clockwise
+  // seen from +y. It must project onto the (x, z) plane, not stretch.
+  const positions = [
+    -1, 0, -1, 1, 0, -1, 1, 0, 1,
+    -1, 0, -1, 1, 0, 1, -1, 0, 1
+  ];
+  const uvs = boxProjectUvs({ positions, tileMeters: 1 });
+  assert.equal(uvs.length, 12);
+  for (const [i, expect] of [[0, [-1, -1]], [1, [1, -1]], [2, [1, 1]],
+    [3, [-1, -1]], [4, [1, 1]], [5, [-1, 1]]]) {
+    assert.ok(Math.abs(uvs[i * 2] - expect[0]) < 1e-6, `u${i} ${uvs[i * 2]}`);
+    assert.ok(Math.abs(uvs[i * 2 + 1] - expect[1]) < 1e-6, `v${i} ${uvs[i * 2 + 1]}`);
+  }
+});
+
+test('boxProjectUvs scales with the tile size instead of hard-coding it', () => {
+  const positions = [0, 0, 0, 3, 0, 0, 0, 0, 3];
+  const at1 = boxProjectUvs({ positions, tileMeters: 1 });
+  const at3 = boxProjectUvs({ positions, tileMeters: 3 });
+  // A 3 m tile means the same 3 m edge covers exactly one UV unit.
+  assert.ok(Math.abs(at3[2] - 1) < 1e-6, `u at tile 3: ${at3[2]}`);
+  assert.ok(Math.abs(at1[2] - 3) < 1e-6, `u at tile 1: ${at1[2]}`);
+});
+
+test('boxProjectUvs honours an index buffer and writes per vertex', () => {
+  // Same quad, but indexed: four unique vertices, six indices.
+  const positions = [-1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1];
+  const indices = [0, 1, 2, 0, 2, 3];
+  const uvs = boxProjectUvs({ positions, indices, tileMeters: 1 });
+  assert.equal(uvs.length, 8, 'one UV pair per vertex, not per index');
+  // v0 = (-1, 0, -1) projects to (u, v) = (-1, -1); v3 = (-1, 0, 1) to (-1, 1).
+  assert.ok(Math.abs(uvs[0] + 1) < 1e-6, `v0.u ${uvs[0]}`);
+  assert.ok(Math.abs(uvs[1] + 1) < 1e-6, `v0.v ${uvs[1]}`);
+  assert.ok(Math.abs(uvs[6] + 1) < 1e-6, `v3.u ${uvs[6]}`);
+  assert.ok(Math.abs(uvs[7] - 1) < 1e-6, `v3.v ${uvs[7]}`);
+});
+
+test('boxProjectUvs picks the dominant axis for a side face', () => {
+  // A quad in the x = 5 plane (facing +x): UVs must come from (z, y).
+  const positions = [5, 0, 0, 5, 2, 0, 5, 2, 3];
+  const uvs = boxProjectUvs({ positions, tileMeters: 1 });
+  // Layout is [u0, v0, u1, v1, u2, v2]; v1 is at index 3, u2 at index 4.
+  assert.ok(Math.abs(uvs[3] - 2) < 1e-6, `v uses y: ${uvs[3]}`);
+  assert.ok(Math.abs(uvs[4] - 3) < 1e-6, `u uses z: ${uvs[4]}`);
 });

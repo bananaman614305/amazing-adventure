@@ -187,3 +187,71 @@ test('the reader refuses features it does not implement', () => {
   };
   assert.throws(() => glbToMeshes(multiPrimitive, fakeTHREE), /one primitive per mesh/);
 });
+// --- UV handling: prop models ship without TEXCOORD_0 -----------------------
+
+test('a GLB with no TEXCOORD_0 loads without UVs and does not throw', () => {
+  // The crate model is authored from untextured boxes, so Blender writes no
+  // UV layer. Loading it must stay quiet; the game box-projects UVs instead.
+  const crate = resolve(import.meta.dirname, '..', 'assets', 'crates.glb');
+  const buf = readFileSync(crate);
+  const meshes = loadGlb(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), fakeTHREE);
+  assert.ok(meshes.length >= 1);
+  for (const { geometry } of meshes) {
+    assert.equal(geometry.attributes.uv, undefined, 'no UVs invented by the reader');
+    assert.ok(geometry.attributes.position, 'positions still present');
+  }
+});
+
+test('a GLB with TEXCOORD_0 becomes an itemSize-2 uv attribute', () => {
+  // Proven with a synthetic GLB rather than a shipped asset, because none of
+  // the current models carry UVs yet. Builds the smallest valid container.
+  const positions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+  const uvs = new Float32Array([0, 0, 1, 0, 0, 1]);
+  const bin = new Uint8Array(positions.byteLength + uvs.byteLength);
+  bin.set(new Uint8Array(positions.buffer), 0);
+  bin.set(new Uint8Array(uvs.buffer), positions.byteLength);
+
+  const json = {
+    asset: { version: '2.0' },
+    buffers: [{ byteLength: bin.byteLength }],
+    bufferViews: [
+      { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+      { buffer: 0, byteOffset: positions.byteLength, byteLength: uvs.byteLength }
+    ],
+    accessors: [
+      {
+        bufferView: 0, componentType: 5126, count: 3, type: 'VEC3',
+        min: [0, 0, 0], max: [1, 1, 0]
+      },
+      { bufferView: 1, componentType: 5126, count: 3, type: 'VEC2' }
+    ],
+    materials: [{ name: 'Test', pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1] } }],
+    meshes: [{ name: 'Quad', primitives: [{ attributes: { POSITION: 0, TEXCOORD_0: 1 }, material: 0 }] }]
+  };
+
+  const jsonBytes = new TextEncoder().encode(JSON.stringify(json));
+  const pad4 = (n) => (4 - (n % 4)) % 4;
+  const jsonPad = pad4(jsonBytes.length);
+  const binPad = pad4(bin.byteLength);
+  const total = 12 + 8 + jsonBytes.length + jsonPad + 8 + bin.byteLength + binPad;
+  const glb = new Uint8Array(total);
+  const dv = new DataView(glb.buffer);
+  dv.setUint32(0, 0x46546c67, true);
+  dv.setUint32(4, 2, true);
+  dv.setUint32(8, total, true);
+  dv.setUint32(12, jsonBytes.length + jsonPad, true);
+  dv.setUint32(16, 0x4e4f534a, true);
+  glb.set(jsonBytes, 20);
+  for (let i = 0; i < jsonPad; i += 1) glb[20 + jsonBytes.length + i] = 0x20;
+  const binStart = 20 + jsonBytes.length + jsonPad;
+  dv.setUint32(binStart, bin.byteLength + binPad, true);
+  dv.setUint32(binStart + 4, 0x004e4942, true);
+  glb.set(bin, binStart + 8);
+
+  const meshes = loadGlb(glb.buffer, fakeTHREE);
+  assert.equal(meshes.length, 1);
+  const uvAttr = meshes[0].geometry.attributes.uv;
+  assert.ok(uvAttr, 'uv attribute exists');
+  assert.equal(uvAttr.itemSize, 2);
+  assert.equal(uvAttr.array.length, 6);
+});
