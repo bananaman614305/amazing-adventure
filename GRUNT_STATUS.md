@@ -373,28 +373,37 @@ instructions.
 
 ## Current task
 
-Round 31 — optimize texture PNGs for deploy weight.
+Round 32 — market stall model + loader + upgrade path.
 
-### What was done
+### What made it into the game
 
-- Re-encoded all 9 texture PNGs with PIL adaptive filtering + compress_level 9.
-  Same 512x512 RGB pixels, lossless. Total texture weight: 1.7 MB -> 1.2 MB
-  (saved 495 KB). Biggest win: wood_normal 667 -> 471 KB, stone_normal 215 -> 104 KB.
-- Preview rebuilt: 40 files, 2.2 MB (was 2.7 MB).
+- `art/blender/make_stall.py` → `assets/stall.glb`: 96 tris, 8 meshes, 3 materials
+  (StallWood/StallRoof/StallIron), 1.2 wide x 3.2 deep x 1.35 tall, 9.6 KB.
+  Authored at the lane stall's actual collider size so no scaling is needed.
+- `src/assets.js`: `STALL_ASSET`, `STALL_MODEL_SIZE`, `loadStall` (same contract
+  as `loadFountain`/`loadBarrel`: never throws, refuses oversized models).
+- `src/world.js`: `upgradeStalls()` hides the procedural lane stall boxes and
+  overlays the model. `assetState.stalls` reports 'model' or 'boxes'.
+- `src/manifest.js`: added `assets/stall.glb` to `REQUIRED_FILES`.
 
 ### Browser evidence
 
 - `npm test`: 397/397 pass.
 - Desktop: 177/177 pass. Mobile: 185/185 pass across 4 profiles.
-- Probe: all materials still carry their maps (plaza stone, house brick, all textured).
+- Probe: stalls='model', 1 stall model instance, 2 procedural standins hidden.
 - 0 console errors, 0 failed requests.
 
 ### Honest limits
 
-- Did not visually inspect the re-encoded PNGs (text-only). PIL round-trip confirms
-  dimensions and mode are unchanged; pixel-level comparison was not run because
-  numpy is unavailable in this environment without the openblas LD_LIBRARY_PATH.
-- The preview is now 2.2 MB, still mostly textures + three.module.min.js (655 KB).
+- Did not visually inspect the result (text-only). Measured: model loaded,
+  standins hidden, asset state reports 'model'.
+- Only 1 lane stall exists in `areas.js` (at 7.4, -21.5); the model overlays
+  that single stall. The marketplace stalls east/west are separate boxes in
+  `world.js` and remain procedural (a future pass can model those too).
+- The model has no UVs; it uses flat material colours (wood/roof/iron) so it
+  matches the game's existing palette without textures.
+
+## Previous round — Round 31: optimize texture PNGs for deploy weight
 
 ## Previous round — Round 30: apply wood and brick textures to materials
 
