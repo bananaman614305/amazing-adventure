@@ -29,6 +29,11 @@ export const COBBLE_TEXTURE_FILES = {
   roughnessMap: 'assets/textures/cobble_rough.png'
 };
 
+export const HOUSE_ASSET = 'assets/house.glb';
+
+/** Authored size of the house trim model (roof span 8 x 6, chimney to 5.33). */
+export const HOUSE_MODEL_SIZE = { width: 8.1, depth: 6.2, height: 5.33 };
+
 export const GATE_DOOR_ASSET = 'assets/gate_door.glb';
 
 /** Authored size of the gate door model (matches the procedural box). */
@@ -445,6 +450,36 @@ export async function loadGateDoor({ THREE, loadGlb, url = GATE_DOOR_ASSET, fetc
     if (reachX > GATE_DOOR_MODEL_SIZE.width / 2 + 0.05 ||
         reachY > GATE_DOOR_MODEL_SIZE.height / 2 + 0.05) {
       return { ok: false, reason: 'gate door exceeds its box', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
+/**
+ * Loads the house-trim GLB. Same contract: never throws. The trim overlays the
+ * brick body, so it checks the roof span (8 x 6) plus a small overhang, and
+ * that nothing sinks below the ground plane.
+ */
+export async function loadHouse({ THREE, loadGlb, url = HOUSE_ASSET, fetchImpl = fetch }) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const footprint = fountainFootprint(meshes);
+    if (!footprint) {
+      return { ok: false, reason: 'no geometry', url };
+    }
+    const reachX = Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX));
+    const reachZ = Math.max(Math.abs(footprint.minZ), Math.abs(footprint.maxZ));
+    if (reachX > HOUSE_MODEL_SIZE.width / 2 + 0.05 ||
+        reachZ > HOUSE_MODEL_SIZE.depth / 2 + 0.05 ||
+        footprint.minY < -0.01) {
+      return { ok: false, reason: 'house trim exceeds its span', footprint, url };
     }
     return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
   } catch (error) {
