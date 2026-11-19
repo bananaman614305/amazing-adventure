@@ -1,9 +1,11 @@
-# Deploying the playable preview
+# Publishing the playable preview (GitHub Pages)
 
-The game is a static site with no build step at runtime and no network calls: every
-dependency is vendored. A preview is therefore a plain upload of one directory.
+Amazing Adventure is a static site: no build step at runtime, no network calls, every
+dependency vendored. Publishing is a plain upload of one directory.
 
-## What is deployable
+Target URL: **https://bananaman614305.github.io/amazing-adventure/**
+
+## What gets published
 
 `dist/` is committed to this repository. It is **not** hand-edited — it is produced by:
 
@@ -11,58 +13,92 @@ dependency is vendored. A preview is therefore a plain upload of one directory.
 node scripts/build-preview.mjs
 ```
 
-and `tests/preview.test.mjs` fails if the committed copy ever drifts from the sources it
-was built from (compare `sourceDigest` in `dist/preview.json`).
+It contains exactly the files `src/manifest.js` declares (27 of them), plus two
+metadata files:
 
-Everything else in the repo — `tests/`, `scripts/`, `node_modules/`, `artifacts/`,
-`package.json` — is deliberately excluded from `dist/`. Only the 27 files the game
-needs are published.
-
-## Settings for Cloudflare Pages
-
-| Setting | Value |
+| File | Why it exists |
 | --- | --- |
-| Framework preset | *None* |
-| Build command | *(leave empty — `dist/` is already committed)* |
-| Build output directory | `dist` |
-| Root directory | *(repo root)* |
+| `.nojekyll` | GitHub Pages runs Jekyll by default, which drops underscore-prefixed paths and can rewrite content. This opts out so every byte is served verbatim. |
+| `preview.json` | Version, entry point, file list and a SHA-256 of the game contents, so a deployment can be tied to exact bytes. |
 
-If you would rather have Pages run the build, use build command
-`node scripts/build-preview.mjs` with the same output directory; it is deterministic and
-needs no dependencies installed.
+Nothing else is published. `tests/`, `scripts/`, `node_modules/`, `artifacts/` and
+`package.json` are deliberately excluded.
 
-## Startup file
+`tests/preview.test.mjs` rebuilds from the current sources and **fails if the committed
+`dist/` no longer matches** the `sourceDigest` recorded in `dist/preview.json`.
 
-`index.html` — it loads `./src/main.js` as an ES module. No client-side routing, no
-rewrite rules required beyond the `/index.html` fallback already in `dist/_redirects`.
+## Pages-safe root layout
+
+A Pages *project* site is served under a subpath (`/<repo>/`), not at the domain root,
+so `dist/` is uploaded as the site root:
+
+```
+dist/                    ->  https://bananaman614305.github.io/amazing-adventure/
+├── .nojekyll
+├── index.html           <- startup file
+├── preview.json
+├── src/                 <- 24 ES modules, loaded relatively
+└── vendor/              <- Three.js, vendored
+```
+
+`index.html` loads `./src/main.js` as an ES module. There is no client-side routing, so
+no rewrite rules are needed. Every reference is **relative** — verified by a test, since
+one root-absolute path would 404 on a project site.
+
+## Publishing
+
+Either of these works; both end with `dist/` as the served root.
+
+**Option A — publish the committed directory (no build on the host).**
+
+```sh
+# From a clean checkout of the reviewed commit:
+npm ci                            # only needed if you also want to run tests
+node scripts/build-preview.mjs    # regenerates dist/; a no-op if already current
+git subtree push --prefix dist origin gh-pages
+```
+
+Or copy `dist/` to a `gh-pages` branch by any means you prefer. The bytes are what
+matter, not the method.
+
+**Option B — let Pages build it.** Settings → Pages → *Deploy from a branch*, branch
+`gh-pages`, folder `/ (root)`. If you'd rather have the build run on the host, use build
+command `node scripts/build-preview.mjs` with output directory `dist`; it is
+deterministic and installs nothing.
+
+Then confirm the URL in **Settings → Pages** reads
+`https://bananaman614305.github.io/amazing-adventure/`.
 
 ## Verifying a deployment before trusting it
 
-```sh
-# 1. From the repo, serve exactly the deployed directory:
-SERVE_DIR=dist PORT=8000 node server.mjs
-
-# 2. Or verify a real host: every request must be same-origin, and the JS must be
-#    served as a JavaScript MIME type or module loading fails.
-curl -sI https://<preview>.pages.dev/            # expect 200, text/html
-curl -sI https://<preview>.pages.dev/src/main.js # expect 200, ...javascript...
-```
-
-## Requirements the preview must satisfy
-
-- **HTTPS** — `localStorage`, Web Audio and pointer lock all need a secure context
-  (Loopback addresses are also treated as secure during local development).
-- **JavaScript MIME type** on `.js` responses — otherwise `import` fails and the page
-  stays blank with a console error.
-- **No COOP/COEP headers needed** — the game does not use `SharedArrayBuffer` or
-  workers.
-
-## Testing the deployed artefact, not just the sources
-
-The mobile and desktop suites accept `SERVE_DIR` so they can be run against these exact
-bytes:
+The suites can be pointed at the exact bytes that get uploaded, served under the same
+subpath Pages uses:
 
 ```sh
-SERVE_DIR=dist npm run test:mobile     # 4 device profiles
-SERVE_DIR=dist npm run test:browser    # desktop checks
+SERVE_DIR=dist BASE_PATH=/amazing-adventure/ npm run test:mobile   # 4 device profiles
+SERVE_DIR=dist BASE_PATH=/amazing-adventure/ npm run test:browser  # desktop checks
 ```
+
+Or serve it by hand and look:
+
+```sh
+SERVE_DIR=dist BASE_PATH=/amazing-adventure/ PORT=8000 node server.mjs
+# http://127.0.0.1:8000/amazing-adventure/
+```
+
+Against the live host, the two things that break a static site are a wrong MIME type
+and a cross-origin reference:
+
+```sh
+curl -sI https://bananaman614305.github.io/amazing-adventure/            # 200, text/html
+curl -sI https://bananaman614305.github.io/amazing-adventure/src/main.js # 200, ...javascript...
+```
+
+## Requirements the published site must satisfy
+
+- **HTTPS** — already true on Pages. `localStorage`, Web Audio and pointer lock all
+  need a secure context (loopback is also treated as secure for local testing).
+- **JavaScript MIME type** on `.js` responses — GitHub Pages sends this correctly.
+  If it were wrong, `import` would fail and the page would stay blank with a console
+  error.
+- **No COOP/COEP headers needed** — the game uses no `SharedArrayBuffer` and no workers.
