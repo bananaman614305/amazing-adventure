@@ -116,3 +116,12 @@ its procedural stand-in or flat colour and stays fully playable.
   side along x and rotated a quarter turn by the game to face west, so the
   loader checks the wider extent against the depth collider. Same licence as
   the game (generated, not downloaded).
+
+### Round 39 addition
+
+- `assets/crates.glb` — `art/blender/make_crates.py`. 120 tris, 10 meshes, 2
+  materials (CrateWood/CrateIron), 11.6 KB. One crate: a body, a lid, four
+  iron bands on each of two rings. The game places three instances at the
+  original positions (two stacked, one offset), matching the market-stall
+  pattern of one GLB, many instances. Same licence as the game (generated,
+  not downloaded).
