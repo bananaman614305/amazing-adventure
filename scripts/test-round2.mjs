@@ -2079,6 +2079,26 @@ try {
                     hidden: marketStalls.hidden }));
 
   await capture(page, 'round34-market-stalls.png');
+  // The upgrade must not change gameplay: the modelled counter still blocks.
+  // Yaw -PI/2 faces +X (east); walking from (8,-3) heads at the counter whose
+  // collider spans x 9..13, so the player must stop short of x 8.9.
+  const stallBlocks = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    api.player.placeAt(8, -3, -Math.PI / 2);
+    api.player.setMoveInput(1, 0);
+    await new Promise((r) => setTimeout(r, 1800));
+    api.player.setMoveInput(0, 0);
+    return { x: Number(api.player.position.x.toFixed(2)), stoppedOutside: api.player.position.x < 8.9 };
+  });
+  checks.check('the modelled market stall is solid, not something you can walk through',
+    stallBlocks.stoppedOutside, JSON.stringify(stallBlocks));
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    api.player.setMoveInput(0, 0);
+    api.player.placeAt(0, 13, 0);
+  });
+
 
   // The lane walls carry the third Kaggle family (plaster). Same contract as
   // the other families: three maps, white base so nothing is double-tinted.

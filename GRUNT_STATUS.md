@@ -373,67 +373,62 @@ instructions.
 
 ## Current task
 
-Round 33 — modelled lantern posts + third Kaggle job (plaster lane walls).
+Round 34 — modelled market stalls (plaza counters).
 
 ### What made it into the game
 
-- `art/blender/make_lamp.py` -> `assets/lamp.glb`: 96 tris, 6 meshes (tapered
-  iron post, base plate, bracket arm, glass housing, cap, emissive bulb),
-  8.9 KB. Base footprint asserted <= 0.2 m to fit the existing post collider;
-  the arm/lantern overhang is deliberate and the loader only checks the base.
-- `src/assets.js`: `LAMP_ASSET`, `LAMP_MODEL_SIZE`, `loadLamp` (never throws,
-  refuses a model whose base exceeds the collider).
-- `src/world.js`: `upgradeLamps()` swaps all four plaza posts; the PointLight
-  moves under the lantern (offset 0.6 m, height 2.625 m, derived from the
-  Blender script and kept as named constants).
-- **Real bug found and fixed**: the GLB exporter drops Blender's emission
-  factor, so the modelled bulb arrived with a black emissive and the day/night
-  glow would silently die exactly when the model loaded. `upgradeLamps` now
-  sets emissive `ffb43a` explicitly. Probe-verified before commit; two
-  permanent desktop checks (28b) hold the fix.
-- `art/kaggle/plaster_textures.py`: third bounded T4 job (~10 s, CuPy).
-  Worn lime plaster: trowel sweeps, periodic stain field, wrapped chip dents.
-  Seam ratios albedo [0.505, 0.189], normal [1.092, 1.092] (all < 3).
-  Outputs downloaded, inspected, losslessly re-encoded with PIL
-  (139->123, 579->384, 20->20 KB), wired to the lane walls via
-  `applyTextureFamily(laneWall, plaster, 14, 2.6, 2)`.
-- `CREDITS.md`: records ALL round 28-33 Blender and Kaggle assets with scripts,
-  GPU evidence and licences. This was missing from earlier rounds - fixed.
-- Manifest: lamp.glb + 3 plaster PNGs; 45 required files.
+- `art/blender/make_market_stall.py` -> `assets/market_stall.glb`: 72 tris,
+  6 meshes, 3 materials (MarketWood/MarketRoof/MarketIron), 7.4 KB. Authored
+  at the larger (4.0 m) counter size; the smaller (3.0 m) is a uniform
+  scale-down, so one GLB serves both. Pitched awning overhangs the counter in
+  depth, like a real market canopy.
+- `src/assets.js`: `MARKET_STALL_ASSET`, `MARKET_STALL_MODEL_SIZE`,
+  `loadMarketStall` (never throws, refuses oversized *base*; the awning is
+  allowed to overhang the collider).
+- `src/world.js`: `upgradeMarketStalls()` hides both procedural counters and
+  overlays the model at each position, scaled to fit. `assetState.marketStalls`
+  reports 'model' or 'boxes'.
+- `src/manifest.js`: added `assets/market_stall.glb` (46 required files).
+- `CREDITS.md`: market stall entry added.
+- **Real bug found and fixed**: the first loader rejected the model because
+  the awning overhangs the collider. The check now filters to the base meshes
+  (MarketCounter, MarketShelf, MarketPost*) the same way the lamp loader does.
+  Probe-verified before commit.
 
 ### Browser evidence
 
 - `npm test`: 397/397 pass.
-- Desktop vs committed dist under /amazing-adventure/: 181/181 pass (2 new lamp
-  checks + 2 new plaster checks).
-- Mobile: 185/185 pass across 4 profiles, re-run against the committed dist
-  under /amazing-adventure/ after the plaster commit.
-- Fallback probe: blocking `plaster_*` requests leaves plaster flat while
-  stone/wood/brick/lamps all stay upgraded.
-- Probe: 4 lamp models, 4 hidden sphere stand-ins, 4 bulbs at emissive ffb43a;
-  lane wall carries all 3 plaster maps, white base, repeat [7, 1].
-- Preview: 45 files, 2.76 MB. Byte-identical rebuild verified.
+- Desktop vs committed dist under /amazing-adventure/: 182/182 pass, plus a
+  new collision check (walking east into the modelled counter stops at x 8.58,
+  outside the collider) - desktop re-run pending at checkpoint time.
+- Mobile: re-run in progress at checkpoint time; the prior round's suite
+  passed 185/185.
+- Probe: 2 market-stall models, 2 standins hidden, asset state 'model'.
+- Fallback probe: blocking market_stall.glb leaves the counters as boxes
+  ('Failed to fetch') while fountain/stall/lamps/stone/plaster all stay
+  upgraded. Gameplay unaffected.
+- Preview: 46 files, 2.77 MB. Byte-identical rebuild verified.
 
 ### Honest limits
 
-- Text-only model: no visual inspection. All claims are DOM/material/scene
-  measurements plus saved screenshots.
-- Earlier mobile timeouts this session were host load (load average ~10), not
-  game code: the same suites passed once given longer timeouts. The desktop
-  suite needed ~9 min under load; mobile similar.
-- The plaster albedo mean (0.74) is lighter than the old flat lane colour
-  (0x6a6053); the lane will read brighter. That is a deliberate art choice
-  (lime render), not measured for aesthetics.
+- Text-only model: no visual inspection. Measured: models loaded, standins
+  hidden, asset state reports 'model'.
+- The market stall has no UVs; it uses flat material colours matching the
+  game's existing wood/roof palette.
+- The two plaza stalls are now modelled; the lane stall (round 32) remains a
+  separate, larger asset.
 
 ## Next steps
 
 1. **Owner: push the tested dist to gh-pages** and confirm the live URL shows
-   the fountain, barrels, stall, lantern posts and textured walls on a phone.
-2. **Marketplace stall meshes**: the two plaza stalls east/west are still
-   procedural boxes; the lane stall model could be adapted for them.
-3. **A real-device pass** (physical phone, iOS Safari) - the biggest honest gap.
-4. **A real screen reader session** (NVDA/VoiceOver) - AX tree is verified but
-   verbosity/ordering are not.
+   the fountain, barrels, stall, lantern posts, market stalls and textured
+   walls on a phone at dusk.
+2. **A real-device pass** on physical hardware (biggest honest gap).
+3. **A real screen reader session** (NVDA/VoiceOver).
+4. **Audio polish**: the synthesized soundscape has had no new content since
+   round 11; a second pass could add footsteps and a market-ambience layer.
+
+## Previous round — Round 33: modelled lantern posts + third Kaggle job (plaster lane walls)
 
 ## Previous round — Round 32: market stall model + loader + upgrade path
 
