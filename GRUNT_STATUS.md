@@ -398,11 +398,11 @@ Round 34 — modelled market stalls (plaza counters).
 ### Browser evidence
 
 - `npm test`: 397/397 pass.
-- Desktop vs committed dist under /amazing-adventure/: 182/182 pass, plus a
-  new collision check (walking east into the modelled counter stops at x 8.58,
-  outside the collider) - desktop re-run pending at checkpoint time.
-- Mobile: re-run in progress at checkpoint time; the prior round's suite
-  passed 185/185.
+- Desktop vs committed dist under /amazing-adventure/: 183/183 pass, including
+  a new collision check (walking east into the modelled counter stops at
+  x 8.58, outside the collider).
+- Mobile vs committed dist under /amazing-adventure/: 185/185 pass across
+  4 profiles.
 - Probe: 2 market-stall models, 2 standins hidden, asset state 'model'.
 - Fallback probe: blocking market_stall.glb leaves the counters as boxes
   ('Failed to fetch') while fountain/stall/lamps/stone/plaster all stay
