@@ -373,58 +373,49 @@ instructions.
 
 ## Current task
 
-Round 40 — gate door model (Blender) + cobblestone lane floor (Kaggle T4).
+Round 41 — modelled house trim (gable roof, chimney, windows, door surround).
 
 ### What made it into the game
 
-- `art/blender/make_gate_door.py` -> `assets/gate_door.glb`: 132 tris, 11 meshes,
-  2 materials, 12.7 KB. Four planks, two hinge straps, handle, four studs.
-  Parented to the existing gateDoor mesh (its own material hidden) so the
-  open/shut lift animation and collider are unchanged.
-- `art/kaggle/cobble_textures.py`: periodic-Voronoi cobblestone, submitted to the
-  private Kaggle notebook and run on a Tesla T4 (CuPy, 12.2 s). Albedo/normal/
-  roughness 512x512; seam ratios albedo [0.517, 0.26], normal [1.369, 0.518],
-  rough [0.199, 0.115] — all well under 3, so no visible seam. Outputs downloaded
-  to art/kaggle/out3/ and inspected (report + file sizes) before copying into
-  assets/textures/.
-- `src/world.js`: upgradeGateDoor() + upgradeCobble(); lane floor material named
-  laneFloorMaterial; cobble tiled at 2 m (4 x 4.25 repeats over the 8 x 8.5 m lane).
-- `src/assets.js`: GATE_DOOR_ASSET/loadGateDoor, COBBLE_TEXTURE_FILES.
-- `src/manifest.js`: 53 required files. Preview 3.50 MB.
-- CREDITS.md: both entries added; Kaggle run provenance recorded honestly.
+- `art/blender/make_house.py` -> `assets/house.glb`: 172 tris, 15 meshes, 5
+  materials, 17.6 KB. Two roof slopes + ridge cap + brick gable infills, a
+  chimney with stone cap, two framed windows with dark panes, and a stone door
+  surround with plank door. Overlays the procedural brick body, which keeps its
+  Kaggle brick texture; roof slab and door box stand-ins are hidden, all
+  colliders stay.
+- `src/assets.js`: HOUSE_ASSET/HOUSE_MODEL_SIZE/loadHouse (span + ground checks).
+- `src/world.js`: upgradeHouse(); assetState.house reports 'model'.
+- `src/manifest.js`: 54 required files. Preview 3.52 MB.
 
 ### Process notes
 
-- First door export used 4 m width; GATE.width is 3. Caught by comparing the
-  Blender bounds against areas.js before wiring; re-exported at 3 m.
-- Local numpy is broken on this host (libblas missing), so the script was
-  validated by submission to Kaggle rather than a local dry run. The job's own
-  seam asserts passed on the T4.
+- First bounds assert ("trim dips into the walls") was wrong: windows and door
+  legitimately reach the ground. Corrected to a ground-plane check; the roof
+  span asserts (8 x 6 + overhang) were kept and pass.
 
 ### Browser evidence
 
 - `npm test`: 412/412 pass.
-- Desktop vs committed dist under /amazing-adventure/: 190/190 pass, including
-  new checks (door model rides the door mesh; lane floor has all 3 cobble maps)
-  and the existing gate open/shut checks (doorHidden true after opening).
+- Desktop vs committed dist under /amazing-adventure/: 191/191 pass, including
+  the new house-trim check (1 model, 2 stand-ins hidden).
 - Mobile vs committed dist: 185/185 pass across 4 profiles; screenshots saved
-  to /worker/state/logs/shots40/ (4 PNGs).
-- Total: 787 checks, 0 failures. Byte-identical rebuild verified.
+  to /worker/state/logs/shots41/ (4 PNGs).
+- Total: 788 checks, 0 failures. Byte-identical rebuild verified.
 
 ### Honest limits
 
-- Text-only model: no visual inspection of the cobble preview or door; claims
-  are measured seam ratios, material maps, scene graph and saved screenshots.
-- Kaggle job used ~12 s of GPU wall time; quota remains ample (~28.9 h).
+- Text-only model: no visual inspection; measured scene graph, asset state and
+  saved screenshots.
 - Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
 
-1. **Architecture pass**: merchant house facade / wall segments are still boxes.
-2. **UV-map the props** so wood/cobble textures can dress the models, not just
-   the floors and walls.
-3. **A real-device pass** on physical hardware (biggest honest gap).
-4. **A real screen reader session** (NVDA/VoiceOver).
+1. **UV-map the props** so wood/cobble textures dress the models, not just
+   floors and walls.
+2. **A real-device pass** on physical hardware (biggest honest gap).
+3. **A real screen reader session** (NVDA/VoiceOver).
+
+## Previous round — Round 40: gate door + Kaggle cobblestone lane floor.
 
 ## Previous round — Round 39: modelled crates (plaza prop stack).
 
