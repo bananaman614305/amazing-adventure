@@ -54,6 +54,11 @@ export const NOTICE_ASSET = 'assets/notice.glb';
 /** Authored size of the notice board model. */
 export const NOTICE_MODEL_SIZE = { width: 0.2, depth: 1.4, height: 2.0 };
 
+export const CRATE_ASSET = 'assets/crates.glb';
+
+/** Authored size of one crate model. */
+export const CRATE_MODEL_SIZE = { width: 1.2, depth: 1.2, height: 1.2 };
+
 export const WOOD_TEXTURE_FILES = {
   map: 'assets/textures/wood_albedo.png',
   normalMap: 'assets/textures/wood_normal.png',
@@ -371,6 +376,34 @@ export async function loadNotice({ THREE, loadGlb, url = NOTICE_ASSET, fetchImpl
       : Infinity;
     if (reachX > 0.95 || reachZ > 0.35) {
       return { ok: false, reason: 'notice exceeds its collider', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
+/**
+ * Loads the crate GLB. Same contract: never throws, refuses a model whose
+ * footprint exceeds the collider (1.2 x 1.2, so a 0.6 half-extent).
+ */
+export async function loadCrate({ THREE, loadGlb, url = CRATE_ASSET, fetchImpl = fetch }) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const footprint = fountainFootprint(meshes);
+    const reachX = footprint
+      ? Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX))
+      : Infinity;
+    const reachZ = footprint
+      ? Math.max(Math.abs(footprint.minZ), Math.abs(footprint.maxZ))
+      : Infinity;
+    if (reachX > 0.65 || reachZ > 0.65) {
+      return { ok: false, reason: 'crate exceeds its collider', footprint, url };
     }
     return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
   } catch (error) {

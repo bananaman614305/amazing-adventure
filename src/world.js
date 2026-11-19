@@ -10,6 +10,7 @@ import {
   LAMP_ASSET, LAMP_MODEL_SIZE, loadLamp, MARKET_STALL_ASSET, MARKET_STALL_MODEL_SIZE,
   loadMarketStall, BENCH_ASSET, BENCH_MODEL_SIZE, loadBench,
   NOTICE_ASSET, NOTICE_MODEL_SIZE, loadNotice,
+  CRATE_ASSET, CRATE_MODEL_SIZE, loadCrate,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES
 } from './assets.js';
 import { loadGlb } from './glb.js';
@@ -388,9 +389,12 @@ export function buildWorld(renderer) {
   addBox(scene, colliders, { size: [3.4, 0.3, 2.2], position: [-11, 1.7, 6], material: roof, castShadow: true });
 
   // Crates south-east break up sightlines and hide the brass key nearby.
-  addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [5, 0.6, 8], material: wood, castShadow: true });
-  addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [5, 1.8, 8], material: wood, castShadow: true });
-  addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [6.4, 0.6, 8.3], material: wood, castShadow: true });
+  const crate0 = addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [5, 0.6, 8], material: wood, castShadow: true });
+  crate0.userData = { crateStandin: true, crateIndex: 0 };
+  const crate1 = addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [5, 1.8, 8], material: wood, castShadow: true });
+  crate1.userData = { crateStandin: true, crateIndex: 1 };
+  const crate2 = addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [6.4, 0.6, 8.3], material: wood, castShadow: true });
+  crate2.userData = { crateStandin: true, crateIndex: 2 };
 
   // The plaza work board: a post with a pinned list of odd jobs. Placed on the
   // walk between the gate and Mara so it is hard to miss, and usable at any
@@ -555,6 +559,7 @@ export function buildWorld(renderer) {
     marketStalls: 'boxes',
     bench: 'box',
     notice: 'plane',
+    crates: 'boxes',
     wood: 'flat',
     brick: 'flat',
     fountainDetail: null,
@@ -957,6 +962,55 @@ export function buildWorld(renderer) {
     });
   }
 
+  function upgradeCrates() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.crates = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadCrate({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.crates = 'boxes';
+        assetState.cratesDetail = result.reason;
+        return assetState;
+      }
+      const standins = scene.children.filter((c) => c.userData && c.userData.crateStandin);
+      for (const c of standins) c.visible = false;
+      // Three instances at the original positions.
+      const positions = [
+        { x: 5, z: 8, y: 0, rot: 0 },
+        { x: 5, z: 8, y: 1.2, rot: 0.4 },
+        { x: 6.4, z: 8.3, y: 0, rot: -0.25 }
+      ];
+      let instances = 0;
+      for (const p of positions) {
+        const group = new THREE.Group();
+        group.name = 'crate-model';
+        for (const { name, geometry, material } of result.meshes) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = name;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          group.add(mesh);
+        }
+        group.position.set(p.x, p.y, p.z);
+        group.rotation.y = p.rot;
+        scene.add(group);
+        instances += 1;
+      }
+      assetState.crates = 'model';
+      assetState.cratesDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances
+      };
+      return assetState;
+    });
+  }
+
   function upgradeStone() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -1062,7 +1116,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {
