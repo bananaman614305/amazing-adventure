@@ -33,7 +33,7 @@ import numpy as np
 SIZE = 512
 OUT = "/kaggle/working"
 
-report = {"size": SIZE, "generator": "procedural wood + brick", "gpu": None}
+report = {"size": SIZE, "generator": "procedural plaster", "gpu": None}
 t_start = time.time()
 
 xp = np
