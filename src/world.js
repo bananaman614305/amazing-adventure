@@ -786,8 +786,15 @@ export function buildWorld(renderer) {
         lamp.light.position.set(lamp.light.position.x + LAMP_LANTERN_OFFSET, LAMP_LANTERN_Y,
                                 lamp.light.position.z);
         // Drive the bulb's emissive instead of the old sphere's; applyPhase()
-        // writes emissiveIntensity to whatever mesh we store here.
-        if (bulb) lamp.mesh = bulb;
+        // writes emissiveIntensity to whatever mesh we store here. The GLB's
+        // bulb material arrives with a black emissive (the exporter does not
+        // carry Blender's emission factor through), so set the lantern tint
+        // explicitly or the day/night glow would silently do nothing.
+        if (bulb) {
+          lamp.mesh = bulb;
+          bulb.material.emissive = new THREE.Color(0xffb43a);
+          bulb.material.emissiveIntensity = 1.6;
+        }
         lamp.modelGroup = group;
         scene.add(group);
       }
