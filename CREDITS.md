@@ -137,3 +137,12 @@ its procedural stand-in or flat colour and stays fully playable.
   cobblestone: albedo/normal/roughness 512x512, seam ratios albedo [0.517, 0.26],
   normal [1.369, 0.518], rough [0.199, 0.115] (all < 3 = no visible seam).
   Fully procedural; no outside images or datasets, so no third-party licence.
+
+### Round 41 addition
+
+- `assets/house.glb` — `art/blender/make_house.py`. 172 tris, 15 meshes, 5
+  materials (HouseRoof/HouseBrick/HouseStone/HouseGlass/HouseDoorWood), 17.6 KB.
+  Gable roof (two slopes + ridge cap + brick gable infills), chimney with stone
+  cap, two framed windows with dark panes, stone door surround with plank door.
+  Overlays the procedural brick body, which keeps its Kaggle brick texture.
+  Same licence as the game (generated, not downloaded).

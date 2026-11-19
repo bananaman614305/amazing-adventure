@@ -40,6 +40,7 @@ export const REQUIRED_FILES = [
   'assets/notice.glb',
   'assets/crates.glb',
   'assets/gate_door.glb',
+  'assets/house.glb',
   'assets/lamp.glb',
   'assets/textures/cobble_albedo.png',
   'assets/textures/cobble_normal.png',
