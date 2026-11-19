@@ -3,10 +3,27 @@ import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BEN
 import {
   GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD
 } from './areas.js';
+import {
+  FOUNTAIN_SPOT, FOUNTAIN_COLLIDER, canLoadAssets, textureRepeat,
+  stoneMaterialParams, loadFountain, loadMaterialTextures,
+  BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, STALL_ASSET, STALL_MODEL_SIZE, loadStall,
+  LAMP_ASSET, LAMP_MODEL_SIZE, loadLamp, MARKET_STALL_ASSET, MARKET_STALL_MODEL_SIZE,
+  loadMarketStall, BENCH_ASSET, BENCH_MODEL_SIZE, loadBench,
+  NOTICE_ASSET, NOTICE_MODEL_SIZE, loadNotice,
+  CRATE_ASSET, CRATE_MODEL_SIZE, loadCrate,
+  GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
+  HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
+  WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
+  COBBLE_TEXTURE_FILES, boxProjectUvs
+} from './assets.js';
+import { loadGlb } from './glb.js';
 
-// Everything you can see and bump into is built here from plain primitives.
-// No outside models or textures, so the whole scene is code. The walkable
-// geometry maths lives in terrain.js so it can be tested without Three.js.
+// Almost everything you can see and bump into is built here from plain
+// primitives, so the scene has no runtime dependency on a binary asset. The
+// exception is the plaza fountain, which is a modelled GLB loaded in the
+// background: it is an upgrade over the procedural stand-in below, never a
+// requirement. The walkable geometry maths lives in terrain.js so it can be
+// tested without Three.js.
 export { WORLD_SIZE, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 
 /**
@@ -31,9 +48,15 @@ export function buildWorld(renderer) {
   scene.add(ground);
 
   // A paved ring in the middle so the plaza reads differently from the grass.
+  // Its material is created from the asset rules so the flat-colour fallback and
+  // the textured version differ in exactly one place.
+  const plazaBase = stoneMaterialParams(false);
+  const plazaMaterial = new THREE.MeshStandardMaterial({
+    color: plazaBase.color, roughness: plazaBase.roughness, metalness: plazaBase.metalness
+  });
   const plaza = new THREE.Mesh(
     new THREE.CircleGeometry(9, 48),
-    new THREE.MeshStandardMaterial({ color: 0xb3a892, roughness: 0.9 })
+    plazaMaterial
   );
   plaza.rotation.x = -Math.PI / 2;
   plaza.position.y = 0.01;
@@ -100,9 +123,10 @@ export function buildWorld(renderer) {
   colliders.push(gateCollider);
 
   // --- The market lane, north of the gate --------------------------------
+  const laneFloorMaterial = new THREE.MeshStandardMaterial({ color: 0x9d9182, roughness: 0.93 });
   const laneFloor = new THREE.Mesh(
     new THREE.PlaneGeometry(LANE.maxX - LANE.minX, LANE.maxZ - LANE.minZ),
-    new THREE.MeshStandardMaterial({ color: 0x9d9182, roughness: 0.93 })
+    laneFloorMaterial
   );
   laneFloor.rotation.x = -Math.PI / 2;
   laneFloor.position.set(
@@ -178,12 +202,19 @@ export function buildWorld(renderer) {
         castShadow: true
       });
       if (prop.kind === 'stall') {
-        addBox(scene, [], {
+        const roofBox = addBox(scene, [], {
           size: [prop.width + 0.5, 0.25, prop.depth + 0.4],
           position: [prop.x, prop.height + 0.15, prop.z],
           material: laneRoof,
           castShadow: true
         });
+        roofBox.userData = { stallStandin: true };
+        // The counter box added just above is the previous scene child.
+        const counterBox = scene.children[scene.children.length - 2];
+        if (counterBox && counterBox.isMesh) {
+          counterBox.userData = counterBox.userData || {};
+          counterBox.userData.stallStandin = true;
+        }
       }
     }
   }
@@ -196,12 +227,14 @@ export function buildWorld(renderer) {
     castShadow: true
   });
   boardFrame.rotation.y = Math.PI / 2;
+  boardFrame.userData = { noticeStandin: true };
   const boardFace = new THREE.Mesh(
     new THREE.PlaneGeometry(1.4, 1.2),
     new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.95 })
   );
   boardFace.position.set(NOTICE_BOARD.x - 0.14, 1.25, NOTICE_BOARD.z);
   boardFace.rotation.y = -Math.PI / 2;
+  boardFace.userData = { noticeStandin: true };
   scene.add(boardFace);
   colliders.push(boxCollider(
     NOTICE_BOARD.x - 0.3, NOTICE_BOARD.z - 0.9,
@@ -220,6 +253,9 @@ export function buildWorld(renderer) {
   // --- North terrace + ramp ----------------------------------------------
   const stepStone = new THREE.MeshStandardMaterial({ color: 0x9a9184, roughness: 0.9 });
   const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.75 });
+  // The house walls get brick; stalls, crates, bench and lamp posts stay wood.
+  // Both are upgraded in place by upgradeWoodBrick() if the maps load.
+  const brickMat = new THREE.MeshStandardMaterial({ color: 0x8b4a3a, roughness: 0.9 });
 
   const terrace = new THREE.Mesh(
     new THREE.BoxGeometry(TERRACE.maxX - TERRACE.minX, TERRACE.height, TERRACE.maxZ - TERRACE.minZ),
@@ -313,34 +349,60 @@ export function buildWorld(renderer) {
   const water = new THREE.MeshStandardMaterial({ color: 0x4f93c4, roughness: 0.2, metalness: 0.1 });
 
   // Fountain in the plaza centre: everyone gathers around it.
-  addBox(scene, colliders, { size: [4, 0.7, 4], position: [0, 0.35, 0], material: stone });
-  const basin = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.1, 32), water);
-  basin.position.set(0, 0.72, 0);
-  basin.receiveShadow = true;
-  scene.add(basin);
-  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 1.8, 12), stone);
-  pillar.position.set(0, 1.5, 0);
-  pillar.castShadow = true;
-  scene.add(pillar);
+  //
+  // A simple stand-in is built synchronously so the plaza is never empty, and the
+  // modelled fountain replaces it when (and only if) it loads. The collider is
+  // registered once, sized for the real model, so gameplay does not change when
+  // the upgrade arrives.
+  const fountainGroup = new THREE.Group();
+  fountainGroup.name = 'fountain';
+  scene.add(fountainGroup);
 
-  // A small house on the north-west side gives the space a landmark.
-  addBox(scene, colliders, { size: [7, 3, 5], position: [-10.5, 1.5, -9], material: wood, castShadow: true });
-  addBox(scene, colliders, { size: [8, 0.6, 6], position: [-10.5, 3.3, -9], material: roof, castShadow: true });
-  addBox(scene, colliders, { size: [1.4, 2.2, 0.3], position: [-10.5, 1.1, -6.35], material: stone });
+  const standIn = new THREE.Group();
+  standIn.name = 'fountain-standin';
+  addBox(standIn, [], { size: [4, 0.7, 4], position: [0, 0.35, 0], material: stone });
+  const standInBasin = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.1, 32), water);
+  standInBasin.position.set(0, 0.72, 0);
+  standInBasin.receiveShadow = true;
+  standIn.add(standInBasin);
+  const standInPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 1.8, 12), stone);
+  standInPillar.position.set(0, 1.5, 0);
+  standInPillar.castShadow = true;
+  standIn.add(standInPillar);
+  fountainGroup.add(standIn);
+
+  colliders.push(boxCollider(
+    FOUNTAIN_SPOT.x - FOUNTAIN_COLLIDER, FOUNTAIN_SPOT.z - FOUNTAIN_COLLIDER,
+    FOUNTAIN_SPOT.x + FOUNTAIN_COLLIDER, FOUNTAIN_SPOT.z + FOUNTAIN_COLLIDER
+  ));
+
+  // A small house on the north-west side gives the space a landmark. The brick
+  // body stays procedural (it wears the Kaggle brick texture); the roof slab and
+  // door box are stand-ins that upgradeHouse() replaces with the modelled trim.
+  addBox(scene, colliders, { size: [7, 3, 5], position: [-10.5, 1.5, -9], material: brickMat, castShadow: true });
+  const houseRoofSlab = addBox(scene, colliders, { size: [8, 0.6, 6], position: [-10.5, 3.3, -9], material: roof, castShadow: true });
+  houseRoofSlab.userData = { houseStandin: true };
+  const houseDoorBox = addBox(scene, colliders, { size: [1.4, 2.2, 0.3], position: [-10.5, 1.1, -6.35], material: stone });
+  houseDoorBox.userData = { houseStandin: true };
 
   // Market stalls east and west.
-  addBox(scene, colliders, { size: [4, 1, 0.4], position: [11, 0.5, -3], material: wood, castShadow: true });
+  const eastCounter = addBox(scene, colliders, { size: [4, 1, 0.4], position: [11, 0.5, -3], material: wood, castShadow: true });
+  eastCounter.userData = { marketStallStandin: true, marketStallSize: 'large' };
   addBox(scene, colliders, { size: [4.4, 0.3, 2.6], position: [11, 2.2, -3], material: roof, castShadow: true });
   addBox(scene, colliders, { size: [0.2, 2.2, 0.2], position: [9.3, 1.1, -4.1], material: wood });
   addBox(scene, colliders, { size: [0.2, 2.2, 0.2], position: [12.7, 1.1, -4.1], material: wood });
 
-  addBox(scene, colliders, { size: [3, 0.9, 0.4], position: [-11, 0.45, 6], material: wood, castShadow: true });
+  const westCounter = addBox(scene, colliders, { size: [3, 0.9, 0.4], position: [-11, 0.45, 6], material: wood, castShadow: true });
+  westCounter.userData = { marketStallStandin: true, marketStallSize: 'small' };
   addBox(scene, colliders, { size: [3.4, 0.3, 2.2], position: [-11, 1.7, 6], material: roof, castShadow: true });
 
   // Crates south-east break up sightlines and hide the brass key nearby.
-  addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [5, 0.6, 8], material: wood, castShadow: true });
-  addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [5, 1.8, 8], material: wood, castShadow: true });
-  addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [6.4, 0.6, 8.3], material: wood, castShadow: true });
+  const crate0 = addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [5, 0.6, 8], material: wood, castShadow: true });
+  crate0.userData = { crateStandin: true, crateIndex: 0 };
+  const crate1 = addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [5, 1.8, 8], material: wood, castShadow: true });
+  crate1.userData = { crateStandin: true, crateIndex: 1 };
+  const crate2 = addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [6.4, 0.6, 8.3], material: wood, castShadow: true });
+  crate2.userData = { crateStandin: true, crateIndex: 2 };
 
   // The plaza work board: a post with a pinned list of odd jobs. Placed on the
   // walk between the gate and Mara so it is hard to miss, and usable at any
@@ -378,8 +440,10 @@ export function buildWorld(renderer) {
   }
 
   // A bench on the west side: resting here skips to the next phase.
-  addBox(scene, colliders, { size: [2.2, 0.5, 0.7], position: [BENCH.x, 0.25, BENCH.z], material: wood, castShadow: true });
-  addBox(scene, [], { size: [2.2, 0.6, 0.15], position: [BENCH.x, 0.8, BENCH.z + 0.3], material: wood, castShadow: true });
+  const benchSeat = addBox(scene, colliders, { size: [2.2, 0.5, 0.7], position: [BENCH.x, 0.25, BENCH.z], material: wood, castShadow: true });
+  benchSeat.userData = { benchStandin: true };
+  const benchBack = addBox(scene, [], { size: [2.2, 0.6, 0.15], position: [BENCH.x, 0.8, BENCH.z + 0.3], material: wood, castShadow: true });
+  benchBack.userData = { benchStandin: true };
 
   for (const [x, z] of [[-5, 9], [-6.2, 9.4], [3, -7.5]]) {
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.3, 16), wood);
@@ -392,6 +456,12 @@ export function buildWorld(renderer) {
 
   // Lantern posts around the plaza. Their lights are stored so the day/night
   // cycle can turn them up at dusk.
+  // Where the model's lantern actually ends up, in metres from the post origin.
+  // Derived from art/blender/make_lamp.py: arm at post_height-0.15, lantern
+  // centred half a lantern below that. Kept as constants so the PointLight and
+  // the emissive bulb stay together if the model is ever re-proportioned.
+  const LAMP_LANTERN_OFFSET = 0.6;
+  const LAMP_LANTERN_Y = LAMP_MODEL_SIZE.postHeight - 0.15 - LAMP_MODEL_SIZE.lanternHeight / 2 + 0.05;
   const lamps = [];
   for (const [x, z] of [[7, 7], [-7, 7], [7, -7], [-7, -7]]) {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3, 10), wood);
@@ -404,12 +474,13 @@ export function buildWorld(renderer) {
       new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xffb43a, emissiveIntensity: 1.6 })
     );
     lamp.position.set(x, 3.15, z);
+    lamp.userData = { lampStandin: true };
     scene.add(lamp);
 
     const point = new THREE.PointLight(0xffc46b, 0, 16, 2);
     point.position.set(x, 3.15, z);
     scene.add(point);
-    lamps.push({ light: point, mesh: lamp });
+    lamps.push({ light: point, mesh: lamp, standinPost: post });
 
     colliders.push(boxCollider(x - 0.2, z - 0.2, x + 0.2, z + 0.2));
   }
@@ -481,6 +552,729 @@ export function buildWorld(renderer) {
   ledgerGroup.visible = false;
   scene.add(ledgerGroup);
 
+  // --- Asset upgrade (asynchronous, never required) ------------------------
+  // The plaza and fountain work without any download. When the files are
+  // available they replace the stand-ins; when they are not, nothing breaks and
+  // `assetState` records why, so a bug report can tell "no textures" apart from
+  // "textures failed to load".
+  // Prop models load before the wood texture family (they are independent
+  // fetches, run in parallel). This registry lets upgradePropWood() dress the
+  // already-built models once the maps arrive, instead of serialising the
+  // whole asset pass behind one 60 KB PNG.
+  const propGroups = [];
+  let woodTexturesLoaded = null;
+
+  const assetState = {
+    fountain: 'stand-in',
+    stone: 'flat',
+    barrels: 'cylinders',
+    stalls: 'boxes',
+    lamps: 'spheres',
+    plaster: 'flat',
+    marketStalls: 'boxes',
+    bench: 'box',
+    notice: 'plane',
+    crates: 'boxes',
+    gateDoor: 'box',
+    house: 'boxes',
+    propWood: 'flat',
+    cobble: 'flat',
+    wood: 'flat',
+    brick: 'flat',
+    fountainDetail: null,
+    stoneDetail: null,
+    barrelDetail: null
+  };
+
+  function upgradeFountain() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.fountain = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadFountain({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.fountain = 'stand-in';
+        assetState.fountainDetail = result.reason;
+        return assetState;
+      }
+      const group = new THREE.Group();
+      group.name = 'fountain-model';
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = name;
+        // The plinth sits on the ground; the model is already authored at y=0.
+        mesh.position.set(FOUNTAIN_SPOT.x, 0, FOUNTAIN_SPOT.z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        // Water surfaces should not cast hard shadows onto the basin floor.
+        if (name.includes('Water')) mesh.castShadow = false;
+        group.add(mesh);
+      }
+      fountainGroup.remove(standIn);
+      fountainGroup.add(group);
+      assetState.fountain = 'model';
+      assetState.fountainDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        height: Number(result.footprint.height.toFixed(2)),
+        width: Number(result.footprint.width.toFixed(2))
+      };
+      return assetState;
+    });
+  }
+
+  // --- Barrel upgrade (asynchronous, never required) -----------------------
+  // The plaza and lane barrels are plain cylinders today. The modelled barrel
+  // replaces each one when it loads; the procedural cylinder stays otherwise.
+  const barrelInstances = [
+    // plaza barrels
+    { x: -5, z: 9, height: 1.3, radius: 0.55, collider: true },
+    { x: -6.2, z: 9.4, height: 1.3, radius: 0.55, collider: true },
+    { x: 3, z: -7.5, height: 1.3, radius: 0.55, collider: true },
+    // lane barrels
+    { x: 6.9, z: -24.4, height: 1.2, radius: 0.5, collider: true },
+  ];
+  const barrelGroup = new THREE.Group();
+  barrelGroup.name = 'barrels';
+  scene.add(barrelGroup);
+
+  function upgradeBarrels() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.barrels = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadBarrel({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.barrels = 'cylinders';
+        assetState.barrelDetail = result.reason;
+        return assetState;
+      }
+      // Remove the procedural cylinders so the model is what you see.
+      const standins = scene.children.filter((c) => c.name === 'barrel-standin');
+      for (const s of standins) scene.remove(s);
+      for (const inst of barrelInstances) {
+        const group = new THREE.Group();
+        group.name = 'barrel-model';
+        const scale = inst.radius / BARREL_MODEL_SIZE.radius;
+        for (const { name, geometry, material } of result.meshes) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = name;
+          mesh.scale.set(scale, inst.height / BARREL_MODEL_SIZE.height, scale);
+          mesh.position.set(0, 0, 0);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          group.add(mesh);
+        }
+        group.position.set(inst.x, 0, inst.z);
+        barrelGroup.add(group);
+      }
+      assetState.barrels = 'model';
+      assetState.barrelDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: barrelInstances.length
+      };
+      return assetState;
+    });
+  }
+
+  /**
+   * Applies one loaded texture family to a material. Shared by stone, wood and
+   * brick so the tiling/anisotropy rules live in exactly one place.
+   * `widthMeters`/`heightMeters` pick the repeat so texel density stays sane.
+   */
+  function applyTextureFamily(material, textures, widthMeters, heightMeters, tileMeters) {
+    let applied = 0;
+    for (const [key, texture] of Object.entries(textures)) {
+      if (!texture || key === 'anyLoaded') continue;
+      const repeat = textureRepeat(widthMeters, heightMeters, tileMeters);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(repeat.repeatX, repeat.repeatY);
+      texture.anisotropy = Math.min(4, renderer.capabilities?.getMaxAnisotropy?.() ?? 1);
+      applied += 1;
+    }
+    // A textured map must not be tinted twice: white base, and the maps carry
+    // the roughness/metalness detail.
+    material.color.setHex(0xffffff);
+    material.roughness = 1;
+    material.metalness = 0;
+    if (textures.map) material.map = textures.map;
+    if (textures.normalMap) material.normalMap = textures.normalMap;
+    if (textures.roughnessMap) material.roughnessMap = textures.roughnessMap;
+    material.needsUpdate = true;
+    return applied;
+  }
+
+  function upgradeStalls() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.stalls = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadStall({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.stalls = 'boxes';
+        assetState.stallDetail = result.reason;
+        return assetState;
+      }
+      // Hide the procedural lane stall boxes so only the model shows.
+      for (const c of scene.children) {
+        if (c.userData && c.userData.stallStandin) c.visible = false;
+      }
+      // Discover lane stall positions from the lane props data.
+      const laneStallPositions = [];
+      // We re-derive from the same LANE_PROPS the build loop used; simpler to
+      // scan the scene for standin markers' positions.
+      for (const c of scene.children) {
+        if (c.userData && c.userData.stallStandin && c.position) {
+          // counter box centre -> model origin at ground
+          laneStallPositions.push({ x: c.position.x, z: c.position.z, height: 1.0 });
+        }
+      }
+      // Deduplicate (counter + roof both marked) by rounding.
+      const seen = new Set();
+      const unique = [];
+      for (const p of laneStallPositions) {
+        const key = `${p.x.toFixed(2)},${p.z.toFixed(2)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(p);
+      }
+      const positions = unique.length ? unique : [{ x: 7.4, z: -21.5, height: 1.0 }];
+      for (const inst of positions) {
+        const group = new THREE.Group();
+        group.name = 'stall-model';
+        const scale = 1;
+        for (const { name, geometry, material } of result.meshes) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = name;
+          mesh.scale.set(scale, inst.height / STALL_MODEL_SIZE.height, scale);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          group.add(mesh);
+        }
+        group.position.set(inst.x, 0, inst.z);
+        scene.add(group);
+      }
+      assetState.stalls = 'model';
+      assetState.stallDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: positions.length
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeLamps() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.lamps = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadLamp({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.lamps = 'spheres';
+        assetState.lampDetail = result.reason;
+        return assetState;
+      }
+      // Swap each procedural post+sphere for the model. The PointLight and the
+      // day/night emissive hook stay exactly where they are: the model provides
+      // a LampBulb mesh whose material emissiveIntensity we drive instead.
+      for (const lamp of lamps) {
+        if (lamp.standinPost) {
+          lamp.standinPost.visible = false;
+          lamp.standinPost = null;
+        }
+        if (lamp.mesh && lamp.mesh.userData && lamp.mesh.userData.lampStandin) {
+          lamp.mesh.visible = false;
+        }
+        const group = new THREE.Group();
+        group.name = 'lamp-model';
+        let bulb = null;
+        for (const { name, geometry, material } of result.meshes) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = name;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          group.add(mesh);
+          if (name === 'LampBulb') bulb = mesh;
+        }
+        // The model's arm reaches +0.6 m in local x and the lantern hangs at
+        // 2.625 m, so the group sits on the post and the light moves under the
+        // lantern rather than staying on top of the (now hidden) post.
+        group.position.set(lamp.light.position.x, 0, lamp.light.position.z);
+        lamp.light.position.set(lamp.light.position.x + LAMP_LANTERN_OFFSET, LAMP_LANTERN_Y,
+                                lamp.light.position.z);
+        // Drive the bulb's emissive instead of the old sphere's; applyPhase()
+        // writes emissiveIntensity to whatever mesh we store here. The GLB's
+        // bulb material arrives with a black emissive (the exporter does not
+        // carry Blender's emission factor through), so set the lantern tint
+        // explicitly or the day/night glow would silently do nothing.
+        if (bulb) {
+          lamp.mesh = bulb;
+          bulb.material.emissive = new THREE.Color(0xffb43a);
+          bulb.material.emissiveIntensity = 1.6;
+        }
+        lamp.modelGroup = group;
+        scene.add(group);
+      }
+      assetState.lamps = 'model';
+      assetState.lampDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: lamps.length
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeMarketStalls() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.marketStalls = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMarketStall({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.marketStalls = 'boxes';
+        assetState.marketStallDetail = result.reason;
+        return assetState;
+      }
+      // Hide the procedural counters; keep their colliders.
+      const standins = scene.children.filter((c) => c.userData && c.userData.marketStallStandin);
+      for (const c of standins) c.visible = false;
+      // Place the model at each standin's position, scaled to fit that counter.
+      const instances = [];
+      for (const c of standins) {
+        instances.push({
+          x: c.position.x,
+          z: c.position.z,
+          height: c.position.y * 2,
+          size: c.userData.marketStallSize
+        });
+      }
+      for (const inst of instances) {
+        const group = new THREE.Group();
+        group.name = 'market-stall-model';
+        const sx = inst.size === 'small'
+          ? 3.0 / MARKET_STALL_MODEL_SIZE.width
+          : 4.0 / MARKET_STALL_MODEL_SIZE.width;
+        const sy = inst.height / MARKET_STALL_MODEL_SIZE.height;
+        for (const { name, geometry, material } of result.meshes) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = name;
+          mesh.scale.set(sx, sy, sx);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          group.add(mesh);
+        }
+        group.position.set(inst.x, 0, inst.z);
+        scene.add(group);
+      }
+      assetState.marketStalls = 'model';
+      assetState.marketStallDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: instances.length
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeBench() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.bench = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadBench({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.bench = 'box';
+        assetState.benchDetail = result.reason;
+        return assetState;
+      }
+      const standins = scene.children.filter((c) => c.userData && c.userData.benchStandin);
+      for (const c of standins) c.visible = false;
+      const group = new THREE.Group();
+      group.name = 'bench-model';
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+      group.position.set(BENCH.x, 0, BENCH.z);
+      scene.add(group);
+      propGroups.push({ group, tile: 1.5 });
+      assetState.bench = 'model';
+      assetState.benchDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: 1
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeNotice() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.notice = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadNotice({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.notice = 'plane';
+        assetState.noticeDetail = result.reason;
+        return assetState;
+      }
+      // Hide the procedural frame and face; the collider stays.
+      for (const c of scene.children) {
+        if (c.userData && c.userData.noticeStandin) c.visible = false;
+      }
+      const group = new THREE.Group();
+      group.name = 'notice-model';
+      // The model is authored long-side-along-x; the game wants it facing
+      // west, so rotate a quarter turn like the procedural frame did.
+      group.rotation.y = Math.PI / 2;
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+      group.position.set(NOTICE_BOARD.x, 0, NOTICE_BOARD.z);
+      scene.add(group);
+      propGroups.push({ group, tile: 1.5 });
+      assetState.notice = 'model';
+      assetState.noticeDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: 1
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeCrates() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.crates = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadCrate({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.crates = 'boxes';
+        assetState.cratesDetail = result.reason;
+        return assetState;
+      }
+      const standins = scene.children.filter((c) => c.userData && c.userData.crateStandin);
+      for (const c of standins) c.visible = false;
+      // Three instances at the original positions.
+      const positions = [
+        { x: 5, z: 8, y: 0, rot: 0 },
+        { x: 5, z: 8, y: 1.2, rot: 0.4 },
+        { x: 6.4, z: 8.3, y: 0, rot: -0.25 }
+      ];
+      let instances = 0;
+      for (const p of positions) {
+        const group = new THREE.Group();
+        group.name = 'crate-model';
+        for (const { name, geometry, material } of result.meshes) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = name;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          group.add(mesh);
+        }
+        group.position.set(p.x, p.y, p.z);
+        group.rotation.y = p.rot;
+        scene.add(group);
+        propGroups.push({ group, tile: 1.5 });
+        instances += 1;
+      }
+      assetState.crates = 'model';
+      assetState.cratesDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeGateDoor() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.gateDoor = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadGateDoor({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.gateDoor = 'box';
+        assetState.gateDoorDetail = result.reason;
+        return assetState;
+      }
+      // Keep the procedural box as the invisible animation carrier: the game
+      // moves gateDoor.position/visible on open/shut, so parent the model to
+      // it and the lift animation works unchanged.
+      const group = new THREE.Group();
+      group.name = 'gate-door-model';
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+      gateDoor.add(group);
+      propGroups.push({ group, tile: 1.5, local: true });
+      // Hide the box's own surface but keep it in the scene graph as carrier.
+      gateDoor.material.visible = false;
+      assetState.gateDoor = 'model';
+      assetState.gateDoorDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: 1
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeCobble() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.cobble = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: COBBLE_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.cobble = 'flat';
+        return assetState;
+      }
+      // The lane is 8 x 8.5 m; a 2 m tile puts ~30 cobbles across the width,
+      // a believable worn-lane scale distinct from the plaza's block paving.
+      applyTextureFamily(laneFloorMaterial, textures, 4, 4.25, 2);
+      assetState.cobble = 'textured';
+      assetState.cobbleDetail = {
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k])
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeHouse() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.house = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadHouse({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.house = 'boxes';
+        assetState.houseDetail = result.reason;
+        return assetState;
+      }
+      // Hide the roof slab and door box; their colliders stay (the roof slab
+      // collider is above head height anyway, the door box is in the wall).
+      for (const c of scene.children) {
+        if (c.userData && c.userData.houseStandin) c.visible = false;
+      }
+      const group = new THREE.Group();
+      group.name = 'house-model';
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+      // The model's front (+y in Blender) exports to +z, matching the house's
+      // south-facing door at z = -6.35.
+      group.position.set(-10.5, 0, -9);
+      scene.add(group);
+      propGroups.push({ group, tile: 2 });
+      assetState.house = 'model';
+      assetState.houseDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: 1
+      };
+      return assetState;
+    });
+  }
+
+  /**
+   * Dresses the modelled props in the wood texture family.
+   *
+   * The prop GLBs are authored from untextured box primitives, so they carry no
+   * UVs; boxProjectUvs() generates them in metres and materials share one tiling.
+   * A mesh keeps its own name-based test: only meshes whose material is a wood
+   * material (Blender names them *Wood) get the maps, so iron bands, glass and
+   * stone trim stay flat and read as different materials.
+   */
+  function upgradePropWood() {
+    if (!woodTexturesLoaded) {
+      assetState.propWood = 'flat';
+      return Promise.resolve(assetState);
+    }
+    let dressed = 0;
+    let projected = 0;
+    for (const { group, tile } of propGroups) {
+      group.traverse((mesh) => {
+        if (!mesh.isMesh) return;
+        const source = mesh.material;
+        const name = source && source.name ? source.name : '';
+        if (!/Wood/i.test(name)) return;
+        if (!mesh.geometry.getAttribute('uv')) {
+          const position = mesh.geometry.getAttribute('position');
+          const index = mesh.geometry.getIndex();
+          const uvs = boxProjectUvs({
+            positions: position.array,
+            indices: index ? index.array : null,
+            tileMeters: tile
+          });
+          mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+          projected += 1;
+        }
+        const material = new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          roughness: 0.78,
+          metalness: 0
+        });
+        for (const [key, texture] of Object.entries(woodTexturesLoaded)) {
+          if (!texture || key === 'anyLoaded') continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          // UVs are already in metres; one repeat keeps the authored tile size.
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        // Keep the source name so later code and tests can identify the family.
+        material.name = name;
+        mesh.material = material;
+        dressed += 1;
+      });
+    }
+    assetState.propWood = dressed > 0 ? 'textured' : 'flat';
+    assetState.propWoodDetail = { dressed, projected, groups: propGroups.length };
+    return Promise.resolve(assetState);
+  }
+
+  function upgradeStone() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.stone = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: STONE_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.stone = 'flat';
+        return assetState;
+      }
+      // The plaza is a 9 m radius disc; a ~3 m tile keeps the blocks a
+      // believable size underfoot rather than stretched or miniaturised.
+      applyTextureFamily(plazaMaterial, textures, 18, 18, 3);
+      assetState.stone = 'textured';
+      assetState.stoneDetail = {
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k])
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeWoodBrick() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.wood = 'unavailable';
+      assetState.brick = 'unavailable';
+      assetState.plaster = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    // Wood dresses the stalls, crates, bench and lamp posts; brick the house
+    // walls. A 1.2 m crate and a 7 m wall want very different repeats, but they
+    // share one material each, so the tile size is a compromise: 1.5 m for wood
+    // (planks read at crate scale) and 2 m for brick (courses read at wall scale).
+    return Promise.all([
+      loadMaterialTextures({ THREE, files: WOOD_TEXTURE_FILES }),
+      loadMaterialTextures({ THREE, files: BRICK_TEXTURE_FILES }),
+      loadMaterialTextures({ THREE, files: PLASTER_TEXTURE_FILES })
+    ]).then(([wood, brick, plaster]) => {
+      assetState.wood = wood.anyLoaded ? 'textured' : 'flat';
+      assetState.brick = brick.anyLoaded ? 'textured' : 'flat';
+      assetState.plaster = plaster.anyLoaded ? 'textured' : 'flat';
+      if (wood.anyLoaded) {
+        woodTexturesLoaded = wood;
+        applyTextureFamily(woodMat, wood, 1.5, 1.5, 1.5);
+        assetState.woodDetail = {
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => wood[k])
+        };
+      }
+      if (brick.anyLoaded) {
+        applyTextureFamily(brickMat, brick, 7, 3, 2);
+        assetState.brickDetail = {
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => brick[k])
+        };
+      }
+      if (plaster.anyLoaded) {
+        // Lane walls are long runs (up to ~14 m) at 2.6 m high; a 2 m tile keeps
+        // the trowel sweeps and chips at a believable plaster scale.
+        applyTextureFamily(laneWall, plaster, 14, 2.6, 2);
+        assetState.plasterDetail = {
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => plaster[k])
+        };
+      }
+      return assetState;
+    });
+  }
+
   const environment = {
     scene,
     hemi,
@@ -506,6 +1300,20 @@ export function buildWorld(renderer) {
     ledgerGroup,
     setLedgerVisible(visible) {
       ledgerGroup.visible = Boolean(visible);
+    },
+    fountainGroup,
+    /**
+     * Starts the asset upgrade. Returns a promise that settles when both assets
+     * have been attempted, so tests can await it and get a truthful report rather
+     * than a guess about timing.
+     */
+    loadAssets() {
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeStone(), upgradeWoodBrick()])
+        .then(() => upgradePropWood()).then(() => ({ ...assetState }));
+    },
+    /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
+    get assetState() {
+      return { ...assetState };
     }
   };
 

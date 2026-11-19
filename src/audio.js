@@ -94,6 +94,76 @@ export function ambienceGain(phase, muted, volume = 1) {
   return clampGain(tone.gain * clampGain(volume, 1), MAX_AMBIENCE_GAIN);
 }
 
+// --- Lane market ambience ---------------------------------------------------
+// A second, optional bed that plays only while the player is in the lane. It is
+// synthesised (filtered noise + a slow LFO) so there are no files to download,
+// and it sits well under the drone so feedback cues stay on top.
+export const LANE_BED_GAIN = 0.03;
+export const LANE_BED_CUTOFF = 260;
+
+export function laneBedGain(area, muted, volume = 1) {
+  if (muted || area !== 'lane') return 0;
+  return clampGain(LANE_BED_GAIN * clampGain(volume, 1), MAX_AMBIENCE_GAIN);
+}
+
+// --- Footsteps ------------------------------------------------------------
+
+/**
+ * A footstep is a short filtered noise burst, not a pitched cue: shoes on stone
+ * read as a thud with a scrape, and keeping them out of the pentatonic set means
+ * walking never sounds like playing an instrument.
+ */
+export const FOOTSTEP = {
+  length: 0.09,
+  attack: 0.004,
+  release: 0.07,
+  gain: 0.05,
+  cutoff: 750,
+  cutoffJitter: 180,
+  q: 0.8
+};
+
+/** Walk cadence in steps per second; running is quicker, not just faster. */
+export const STEP_RATE = { walk: 1.9, run: 2.7 };
+
+/** Speeds under this are the damping tail, not walking: no steps for them. */
+export const STEP_MIN_SPEED = 0.6;
+
+/** Above this fraction of walk speed the cadence switches to the run rate. */
+export const RUN_SPEED_FRACTION = 0.75;
+
+/**
+ * Pure step timing. Accumulates *distance*, not time, so the cadence follows
+ * actual ground covered: pushing into a wall makes no sound, and a half-pushed
+ * stick walks with half the steps. Returns how many steps fell due this frame.
+ */
+export function createStepClock({ stride = 1.35, minSpeed = STEP_MIN_SPEED } = {}) {
+  let travelled = 0;
+  return {
+    get travelled() { return travelled; },
+    /** speed in m/s, dt in seconds. 0 unless a stride boundary was crossed. */
+    advance(speed, dt) {
+      const s = Number(speed);
+      const d = Number(dt);
+      if (!Number.isFinite(s) || !Number.isFinite(d) || s < minSpeed || d <= 0) return 0;
+      travelled += s * d;
+      const steps = Math.floor(travelled / stride);
+      travelled -= steps * stride;
+      return steps;
+    },
+    reset() { travelled = 0; }
+  };
+}
+
+/** Footstep loudness scales gently with speed but never exceeds the ceiling. */
+export function footstepGain(speed, walkSpeed) {
+  const s = Number(speed);
+  const w = Number(walkSpeed);
+  if (!Number.isFinite(s) || !Number.isFinite(w) || w <= 0 || s <= 0) return 0;
+  const ratio = Math.min(1, s / w);
+  return clampGain(FOOTSTEP.gain * (0.6 + 0.4 * ratio), MAX_CUE_GAIN);
+}
+
 // --- Preferences ----------------------------------------------------------
 
 export const AUDIO_KEY = 'amazing-adventure:audio';
@@ -136,9 +206,11 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
   let ctx = null;
   let master = null;
   let drone = null;
+  let bed = null;
   let enabled = preference?.enabled ?? true;
   let volume = preference?.volume ?? 0.7;
   let currentPhase = 'day';
+  let currentArea = 'plaza';
   let started = false;
 
   function ensureContext() {
@@ -183,6 +255,27 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
     return { gain, oscA, oscB, filter, phase };
   }
 
+  /** A low, filtered noise bed for the market lane: chatter and clatter. */
+  function buildBed() {
+    if (!ctx || typeof ctx.createBufferSource !== 'function') return null;
+    const buffer = getNoiseBuffer();
+    if (!buffer) return null;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = LANE_BED_CUTOFF;
+    filter.Q.value = 0.7;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(master);
+    try { source.start(); } catch { return null; }
+    return { gain, source, filter };
+  }
+
   function fade(node, to, seconds = 1.2) {
     if (!ctx) return;
     const now = ctx.currentTime;
@@ -191,10 +284,30 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
     node.gain.linearRampToValueAtTime(Math.max(0.0001, to), now + seconds);
   }
 
+  /**
+   * One second of white noise, built once and reused by every footstep. A
+   * context without createBuffer (a fake, an ancient browser) simply gets no
+   * footsteps; nothing else in the soundscape depends on it.
+   */
+  let noiseBuffer = null;
+  function getNoiseBuffer() {
+    if (noiseBuffer || !ctx || typeof ctx.createBuffer !== 'function') return noiseBuffer;
+    try {
+      const length = Math.floor(ctx.sampleRate || 44100);
+      noiseBuffer = ctx.createBuffer(1, length, ctx.sampleRate || 44100);
+      const data = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < length; i += 1) data[i] = Math.random() * 2 - 1;
+    } catch {
+      noiseBuffer = null;
+    }
+    return noiseBuffer;
+  }
+
   return {
     get enabled() { return enabled; },
     get started() { return started; },
     get phase() { return currentPhase; },
+    get area() { return currentArea; },
 
     /** Must be called from a user gesture. Safe to call repeatedly. */
     start() {
@@ -203,14 +316,22 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
       if (ctx.state === 'suspended') ctx.resume?.();
       drone = buildDrone(currentPhase);
       fade(drone.gain, enabled ? phaseTone(currentPhase).gain : 0, 1.6);
+      bed = buildBed();
+      if (bed) fade(bed.gain, enabled ? laneBedGain(currentArea, false, volume) : 0, 1.6);
       started = true;
       return true;
     },
 
     stop() {
-      if (!ctx || !drone) return;
-      try { drone.oscA.stop(); drone.oscB.stop(); } catch { /* already stopped */ }
+      if (!ctx) return;
+      if (drone) {
+        try { drone.oscA.stop(); drone.oscB.stop(); } catch { /* already stopped */ }
+      }
+      if (bed) {
+        try { bed.source.stop(); } catch { /* already stopped */ }
+      }
       drone = null;
+      bed = null;
       started = false;
     },
 
@@ -221,6 +342,7 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
       if (persist) writePreference(persist, enabled);
       if (!ctx || !master) return enabled;
       master.gain.setTargetAtTime(enabled ? clampGain(volume, 1) : 0, ctx.currentTime, 0.08);
+      if (bed) fade(bed.gain, enabled ? laneBedGain(currentArea, false, volume) : 0, 0.3);
       return enabled;
     },
 
@@ -229,6 +351,7 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
     setVolume(next) {
       volume = clampGain(next, 1);
       if (ctx && master && enabled) master.gain.setTargetAtTime(volume, ctx.currentTime, 0.08);
+      if (ctx && bed && enabled) fade(bed.gain, laneBedGain(currentArea, false, volume), 0.3);
       return volume;
     },
 
@@ -248,6 +371,50 @@ export function createSoundscape({ AudioContextClass, preference, persist = null
           fade(drone.gain, enabled ? tone.gain : 0, 0.9);
         } catch { /* context closed mid-fade */ }
       }, 0);
+    },
+
+    /** Follows the player's location: the market bed plays only in the lane. */
+    setArea(area) {
+      currentArea = area || currentArea;
+      if (!ctx || !bed || !started) return currentArea;
+      fade(bed.gain, enabled ? laneBedGain(currentArea, false, volume) : 0, 1.0);
+      return currentArea;
+    },
+
+    /**
+     * One footstep: a filtered noise thud. Same safety contract as play() --
+     * silent when off, unstarted, or when the platform cannot make noise.
+     * `speed`/`walkSpeed` set the loudness; `variant` (0/1) alternates the
+     * filter so left and right feet do not sound identical.
+     */
+    step({ speed = 0, walkSpeed = 1, variant = 0 } = {}) {
+      if (!enabled || !ctx || !master || !started) return false;
+      if (typeof ctx.createBufferSource !== 'function') return false;
+      const buffer = getNoiseBuffer();
+      if (!buffer) return false;
+      const gainValue = footstepGain(speed, walkSpeed);
+      if (gainValue <= 0) return false;
+      if (ctx.state === 'suspended') ctx.resume?.();
+      const now = ctx.currentTime;
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = FOOTSTEP.cutoff + (variant ? FOOTSTEP.cutoffJitter : -FOOTSTEP.cutoffJitter);
+      filter.Q.value = FOOTSTEP.q;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(gainValue, now + FOOTSTEP.attack);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + FOOTSTEP.attack + FOOTSTEP.length + FOOTSTEP.release);
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(master);
+      // Start at a random offset so consecutive steps never reuse the same
+      // slice of noise; the buffer is a full second, the step is ~0.16 s.
+      const offset = Math.random() * Math.max(0, (buffer.duration || 1) - 0.3);
+      source.start(now, offset);
+      source.stop(now + FOOTSTEP.attack + FOOTSTEP.length + FOOTSTEP.release + 0.02);
+      return true;
     },
 
     /** Plays one of CUES. Silently does nothing if sound is off or unstarted. */
