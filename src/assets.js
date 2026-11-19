@@ -23,6 +23,17 @@ export const STONE_TEXTURE_FILES = {
   roughnessMap: 'assets/textures/stone_rough.png'
 };
 
+export const COBBLE_TEXTURE_FILES = {
+  map: 'assets/textures/cobble_albedo.png',
+  normalMap: 'assets/textures/cobble_normal.png',
+  roughnessMap: 'assets/textures/cobble_rough.png'
+};
+
+export const GATE_DOOR_ASSET = 'assets/gate_door.glb';
+
+/** Authored size of the gate door model (matches the procedural box). */
+export const GATE_DOOR_MODEL_SIZE = { width: 3.0, height: 2.9, depth: 0.28 };
+
 export const FOUNTAIN_ASSET = 'assets/fountain.glb';
 export const BARREL_ASSET = 'assets/barrel.glb';
 
@@ -404,6 +415,36 @@ export async function loadCrate({ THREE, loadGlb, url = CRATE_ASSET, fetchImpl =
       : Infinity;
     if (reachX > 0.65 || reachZ > 0.65) {
       return { ok: false, reason: 'crate exceeds its collider', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
+/**
+ * Loads the gate-door GLB. Same contract: never throws, refuses a model whose
+ * footprint exceeds the door box (3.0 wide x 2.9 tall; the straps and handle
+ * may stand slightly proud in depth).
+ */
+export async function loadGateDoor({ THREE, loadGlb, url = GATE_DOOR_ASSET, fetchImpl = fetch }) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const footprint = fountainFootprint(meshes);
+    const reachX = footprint
+      ? Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX))
+      : Infinity;
+    const reachY = footprint
+      ? Math.max(Math.abs(footprint.minY), Math.abs(footprint.maxY))
+      : Infinity;
+    if (reachX > GATE_DOOR_MODEL_SIZE.width / 2 + 0.05 ||
+        reachY > GATE_DOOR_MODEL_SIZE.height / 2 + 0.05) {
+      return { ok: false, reason: 'gate door exceeds its box', footprint, url };
     }
     return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
   } catch (error) {
