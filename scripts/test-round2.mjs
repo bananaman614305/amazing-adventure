@@ -813,18 +813,44 @@ try {
     `ratio=${adaptive.ratio} base=${adaptive.base}`);
 
   // The manual override must restore native sharpness and persist the choice.
+  // It must also leave the controller's *reported* ratio agreeing with the renderer:
+  // a pin that bypasses the controller made `resolution.ratio` go stale, which is a
+  // lie about what is on screen rather than a cosmetic detail.
   const fixed = await page.evaluate(() => {
-    const on = window.amazingAdventure.resolution.setAdaptive(false);
+    const api = window.amazingAdventure;
+    const on = api.resolution.setAdaptive(false);
     return {
       on,
-      ratio: window.amazingAdventure.renderer.getPixelRatio(),
-      base: window.amazingAdventure.basePixelRatio,
+      reported: api.resolution.ratio,
+      ratio: api.renderer.getPixelRatio(),
+      dataset: document.body.dataset.pixelRatio,
+      base: api.basePixelRatio,
       stored: localStorage.getItem('amazing-adventure:resolution')
     };
   });
   checks.check('turning adaptive off restores native resolution and remembers it',
     fixed.on === false && fixed.ratio === fixed.base && fixed.stored === 'fixed',
     JSON.stringify(fixed));
+  checks.check('a pinned resolution is reported honestly, not stale',
+    fixed.reported === fixed.ratio &&
+    Number(fixed.dataset) === fixed.ratio,
+    JSON.stringify(fixed));
+
+  // And the pin has to survive being pinned from an already-reduced ratio, which is
+  // the state the capture helper leaves the page in.
+  await page.evaluate(() => window.amazingAdventure.resolution.setAdaptive(true));
+  const pinnedAgain = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    api.resolution.setAdaptive(false);
+    return {
+      reported: api.resolution.ratio,
+      actual: api.renderer.getPixelRatio(),
+      base: api.basePixelRatio
+    };
+  });
+  checks.check('pinning from any state lands on the base ratio and says so',
+    pinnedAgain.reported === pinnedAgain.base && pinnedAgain.actual === pinnedAgain.base,
+    JSON.stringify(pinnedAgain));
 
   const reEnabled = await page.evaluate(() => {
     const on = window.amazingAdventure.resolution.setAdaptive(true);
@@ -1904,6 +1930,48 @@ try {
   checks.check('a cue renders above the drone without clipping',
     audioSamples.cuePeak > audioSamples.dronePeak && audioSamples.cuePeak < 1,
     JSON.stringify(audioSamples));
+
+  // --- 27x. The deployable package is the game --------------------------------
+  // The preview is built from the manifest, so this asserts the packaged artefact
+  // against the manifest rather than trusting the build script.
+  const pkg = await page.evaluate(async () => {
+    const m = await import('./src/manifest.js');
+    const manifest = m.buildManifest();
+    return {
+      files: manifest.requiredFiles.length,
+      entry: manifest.entryPoint,
+      version: manifest.version
+    };
+  });
+  checks.check('the running build reports a served manifest with a real entry point',
+    pkg.files >= 27 && typeof pkg.entry === 'string' && pkg.version === '0.3.0',
+    JSON.stringify(pkg));
+
+  // Everything the page actually loaded must be same-origin and must have succeeded.
+  const loaded = await page.evaluate(() => {
+    const entries = performance.getEntriesByType('resource').map((e) => e.name);
+    return {
+      total: entries.length,
+      offOrigin: entries.filter((u) => !u.startsWith(location.origin) && !u.startsWith('data:')),
+      failed: entries.filter((e) => e.transferSize === 0 && !e.name.startsWith('data:'))
+    };
+  });
+  checks.check('every resource the game loads is same-origin',
+    loaded.total > 0 && loaded.offOrigin.length === 0,
+    JSON.stringify({ total: loaded.total, offOrigin: loaded.offOrigin.slice(0, 4) }));
+
+  // The static host has to send correct JavaScript MIME types or module loading
+  // fails on a phone with a bare "Failed to fetch dynamically imported module".
+  const mime = await page.evaluate(async () => {
+    const res = await fetch('./src/main.js');
+    const mod = await fetch('./src/manifest.js');
+    return { js: res.headers.get('content-type'), manifest: mod.headers.get('content-type'), status: res.status };
+  });
+  checks.check('the server sends JavaScript modules with a JavaScript content type',
+    mime.status === 200 && /javascript/.test(mime.js || ''),
+    JSON.stringify(mime));
+
+  await capture(page, 'round27-package.png');
 
   // --- 27y. A new player is told what to do --------------------------------
   // The plaza puts you a few metres from anyone, so the interaction hint is hidden
