@@ -373,55 +373,47 @@ instructions.
 
 ## Current task
 
-Round 36 — lane market ambience bed.
+Round 37 — modelled bench (west-side rest spot).
 
 ### What made it into the game
 
-- `src/audio.js`: a second, optional soundscape bed (`laneBedGain`, `LANE_BED_GAIN`,
-  `LANE_BED_CUTOFF`, `buildBed`, `setArea`). It is synthesised - looping white
-  noise through a lowpass at 260 Hz - so there are no files to download, and it
-  sits well under the drone (0.03 vs 0.05) and the cues. It plays only while
-  `currentArea === 'lane'`, follows mute and volume, and is torn down by `stop()`.
-- `src/main.js`: the area-tracking block calls `sound.setArea(area)` on every
-  change, so entering the lane fades the bed in and leaving fades it out. The
-  debug API exposes `audio.area` and `audio.setArea`.
-- `tests/audio.test.mjs`: 6 new tests covering lane-only gating, the level
-  hierarchy, volume scaling, area tracking before `start()`, no-context survival,
-  and `stop()` tearing down the bed.
-- `scripts/test-round2.mjs`: 2 new browser checks (23c) rendering the bed through
-  an `OfflineAudioContext` and confirming the game tracks the player's area.
-- `CREDITS.md`: no new outside assets (the bed is synthesised).
-
-### Real safety fix along the way
-
-`stop()` previously early-returned when `!ctx || !drone`, which meant a bed
-built without a drone (or a stop after a partial start) could keep running. It
-now tears down each node independently and clears `started`.
+- `art/blender/make_bench.py` -> `assets/bench.glb`: 96 tris, 8 meshes, 2 materials
+  (BenchWood/BenchIron), 9.4 KB. Authored at the existing bench collider
+  (2.2 x 0.7); the backrest overhangs slightly in depth, so the loader checks
+  only the base footprint.
+- `src/assets.js`: `BENCH_ASSET`, `BENCH_MODEL_SIZE`, `loadBench` (never throws,
+  refuses oversized models).
+- `src/world.js`: `upgradeBench()` hides the two procedural boxes and overlays
+  the model. `assetState.bench` reports 'model' / 'box' / 'unavailable'.
+- `src/manifest.js`: added `assets/bench.glb` (47 required files).
+- `CREDITS.md`: bench entry added.
 
 ### Browser evidence
 
-- `npm test`: 412/412 pass (406 + 6 new).
+- `npm test`: 412/412 pass.
 - Desktop vs committed dist under /amazing-adventure/: 186/186 pass.
 - Mobile vs committed dist under /amazing-adventure/: 185/185 pass across
   4 profiles.
-- Preview: 46 files, 2.78 MB. Byte-identical rebuild verified.
+- Probe: 1 bench model, 2 standins hidden, asset state 'model'.
+- Preview: 47 files, 2.79 MB. Byte-identical rebuild verified.
 
 ### Honest limits
 
-- Text-only model: no auditory inspection; the bed's maths and gating are tested,
-  but the timbre of filtered noise is not judged.
-- Chrome device emulation only; no physical phone or iOS Safari.
-- The bed is a low muffled wash, not market chatter - a real ambience layer
-  would need voices, which means assets or a sampler. Deliberately kept to
-  synthesised noise to preserve the no-download invariant.
+- Text-only model: no visual inspection. Measured: model loaded, standins
+  hidden, asset state reports 'model'.
+- The bench has no UVs; it uses flat material colours matching the game's
+  existing wood/iron palette.
 
 ## Next steps
 
-1. **Owner: push the tested dist to gh-pages** and confirm on a real phone.
-2. **A real-device pass** on physical hardware (biggest honest gap).
-3. **A real screen reader session** (NVDA/VoiceOver).
-4. **More polish candidates**: a second Kaggle job for a learned experiment,
-   or a new model (bench, notice board, or a crate stack).
+1. **More scene assets**: the notice board and the crate stack are still
+   procedural boxes. The notice board is a good next candidate.
+2. **A second Kaggle job**: a learned experiment or a new texture family
+   (cobblestone, plaster for the house, or a detail normal).
+3. **A real-device pass** on physical hardware (biggest honest gap).
+4. **A real screen reader session** (NVDA/VoiceOver).
+
+## Previous round — Round 36: lane market ambience bed.
 
 ## Previous round — Round 35: audio polish: distance-driven footsteps.
 
