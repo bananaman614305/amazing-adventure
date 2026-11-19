@@ -236,10 +236,9 @@ export function buildWorld(renderer) {
   // --- North terrace + ramp ----------------------------------------------
   const stepStone = new THREE.MeshStandardMaterial({ color: 0x9a9184, roughness: 0.9 });
   const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.75 });
+  // The house walls get brick; stalls, crates, bench and lamp posts stay wood.
+  // Both are upgraded in place by upgradeWoodBrick() if the maps load.
   const brickMat = new THREE.MeshStandardMaterial({ color: 0x8b4a3a, roughness: 0.9 });
-  // The house walls use brick instead of wood; swap the material reference.
-  // (recorded so the upgrade below can find them)
-  const houseWallMaterial = brickMat;
 
   const terrace = new THREE.Mesh(
     new THREE.BoxGeometry(TERRACE.maxX - TERRACE.minX, TERRACE.height, TERRACE.maxZ - TERRACE.minZ),
