@@ -373,45 +373,57 @@ instructions.
 
 ## Current task
 
-Round 37 — modelled bench (west-side rest spot).
+Round 38 — modelled notice board (lane notice).
 
 ### What made it into the game
 
-- `art/blender/make_bench.py` -> `assets/bench.glb`: 96 tris, 8 meshes, 2 materials
-  (BenchWood/BenchIron), 9.4 KB. Authored at the existing bench collider
-  (2.2 x 0.7); the backrest overhangs slightly in depth, so the loader checks
-  only the base footprint.
-- `src/assets.js`: `BENCH_ASSET`, `BENCH_MODEL_SIZE`, `loadBench` (never throws,
+- `art/blender/make_notice.py` -> `assets/notice.glb`: 108 tris, 9 meshes, 3 materials
+  (NoticeWood/NoticeFace/NoticeIron), 10.7 KB. A post, a framed board face with
+  rails, a rain cap and two iron bolts. Authored with the long side along x and
+  rotated a quarter turn by the game to face west, so the loader checks the wider
+  extent against the depth collider.
+- `src/assets.js`: `NOTICE_ASSET`, `NOTICE_MODEL_SIZE`, `loadNotice` (never throws,
   refuses oversized models).
-- `src/world.js`: `upgradeBench()` hides the two procedural boxes and overlays
-  the model. `assetState.bench` reports 'model' / 'box' / 'unavailable'.
-- `src/manifest.js`: added `assets/bench.glb` (47 required files).
-- `CREDITS.md`: bench entry added.
+- `src/world.js`: `upgradeNotice()` hides the procedural frame and face and
+  overlays the model; the collider is untouched. `assetState.notice` reports
+  'model' / 'plane' / 'unavailable'.
+- `src/manifest.js`: added `assets/notice.glb` (48 required files).
+- `CREDITS.md`: notice entry added.
+
+### Real bug found and fixed during the round
+
+The first Blender script failed its own width assert because the model is
+authored along x while the collider is along z (the game rotates it 90 deg).
+The bounds check now compares the wider extent to depth, matching how the game
+rotates it. Caught by the script's own assert before export.
 
 ### Browser evidence
 
 - `npm test`: 412/412 pass.
-- Desktop vs committed dist under /amazing-adventure/: 186/186 pass.
+- Desktop vs committed dist under /amazing-adventure/: 187/187 pass, including
+  a new check (notice model, 2 standins hidden, asset state 'model').
 - Mobile vs committed dist under /amazing-adventure/: 185/185 pass across
   4 profiles.
-- Probe: 1 bench model, 2 standins hidden, asset state 'model'.
-- Preview: 47 files, 2.79 MB. Byte-identical rebuild verified.
+- Probe: 1 notice model, 2 standins hidden, asset state 'model'.
+- Preview: 48 files, 2.81 MB. Byte-identical rebuild verified.
 
 ### Honest limits
 
 - Text-only model: no visual inspection. Measured: model loaded, standins
   hidden, asset state reports 'model'.
-- The bench has no UVs; it uses flat material colours matching the game's
-  existing wood/iron palette.
+- The notice board has no UVs; it uses flat material colours matching the
+  game's existing wood/face palette.
 
 ## Next steps
 
-1. **More scene assets**: the notice board and the crate stack are still
-   procedural boxes. The notice board is a good next candidate.
+1. **More scene assets**: the crate stack is still procedural boxes. A crate
+   stack model would complete the plaza's prop set.
 2. **A second Kaggle job**: a learned experiment or a new texture family
-   (cobblestone, plaster for the house, or a detail normal).
+   (cobblestone, house plaster, or a detail normal).
 3. **A real-device pass** on physical hardware (biggest honest gap).
 4. **A real screen reader session** (NVDA/VoiceOver).
+
+## Previous round — Round 37: modelled bench (west-side rest spot).
 
 ## Previous round — Round 36: lane market ambience bed.
 

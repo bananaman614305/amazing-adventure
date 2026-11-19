@@ -107,3 +107,12 @@ its procedural stand-in or flat colour and stays fully playable.
   materials (BenchWood/BenchIron), 9.4 KB. Built from the same box primitives
   as the previous models: four legs, a slatted seat slab, a backrest slab, and
   two iron brackets. Same licence as the game (generated, not downloaded).
+
+### Round 38 addition
+
+- `assets/notice.glb` — `art/blender/make_notice.py`. 108 tris, 9 meshes, 3
+  materials (NoticeWood/NoticeFace/NoticeIron), 10.7 KB. A post, a framed
+  board face with rails, a rain cap and two iron bolts. Authored with the long
+  side along x and rotated a quarter turn by the game to face west, so the
+  loader checks the wider extent against the depth collider. Same licence as
+  the game (generated, not downloaded).

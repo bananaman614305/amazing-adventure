@@ -2163,6 +2163,26 @@ try {
                     hidden: marketStalls.hidden }));
 
   await capture(page, 'round34-market-stalls.png');
+  // --- 28d. The modelled notice board --------------------------------------
+  // The lane notice board swaps a box frame + plane for the model; the
+  // collider is untouched so the board stays readable.
+  const notice = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    let models = 0;
+    let hidden = 0;
+    api.scene.traverse((o) => {
+      if (o.name === 'notice-model') models += 1;
+      if (o.userData && o.userData.noticeStandin && !o.visible) hidden += 1;
+    });
+    return { state: api.assetState(), models, hidden };
+  }));
+  checks.check('the modelled notice board replaces the procedural frame and face',
+    notice.state.notice === 'model' && notice.models === 1 && notice.hidden === 2,
+    JSON.stringify({ state: notice.state.notice, models: notice.models,
+                    hidden: notice.hidden }));
+
+  await capture(page, 'round38-notice.png');
+
   // The upgrade must not change gameplay: the modelled counter still blocks.
   // Yaw -PI/2 faces +X (east); walking from (8,-3) heads at the counter whose
   // collider spans x 9..13, so the player must stop short of x 8.9.
