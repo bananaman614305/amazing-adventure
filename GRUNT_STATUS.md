@@ -406,8 +406,8 @@ Round 33 — modelled lantern posts + third Kaggle job (plaster lane walls).
 - `npm test`: 397/397 pass.
 - Desktop vs committed dist under /amazing-adventure/: 181/181 pass (2 new lamp
   checks + 2 new plaster checks).
-- Mobile: 185/185 pass across 4 profiles (run before the plaster commit; a
-  re-run against the final dist is in progress at checkpoint time).
+- Mobile: 185/185 pass across 4 profiles, re-run against the committed dist
+  under /amazing-adventure/ after the plaster commit.
 - Fallback probe: blocking `plaster_*` requests leaves plaster flat while
   stone/wood/brick/lamps all stay upgraded.
 - Probe: 4 lamp models, 4 hidden sphere stand-ins, 4 bulbs at emissive ffb43a;
