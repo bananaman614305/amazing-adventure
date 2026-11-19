@@ -28,7 +28,8 @@ import {
 import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
 import { createAdaptiveResolution } from './perf.js';
 import { createRecovery, shouldPanicShed } from './resilience.js';
-import { createSoundscape, readPreference } from './audio.js';
+import { createSoundscape, readPreference, createStepClock, STEP_RATE, STEP_MIN_SPEED } from './audio.js';
+import { WALK_SPEED_EXPORT } from './player.js';
 import { buildEpilogue, storyComplete, storyProgress } from './epilogue.js';
 import { describeState, questChanges, coinAnnouncement, interactableAnnouncement, areaAnnouncement } from './announce.js';
 import { nearbyTargets, routeHint, describeTarget, compassBearing, distancePhrase, sentenceCase } from './compass.js';
@@ -350,6 +351,7 @@ container.appendChild(renderer.domElement);
 // --- Sound ---------------------------------------------------------------
 // Synthesised, so there is nothing to download. Browsers refuse to start audio
 // without a gesture, so start() is called from the play/tap handlers below.
+const stepClock = createStepClock({ stride: 1.35, minSpeed: STEP_MIN_SPEED });
 const sound = createSoundscape({
   AudioContextClass: window.AudioContext || window.webkitAudioContext,
   preference: readPreference((key) => localStorage.getItem(key)),
@@ -1587,6 +1589,22 @@ function frame() {
   const dt = Math.min(rawDt, 0.05);
   updateGuidedTravel();
   player.update(dt);
+
+  // Footsteps: distance-driven, so pushing into a wall is silent and half-speed
+  // walking gives half the steps. Cadence rises with speed (walk vs run).
+  if (started && sound.started) {
+    const speed = Math.hypot(player.velocity.x, player.velocity.z);
+    const rate = speed > WALK_SPEED_EXPORT * 0.75 ? STEP_RATE.run : STEP_RATE.walk;
+    const steps = stepClock.advance(speed, dt);
+    if (steps > 0) {
+      for (let i = 0; i < steps; i += 1) {
+        sound.step({ speed, walkSpeed: WALK_SPEED_EXPORT, variant: i % 2 });
+      }
+    }
+    // Reset the accumulator when the player stops, so the next step lands on a
+    // fresh stride rather than mid-stride.
+    if (speed < STEP_MIN_SPEED) stepClock.reset();
+  }
 
   clockSeconds = wrapClock(clockSeconds + dt);
   syncPhase();
