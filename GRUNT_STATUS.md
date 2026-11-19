@@ -373,7 +373,74 @@ instructions.
 
 ## Current task
 
-Round 26 — A new player was told nothing.
+Round 27 — A versioned, self-contained preview package for the owner to play on a phone.
+
+PRs #5–#27 are published and open for the human. The owner asked for the game to be
+playable from the Grunt dashboard Play tab on a phone, which needs an HTTPS
+`pages.dev` preview. This round builds and verifies **the deployable artefact**. It
+does not deploy it: there are no Cloudflare credentials and no `wrangler` binary in
+this environment, so the upload itself sits behind the owner's deployment boundary.
+
+### What is ready to deploy
+
+| Item | Value |
+| --- | --- |
+| Source branch | `grunt/round27-preview-package` |
+| Source commit | `d2908c4fdca90147d209b3e75693ebdef91b75fb` |
+| Static output path | **`dist/`** (committed to the repo, 27 game files, 1.0 MB incl. `_redirects` + `preview.json`) |
+| Startup file | **`index.html`** → loads `./src/main.js` as an ES module |
+| Content identity | `sourceDigest d9da50a8ff5db2fbadf11e77e7964f7adf93e313ca3c8118c679ff30dc7ea2f8` |
+| Build command for Pages | *(none — `dist/` is committed)*, or `node scripts/build-preview.mjs` |
+| Build output directory | `dist` |
+
+`dist/preview.json` records the version, source commit, file list and content digest,
+so a deployment can be tied to exact bytes.
+
+### Why the artefact is trustworthy
+
+- **Built from the manifest, not by hand.** `scripts/build-preview.mjs` copies exactly
+  the files `src/manifest.js` declares, so the preview cannot omit a `src/*.js` file or
+  ship a test.
+- **Deterministic.** Two builds of the same sources produce the same digest; verified.
+- **Drift-guarded.** `tests/preview.test.mjs` rebuilds from the current sources and
+  fails if the committed `dist/` no longer matches `sourceDigest`.
+- **Proven to exclude tooling**: no `tests/`, `scripts/`, `node_modules/`, `package.json`.
+- **No remote fetches**: every JS/HTML `src`, `href`, `import` and `fetch()` was scanned;
+  nothing points off-origin. Three.js is vendored.
+
+### Mobile evidence, captured from the deployable bytes
+
+The suites accept `SERVE_DIR`, so they run against `dist/` itself rather than the repo:
+
+```
+SERVE_DIR=dist npm run test:mobile   -> 185/185 pass, exit 0
+SERVE_DIR=dist npm run test:browser  -> 169/169 pass, exit 0
+npm test                             -> 372/372 pass
+```
+
+Four device profiles, 46 checks each, all against `dist/`:
+
+| Profile | Screenshot | Measured |
+| --- | --- | --- |
+| iPhone 13 portrait (390x844) | `artifacts/mobile-iphone-13-portrait.png` | 1170x2532, 27.2% bright, 12831 colours |
+| iPhone 13 landscape (844x390) | `artifacts/mobile-iphone-13-landscape.png` | 2532x1170, 29.2% bright, 17794 colours |
+| iPhone SE small (320x568) | `artifacts/mobile-iphone-se-small.png` | 640x1136, 28.3% bright, 7599 colours |
+| Pixel 7 portrait (412x915) | `artifacts/mobile-pixel-7-portrait.png` | 1071x2379, 35.2% bright, 11892 colours |
+
+Additionally verified by loading `dist/` in a 390x844 mobile viewport: version 0.3.0,
+canvas renders, 6 touch controls, journal opens, opening toasts appear, **0 external
+requests, 0 failed requests, 0 console errors**.
+
+### Honest limits
+
+- **I did not deploy anything.** No Cloudflare API token, no `wrangler`, no Pages
+  project — I checked, and did not attempt to obtain credentials. The upload is the
+  owner step.
+- **No real phone.** All mobile evidence is Chrome device emulation; iOS Safari's own
+  engine and real touch latency are untested.
+- **`_redirects` is written for Pages** (`/* /index.html 200`). Other hosts ignore it.
+
+## Previous round — Round 26: a new player was told nothing
 
 PRs #5–#26 are published and open for the human. Ten rounds were accessibility. This
 round asks a product question no round had asked: **having just pressed Play, does a

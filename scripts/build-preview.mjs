@@ -74,10 +74,12 @@ export function build({ outDir = OUT, quiet = false } = {}) {
   const sourceDigest = buildDigest('.', files);
   const digest = sourceDigest;
 
-  // Cloudflare Pages serves a static directory; no SPA rewrite is needed because
-  // the game is one page, but the host still deserves a fallback so a mistyped
-  // path returns the game rather than a blank 404 on a phone.
-  writeFileSync(join(outDir, '_redirects'), '/*  /index.html  200\n');
+  // GitHub Pages runs Jekyll by default, which drops files and directories whose
+  // names start with an underscore and can rewrite content. The game has no source
+  // files that need it and every byte should be served exactly as built, so opt out
+  // with the standard marker. This is the only file added beyond the game itself
+  // (plus the metadata below).
+  writeFileSync(join(outDir, '.nojekyll'), '');
 
   const meta = {
     name: MANIFEST.name || 'amazing-adventure',

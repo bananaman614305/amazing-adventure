@@ -116,11 +116,33 @@ test('the same sources produce the same digest', () => {
   }
 });
 
-test('the preview adds a fallback so a mistyped path still serves the game', () => {
+test('the preview carries the GitHub Pages marker so files are served verbatim', () => {
+  // Pages runs Jekyll by default, which drops underscore-prefixed paths and can
+  // rewrite content. `.nojekyll` is the standard opt-out and must be present.
+  const { dir, meta } = make();
+  try {
+    assert.ok(existsSync(join(dir, '.nojekyll')), 'the .nojekyll marker is present');
+    // Nothing host-specific from another platform should linger.
+    assert.equal(existsSync(join(dir, '_redirects')), false,
+      'no Cloudflare-specific redirect file in a Pages artefact');
+    // The artefact is the game plus that one marker, and nothing else.
+    const extras = meta.files.filter((f) => f.startsWith('_') || f.startsWith('.'));
+    assert.deepEqual(extras, [], 'no hidden or underscore files are shipped beyond the marker');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the game works from a project subpath, as GitHub Pages serves it', () => {
+  // A project site lives at /<repo>/, not at the domain root. Every reference in the
+  // entry point must therefore be relative, or the page 404s on a phone.
   const { dir } = make();
   try {
-    const redirects = readFileSync(join(dir, '_redirects'), 'utf8');
-    assert.match(redirects, /\/index\.html/, 'a static host has a rule to fall back to the game');
+    const html = readFileSync(join(dir, 'index.html'), 'utf8');
+    const absolute = [...html.matchAll(/(?:src|href)\s*=\s*["'](\/[^/"'][^"']*)["']/gi)]
+      .map((m) => m[1]);
+    assert.deepEqual(absolute, [], `no root-absolute URLs: ${absolute.join(', ')}`);
+    assert.match(html, /src="\.\/src\/main\.js"/, 'the entry point is loaded relatively');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

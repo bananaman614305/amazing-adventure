@@ -22,10 +22,23 @@ const types = {
   '.ico': 'image/x-icon'
 };
 
+// BASE_PATH mounts the game under a prefix, which is how a GitHub Pages project
+// site is served (https://user.github.io/<repo>/). Testing that shape locally is the
+// only way to know the deployed URL works, because a project site is never at the
+// domain root.
+const basePath = (process.env.BASE_PATH || '/').replace(/\/?$/, '/');
+
 createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
     let pathname = decodeURIComponent(url.pathname);
+    if (basePath !== '/') {
+      if (!pathname.startsWith(basePath)) {
+        response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found');
+        return;
+      }
+      pathname = `/${pathname.slice(basePath.length)}`;
+    }
     if (pathname.endsWith('/')) pathname += 'index.html';
     const file = resolve(root, '.' + normalize(pathname));
     if (file !== root && !file.startsWith(root + '/') && !file.startsWith(root + '\\')) {
@@ -39,5 +52,5 @@ createServer(async (request, response) => {
     response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found');
   }
 }).listen(port, host, () => {
-  console.log(`Amazing Adventure is running at http://${host}:${port}`);
+  console.log(`Amazing Adventure is running at http://${host}:${port}${basePath}`);
 });
