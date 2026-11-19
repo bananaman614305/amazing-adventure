@@ -118,6 +118,12 @@ export function glbToMeshes(parsed, THREE) {
     if (attrs.NORMAL !== undefined) {
       geometry.setAttribute('normal', new THREE.BufferAttribute(readAccessor(json, bin, attrs.NORMAL), 3));
     }
+    // UVs are optional in this pipeline: Blender only writes TEXCOORD_0 for a
+    // mesh that has a UV layer. Models authored without one get box-projected
+    // UVs later in assets.js (see ensureUvs), so this must not throw.
+    if (attrs.TEXCOORD_0 !== undefined) {
+      geometry.setAttribute('uv', new THREE.BufferAttribute(readAccessor(json, bin, attrs.TEXCOORD_0), 2));
+    }
     if (prim.indices !== undefined) {
       geometry.setIndex(new THREE.BufferAttribute(readAccessor(json, bin, prim.indices), 1));
     }

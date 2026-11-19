@@ -2234,6 +2234,42 @@ try {
                     hidden: house.hidden }));
 
   await capture(page, 'round41-house.png');
+  // --- 28h. Prop models wear the wood texture -------------------------------
+  // The prop GLBs ship without UVs; the game box-projects them and dresses only
+  // the wood-named materials. Iron, glass and stone must stay flat.
+  const propWood = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    let woodTextured = 0;
+    let woodNoUv = 0;
+    let flatNonWood = 0;
+    const names = ['bench-model', 'notice-model', 'crate-model', 'gate-door-model', 'house-model'];
+    api.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      let inProp = false;
+      for (let p = o; p; p = p.parent) {
+        if (names.includes(p.name)) { inProp = true; break; }
+      }
+      if (!inProp) return;
+      const name = o.material && o.material.name ? o.material.name : '';
+      const hasMap = Boolean(o.material && o.material.map);
+      const hasUv = Boolean(o.geometry.getAttribute('uv'));
+      if (/Wood/i.test(name)) {
+        if (hasMap && hasUv) woodTextured += 1;
+        else if (!hasUv) woodNoUv += 1;
+      } else if (!hasMap) {
+        flatNonWood += 1;
+      }
+    });
+    return { state: api.assetState(), woodTextured, woodNoUv, flatNonWood };
+  }));
+  checks.check('the wood texture reaches the prop models and not the iron or glass',
+    propWood.state.propWood === 'textured' && propWood.woodTextured >= 8 &&
+    propWood.woodNoUv === 0 && propWood.flatNonWood >= 8,
+    JSON.stringify({ state: propWood.state.propWood, woodTextured: propWood.woodTextured,
+                    woodNoUv: propWood.woodNoUv, flatNonWood: propWood.flatNonWood }));
+
+  await capture(page, 'round42-prop-uvs.png');
+
 
 
 

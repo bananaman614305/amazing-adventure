@@ -14,7 +14,7 @@ import {
   GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
   HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
-  COBBLE_TEXTURE_FILES
+  COBBLE_TEXTURE_FILES, boxProjectUvs
 } from './assets.js';
 import { loadGlb } from './glb.js';
 
@@ -557,6 +557,13 @@ export function buildWorld(renderer) {
   // available they replace the stand-ins; when they are not, nothing breaks and
   // `assetState` records why, so a bug report can tell "no textures" apart from
   // "textures failed to load".
+  // Prop models load before the wood texture family (they are independent
+  // fetches, run in parallel). This registry lets upgradePropWood() dress the
+  // already-built models once the maps arrive, instead of serialising the
+  // whole asset pass behind one 60 KB PNG.
+  const propGroups = [];
+  let woodTexturesLoaded = null;
+
   const assetState = {
     fountain: 'stand-in',
     stone: 'flat',
@@ -570,6 +577,7 @@ export function buildWorld(renderer) {
     crates: 'boxes',
     gateDoor: 'box',
     house: 'boxes',
+    propWood: 'flat',
     cobble: 'flat',
     wood: 'flat',
     brick: 'flat',
@@ -920,6 +928,7 @@ export function buildWorld(renderer) {
       }
       group.position.set(BENCH.x, 0, BENCH.z);
       scene.add(group);
+      propGroups.push({ group, tile: 1.5 });
       assetState.bench = 'model';
       assetState.benchDetail = {
         parts: result.meshes.length,
@@ -963,6 +972,7 @@ export function buildWorld(renderer) {
       }
       group.position.set(NOTICE_BOARD.x, 0, NOTICE_BOARD.z);
       scene.add(group);
+      propGroups.push({ group, tile: 1.5 });
       assetState.notice = 'model';
       assetState.noticeDetail = {
         parts: result.meshes.length,
@@ -1010,6 +1020,7 @@ export function buildWorld(renderer) {
         group.position.set(p.x, p.y, p.z);
         group.rotation.y = p.rot;
         scene.add(group);
+        propGroups.push({ group, tile: 1.5 });
         instances += 1;
       }
       assetState.crates = 'model';
@@ -1050,6 +1061,7 @@ export function buildWorld(renderer) {
         group.add(mesh);
       }
       gateDoor.add(group);
+      propGroups.push({ group, tile: 1.5, local: true });
       // Hide the box's own surface but keep it in the scene graph as carrier.
       gateDoor.material.visible = false;
       assetState.gateDoor = 'model';
@@ -1120,6 +1132,7 @@ export function buildWorld(renderer) {
       // south-facing door at z = -6.35.
       group.position.set(-10.5, 0, -9);
       scene.add(group);
+      propGroups.push({ group, tile: 2 });
       assetState.house = 'model';
       assetState.houseDetail = {
         parts: result.meshes.length,
@@ -1128,6 +1141,65 @@ export function buildWorld(renderer) {
       };
       return assetState;
     });
+  }
+
+  /**
+   * Dresses the modelled props in the wood texture family.
+   *
+   * The prop GLBs are authored from untextured box primitives, so they carry no
+   * UVs; boxProjectUvs() generates them in metres and materials share one tiling.
+   * A mesh keeps its own name-based test: only meshes whose material is a wood
+   * material (Blender names them *Wood) get the maps, so iron bands, glass and
+   * stone trim stay flat and read as different materials.
+   */
+  function upgradePropWood() {
+    if (!woodTexturesLoaded) {
+      assetState.propWood = 'flat';
+      return Promise.resolve(assetState);
+    }
+    let dressed = 0;
+    let projected = 0;
+    for (const { group, tile } of propGroups) {
+      group.traverse((mesh) => {
+        if (!mesh.isMesh) return;
+        const source = mesh.material;
+        const name = source && source.name ? source.name : '';
+        if (!/Wood/i.test(name)) return;
+        if (!mesh.geometry.getAttribute('uv')) {
+          const position = mesh.geometry.getAttribute('position');
+          const index = mesh.geometry.getIndex();
+          const uvs = boxProjectUvs({
+            positions: position.array,
+            indices: index ? index.array : null,
+            tileMeters: tile
+          });
+          mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+          projected += 1;
+        }
+        const material = new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          roughness: 0.78,
+          metalness: 0
+        });
+        for (const [key, texture] of Object.entries(woodTexturesLoaded)) {
+          if (!texture || key === 'anyLoaded') continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          // UVs are already in metres; one repeat keeps the authored tile size.
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        // Keep the source name so later code and tests can identify the family.
+        material.name = name;
+        mesh.material = material;
+        dressed += 1;
+      });
+    }
+    assetState.propWood = dressed > 0 ? 'textured' : 'flat';
+    assetState.propWoodDetail = { dressed, projected, groups: propGroups.length };
+    return Promise.resolve(assetState);
   }
 
   function upgradeStone() {
@@ -1179,6 +1251,7 @@ export function buildWorld(renderer) {
       assetState.brick = brick.anyLoaded ? 'textured' : 'flat';
       assetState.plaster = plaster.anyLoaded ? 'textured' : 'flat';
       if (wood.anyLoaded) {
+        woodTexturesLoaded = wood;
         applyTextureFamily(woodMat, wood, 1.5, 1.5, 1.5);
         assetState.woodDetail = {
           maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => wood[k])
@@ -1235,7 +1308,8 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeStone(), upgradeWoodBrick()])
+        .then(() => upgradePropWood()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {
