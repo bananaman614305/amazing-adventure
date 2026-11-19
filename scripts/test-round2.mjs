@@ -2182,6 +2182,24 @@ try {
                     hidden: notice.hidden }));
 
   await capture(page, 'round38-notice.png');
+  // --- 28e. The modelled crates --------------------------------------------
+  const crates = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    let models = 0;
+    let hidden = 0;
+    api.scene.traverse((o) => {
+      if (o.name === 'crate-model') models += 1;
+      if (o.userData && o.userData.crateStandin && !o.visible) hidden += 1;
+    });
+    return { state: api.assetState(), models, hidden };
+  }));
+  checks.check('the modelled crates replace the three procedural boxes',
+    crates.state.crates === 'model' && crates.models === 3 && crates.hidden === 3,
+    JSON.stringify({ state: crates.state.crates, models: crates.models,
+                    hidden: crates.hidden }));
+
+  await capture(page, 'round39-crates.png');
+
 
   // The upgrade must not change gameplay: the modelled counter still blocks.
   // Yaw -PI/2 faces +X (east); walking from (8,-3) heads at the counter whose
