@@ -7,7 +7,7 @@ import {
   noteFrequency, pentatonicNote, PENTATONIC, PHASE_TONES, phaseTone, CUES,
   envelope, cueDuration, clampGain, cueGain, ambienceGain, readPreference,
   writePreference, createSoundscape, createStepClock, FOOTSTEP, STEP_RATE,
-  footstepGain, STEP_MIN_SPEED,
+  footstepGain, STEP_MIN_SPEED, laneBedGain, LANE_BED_GAIN, LANE_BED_CUTOFF,
   AUDIO_KEY, MAX_CUE_GAIN, MAX_AMBIENCE_GAIN
 } from '../src/audio.js';
 
@@ -147,7 +147,7 @@ test('a cue never plays while sound is off', () => {
 // The pure maths above is well covered; these cover the browser-facing object,
 // where the doc comments make promises the code has to keep.
 function recordingContext() {
-  const made = { oscillators: [], gains: [], filters: [], ramps: [] };
+  const made = { oscillators: [], gains: [], filters: [], ramps: [], bufferSources: [] };
   class Fake {
     constructor() { this.state = 'running'; this.currentTime = 0; this.destination = { name: 'dest' }; this.sampleRate = 44100; }
     createGain() {
@@ -186,8 +186,13 @@ function recordingContext() {
         getChannelData() { return data; } };
     }
     createBufferSource() {
-      const node = { buffer: null, connect(t) { node.connectedTo = t; }, start() {}, stop() {} };
-      made.oscillators.push(node);
+      const node = {
+        buffer: null, loop: false, stopped: false,
+        connect(t) { node.connectedTo = t; },
+        start() { node.startedAt = 0; },
+        stop() { node.stopped = true; }
+      };
+      made.bufferSources.push(node);
       return node;
     }
     resume() {}
@@ -376,4 +381,54 @@ test('the step method survives a context without createBuffer', () => {
   sound.start();
   assert.equal(sound.step({ speed: 4, walkSpeed: 4 }), false, 'no buffer source, no step, no crash');
   assert.equal(sound.play('talk'), true, 'cues still work');
+});
+
+
+// --- Lane market ambience: a bed that only exists in the lane ----------------
+test('the lane bed is silent everywhere except the lane', () => {
+  assert.ok(laneBedGain('lane', false) > 0, 'the lane has a bed');
+  assert.equal(laneBedGain('plaza', false), 0, 'the plaza does not');
+  assert.equal(laneBedGain('outside', false), 0);
+  assert.equal(laneBedGain(undefined, false), 0);
+  assert.equal(laneBedGain('lane', true), 0, 'muting silences the bed too');
+});
+
+test('the lane bed sits under the drone and the cues', () => {
+  assert.ok(LANE_BED_GAIN < MAX_AMBIENCE_GAIN, 'the bed is quieter than the drone');
+  assert.ok(LANE_BED_GAIN < MAX_CUE_GAIN);
+  assert.ok(LANE_BED_CUTOFF > 0 && LANE_BED_CUTOFF < 1000, 'the bed is low and muffled');
+});
+
+test('the lane bed scales with volume and cannot exceed the ambience ceiling', () => {
+  assert.equal(laneBedGain('lane', false, 0), 0, 'zero volume is silent');
+  assert.ok(laneBedGain('lane', false, 0.5) < laneBedGain('lane', false, 1));
+  assert.ok(laneBedGain('lane', false, 99) <= MAX_AMBIENCE_GAIN);
+  assert.equal(laneBedGain('lane', false, NaN), 0, 'a broken volume is silence');
+});
+
+test('setArea tracks the area even before audio starts', () => {
+  const { Fake } = recordingContext();
+  const sound = createSoundscape({ AudioContextClass: Fake, preference: { enabled: true, volume: 0.7 } });
+  assert.equal(sound.area, 'plaza', 'the plaza is the default');
+  assert.equal(sound.setArea('lane'), 'lane', 'it tracks before start()');
+  sound.start();
+  assert.equal(sound.area, 'lane', 'start() keeps the area');
+  assert.equal(sound.setArea('plaza'), 'plaza');
+});
+
+test('setArea survives a soundscape with no context or buffer support', () => {
+  const sound = createSoundscape({ AudioContextClass: null, preference: { enabled: true, volume: 0.7 } });
+  assert.equal(sound.setArea('lane'), 'lane', 'still tracks');
+  assert.equal(sound.area, 'lane');
+});
+
+test('stop() tears down the lane bed as well as the drone', () => {
+  const { Fake, made } = recordingContext();
+  const sound = createSoundscape({ AudioContextClass: Fake, preference: { enabled: true, volume: 0.7 } });
+  sound.setArea('lane');
+  sound.start();
+  assert.ok(made.bufferSources.length > 0, 'the bed started a looping source');
+  sound.stop();
+  assert.equal(made.bufferSources[0].stopped, true, 'and stop() stopped it');
+  assert.equal(sound.started, false);
 });
