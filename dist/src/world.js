@@ -9,6 +9,7 @@ import {
   BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, STALL_ASSET, STALL_MODEL_SIZE, loadStall,
   LAMP_ASSET, LAMP_MODEL_SIZE, loadLamp, MARKET_STALL_ASSET, MARKET_STALL_MODEL_SIZE,
   loadMarketStall, BENCH_ASSET, BENCH_MODEL_SIZE, loadBench,
+  NOTICE_ASSET, NOTICE_MODEL_SIZE, loadNotice,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES
 } from './assets.js';
 import { loadGlb } from './glb.js';
@@ -221,12 +222,14 @@ export function buildWorld(renderer) {
     castShadow: true
   });
   boardFrame.rotation.y = Math.PI / 2;
+  boardFrame.userData = { noticeStandin: true };
   const boardFace = new THREE.Mesh(
     new THREE.PlaneGeometry(1.4, 1.2),
     new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.95 })
   );
   boardFace.position.set(NOTICE_BOARD.x - 0.14, 1.25, NOTICE_BOARD.z);
   boardFace.rotation.y = -Math.PI / 2;
+  boardFace.userData = { noticeStandin: true };
   scene.add(boardFace);
   colliders.push(boxCollider(
     NOTICE_BOARD.x - 0.3, NOTICE_BOARD.z - 0.9,
@@ -551,6 +554,7 @@ export function buildWorld(renderer) {
     plaster: 'flat',
     marketStalls: 'boxes',
     bench: 'box',
+    notice: 'plane',
     wood: 'flat',
     brick: 'flat',
     fountainDetail: null,
@@ -910,6 +914,49 @@ export function buildWorld(renderer) {
     });
   }
 
+  function upgradeNotice() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.notice = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadNotice({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.notice = 'plane';
+        assetState.noticeDetail = result.reason;
+        return assetState;
+      }
+      // Hide the procedural frame and face; the collider stays.
+      for (const c of scene.children) {
+        if (c.userData && c.userData.noticeStandin) c.visible = false;
+      }
+      const group = new THREE.Group();
+      group.name = 'notice-model';
+      // The model is authored long-side-along-x; the game wants it facing
+      // west, so rotate a quarter turn like the procedural frame did.
+      group.rotation.y = Math.PI / 2;
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+      group.position.set(NOTICE_BOARD.x, 0, NOTICE_BOARD.z);
+      scene.add(group);
+      assetState.notice = 'model';
+      assetState.noticeDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: 1
+      };
+      return assetState;
+    });
+  }
+
   function upgradeStone() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -1015,7 +1062,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {
