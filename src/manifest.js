@@ -30,6 +30,12 @@ export const REQUIRED_FILES = [
   'src/ambient.js',
   'src/daynight.js',
   'src/onboard.js',
+  'src/glb.js',
+  'src/assets.js',
+  'assets/fountain.glb',
+  'assets/textures/stone_albedo.png',
+  'assets/textures/stone_normal.png',
+  'assets/textures/stone_rough.png',
   'vendor/three.module.min.js',
   'vendor/THREE-LICENSE.txt'
 ];

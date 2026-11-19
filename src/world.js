@@ -3,10 +3,18 @@ import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BEN
 import {
   GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD
 } from './areas.js';
+import {
+  FOUNTAIN_SPOT, FOUNTAIN_COLLIDER, canLoadAssets, textureRepeat,
+  stoneMaterialParams, loadFountain, loadStoneTextures
+} from './assets.js';
+import { loadGlb } from './glb.js';
 
-// Everything you can see and bump into is built here from plain primitives.
-// No outside models or textures, so the whole scene is code. The walkable
-// geometry maths lives in terrain.js so it can be tested without Three.js.
+// Almost everything you can see and bump into is built here from plain
+// primitives, so the scene has no runtime dependency on a binary asset. The
+// exception is the plaza fountain, which is a modelled GLB loaded in the
+// background: it is an upgrade over the procedural stand-in below, never a
+// requirement. The walkable geometry maths lives in terrain.js so it can be
+// tested without Three.js.
 export { WORLD_SIZE, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 
 /**
@@ -31,9 +39,15 @@ export function buildWorld(renderer) {
   scene.add(ground);
 
   // A paved ring in the middle so the plaza reads differently from the grass.
+  // Its material is created from the asset rules so the flat-colour fallback and
+  // the textured version differ in exactly one place.
+  const plazaBase = stoneMaterialParams(false);
+  const plazaMaterial = new THREE.MeshStandardMaterial({
+    color: plazaBase.color, roughness: plazaBase.roughness, metalness: plazaBase.metalness
+  });
   const plaza = new THREE.Mesh(
     new THREE.CircleGeometry(9, 48),
-    new THREE.MeshStandardMaterial({ color: 0xb3a892, roughness: 0.9 })
+    plazaMaterial
   );
   plaza.rotation.x = -Math.PI / 2;
   plaza.position.y = 0.01;
@@ -313,15 +327,32 @@ export function buildWorld(renderer) {
   const water = new THREE.MeshStandardMaterial({ color: 0x4f93c4, roughness: 0.2, metalness: 0.1 });
 
   // Fountain in the plaza centre: everyone gathers around it.
-  addBox(scene, colliders, { size: [4, 0.7, 4], position: [0, 0.35, 0], material: stone });
-  const basin = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.1, 32), water);
-  basin.position.set(0, 0.72, 0);
-  basin.receiveShadow = true;
-  scene.add(basin);
-  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 1.8, 12), stone);
-  pillar.position.set(0, 1.5, 0);
-  pillar.castShadow = true;
-  scene.add(pillar);
+  //
+  // A simple stand-in is built synchronously so the plaza is never empty, and the
+  // modelled fountain replaces it when (and only if) it loads. The collider is
+  // registered once, sized for the real model, so gameplay does not change when
+  // the upgrade arrives.
+  const fountainGroup = new THREE.Group();
+  fountainGroup.name = 'fountain';
+  scene.add(fountainGroup);
+
+  const standIn = new THREE.Group();
+  standIn.name = 'fountain-standin';
+  addBox(standIn, [], { size: [4, 0.7, 4], position: [0, 0.35, 0], material: stone });
+  const standInBasin = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.1, 32), water);
+  standInBasin.position.set(0, 0.72, 0);
+  standInBasin.receiveShadow = true;
+  standIn.add(standInBasin);
+  const standInPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 1.8, 12), stone);
+  standInPillar.position.set(0, 1.5, 0);
+  standInPillar.castShadow = true;
+  standIn.add(standInPillar);
+  fountainGroup.add(standIn);
+
+  colliders.push(boxCollider(
+    FOUNTAIN_SPOT.x - FOUNTAIN_COLLIDER, FOUNTAIN_SPOT.z - FOUNTAIN_COLLIDER,
+    FOUNTAIN_SPOT.x + FOUNTAIN_COLLIDER, FOUNTAIN_SPOT.z + FOUNTAIN_COLLIDER
+  ));
 
   // A small house on the north-west side gives the space a landmark.
   addBox(scene, colliders, { size: [7, 3, 5], position: [-10.5, 1.5, -9], material: wood, castShadow: true });
@@ -481,6 +512,99 @@ export function buildWorld(renderer) {
   ledgerGroup.visible = false;
   scene.add(ledgerGroup);
 
+  // --- Asset upgrade (asynchronous, never required) ------------------------
+  // The plaza and fountain work without any download. When the files are
+  // available they replace the stand-ins; when they are not, nothing breaks and
+  // `assetState` records why, so a bug report can tell "no textures" apart from
+  // "textures failed to load".
+  const assetState = {
+    fountain: 'stand-in',
+    stone: 'flat',
+    fountainDetail: null,
+    stoneDetail: null
+  };
+
+  function upgradeFountain() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.fountain = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadFountain({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.fountain = 'stand-in';
+        assetState.fountainDetail = result.reason;
+        return assetState;
+      }
+      const group = new THREE.Group();
+      group.name = 'fountain-model';
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = name;
+        // The plinth sits on the ground; the model is already authored at y=0.
+        mesh.position.set(FOUNTAIN_SPOT.x, 0, FOUNTAIN_SPOT.z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        // Water surfaces should not cast hard shadows onto the basin floor.
+        if (name.includes('Water')) mesh.castShadow = false;
+        group.add(mesh);
+      }
+      fountainGroup.remove(standIn);
+      fountainGroup.add(group);
+      assetState.fountain = 'model';
+      assetState.fountainDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        height: Number(result.footprint.height.toFixed(2)),
+        width: Number(result.footprint.width.toFixed(2))
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeStone() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.stone = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadStoneTextures({ THREE }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.stone = 'flat';
+        return assetState;
+      }
+      for (const [key, texture] of Object.entries(textures)) {
+        if (!texture || key === 'anyLoaded') continue;
+        // The plaza is a 9 m radius disc; a ~3 m tile keeps the blocks a
+        // believable size underfoot rather than stretched or miniaturised.
+        const repeat = textureRepeat(18, 18, 3);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(repeat.repeatX, repeat.repeatY);
+        texture.anisotropy = Math.min(4, renderer.capabilities?.getMaxAnisotropy?.() ?? 1);
+      }
+      const params = stoneMaterialParams(true);
+      plazaMaterial.color.setHex(params.color);
+      plazaMaterial.roughness = params.roughness;
+      plazaMaterial.metalness = params.metalness;
+      if (textures.map) plazaMaterial.map = textures.map;
+      if (textures.normalMap) plazaMaterial.normalMap = textures.normalMap;
+      if (textures.roughnessMap) plazaMaterial.roughnessMap = textures.roughnessMap;
+      plazaMaterial.needsUpdate = true;
+      assetState.stone = 'textured';
+      assetState.stoneDetail = {
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k])
+      };
+      return assetState;
+    });
+  }
+
   const environment = {
     scene,
     hemi,
@@ -506,6 +630,19 @@ export function buildWorld(renderer) {
     ledgerGroup,
     setLedgerVisible(visible) {
       ledgerGroup.visible = Boolean(visible);
+    },
+    fountainGroup,
+    /**
+     * Starts the asset upgrade. Returns a promise that settles when both assets
+     * have been attempted, so tests can await it and get a truthful report rather
+     * than a guess about timing.
+     */
+    loadAssets() {
+      return Promise.all([upgradeFountain(), upgradeStone()]).then(() => ({ ...assetState }));
+    },
+    /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
+    get assetState() {
+      return { ...assetState };
     }
   };
 
