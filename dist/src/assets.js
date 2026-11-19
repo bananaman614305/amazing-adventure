@@ -45,6 +45,12 @@ export const WOOD_TEXTURE_FILES = {
   roughnessMap: 'assets/textures/wood_rough.png'
 };
 
+export const PLASTER_TEXTURE_FILES = {
+  map: 'assets/textures/plaster_albedo.png',
+  normalMap: 'assets/textures/plaster_normal.png',
+  roughnessMap: 'assets/textures/plaster_rough.png'
+};
+
 export const BRICK_TEXTURE_FILES = {
   map: 'assets/textures/brick_albedo.png',
   normalMap: 'assets/textures/brick_normal.png',
