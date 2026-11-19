@@ -8,7 +8,7 @@ import {
   stoneMaterialParams, loadFountain, loadMaterialTextures,
   BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, STALL_ASSET, STALL_MODEL_SIZE, loadStall,
   LAMP_ASSET, LAMP_MODEL_SIZE, loadLamp,
-  WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES
+  WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES
 } from './assets.js';
 import { loadGlb } from './glb.js';
 
@@ -543,6 +543,7 @@ export function buildWorld(renderer) {
     barrels: 'cylinders',
     stalls: 'boxes',
     lamps: 'spheres',
+    plaster: 'flat',
     wood: 'flat',
     brick: 'flat',
     fountainDetail: null,
@@ -841,6 +842,7 @@ export function buildWorld(renderer) {
     })) {
       assetState.wood = 'unavailable';
       assetState.brick = 'unavailable';
+      assetState.plaster = 'unavailable';
       return Promise.resolve(assetState);
     }
     // Wood dresses the stalls, crates, bench and lamp posts; brick the house
@@ -849,10 +851,12 @@ export function buildWorld(renderer) {
     // (planks read at crate scale) and 2 m for brick (courses read at wall scale).
     return Promise.all([
       loadMaterialTextures({ THREE, files: WOOD_TEXTURE_FILES }),
-      loadMaterialTextures({ THREE, files: BRICK_TEXTURE_FILES })
-    ]).then(([wood, brick]) => {
+      loadMaterialTextures({ THREE, files: BRICK_TEXTURE_FILES }),
+      loadMaterialTextures({ THREE, files: PLASTER_TEXTURE_FILES })
+    ]).then(([wood, brick, plaster]) => {
       assetState.wood = wood.anyLoaded ? 'textured' : 'flat';
       assetState.brick = brick.anyLoaded ? 'textured' : 'flat';
+      assetState.plaster = plaster.anyLoaded ? 'textured' : 'flat';
       if (wood.anyLoaded) {
         applyTextureFamily(woodMat, wood, 1.5, 1.5, 1.5);
         assetState.woodDetail = {
@@ -863,6 +867,14 @@ export function buildWorld(renderer) {
         applyTextureFamily(brickMat, brick, 7, 3, 2);
         assetState.brickDetail = {
           maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => brick[k])
+        };
+      }
+      if (plaster.anyLoaded) {
+        // Lane walls are long runs (up to ~14 m) at 2.6 m high; a 2 m tile keeps
+        // the trowel sweeps and chips at a believable plaster scale.
+        applyTextureFamily(laneWall, plaster, 14, 2.6, 2);
+        assetState.plasterDetail = {
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => plaster[k])
         };
       }
       return assetState;

@@ -2058,6 +2058,33 @@ try {
     JSON.stringify({ bulbs: lamps.bulbs, emissive: lamps.emissive, intensity: lamps.intensity }));
 
   await capture(page, 'round33-lamps.png');
+  // The lane walls carry the third Kaggle family (plaster). Same contract as
+  // the other families: three maps, white base so nothing is double-tinted.
+  const plaster = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    let wall = null;
+    api.scene.traverse((o) => {
+      if (o.isMesh && o.geometry.type === 'BoxGeometry' && o.material.map &&
+          o.position.y === 1.5 && !wall) {
+        wall = {
+          map: true,
+          normal: Boolean(o.material.normalMap),
+          rough: Boolean(o.material.roughnessMap),
+          color: o.material.color.getHexString(),
+          repeat: [o.material.map.repeat.x, o.material.map.repeat.y]
+        };
+      }
+    });
+    return { state: api.assetState(), wall };
+  }));
+  checks.check('the lane walls are dressed with all three plaster maps',
+    plaster.state.plaster === 'textured' && plaster.wall &&
+    plaster.wall.map && plaster.wall.normal && plaster.wall.rough,
+    JSON.stringify({ state: plaster.state.plaster, wall: plaster.wall }));
+  checks.check('the plaster tiles at wall scale and is not double-tinted',
+    plaster.wall && plaster.wall.repeat[0] === 7 && plaster.wall.color === 'ffffff',
+    JSON.stringify({ repeat: plaster.wall && plaster.wall.repeat, color: plaster.wall && plaster.wall.color }));
+
 
   // --- 27x. The deployable package is the game --------------------------------
   // The preview is built from the manifest, so this asserts the packaged artefact
