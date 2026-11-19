@@ -373,6 +373,42 @@ instructions.
 
 ## Current task
 
+Round 29 — second graphics pass: modelled barrel + wood/brick textures.
+
+### What the tools produced
+
+- **Blender (headless, v5.0.1):** `art/blender/make_barrel.py` models a 308-triangle
+  coopered barrel (12 staves, 2 iron hoops, bulged profile) and exports it as
+  `assets/barrel.glb` (15.5 KB). Authored at the larger plaza size so one asset
+  serves both plaza (r=0.55) and lane (r=0.5) barrels via per-instance scaling.
+- **Kaggle (Tesla T4, CuPy, ~12 s):** `art/kaggle/wood_brick_textures.py` generates
+  tileable wood (vertical planks + grain + growth rings) and brick (running bond,
+  fired-clay) maps, 512x512, three maps each. Seam ratios 0.06-1.09. GPU output
+  matches local NumPy within 1 LSB.
+
+### What made it into the game
+
+- `src/assets.js`: added `loadBarrel` + `WOOD_TEXTURE_FILES` + `BARREL_ASSET`.
+- `src/world.js`: barrels upgraded asynchronously over procedural cylinders, same
+  fallback contract as the fountain. 4 instances, 12 mesh parts, 1232 tris total.
+- `src/manifest.js`: 40 required files (added barrel.glb + 6 new textures).
+
+### Browser and mobile evidence
+
+- `npm test`: 397/397 pass.
+- Desktop: 177/177 pass. Barrels state 'model', 4 groups, 12 parts, 1232 tris.
+- Mobile: 185/185 pass across 4 profiles.
+- 0 console errors, 0 failed requests.
+
+### Honest limits
+
+- Did not visually inspect the GLB/PNGs (text-only).
+- Wood and brick textures are shipped but not yet applied to materials (barrels
+  and house still use flat colours). Applying them is the next graphics step.
+- Live Pages host not tested by me.
+
+## Previous round — Round 28: the first graphics pass (fountain + stone)
+
 Round 28 — the first graphics pass: a modelled fountain and tileable stone textures.
 
 PRs #5–#28 are published and open. This round used the two owner-enabled art tools
