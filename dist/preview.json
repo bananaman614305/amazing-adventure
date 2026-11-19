@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "build": "A living world",
   "entryPoint": "index.html",
-  "commit": "94702ac9f0343623cdbb02551d8b7b50293f6c70",
+  "commit": "f14a3a4441ef8d993306471f25b30d59f8f030d2",
   "workingTreeClean": true,
   "fileCount": 27,
   "sourceDigest": "d9da50a8ff5db2fbadf11e77e7964f7adf93e313ca3c8118c679ff30dc7ea2f8",
