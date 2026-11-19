@@ -3,7 +3,7 @@
   "version": "0.3.0",
   "build": "A living world",
   "entryPoint": "index.html",
-  "workingTreeClean": true,
+  "workingTreeClean": false,
   "fileCount": 33,
   "sourceDigest": "bbe8f7fb619e74bea020767d9c3328e09a74c8206529a4bd956a60a43a5630fb",
   "digest": "bbe8f7fb619e74bea020767d9c3328e09a74c8206529a4bd956a60a43a5630fb",
