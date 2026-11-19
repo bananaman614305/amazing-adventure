@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import {
   noteFrequency, pentatonicNote, PENTATONIC, PHASE_TONES, phaseTone, CUES,
   envelope, cueDuration, clampGain, cueGain, ambienceGain, readPreference,
-  writePreference, createSoundscape, AUDIO_KEY, MAX_CUE_GAIN, MAX_AMBIENCE_GAIN
+  writePreference, createSoundscape, createStepClock, FOOTSTEP, STEP_RATE,
+  footstepGain, STEP_MIN_SPEED,
+  AUDIO_KEY, MAX_CUE_GAIN, MAX_AMBIENCE_GAIN
 } from '../src/audio.js';
 
 test('note frequencies match equal temperament', () => {
@@ -178,6 +180,16 @@ function recordingContext() {
       made.filters.push(node);
       return node;
     }
+    createBuffer(channels, length, sampleRate) {
+      const data = new Float32Array(length);
+      return { numberOfChannels: channels, length, sampleRate, duration: length / sampleRate,
+        getChannelData() { return data; } };
+    }
+    createBufferSource() {
+      const node = { buffer: null, connect(t) { node.connectedTo = t; }, start() {}, stop() {} };
+      made.oscillators.push(node);
+      return node;
+    }
     resume() {}
   }
   return { Fake, made };
@@ -285,4 +297,83 @@ test('the drone stays quieter than the cues that sit on top of it', () => {
   // A drone that competes with feedback cues makes the game harder to follow, and
   // the two ceilings are the only thing keeping that balance.
   assert.ok(MAX_AMBIENCE_GAIN < MAX_CUE_GAIN, 'ambience must stay under the cue ceiling');
+});
+
+
+// --- Footstep timing: distance-driven, so pushing into a wall is silent -------
+test('a step clock accumulates distance and fires on stride boundaries', () => {
+  const clock = createStepClock({ stride: 1.0, minSpeed: 0.5 });
+  assert.equal(clock.advance(2, 0.4), 0, '0.8 m is short of a stride');
+  assert.equal(clock.travelled, 0.8, 'distance is carried forward');
+  assert.equal(clock.advance(2, 0.2), 1, 'the next 0.4 m crosses a stride');
+  assert.ok(Math.abs(clock.travelled - 0.2) < 1e-9, 'the remainder is kept');
+});
+
+test('a step clock is silent below the minimum speed', () => {
+  const clock = createStepClock({ stride: 1.0, minSpeed: 0.5 });
+  assert.equal(clock.advance(0.3, 10), 0, 'damping tails make no sound');
+  assert.equal(clock.travelled, 0, 'and do not accumulate');
+});
+
+test('a step clock ignores non-finite or non-positive deltas', () => {
+  const clock = createStepClock({ stride: 1.0, minSpeed: 0.5 });
+  assert.equal(clock.advance(2, 0), 0);
+  assert.equal(clock.advance(2, -1), 0);
+  assert.equal(clock.advance(NaN, 0.5), 0);
+  assert.equal(clock.advance(2, Infinity), 0);
+});
+
+test('a step clock can fire several steps in one frame after a stall', () => {
+  const clock = createStepClock({ stride: 1.0, minSpeed: 0.5 });
+  assert.equal(clock.advance(4, 1.0), 4, 'a full second of running at 4 m/s');
+});
+
+test('resetting a step clock clears the accumulator', () => {
+  const clock = createStepClock({ stride: 1.0, minSpeed: 0.5 });
+  clock.advance(2, 0.4);
+  clock.reset();
+  assert.equal(clock.travelled, 0);
+});
+
+test('footstep gain scales with speed but never exceeds the cue ceiling', () => {
+  assert.equal(footstepGain(0, 4), 0, 'still means silent');
+  assert.equal(footstepGain(4, 0), 0, 'no walk speed means no scale');
+  assert.ok(footstepGain(1, 4) > 0);
+  assert.ok(footstepGain(4, 4) <= MAX_CUE_GAIN);
+  assert.ok(footstepGain(4, 4) > footstepGain(1, 4), 'faster is louder');
+  assert.equal(footstepGain(NaN, 4), 0);
+  assert.equal(footstepGain(4, Infinity), 0);
+});
+
+test('the FOOTSTEP cue is quieter than the interaction cues', () => {
+  assert.ok(FOOTSTEP.gain < MAX_CUE_GAIN, 'footsteps must stay under the cue ceiling');
+  assert.ok(FOOTSTEP.gain > 0);
+  assert.ok(FOOTSTEP.length > 0 && FOOTSTEP.length < 0.2);
+});
+
+test('the step method is a safe no-op when sound is off or unstarted', () => {
+  const { Fake } = recordingContext();
+  const sound = createSoundscape({ AudioContextClass: Fake, preference: { enabled: true, volume: 0.7 } });
+  assert.equal(sound.step({ speed: 4, walkSpeed: 4 }), false, 'unstarted means no step');
+  sound.start();
+  sound.setEnabled(false);
+  assert.equal(sound.step({ speed: 4, walkSpeed: 4 }), false, 'muted means no step');
+  sound.setEnabled(true);
+  assert.equal(sound.step({ speed: 4, walkSpeed: 4 }), true, 'unmuted steps play');
+});
+
+test('the step method survives a context without createBuffer', () => {
+  // An ancient browser or a locked-down environment may not expose createBuffer.
+  // Footsteps must then be silent, and nothing else may break.
+  class Minimal {
+    constructor() { this.state = 'running'; this.currentTime = 0; this.destination = {}; this.sampleRate = 44100; }
+    createGain() { return { gain: { value: 1, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {}, cancelScheduledValues() {}, setTargetAtTime() {} }, connect() {} }; }
+    createOscillator() { return { type: '', frequency: { value: 0, setTargetAtTime() {} }, detune: { value: 0, setTargetAtTime() {} }, connect() {}, start() {}, stop() {} }; }
+    createBiquadFilter() { return { type: '', frequency: { value: 0 }, Q: { value: 0 }, connect() {} }; }
+    resume() {}
+  }
+  const sound = createSoundscape({ AudioContextClass: Minimal, preference: { enabled: true, volume: 0.7 } });
+  sound.start();
+  assert.equal(sound.step({ speed: 4, walkSpeed: 4 }), false, 'no buffer source, no step, no crash');
+  assert.equal(sound.play('talk'), true, 'cues still work');
 });
