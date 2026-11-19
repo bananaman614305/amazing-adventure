@@ -1690,7 +1690,10 @@ try {
     JSON.stringify(openGate));
 
   // Guided travel must walk the player, not teleport them, and must deliver them.
-  await page.evaluate(() => { const a = window.amazingAdventure; a.player.placeAt(0, 0, 0, 0); });
+  // Place just south of the fountain: the fountain now has a real collider, so
+  // (0,0) is inside it. The check measures distance *travelled*, so the start
+  // point only has to be a walkable cell.
+  await page.evaluate(() => { const a = window.amazingAdventure; a.player.placeAt(0, 4, 0, 0); });
   await new Promise((r) => setTimeout(r, 300));
   const began = await page.evaluate(() => window.amazingAdventure.startGuidedTravel('bench'));
   await new Promise((r) => setTimeout(r, 1400));
@@ -1700,8 +1703,8 @@ try {
   });
   checks.check('guided travel starts and moves the player gradually rather than instantly',
     began?.path?.length > 2 && midway.state !== null &&
-    Math.hypot(midway.x, midway.z) > 0.5 && Math.hypot(midway.x, midway.z) < 10,
-    JSON.stringify({ waypoints: began?.path?.length, moved: Number(Math.hypot(midway.x, midway.z).toFixed(2)) }));
+    Math.hypot(midway.x - 0, midway.z - 4) > 0.5 && Math.hypot(midway.x, midway.z - 4) < 12,
+    JSON.stringify({ waypoints: began?.path?.length, moved: Number(Math.hypot(midway.x - 0, midway.z - 4).toFixed(2)) }));
 
   // The walk is about 16 world units and takes roughly eleven seconds; poll rather
   // than guess a fixed wait, so a slower frame rate cannot make this flaky.
@@ -1930,6 +1933,96 @@ try {
   checks.check('a cue renders above the drone without clipping',
     audioSamples.cuePeak > audioSamples.dronePeak && audioSamples.cuePeak < 1,
     JSON.stringify(audioSamples));
+
+  // --- 28. The modelled fountain and stone textures --------------------------
+  // Await the settle point rather than sleeping: assets are an upgrade loaded in
+  // the background, so timing is not something a test should guess at.
+  const assets = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    const model = api.scene.getObjectByName('fountain-model');
+    const standin = api.scene.getObjectByName('fountain-standin');
+    let parts = 0;
+    let tris = 0;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let reach = 0;
+    if (model) {
+      model.traverse((o) => {
+        if (!o.isMesh) return;
+        parts += 1;
+        tris += o.geometry.index.count / 3;
+        o.geometry.computeBoundingBox();
+        const b = o.geometry.boundingBox;
+        minY = Math.min(minY, b.min.y);
+        maxY = Math.max(maxY, b.max.y);
+        reach = Math.max(reach, Math.abs(b.min.x), Math.abs(b.max.x), Math.abs(b.min.z), Math.abs(b.max.z));
+      });
+    }
+    const plaza = api.scene.children.find((o) => o.isMesh && o.geometry.type === 'CircleGeometry');
+    return {
+      state: api.assetState(),
+      modelPresent: Boolean(model),
+      standinPresent: Boolean(standin),
+      parts,
+      tris,
+      height: Number((maxY - minY).toFixed(3)),
+      minY: Number(minY.toFixed(3)),
+      reach: Number(reach.toFixed(3)),
+      plazaMaps: plaza ? {
+        map: Boolean(plaza.material.map),
+        normal: Boolean(plaza.material.normalMap),
+        rough: Boolean(plaza.material.roughnessMap),
+        repeat: plaza.material.map ? [plaza.material.map.repeat.x, plaza.material.map.repeat.y] : null,
+        color: plaza.material.color.getHexString()
+      } : null
+    };
+  }));
+
+  checks.check('the modelled fountain replaces the procedural stand-in',
+    assets.state.fountain === 'model' && assets.modelPresent && !assets.standinPresent,
+    JSON.stringify(assets.state));
+
+  checks.check('the fountain is the reviewed low-poly model, not a placeholder',
+    assets.parts === 12 && assets.tris === 332,
+    JSON.stringify({ parts: assets.parts, tris: assets.tris }));
+
+  checks.check('the fountain stands on the ground and stays inside its collider',
+    assets.minY >= -0.001 && assets.height > 2 && assets.reach <= 2.15,
+    JSON.stringify({ minY: assets.minY, height: assets.height, reach: assets.reach }));
+
+  checks.check('the plaza is dressed with all three stone maps',
+    assets.state.stone === 'textured' && assets.plazaMaps &&
+    assets.plazaMaps.map && assets.plazaMaps.normal && assets.plazaMaps.rough,
+    JSON.stringify(assets.plazaMaps));
+
+  checks.check('the stone tiles at a believable scale and is not double-tinted',
+    assets.plazaMaps && assets.plazaMaps.repeat[0] === 6 &&
+    assets.plazaMaps.repeat[1] === 6 && assets.plazaMaps.color === 'ffffff',
+    JSON.stringify({ repeat: assets.plazaMaps && assets.plazaMaps.repeat, color: assets.plazaMaps && assets.plazaMaps.color }));
+
+  // The upgrade must not change gameplay: the fountain still blocks the player.
+  // Yaw 0 faces -Z (north), so walking forward from z=6 heads straight at it.
+  const fountainBlocks = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    api.player.placeAt(0, 6, 0);
+    api.player.setMoveInput(1, 0);
+    await new Promise((r) => setTimeout(r, 1800));
+    api.player.setMoveInput(0, 0);
+    const z = api.player.position.z;
+    return { z: Number(z.toFixed(2)), stoppedOutside: z > 1.9 };
+  });
+  checks.check('the modelled fountain is solid, not something you can walk through',
+    fountainBlocks.stoppedOutside,
+    JSON.stringify(fountainBlocks));
+
+  // Put the player back where the rest of the suite expects them.
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    api.player.setMoveInput(0, 0);
+    api.player.placeAt(0, 13, 0);
+  });
+
+  await capture(page, 'round28-fountain.png');
 
   // --- 27x. The deployable package is the game --------------------------------
   // The preview is built from the manifest, so this asserts the packaged artefact

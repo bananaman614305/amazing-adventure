@@ -210,7 +210,7 @@ async function playSession(browser, server, profile) {
     const api = window.amazingAdventure;
     api.stopGuidedTravel({ announceIt: false });
     document.getElementById('dialogue')?.setAttribute('hidden', '');
-    api.player.placeAt(0, 0, 0, 0);
+    api.player.placeAt(0, 4, 0, 0);
     api.player.frozen = false;
   });
   await wait(400);
@@ -275,7 +275,7 @@ async function playSession(browser, server, profile) {
     const api = window.amazingAdventure;
     document.getElementById('dialogue')?.setAttribute('hidden', '');
     api.touch.pause(false);
-    api.player.placeAt(0, 0, 0, 0);
+    api.player.placeAt(0, 4, 0, 0);
   });
   await wait(300);
   await hide();
