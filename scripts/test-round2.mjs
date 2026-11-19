@@ -2024,6 +2024,68 @@ try {
 
   await capture(page, 'round28-fountain.png');
 
+  // --- 28b. The modelled lantern posts ---------------------------------------
+  // The four plaza lamp posts swap a cylinder+sphere stand-in for a Blender
+  // model. The day/night cycle drives the bulb's emissive, and the GLB exporter
+  // drops Blender's emission factor, so the game must set it explicitly or the
+  // glow silently dies exactly when the model loads.
+  const lamps = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    const bulbs = [];
+    let models = 0;
+    let hiddenStandins = 0;
+    api.scene.traverse((o) => {
+      if (o.name === 'lamp-model') models += 1;
+      if (o.name === 'LampBulb') bulbs.push(o);
+      if (o.userData && o.userData.lampStandin && !o.visible) hiddenStandins += 1;
+    });
+    return {
+      state: api.assetState(),
+      models,
+      bulbs: bulbs.length,
+      hiddenStandins,
+      emissive: bulbs[0] ? bulbs[0].material.emissive.getHexString() : null,
+      intensity: bulbs[0] ? bulbs[0].material.emissiveIntensity : null
+    };
+  }));
+
+  checks.check('the modelled lantern posts replace the sphere stand-ins',
+    lamps.state.lamps === 'model' && lamps.models === 4 && lamps.hiddenStandins === 4,
+    JSON.stringify({ state: lamps.state.lamps, models: lamps.models, hidden: lamps.hiddenStandins }));
+
+  checks.check('the lantern bulbs keep their day/night glow after the model loads',
+    lamps.bulbs === 4 && lamps.emissive === 'ffb43a' && lamps.intensity > 0,
+    JSON.stringify({ bulbs: lamps.bulbs, emissive: lamps.emissive, intensity: lamps.intensity }));
+
+  await capture(page, 'round33-lamps.png');
+  // The lane walls carry the third Kaggle family (plaster). Same contract as
+  // the other families: three maps, white base so nothing is double-tinted.
+  const plaster = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    let wall = null;
+    api.scene.traverse((o) => {
+      if (o.isMesh && o.geometry.type === 'BoxGeometry' && o.material.map &&
+          o.position.y === 1.5 && !wall) {
+        wall = {
+          map: true,
+          normal: Boolean(o.material.normalMap),
+          rough: Boolean(o.material.roughnessMap),
+          color: o.material.color.getHexString(),
+          repeat: [o.material.map.repeat.x, o.material.map.repeat.y]
+        };
+      }
+    });
+    return { state: api.assetState(), wall };
+  }));
+  checks.check('the lane walls are dressed with all three plaster maps',
+    plaster.state.plaster === 'textured' && plaster.wall &&
+    plaster.wall.map && plaster.wall.normal && plaster.wall.rough,
+    JSON.stringify({ state: plaster.state.plaster, wall: plaster.wall }));
+  checks.check('the plaster tiles at wall scale and is not double-tinted',
+    plaster.wall && plaster.wall.repeat[0] === 7 && plaster.wall.color === 'ffffff',
+    JSON.stringify({ repeat: plaster.wall && plaster.wall.repeat, color: plaster.wall && plaster.wall.color }));
+
+
   // --- 27x. The deployable package is the game --------------------------------
   // The preview is built from the manifest, so this asserts the packaged artefact
   // against the manifest rather than trusting the build script.

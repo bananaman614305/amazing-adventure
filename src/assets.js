@@ -34,10 +34,21 @@ export const STALL_ASSET = 'assets/stall.glb';
 /** Authored size of the stall model, so instances can be scaled to fit. */
 export const STALL_MODEL_SIZE = { width: 1.2, depth: 3.2, height: 1.35 };
 
+export const LAMP_ASSET = 'assets/lamp.glb';
+
+/** Authored size of the lamp model: the post is 3 m, the lantern overhangs. */
+export const LAMP_MODEL_SIZE = { postHeight: 3.0, lanternHeight: 0.55 };
+
 export const WOOD_TEXTURE_FILES = {
   map: 'assets/textures/wood_albedo.png',
   normalMap: 'assets/textures/wood_normal.png',
   roughnessMap: 'assets/textures/wood_rough.png'
+};
+
+export const PLASTER_TEXTURE_FILES = {
+  map: 'assets/textures/plaster_albedo.png',
+  normalMap: 'assets/textures/plaster_normal.png',
+  roughnessMap: 'assets/textures/plaster_rough.png'
 };
 
 export const BRICK_TEXTURE_FILES = {
@@ -218,6 +229,40 @@ export async function loadStall({ THREE, loadGlb, url = STALL_ASSET, fetchImpl =
       : Infinity;
     if (reachX > 0.61 || reachZ > 1.61) {
       return { ok: false, reason: 'stall exceeds its collider', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
+/**
+ * Loads the lantern-post GLB. Same contract as loadStall: never throws, reports
+ * what happened, and refuses a model whose *base* does not fit the collider the
+ * game already registers for posts (0.4 x 0.4, so a 0.2 half-extent). The arm
+ * and lantern are allowed to overhang the collider -- only the post must fit.
+ */
+export async function loadLamp({ THREE, loadGlb, url = LAMP_ASSET, fetchImpl = fetch }) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    // The base parts (LampPost, LampBase) must sit inside the collider; the
+    // overhanging arm/lantern may not. Reject only on base overflow.
+    const baseMeshes = meshes.filter((m) => m.name === 'LampPost' || m.name === 'LampBase');
+    const check = baseMeshes.length ? baseMeshes : meshes;
+    const footprint = fountainFootprint(check);
+    const reachX = footprint
+      ? Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX))
+      : Infinity;
+    const reachZ = footprint
+      ? Math.max(Math.abs(footprint.minZ), Math.abs(footprint.maxZ))
+      : Infinity;
+    if (reachX > 0.21 || reachZ > 0.21) {
+      return { ok: false, reason: 'lamp base exceeds its collider', footprint, url };
     }
     return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
   } catch (error) {

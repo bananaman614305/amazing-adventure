@@ -53,3 +53,42 @@ of this game taken by that test. They are not game assets.
 licence, `vendor/THREE-LICENSE.txt`), included so the game can be served as a
 self-contained static preview with no CDN or network dependency. It is
 third-party code and is not modified.
+
+## Graphics rounds 28–33: Blender models and Kaggle-generated textures
+
+All art below was generated for this game by Grunt. Nothing was downloaded from
+an asset store, stock site or third-party model repository. The generation
+scripts are committed under `art/` so every asset is reproducible.
+
+### Models (headless Blender, `art/blender/`)
+
+| Asset | Script | Contents | Licence |
+| --- | --- | --- | --- |
+| `assets/fountain.glb` | `art/blender/make_fountain.py` | 332 tris, 12 meshes, 3 materials (Stone/StoneDark/Water), 22.6 KB | Generated for this game; same licence as the game |
+| `assets/barrel.glb` | `art/blender/make_barrel.py` | 3 meshes (body + 2 hoops), 15.9 KB | Generated for this game; same licence as the game |
+| `assets/stall.glb` | `art/blender/make_stall.py` | 96 tris, 8 meshes, 3 materials, 9.8 KB | Generated for this game; same licence as the game |
+| `assets/lamp.glb` | `art/blender/make_lamp.py` | 96 tris, 6 meshes (post/base/arm/housing/cap/bulb), 8.9 KB | Generated for this game; same licence as the game |
+
+Blender runs headless via `/worker/state/grunt-blender`. Meshes are built
+explicitly with `bmesh` (no boolean operations), flat-shaded, exported as GLB
+with Y-up conversion. Footprints are asserted against the game's colliders in
+each script. The GLB loader (`src/glb.js`) was written for this game.
+
+### Textures (Kaggle dual-T4 notebook, `art/kaggle/`)
+
+| Family | Script | Files | GPU / runtime | Licence |
+| --- | --- | --- | --- | --- |
+| stone | `art/kaggle/stone_textures.py` | `assets/textures/stone_{albedo,normal,rough}.png` | Tesla T4, CuPy, ~11 s | Generated for this game; same licence as the game |
+| wood + brick | `art/kaggle/wood_brick_textures.py` | `assets/textures/wood_*.png`, `assets/textures/brick_*.png` | Tesla T4, CuPy | Generated for this game; same licence as the game |
+| plaster | `art/kaggle/plaster_textures.py` | `assets/textures/plaster_{albedo,normal,rough}.png` | Tesla T4, CuPy, ~10 s | Generated for this game; same licence as the game |
+
+All textures are fully procedural (tileable value noise, explicit block/plank
+patterns, Sobel normals), 512×512, no external inputs. Each job measures
+seam ratios (wrap difference ÷ interior neighbour difference) and asserts they
+are below 3. The stone job's T4 output was verified byte-identical to a local
+NumPy run. PNGs were re-encoded losslessly with PIL (`optimize=True`) in
+round 31; pixel content is unchanged.
+
+Every model and texture is an **upgrade, never a dependency**: if a fetch
+fails, a decoder is missing, or a model exceeds its collider, the game keeps
+its procedural stand-in or flat colour and stays fully playable.

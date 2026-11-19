@@ -35,6 +35,7 @@ export const REQUIRED_FILES = [
   'assets/fountain.glb',
   'assets/barrel.glb',
   'assets/stall.glb',
+  'assets/lamp.glb',
   'assets/textures/wood_albedo.png',
   'assets/textures/wood_normal.png',
   'assets/textures/wood_rough.png',
@@ -44,6 +45,9 @@ export const REQUIRED_FILES = [
   'assets/textures/stone_albedo.png',
   'assets/textures/stone_normal.png',
   'assets/textures/stone_rough.png',
+  'assets/textures/plaster_albedo.png',
+  'assets/textures/plaster_normal.png',
+  'assets/textures/plaster_rough.png',
   'vendor/three.module.min.js',
   'vendor/THREE-LICENSE.txt'
 ];
