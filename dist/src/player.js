@@ -3,9 +3,12 @@ import * as THREE from 'three';
 // First-person controller: pointer-lock mouse look, WASD movement and sliding
 // AABB collision so the player never leaves the courtyard or walks through props.
 
+const WALK_SPEED = 4.2;
+const RUN_SPEED = 7.0;
 export const PLAYER_HEIGHT = 1.7;
 export const PLAYER_RADIUS = 0.42;
-const WALK_SPEED = 4.2;
+export const WALK_SPEED_EXPORT = WALK_SPEED;
+export const RUN_SPEED_EXPORT = RUN_SPEED;
 const ACCELERATION = 40;
 const DAMPING = 12;
 
@@ -113,6 +116,12 @@ export class Player {
     return this.velocity.lengthSq() > 0.35;
   }
 
+  /** True when the player is moving above walk speed (running). */
+  isRunning() {
+    const speed = Math.hypot(this.velocity.x, this.velocity.z);
+    return speed > WALK_SPEED * 0.75;
+  }
+
   update(dt) {
     const moving = this.enabled && !this.frozen;
     // Keyboard is digital, the stick is analog; take whichever asks for more so
@@ -141,11 +150,13 @@ export class Player {
       this.velocity.z += nz * ACCELERATION * dt * strength;
     }
 
-    // Cap the speed and apply damping so stopping feels immediate but not stiff.
+    // Shift runs; the cap follows so a held key actually speeds the player up.
+    const runHeld = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+    const cap = runHeld ? RUN_SPEED : WALK_SPEED;
     const speed = Math.hypot(this.velocity.x, this.velocity.z);
-    if (speed > WALK_SPEED) {
-      this.velocity.x = (this.velocity.x / speed) * WALK_SPEED;
-      this.velocity.z = (this.velocity.z / speed) * WALK_SPEED;
+    if (speed > cap) {
+      this.velocity.x = (this.velocity.x / speed) * cap;
+      this.velocity.z = (this.velocity.z / speed) * cap;
     }
     const damp = Math.exp(-DAMPING * dt);
     this.velocity.x *= damp;

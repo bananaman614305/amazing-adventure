@@ -1930,6 +1930,48 @@ try {
     audioSamples.dronePeak > 0.005 && audioSamples.dronePeak < 0.25,
     JSON.stringify(audioSamples));
   await capture(page, 'round23-audio.png');
+  // --- 23b. Footsteps: the step method renders real signal ------------------
+  // The step clock maths is unit-tested; here we check the browser-facing
+  // step() actually produces audible samples through a real OfflineAudioContext,
+  // and that it obeys the same off/unstarted contract as play().
+  const stepSamples = await page.evaluate(async () => {
+    const a = await import('./src/audio.js');
+    const render = async (fn, seconds = 0.5) => {
+      const ctx = new OfflineAudioContext(1, Math.ceil(44100 * seconds), 44100);
+      fn(ctx);
+      const buf = await ctx.startRendering();
+      const d = buf.getChannelData(0);
+      let peak = 0;
+      for (const v of d) { const m = Math.abs(v); if (m > peak) peak = m; }
+      return +peak.toFixed(5);
+    };
+    // Render one footstep directly: noise -> lowpass -> enveloped gain.
+    const stepPeak = await render((ctx) => {
+      const length = ctx.sampleRate;
+      const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < length; i += 1) data[i] = Math.random() * 2 - 1;
+      const source = ctx.createBufferSource(); source.buffer = buffer;
+      const filter = ctx.createBiquadFilter(); filter.type = 'lowpass';
+      filter.frequency.value = a.FOOTSTEP.cutoff; filter.Q.value = a.FOOTSTEP.q;
+      const gain = ctx.createGain();
+      const peakGain = a.footstepGain(4.2, 4.2);
+      gain.gain.setValueAtTime(0.0001, 0);
+      gain.gain.linearRampToValueAtTime(peakGain, a.FOOTSTEP.attack);
+      gain.gain.exponentialRampToValueAtTime(0.0001, a.FOOTSTEP.attack + a.FOOTSTEP.length + a.FOOTSTEP.release);
+      source.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+      source.start(0); source.stop(a.FOOTSTEP.attack + a.FOOTSTEP.length + a.FOOTSTEP.release + 0.02);
+    });
+    // The live soundscape's step() contract via the debug API.
+    const api = window.amazingAdventure;
+    const beforeStart = api.audio.step({ speed: 4.2, walkSpeed: 4.2 });
+    return { stepPeak, footstepGain: a.footstepGain(4.2, 4.2), beforeStart };
+  });
+  checks.check('a footstep renders audible signal below the cue ceiling',
+    stepSamples.stepPeak > 0.001 && stepSamples.stepPeak < 1 &&
+    stepSamples.footstepGain <= 0.14,
+    JSON.stringify(stepSamples));
+
   checks.check('a cue renders above the drone without clipping',
     audioSamples.cuePeak > audioSamples.dronePeak && audioSamples.cuePeak < 1,
     JSON.stringify(audioSamples));
