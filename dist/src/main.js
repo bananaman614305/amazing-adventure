@@ -1784,6 +1784,7 @@ window.amazingAdventure = {
     get started() { return sound.started; },
     get phase() { return sound.phase; },
     play: (name) => cue(name),
+    step: (opts) => { try { return sound.step(opts); } catch { return false; } },
     toggle: () => { const on = sound.toggle(); syncSoundToggle(); return on; },
     setEnabled: (on) => { const value = sound.setEnabled(on); syncSoundToggle(); return value; }
   },
