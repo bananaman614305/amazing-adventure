@@ -2217,6 +2217,24 @@ try {
     JSON.stringify(round40.state.cobbleDetail));
 
   await capture(page, 'round40-gate-cobble.png');
+  // --- 28g. The modelled house trim -----------------------------------------
+  const house = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    let models = 0;
+    let hidden = 0;
+    api.scene.traverse((o) => {
+      if (o.name === 'house-model') models += 1;
+      if (o.userData && o.userData.houseStandin && !o.visible) hidden += 1;
+    });
+    return { state: api.assetState(), models, hidden };
+  }));
+  checks.check('the modelled house trim replaces the roof slab and door box',
+    house.state.house === 'model' && house.models === 1 && house.hidden === 2,
+    JSON.stringify({ state: house.state.house, models: house.models,
+                    hidden: house.hidden }));
+
+  await capture(page, 'round41-house.png');
+
 
 
 
