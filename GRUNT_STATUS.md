@@ -373,39 +373,35 @@ instructions.
 
 ## Current task
 
-Round 29 — second graphics pass: modelled barrel + wood/brick textures.
-
-### What the tools produced
-
-- **Blender (headless, v5.0.1):** `art/blender/make_barrel.py` models a 308-triangle
-  coopered barrel (12 staves, 2 iron hoops, bulged profile) and exports it as
-  `assets/barrel.glb` (15.5 KB). Authored at the larger plaza size so one asset
-  serves both plaza (r=0.55) and lane (r=0.5) barrels via per-instance scaling.
-- **Kaggle (Tesla T4, CuPy, ~12 s):** `art/kaggle/wood_brick_textures.py` generates
-  tileable wood (vertical planks + grain + growth rings) and brick (running bond,
-  fired-clay) maps, 512x512, three maps each. Seam ratios 0.06-1.09. GPU output
-  matches local NumPy within 1 LSB.
+Round 30 — apply wood and brick textures to materials.
 
 ### What made it into the game
 
-- `src/assets.js`: added `loadBarrel` + `WOOD_TEXTURE_FILES` + `BARREL_ASSET`.
-- `src/world.js`: barrels upgraded asynchronously over procedural cylinders, same
-  fallback contract as the fountain. 4 instances, 12 mesh parts, 1232 tris total.
-- `src/manifest.js`: 40 required files (added barrel.glb + 6 new textures).
+- `src/world.js`: wood dresses the stalls, crates, bench and lamp posts; brick dresses
+  the house walls. Both use the shared `applyTextureFamily` helper so tiling and
+  anisotropy rules live in one place. Graceful fallback to flat colours when maps
+  fail to load (verified by blocking requests in round 28's pattern).
+- `src/assets.js`: generalized `loadStoneTextures` -> `loadMaterialTextures` (alias
+  kept for backwards compatibility) so any material family shares the same loader.
+- Added `BRICK_TEXTURE_FILES` constant.
 
-### Browser and mobile evidence
+### Browser evidence
 
 - `npm test`: 397/397 pass.
-- Desktop: 177/177 pass. Barrels state 'model', 4 groups, 12 parts, 1232 tris.
+- Desktop: 177/177 pass. Plaza and house both carry all 3 maps (albedo, normal,
+  roughness), base colour set to white so maps are not double-tinted.
 - Mobile: 185/185 pass across 4 profiles.
+- Asset state now reports `wood` and `brick` alongside `stone` and `barrels`.
 - 0 console errors, 0 failed requests.
 
 ### Honest limits
 
-- Did not visually inspect the GLB/PNGs (text-only).
-- Wood and brick textures are shipped but not yet applied to materials (barrels
-  and house still use flat colours). Applying them is the next graphics step.
-- Live Pages host not tested by me.
+- Did not visually inspect the result (text-only). Measured: plaza and house both
+  have map/normal/roughness loaded, color = #ffffff.
+- The wood repeat is a compromise (1.5 m) because one material covers both crates
+  and stalls; a per-mesh repeat would look better but needs per-mesh materials.
+
+## Previous round — Round 29: second graphics pass (barrel + wood/brick textures)
 
 ## Previous round — Round 28: the first graphics pass (fountain + stone)
 
