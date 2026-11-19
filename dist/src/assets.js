@@ -39,6 +39,11 @@ export const LAMP_ASSET = 'assets/lamp.glb';
 /** Authored size of the lamp model: the post is 3 m, the lantern overhangs. */
 export const LAMP_MODEL_SIZE = { postHeight: 3.0, lanternHeight: 0.55 };
 
+export const MARKET_STALL_ASSET = 'assets/market_stall.glb';
+
+/** Authored size of the market stall model (the larger of the two). */
+export const MARKET_STALL_MODEL_SIZE = { width: 4.0, depth: 0.4, height: 1.25 };
+
 export const WOOD_TEXTURE_FILES = {
   map: 'assets/textures/wood_albedo.png',
   normalMap: 'assets/textures/wood_normal.png',
@@ -263,6 +268,35 @@ export async function loadLamp({ THREE, loadGlb, url = LAMP_ASSET, fetchImpl = f
       : Infinity;
     if (reachX > 0.21 || reachZ > 0.21) {
       return { ok: false, reason: 'lamp base exceeds its collider', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
+/**
+ * Loads the market-stall GLB. Same contract as the others: never throws, and
+ * refuses a model whose base exceeds the larger collider (4.0 x 0.4, so a
+ * 2.0 wide / 0.2 deep half-extent). The smaller stall is a uniform scale-down.
+ */
+export async function loadMarketStall({ THREE, loadGlb, url = MARKET_STALL_ASSET, fetchImpl = fetch }) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const footprint = fountainFootprint(meshes);
+    const reachX = footprint
+      ? Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX))
+      : Infinity;
+    const reachZ = footprint
+      ? Math.max(Math.abs(footprint.minZ), Math.abs(footprint.maxZ))
+      : Infinity;
+    if (reachX > 2.05 || reachZ > 0.22) {
+      return { ok: false, reason: 'market stall exceeds its collider', footprint, url };
     }
     return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
   } catch (error) {
