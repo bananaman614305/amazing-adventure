@@ -125,6 +125,60 @@ export function textureRepeat(widthMeters, heightMeters, tileMeters = 2) {
 }
 
 /**
+ * Box-projects UVs for a flat-shaded model whose GLB carried no TEXCOORD_0.
+ *
+ * Why this exists: the Blender prop models are authored from untextured box
+ * primitives, so Blender writes no UVs for them. The wood texture can only
+ * dress a mesh that has UVs, so the loader generates them here instead of
+ * re-authoring every model with a UV unwrap.
+ *
+ * Box projection puts each triangle in the plane of its dominant normal axis:
+ * a face pointing mostly along x gets (z, y) as its UV pair, and so on. That is
+ * exactly right for crate/slab geometry (no stretching on the flat faces) and
+ * cheap enough to do once at load time.
+ *
+ * Pure: positions in, UVs out, no THREE. `indices` may be null for
+ * already-expanded geometry. Returns UVs in the same order as `positions`.
+ */
+export function boxProjectUvs({ positions, indices = null, tileMeters = 1 }) {
+  const tile = Number.isFinite(tileMeters) && tileMeters > 0 ? tileMeters : 1;
+  const uvs = new Float32Array((positions.length / 3) * 2);
+  const triangleCount = indices ? indices.length / 3 : positions.length / 9;
+
+  const projected = (i, nx, ny, nz) => {
+    const x = positions[i * 3];
+    const y = positions[i * 3 + 1];
+    const z = positions[i * 3 + 2];
+    const ax = Math.abs(nx);
+    const ay = Math.abs(ny);
+    const az = Math.abs(nz);
+    if (ax >= ay && ax >= az) return [z / tile, y / tile];
+    if (ay >= az) return [x / tile, z / tile];
+    return [x / tile, y / tile];
+  };
+
+  for (let t = 0; t < triangleCount; t += 1) {
+    const a = indices ? indices[t * 3] : t * 3;
+    const b = indices ? indices[t * 3 + 1] : t * 3 + 1;
+    const c = indices ? indices[t * 3 + 2] : t * 3 + 2;
+    const ax = positions[a * 3], ay = positions[a * 3 + 1], az = positions[a * 3 + 2];
+    const e1x = positions[b * 3] - ax, e1y = positions[b * 3 + 1] - ay,
+      e1z = positions[b * 3 + 2] - az;
+    const e2x = positions[c * 3] - ax, e2y = positions[c * 3 + 1] - ay,
+      e2z = positions[c * 3 + 2] - az;
+    const nx = e1y * e2z - e1z * e2y;
+    const ny = e1z * e2x - e1x * e2z;
+    const nz = e1x * e2y - e1y * e2x;
+    for (const i of [a, b, c]) {
+      const [u, v] = projected(i, nx, ny, nz);
+      uvs[i * 2] = u;
+      uvs[i * 2 + 1] = v;
+    }
+  }
+  return uvs;
+}
+
+/**
  * Chooses the material settings for the stone given whether textures loaded.
  * With textures: white base colour so the map is not tinted twice, plus normal
  * and roughness maps. Without: the original flat colour, so the plaza still reads
