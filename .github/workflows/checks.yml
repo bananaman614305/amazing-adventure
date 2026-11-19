@@ -1,0 +1,85 @@
+name: checks
+
+# Run on every pull request and on every push to main.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to the same branch cancels the superseded run.
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: install, build, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # On a pull request this checks out the pull request's own tree, so the
+      # steps below act on the code being reviewed, not on main.
+      - name: Look for a package manifest
+        id: manifest
+        run: |
+          if [ -f package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "package.json found: install, build and test will run."
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No package.json on this revision: install, build and test are skipped."
+          fi
+
+      # Two setup steps rather than one with a computed cache input, because
+      # setup-node fails the job when it is told to cache and finds no lock file.
+      - name: Set up Node.js with the npm cache
+        if: steps.manifest.outputs.present == 'true' && hashFiles('package-lock.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Set up Node.js
+        if: steps.manifest.outputs.present == 'true' && hashFiles('package-lock.json') == ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        if: steps.manifest.outputs.present == 'true'
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      # The game ships as plain ES modules with no bundler, so --if-present
+      # keeps "build" a no-op until a build script is added.
+      - name: Build
+        if: steps.manifest.outputs.present == 'true'
+        run: npm run build --if-present
+
+      # Run the tests a revision actually has: its own test script if it has
+      # one, otherwise any node:test suite under tests/. A revision with
+      # neither is reported, not silently passed.
+      - name: Test
+        if: steps.manifest.outputs.present == 'true'
+        run: |
+          if node -e "process.exit(require('./package.json').scripts?.test ? 0 : 1)"; then
+            npm test
+          elif compgen -G 'tests/*.test.mjs' > /dev/null; then
+            node --test tests/*.test.mjs
+          else
+            echo "No test script and no tests/ directory on this revision, so no tests ran."
+          fi
+
+      - name: Nothing to install on this revision
+        if: steps.manifest.outputs.present == 'false'
+        run: echo "No package.json on this revision, so there is nothing to install, build or test."
