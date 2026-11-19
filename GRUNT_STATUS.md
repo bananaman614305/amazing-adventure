@@ -373,33 +373,30 @@ instructions.
 
 ## Current task
 
-Round 30 — apply wood and brick textures to materials.
+Round 31 — optimize texture PNGs for deploy weight.
 
-### What made it into the game
+### What was done
 
-- `src/world.js`: wood dresses the stalls, crates, bench and lamp posts; brick dresses
-  the house walls. Both use the shared `applyTextureFamily` helper so tiling and
-  anisotropy rules live in one place. Graceful fallback to flat colours when maps
-  fail to load (verified by blocking requests in round 28's pattern).
-- `src/assets.js`: generalized `loadStoneTextures` -> `loadMaterialTextures` (alias
-  kept for backwards compatibility) so any material family shares the same loader.
-- Added `BRICK_TEXTURE_FILES` constant.
+- Re-encoded all 9 texture PNGs with PIL adaptive filtering + compress_level 9.
+  Same 512x512 RGB pixels, lossless. Total texture weight: 1.7 MB -> 1.2 MB
+  (saved 495 KB). Biggest win: wood_normal 667 -> 471 KB, stone_normal 215 -> 104 KB.
+- Preview rebuilt: 40 files, 2.2 MB (was 2.7 MB).
 
 ### Browser evidence
 
 - `npm test`: 397/397 pass.
-- Desktop: 177/177 pass. Plaza and house both carry all 3 maps (albedo, normal,
-  roughness), base colour set to white so maps are not double-tinted.
-- Mobile: 185/185 pass across 4 profiles.
-- Asset state now reports `wood` and `brick` alongside `stone` and `barrels`.
+- Desktop: 177/177 pass. Mobile: 185/185 pass across 4 profiles.
+- Probe: all materials still carry their maps (plaza stone, house brick, all textured).
 - 0 console errors, 0 failed requests.
 
 ### Honest limits
 
-- Did not visually inspect the result (text-only). Measured: plaza and house both
-  have map/normal/roughness loaded, color = #ffffff.
-- The wood repeat is a compromise (1.5 m) because one material covers both crates
-  and stalls; a per-mesh repeat would look better but needs per-mesh materials.
+- Did not visually inspect the re-encoded PNGs (text-only). PIL round-trip confirms
+  dimensions and mode are unchanged; pixel-level comparison was not run because
+  numpy is unavailable in this environment without the openblas LD_LIBRARY_PATH.
+- The preview is now 2.2 MB, still mostly textures + three.module.min.js (655 KB).
+
+## Previous round — Round 30: apply wood and brick textures to materials
 
 ## Previous round — Round 29: second graphics pass (barrel + wood/brick textures)
 
