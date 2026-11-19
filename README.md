@@ -249,3 +249,5 @@ is in the game now:
 The logic files import nothing from Three.js, so `npm test` runs the whole story
 and save system in Node without a browser. `scripts/test-round2.mjs` then plays
 the game through the real DOM in headless Chrome.
+
+See `DEPLOY.md` for serving a self-contained, versioned preview.
