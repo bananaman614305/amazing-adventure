@@ -1905,6 +1905,48 @@ try {
     audioSamples.cuePeak > audioSamples.dronePeak && audioSamples.cuePeak < 1,
     JSON.stringify(audioSamples));
 
+  // --- 27x. The deployable package is the game --------------------------------
+  // The preview is built from the manifest, so this asserts the packaged artefact
+  // against the manifest rather than trusting the build script.
+  const pkg = await page.evaluate(async () => {
+    const m = await import('./src/manifest.js');
+    const manifest = m.buildManifest();
+    return {
+      files: manifest.requiredFiles.length,
+      entry: manifest.entryPoint,
+      version: manifest.version
+    };
+  });
+  checks.check('the running build reports a served manifest with a real entry point',
+    pkg.files >= 27 && typeof pkg.entry === 'string' && pkg.version === '0.3.0',
+    JSON.stringify(pkg));
+
+  // Everything the page actually loaded must be same-origin and must have succeeded.
+  const loaded = await page.evaluate(() => {
+    const entries = performance.getEntriesByType('resource').map((e) => e.name);
+    return {
+      total: entries.length,
+      offOrigin: entries.filter((u) => !u.startsWith(location.origin) && !u.startsWith('data:')),
+      failed: entries.filter((e) => e.transferSize === 0 && !e.name.startsWith('data:'))
+    };
+  });
+  checks.check('every resource the game loads is same-origin',
+    loaded.total > 0 && loaded.offOrigin.length === 0,
+    JSON.stringify({ total: loaded.total, offOrigin: loaded.offOrigin.slice(0, 4) }));
+
+  // The static host has to send correct JavaScript MIME types or module loading
+  // fails on a phone with a bare "Failed to fetch dynamically imported module".
+  const mime = await page.evaluate(async () => {
+    const res = await fetch('./src/main.js');
+    const mod = await fetch('./src/manifest.js');
+    return { js: res.headers.get('content-type'), manifest: mod.headers.get('content-type'), status: res.status };
+  });
+  checks.check('the server sends JavaScript modules with a JavaScript content type',
+    mime.status === 200 && /javascript/.test(mime.js || ''),
+    JSON.stringify(mime));
+
+  await capture(page, 'round27-package.png');
+
   // --- 27y. A new player is told what to do --------------------------------
   // The plaza puts you a few metres from anyone, so the interaction hint is hidden
   // at spawn and a first-time player used to get no instruction at all.

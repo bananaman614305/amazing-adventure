@@ -28,7 +28,13 @@ export async function startServer() {
   const port = await freePort();
   const child = spawn(process.execPath, ['server.mjs'], {
     cwd: ROOT,
-    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1' },
+    // SERVE_DIR is passed through so the suite can be pointed at the built preview.
+    env: {
+      ...process.env,
+      PORT: String(port),
+      HOST: '127.0.0.1',
+      ...(process.env.SERVE_DIR ? { SERVE_DIR: process.env.SERVE_DIR } : {})
+    },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   const base = `http://127.0.0.1:${port}`;
