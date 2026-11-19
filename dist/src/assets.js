@@ -24,6 +24,22 @@ export const STONE_TEXTURE_FILES = {
 };
 
 export const FOUNTAIN_ASSET = 'assets/fountain.glb';
+export const BARREL_ASSET = 'assets/barrel.glb';
+
+/** Authored size of the barrel model, so instances can be scaled to fit. */
+export const BARREL_MODEL_SIZE = { radius: 0.46, height: 1.30 };
+
+export const WOOD_TEXTURE_FILES = {
+  map: 'assets/textures/wood_albedo.png',
+  normalMap: 'assets/textures/wood_normal.png',
+  roughnessMap: 'assets/textures/wood_rough.png'
+};
+
+export const BRICK_TEXTURE_FILES = {
+  map: 'assets/textures/brick_albedo.png',
+  normalMap: 'assets/textures/brick_normal.png',
+  roughnessMap: 'assets/textures/brick_rough.png'
+};
 
 /**
  * Whether the current context can load local assets at all. `fetch` is absent in
@@ -149,15 +165,42 @@ export async function loadFountain({ THREE, loadGlb, url = FOUNTAIN_ASSET, fetch
 }
 
 /**
- * Loads the three stone maps. Resolves to nulls for any that fail.
- *
- * `createBitmap` is injectable because the decode step needs a browser API
- * (`createImageBitmap`) that Node does not have. Without a decoder a texture
- * cannot exist, so this returns nulls rather than pretending otherwise -- the
- * material then falls back to its flat colour. Tests supply a fake decoder so
- * the success path is exercised too.
+ * Loads the barrel GLB. Same contract as loadFountain: never throws, reports
+ * what happened, and refuses a model that does not fit the collider the game
+ * already registers for barrels (1.1 x 1.1, so a 0.55 half-extent).
  */
-export async function loadStoneTextures({
+export async function loadBarrel({ THREE, loadGlb, url = BARREL_ASSET, fetchImpl = fetch }) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const footprint = fountainFootprint(meshes);
+    const reach = footprint
+      ? Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX),
+                 Math.abs(footprint.minZ), Math.abs(footprint.maxZ))
+      : Infinity;
+    if (reach > 0.55) {
+      return { ok: false, reason: 'barrel exceeds its collider', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
+/**
+ * Loads a set of three maps (albedo / normal / roughness) for one material family.
+ * Shared by stone, wood and brick; `files` selects which family.
+ *
+ * Resolves to nulls for any map that fails. `createBitmap` is injectable because
+ * the decode step needs a browser API (`createImageBitmap`) that Node does not
+ * have. Without a decoder a texture cannot exist, so this returns nulls rather
+ * than pretending otherwise -- the material then falls back to its flat colour.
+ */
+export async function loadMaterialTextures({
   THREE, files = STONE_TEXTURE_FILES, fetchImpl = fetch,
   createBitmap = typeof createImageBitmap === 'function' ? createImageBitmap : null
 } = {}) {
@@ -180,3 +223,6 @@ export async function loadStoneTextures({
   ]);
   return { map, normalMap, roughnessMap, anyLoaded: Boolean(map || normalMap || roughnessMap) };
 }
+
+/** Backwards-compatible alias: the stone family is the original user. */
+export const loadStoneTextures = loadMaterialTextures;

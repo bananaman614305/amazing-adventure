@@ -373,6 +373,38 @@ instructions.
 
 ## Current task
 
+Round 30 — apply wood and brick textures to materials.
+
+### What made it into the game
+
+- `src/world.js`: wood dresses the stalls, crates, bench and lamp posts; brick dresses
+  the house walls. Both use the shared `applyTextureFamily` helper so tiling and
+  anisotropy rules live in one place. Graceful fallback to flat colours when maps
+  fail to load (verified by blocking requests in round 28's pattern).
+- `src/assets.js`: generalized `loadStoneTextures` -> `loadMaterialTextures` (alias
+  kept for backwards compatibility) so any material family shares the same loader.
+- Added `BRICK_TEXTURE_FILES` constant.
+
+### Browser evidence
+
+- `npm test`: 397/397 pass.
+- Desktop: 177/177 pass. Plaza and house both carry all 3 maps (albedo, normal,
+  roughness), base colour set to white so maps are not double-tinted.
+- Mobile: 185/185 pass across 4 profiles.
+- Asset state now reports `wood` and `brick` alongside `stone` and `barrels`.
+- 0 console errors, 0 failed requests.
+
+### Honest limits
+
+- Did not visually inspect the result (text-only). Measured: plaza and house both
+  have map/normal/roughness loaded, color = #ffffff.
+- The wood repeat is a compromise (1.5 m) because one material covers both crates
+  and stalls; a per-mesh repeat would look better but needs per-mesh materials.
+
+## Previous round — Round 29: second graphics pass (barrel + wood/brick textures)
+
+## Previous round — Round 28: the first graphics pass (fountain + stone)
+
 Round 28 — the first graphics pass: a modelled fountain and tileable stone textures.
 
 PRs #5–#28 are published and open. This round used the two owner-enabled art tools
