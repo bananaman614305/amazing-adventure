@@ -1967,6 +1967,48 @@ try {
     const beforeStart = api.audio.step({ speed: 4.2, walkSpeed: 4.2 });
     return { stepPeak, footstepGain: a.footstepGain(4.2, 4.2), beforeStart };
   });
+  // --- 23c. The lane ambience bed ------------------------------------------
+  // The bed is only audible in the market lane, and it must be demonstrably
+  // quieter than the drone it sits under.
+  const bed = await page.evaluate(async () => {
+    const a = await import('./src/audio.js');
+    const api = window.amazingAdventure;
+    const render = async (seconds = 0.6) => {
+      const ctx = new OfflineAudioContext(1, Math.ceil(44100 * seconds), 44100);
+      const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
+      const source = ctx.createBufferSource(); source.buffer = buffer; source.loop = true;
+      const filter = ctx.createBiquadFilter(); filter.type = 'lowpass';
+      filter.frequency.value = a.LANE_BED_CUTOFF; filter.Q.value = 0.7;
+      const gain = ctx.createGain(); gain.gain.value = a.laneBedGain('lane', false, 0.7);
+      source.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
+      source.start(0);
+      const buf = await ctx.startRendering();
+      const d = buf.getChannelData(0);
+      let peak = 0;
+      for (const v of d) { const m = Math.abs(v); if (m > peak) peak = m; }
+      return +peak.toFixed(5);
+    };
+    const bedPeak = await render();
+    return {
+      bedPeak,
+      lane: a.laneBedGain('lane', false, 0.7),
+      plaza: a.laneBedGain('plaza', false, 0.7),
+      muted: a.laneBedGain('lane', true, 0.7),
+      droneGain: a.phaseTone('day').gain,
+      apiArea: api.audio.area
+    };
+  });
+  checks.check('the lane ambience bed only sounds in the lane, and stays under the drone',
+    bed.lane > 0 && bed.plaza === 0 && bed.muted === 0 &&
+    bed.lane < bed.droneGain && bed.bedPeak > 0.0005 && bed.bedPeak < 0.2,
+    JSON.stringify(bed));
+
+  checks.check('the running game tracks the player\'s area for the ambience bed',
+    typeof bed.apiArea === 'string' && bed.apiArea.length > 0,
+    JSON.stringify({ area: bed.apiArea }));
+
   checks.check('a footstep renders audible signal below the cue ceiling',
     stepSamples.stepPeak > 0.001 && stepSamples.stepPeak < 1 &&
     stepSamples.footstepGain <= 0.14,
