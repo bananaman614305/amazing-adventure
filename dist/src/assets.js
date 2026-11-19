@@ -35,6 +35,12 @@ export const WOOD_TEXTURE_FILES = {
   roughnessMap: 'assets/textures/wood_rough.png'
 };
 
+export const BRICK_TEXTURE_FILES = {
+  map: 'assets/textures/brick_albedo.png',
+  normalMap: 'assets/textures/brick_normal.png',
+  roughnessMap: 'assets/textures/brick_rough.png'
+};
+
 /**
  * Whether the current context can load local assets at all. `fetch` is absent in
  * some embedded webviews and `file://` pages cannot fetch siblings even when
@@ -186,15 +192,15 @@ export async function loadBarrel({ THREE, loadGlb, url = BARREL_ASSET, fetchImpl
 }
 
 /**
- * Loads the three stone maps. Resolves to nulls for any that fail.
+ * Loads a set of three maps (albedo / normal / roughness) for one material family.
+ * Shared by stone, wood and brick; `files` selects which family.
  *
- * `createBitmap` is injectable because the decode step needs a browser API
- * (`createImageBitmap`) that Node does not have. Without a decoder a texture
- * cannot exist, so this returns nulls rather than pretending otherwise -- the
- * material then falls back to its flat colour. Tests supply a fake decoder so
- * the success path is exercised too.
+ * Resolves to nulls for any map that fails. `createBitmap` is injectable because
+ * the decode step needs a browser API (`createImageBitmap`) that Node does not
+ * have. Without a decoder a texture cannot exist, so this returns nulls rather
+ * than pretending otherwise -- the material then falls back to its flat colour.
  */
-export async function loadStoneTextures({
+export async function loadMaterialTextures({
   THREE, files = STONE_TEXTURE_FILES, fetchImpl = fetch,
   createBitmap = typeof createImageBitmap === 'function' ? createImageBitmap : null
 } = {}) {
@@ -217,3 +223,6 @@ export async function loadStoneTextures({
   ]);
   return { map, normalMap, roughnessMap, anyLoaded: Boolean(map || normalMap || roughnessMap) };
 }
+
+/** Backwards-compatible alias: the stone family is the original user. */
+export const loadStoneTextures = loadMaterialTextures;

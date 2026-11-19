@@ -5,8 +5,9 @@ import {
 } from './areas.js';
 import {
   FOUNTAIN_SPOT, FOUNTAIN_COLLIDER, canLoadAssets, textureRepeat,
-  stoneMaterialParams, loadFountain, loadStoneTextures,
-  BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, WOOD_TEXTURE_FILES
+  stoneMaterialParams, loadFountain, loadMaterialTextures,
+  BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES,
+  BRICK_TEXTURE_FILES
 } from './assets.js';
 import { loadGlb } from './glb.js';
 
@@ -235,6 +236,9 @@ export function buildWorld(renderer) {
   // --- North terrace + ramp ----------------------------------------------
   const stepStone = new THREE.MeshStandardMaterial({ color: 0x9a9184, roughness: 0.9 });
   const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.75 });
+  // The house walls get brick; stalls, crates, bench and lamp posts stay wood.
+  // Both are upgraded in place by upgradeWoodBrick() if the maps load.
+  const brickMat = new THREE.MeshStandardMaterial({ color: 0x8b4a3a, roughness: 0.9 });
 
   const terrace = new THREE.Mesh(
     new THREE.BoxGeometry(TERRACE.maxX - TERRACE.minX, TERRACE.height, TERRACE.maxZ - TERRACE.minZ),
@@ -356,7 +360,7 @@ export function buildWorld(renderer) {
   ));
 
   // A small house on the north-west side gives the space a landmark.
-  addBox(scene, colliders, { size: [7, 3, 5], position: [-10.5, 1.5, -9], material: wood, castShadow: true });
+  addBox(scene, colliders, { size: [7, 3, 5], position: [-10.5, 1.5, -9], material: brickMat, castShadow: true });
   addBox(scene, colliders, { size: [8, 0.6, 6], position: [-10.5, 3.3, -9], material: roof, castShadow: true });
   addBox(scene, colliders, { size: [1.4, 2.2, 0.3], position: [-10.5, 1.1, -6.35], material: stone });
 
@@ -522,6 +526,8 @@ export function buildWorld(renderer) {
     fountain: 'stand-in',
     stone: 'flat',
     barrels: 'cylinders',
+    wood: 'flat',
+    brick: 'flat',
     fountainDetail: null,
     stoneDetail: null,
     barrelDetail: null
@@ -627,6 +633,34 @@ export function buildWorld(renderer) {
     });
   }
 
+  /**
+   * Applies one loaded texture family to a material. Shared by stone, wood and
+   * brick so the tiling/anisotropy rules live in exactly one place.
+   * `widthMeters`/`heightMeters` pick the repeat so texel density stays sane.
+   */
+  function applyTextureFamily(material, textures, widthMeters, heightMeters, tileMeters) {
+    let applied = 0;
+    for (const [key, texture] of Object.entries(textures)) {
+      if (!texture || key === 'anyLoaded') continue;
+      const repeat = textureRepeat(widthMeters, heightMeters, tileMeters);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(repeat.repeatX, repeat.repeatY);
+      texture.anisotropy = Math.min(4, renderer.capabilities?.getMaxAnisotropy?.() ?? 1);
+      applied += 1;
+    }
+    // A textured map must not be tinted twice: white base, and the maps carry
+    // the roughness/metalness detail.
+    material.color.setHex(0xffffff);
+    material.roughness = 1;
+    material.metalness = 0;
+    if (textures.map) material.map = textures.map;
+    if (textures.normalMap) material.normalMap = textures.normalMap;
+    if (textures.roughnessMap) material.roughnessMap = textures.roughnessMap;
+    material.needsUpdate = true;
+    return applied;
+  }
+
   function upgradeStone() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -636,33 +670,54 @@ export function buildWorld(renderer) {
       assetState.stone = 'unavailable';
       return Promise.resolve(assetState);
     }
-    return loadStoneTextures({ THREE }).then((textures) => {
+    return loadMaterialTextures({ THREE, files: STONE_TEXTURE_FILES }).then((textures) => {
       if (!textures.anyLoaded) {
         assetState.stone = 'flat';
         return assetState;
       }
-      for (const [key, texture] of Object.entries(textures)) {
-        if (!texture || key === 'anyLoaded') continue;
-        // The plaza is a 9 m radius disc; a ~3 m tile keeps the blocks a
-        // believable size underfoot rather than stretched or miniaturised.
-        const repeat = textureRepeat(18, 18, 3);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(repeat.repeatX, repeat.repeatY);
-        texture.anisotropy = Math.min(4, renderer.capabilities?.getMaxAnisotropy?.() ?? 1);
-      }
-      const params = stoneMaterialParams(true);
-      plazaMaterial.color.setHex(params.color);
-      plazaMaterial.roughness = params.roughness;
-      plazaMaterial.metalness = params.metalness;
-      if (textures.map) plazaMaterial.map = textures.map;
-      if (textures.normalMap) plazaMaterial.normalMap = textures.normalMap;
-      if (textures.roughnessMap) plazaMaterial.roughnessMap = textures.roughnessMap;
-      plazaMaterial.needsUpdate = true;
+      // The plaza is a 9 m radius disc; a ~3 m tile keeps the blocks a
+      // believable size underfoot rather than stretched or miniaturised.
+      applyTextureFamily(plazaMaterial, textures, 18, 18, 3);
       assetState.stone = 'textured';
       assetState.stoneDetail = {
         maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k])
       };
+      return assetState;
+    });
+  }
+
+  function upgradeWoodBrick() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.wood = 'unavailable';
+      assetState.brick = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    // Wood dresses the stalls, crates, bench and lamp posts; brick the house
+    // walls. A 1.2 m crate and a 7 m wall want very different repeats, but they
+    // share one material each, so the tile size is a compromise: 1.5 m for wood
+    // (planks read at crate scale) and 2 m for brick (courses read at wall scale).
+    return Promise.all([
+      loadMaterialTextures({ THREE, files: WOOD_TEXTURE_FILES }),
+      loadMaterialTextures({ THREE, files: BRICK_TEXTURE_FILES })
+    ]).then(([wood, brick]) => {
+      assetState.wood = wood.anyLoaded ? 'textured' : 'flat';
+      assetState.brick = brick.anyLoaded ? 'textured' : 'flat';
+      if (wood.anyLoaded) {
+        applyTextureFamily(woodMat, wood, 1.5, 1.5, 1.5);
+        assetState.woodDetail = {
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => wood[k])
+        };
+      }
+      if (brick.anyLoaded) {
+        applyTextureFamily(brickMat, brick, 7, 3, 2);
+        assetState.brickDetail = {
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => brick[k])
+        };
+      }
       return assetState;
     });
   }
@@ -700,7 +755,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStone()]).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {
