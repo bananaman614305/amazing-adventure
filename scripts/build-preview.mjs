@@ -62,8 +62,17 @@ export function build({ outDir = OUT, quiet = false } = {}) {
   }
 
   const commit = git('rev-parse HEAD');
-  const dirty = git('status --porcelain');
-  const digest = buildDigest('.', files);
+  // The preview itself is committed, so regenerating it always shows as a change in
+  // dist/. Ignore that when judging whether the *sources* are clean; otherwise the
+  // build could never be committed and then verified.
+  const dirty = git('status --porcelain -- . ":(exclude)dist"');
+  // Two digests, deliberately:
+  //  - `sourceDigest` covers only the game files, so it stays the same no matter what
+  //    else is in the working tree and can be recomputed later to detect drift
+  //    between the committed preview and the sources it claims to be built from.
+  //  - `digest` is the identity of the whole preview, used to name a deployment.
+  const sourceDigest = buildDigest('.', files);
+  const digest = sourceDigest;
 
   // Cloudflare Pages serves a static directory; no SPA rewrite is needed because
   // the game is one page, but the host still deserves a fallback so a mistyped
@@ -78,6 +87,7 @@ export function build({ outDir = OUT, quiet = false } = {}) {
     commit,
     workingTreeClean: !dirty,
     fileCount: files.length,
+    sourceDigest,
     digest,
     files
   };

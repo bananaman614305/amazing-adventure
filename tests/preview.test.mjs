@@ -4,10 +4,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, existsSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { build, previewFiles } from '../scripts/build-preview.mjs';
 import { buildManifest } from '../src/manifest.js';
+
+const require = createRequire(import.meta.url);
 
 const make = () => {
   const dir = mkdtempSync(join(tmpdir(), 'aa-preview-'));
@@ -76,6 +79,26 @@ test('the preview is accompanied by machine-readable metadata', () => {
     assert.ok(typeof meta.commit === 'string' && meta.commit.length >= 7, 'the commit is recorded');
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the committed preview matches the committed sources', () => {
+  // dist/ is checked in so a deployment is a plain upload of known bytes. That is
+  // only safe if the bytes cannot go stale: rebuild from HEAD and compare the digest
+  // the sources produce with the digest recorded in the committed preview.json.
+  const { existsSync, readFileSync } = require('node:fs');
+  const committedPath = join(process.cwd(), 'dist', 'preview.json');
+  if (!existsSync(committedPath)) {
+    assert.ok(true, 'no committed preview in this checkout');
+    return;
+  }
+  const committed = JSON.parse(readFileSync(committedPath, 'utf8'));
+  const rebuilt = make();
+  try {
+    assert.equal(rebuilt.meta.sourceDigest, committed.sourceDigest,
+      'dist/ is stale: run `node scripts/build-preview.mjs` and commit the result');
+  } finally {
+    rmSync(rebuilt.dir, { recursive: true, force: true });
   }
 });
 
