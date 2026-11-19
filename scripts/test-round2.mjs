@@ -2305,6 +2305,45 @@ try {
     JSON.stringify(quality.back));
 
   await capture(page, 'round43-quality.png');
+  // --- 28j. The modelled cast ------------------------------------------------
+  // The NPCs upgrade from procedural cylinders to Blender figures with jointed
+  // limbs. The owner's complaint was visual, so the checks measure the things
+  // that make it true: per-character modes, limb pivots, and a real walk cycle.
+  const cast = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const cast = await api.castReady;
+    const mara = api.npcs.find((n) => n.id === 'mara');
+    const meshNames = [];
+    mara.group.traverse((o) => { if (o.isMesh) meshNames.push(o.name); });
+    // Send Mara walking and sample the cycle through the real game loop.
+    mara.target = { x: mara.group.position.x + 6, z: mara.group.position.z };
+    const samples = [];
+    for (let i = 0; i < 8; i += 1) {
+      await new Promise((r) => setTimeout(r, 120));
+      samples.push(mara.limbs.legL.rotation.x, mara.limbs.legR.rotation.x);
+    }
+    return {
+      cast, meshNames,
+      modes: api.npcs.map((n) => n.mode),
+      swingRange: Math.max(...samples.map(Math.abs)),
+      alternating: samples[0] * samples[1] < 0
+    };
+  });
+  checks.check('every NPC wears its modelled rig, not the cylinder fallback',
+    cast.modes.every((m) => m === 'model') && cast.cast.loaded === 6,
+    JSON.stringify({ modes: cast.modes, loaded: cast.cast.loaded }));
+  checks.check('the cast rig carries the modelled detail meshes',
+    ['Torso', 'Head', 'Nose', 'Hair'].every((n) => cast.meshNames.includes(n)) &&
+    cast.meshNames.some((n) => n.startsWith('Prop')),
+    JSON.stringify({ meshes: cast.meshNames.length }));
+  checks.check('the modelled cast walks with real limb swings',
+    cast.swingRange > 0.15 && cast.alternating,
+    JSON.stringify({ swingRange: Number(cast.swingRange.toFixed(3)),
+                    alternating: cast.alternating }));
+
+  await capture(page, 'round44-cast.png');
+
 
 
 
