@@ -373,47 +373,65 @@ instructions.
 
 ## Current task
 
-Round 41 — modelled house trim (gable roof, chimney, windows, door surround).
+Round 42 — UV mapping for prop models (box projection). The wood texture now
+dresses the models, not just the floors and walls.
+
+### Why this was the gap
+
+Every prop GLB is authored from untextured box primitives, so Blender writes no
+UV layer (`TEXCOORD_0` absent in crates.glb and bench.glb, measured). Without
+UVs a texture cannot be applied, which is why the Kaggle wood map only ever
+reached the procedural floors, walls and counters.
 
 ### What made it into the game
 
-- `art/blender/make_house.py` -> `assets/house.glb`: 172 tris, 15 meshes, 5
-  materials, 17.6 KB. Two roof slopes + ridge cap + brick gable infills, a
-  chimney with stone cap, two framed windows with dark panes, and a stone door
-  surround with plank door. Overlays the procedural brick body, which keeps its
-  Kaggle brick texture; roof slab and door box stand-ins are hidden, all
-  colliders stay.
-- `src/assets.js`: HOUSE_ASSET/HOUSE_MODEL_SIZE/loadHouse (span + ground checks).
-- `src/world.js`: upgradeHouse(); assetState.house reports 'model'.
-- `src/manifest.js`: 54 required files. Preview 3.52 MB.
+- `src/glb.js`: reads `TEXCOORD_0` into a `uv` attribute when present. Absent UVs
+  stay absent rather than throwing — that is the current case for every prop.
+- `src/assets.js`: `boxProjectUvs()` — pure box projection in metres. Per
+  triangle it picks the dominant normal axis and projects onto the matching
+  plane, so flat crate/slab faces get no stretching. Honours an index buffer or
+  already-expanded geometry, and takes the tile size as a parameter.
+- `src/world.js`: a `propGroups` registry (bench, notice, crates, gate door,
+  house) plus `upgradePropWood()`, which runs after the wood family loads.
+  It dresses only meshes whose material name matches `/Wood/`, so iron bands,
+  glass panes and stone trim stay flat and read as different materials.
+  UVs are in metres, so texture repeat is 1:1 at the authored tile size.
+- No new asset files; the manifest is unchanged at 54 files. Preview 3.53 MB.
+
+### Browser evidence (measured, not assumed)
+
+- `npm test`: 418/418 pass (4 new boxProjectUvs tests + 2 GLB UV tests).
+- Desktop vs committed dist under /amazing-adventure/: 192/192 pass. The new
+  check measured **23 wood meshes textured with UVs, 0 wood meshes missing UVs,
+  50 non-wood meshes kept flat** across the five prop model groups.
+- Mobile vs committed dist: 185/185 pass across 4 profiles; screenshots saved
+  to /worker/state/logs/shots42/ (4 PNGs).
+- Total: 795 checks, 0 failures. Byte-identical rebuild verified.
 
 ### Process notes
 
-- First bounds assert ("trim dips into the walls") was wrong: windows and door
-  legitimately reach the ground. Corrected to a ground-plane check; the roof
-  span asserts (8 x 6 + overhang) were kept and pass.
-
-### Browser evidence
-
-- `npm test`: 412/412 pass.
-- Desktop vs committed dist under /amazing-adventure/: 191/191 pass, including
-  the new house-trim check (1 model, 2 stand-ins hidden).
-- Mobile vs committed dist: 185/185 pass across 4 profiles; screenshots saved
-  to /worker/state/logs/shots41/ (4 PNGs).
-- Total: 788 checks, 0 failures. Byte-identical rebuild verified.
+- Two of the four new unit tests failed first run because I wrote the wrong
+  array indices in the expectations (`uvs[6]` for vertex 3's u, `uvs[2]` for
+  vertex 1's v). The implementation was right; I fixed the assertions rather
+  than the code, and recorded that here rather than claiming a clean first pass.
 
 ### Honest limits
 
-- Text-only model: no visual inspection; measured scene graph, asset state and
-  saved screenshots.
+- Text-only model: no visual inspection. The claim is measured material/UV
+  state per mesh plus saved screenshots, not an aesthetic judgement.
+- Box projection is right for these box-primitive props; a curved or organic
+  model would want a real unwrap instead.
 - Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
 
-1. **UV-map the props** so wood/cobble textures dress the models, not just
-   floors and walls.
-2. **A real-device pass** on physical hardware (biggest honest gap).
-3. **A real screen reader session** (NVDA/VoiceOver).
+1. **A real-device pass** on physical hardware (biggest honest gap).
+2. **A real screen reader session** (NVDA/VoiceOver).
+3. **Performance**: the lane profiles run at 1.7-2 fps under software
+   rasterisation; measure whether a lower-poly LOD or a cheaper material path
+   helps on genuinely slow devices.
+
+## Previous round — Round 41: modelled house trim.
 
 ## Previous round — Round 40: gate door + Kaggle cobblestone lane floor.
 
