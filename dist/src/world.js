@@ -8,7 +8,7 @@ import {
   stoneMaterialParams, loadFountain, loadMaterialTextures,
   BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, STALL_ASSET, STALL_MODEL_SIZE, loadStall,
   LAMP_ASSET, LAMP_MODEL_SIZE, loadLamp, MARKET_STALL_ASSET, MARKET_STALL_MODEL_SIZE,
-  loadMarketStall,
+  loadMarketStall, BENCH_ASSET, BENCH_MODEL_SIZE, loadBench,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES
 } from './assets.js';
 import { loadGlb } from './glb.js';
@@ -425,8 +425,10 @@ export function buildWorld(renderer) {
   }
 
   // A bench on the west side: resting here skips to the next phase.
-  addBox(scene, colliders, { size: [2.2, 0.5, 0.7], position: [BENCH.x, 0.25, BENCH.z], material: wood, castShadow: true });
-  addBox(scene, [], { size: [2.2, 0.6, 0.15], position: [BENCH.x, 0.8, BENCH.z + 0.3], material: wood, castShadow: true });
+  const benchSeat = addBox(scene, colliders, { size: [2.2, 0.5, 0.7], position: [BENCH.x, 0.25, BENCH.z], material: wood, castShadow: true });
+  benchSeat.userData = { benchStandin: true };
+  const benchBack = addBox(scene, [], { size: [2.2, 0.6, 0.15], position: [BENCH.x, 0.8, BENCH.z + 0.3], material: wood, castShadow: true });
+  benchBack.userData = { benchStandin: true };
 
   for (const [x, z] of [[-5, 9], [-6.2, 9.4], [3, -7.5]]) {
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.3, 16), wood);
@@ -548,6 +550,7 @@ export function buildWorld(renderer) {
     lamps: 'spheres',
     plaster: 'flat',
     marketStalls: 'boxes',
+    bench: 'box',
     wood: 'flat',
     brick: 'flat',
     fountainDetail: null,
@@ -869,6 +872,44 @@ export function buildWorld(renderer) {
     });
   }
 
+  function upgradeBench() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.bench = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadBench({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.bench = 'box';
+        assetState.benchDetail = result.reason;
+        return assetState;
+      }
+      const standins = scene.children.filter((c) => c.userData && c.userData.benchStandin);
+      for (const c of standins) c.visible = false;
+      const group = new THREE.Group();
+      group.name = 'bench-model';
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+      group.position.set(BENCH.x, 0, BENCH.z);
+      scene.add(group);
+      assetState.bench = 'model';
+      assetState.benchDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: 1
+      };
+      return assetState;
+    });
+  }
+
   function upgradeStone() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -974,7 +1015,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {
