@@ -12,6 +12,7 @@ import {
   NOTICE_ASSET, NOTICE_MODEL_SIZE, loadNotice,
   CRATE_ASSET, CRATE_MODEL_SIZE, loadCrate,
   GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
+  HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
   COBBLE_TEXTURE_FILES
 } from './assets.js';
@@ -375,10 +376,14 @@ export function buildWorld(renderer) {
     FOUNTAIN_SPOT.x + FOUNTAIN_COLLIDER, FOUNTAIN_SPOT.z + FOUNTAIN_COLLIDER
   ));
 
-  // A small house on the north-west side gives the space a landmark.
+  // A small house on the north-west side gives the space a landmark. The brick
+  // body stays procedural (it wears the Kaggle brick texture); the roof slab and
+  // door box are stand-ins that upgradeHouse() replaces with the modelled trim.
   addBox(scene, colliders, { size: [7, 3, 5], position: [-10.5, 1.5, -9], material: brickMat, castShadow: true });
-  addBox(scene, colliders, { size: [8, 0.6, 6], position: [-10.5, 3.3, -9], material: roof, castShadow: true });
-  addBox(scene, colliders, { size: [1.4, 2.2, 0.3], position: [-10.5, 1.1, -6.35], material: stone });
+  const houseRoofSlab = addBox(scene, colliders, { size: [8, 0.6, 6], position: [-10.5, 3.3, -9], material: roof, castShadow: true });
+  houseRoofSlab.userData = { houseStandin: true };
+  const houseDoorBox = addBox(scene, colliders, { size: [1.4, 2.2, 0.3], position: [-10.5, 1.1, -6.35], material: stone });
+  houseDoorBox.userData = { houseStandin: true };
 
   // Market stalls east and west.
   const eastCounter = addBox(scene, colliders, { size: [4, 1, 0.4], position: [11, 0.5, -3], material: wood, castShadow: true });
@@ -564,6 +569,7 @@ export function buildWorld(renderer) {
     notice: 'plane',
     crates: 'boxes',
     gateDoor: 'box',
+    house: 'boxes',
     cobble: 'flat',
     wood: 'flat',
     brick: 'flat',
@@ -1081,6 +1087,49 @@ export function buildWorld(renderer) {
     });
   }
 
+  function upgradeHouse() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.house = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadHouse({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.house = 'boxes';
+        assetState.houseDetail = result.reason;
+        return assetState;
+      }
+      // Hide the roof slab and door box; their colliders stay (the roof slab
+      // collider is above head height anyway, the door box is in the wall).
+      for (const c of scene.children) {
+        if (c.userData && c.userData.houseStandin) c.visible = false;
+      }
+      const group = new THREE.Group();
+      group.name = 'house-model';
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+      // The model's front (+y in Blender) exports to +z, matching the house's
+      // south-facing door at z = -6.35.
+      group.position.set(-10.5, 0, -9);
+      scene.add(group);
+      assetState.house = 'model';
+      assetState.houseDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: 1
+      };
+      return assetState;
+    });
+  }
+
   function upgradeStone() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -1186,7 +1235,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeCobble(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {
