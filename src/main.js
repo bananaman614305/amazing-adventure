@@ -28,7 +28,7 @@ import {
 import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
 import { createAdaptiveResolution } from './perf.js';
 import { createRecovery, shouldPanicShed } from './resilience.js';
-import { createSoundscape, readPreference, createStepClock, STEP_RATE, STEP_MIN_SPEED } from './audio.js';
+import { createSoundscape, readPreference, createStepClock, STEP_MIN_SPEED } from './audio.js';
 import { WALK_SPEED_EXPORT } from './player.js';
 import { buildEpilogue, storyComplete, storyProgress } from './epilogue.js';
 import { describeState, questChanges, coinAnnouncement, interactableAnnouncement, areaAnnouncement } from './announce.js';
@@ -1594,7 +1594,6 @@ function frame() {
   // walking gives half the steps. Cadence rises with speed (walk vs run).
   if (started && sound.started) {
     const speed = Math.hypot(player.velocity.x, player.velocity.z);
-    const rate = speed > WALK_SPEED_EXPORT * 0.75 ? STEP_RATE.run : STEP_RATE.walk;
     const steps = stepClock.advance(speed, dt);
     if (steps > 0) {
       for (let i = 0; i < steps; i += 1) {
