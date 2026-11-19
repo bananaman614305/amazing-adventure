@@ -26,7 +26,8 @@ import {
   AMBIENT_CHANCE
 } from './ambient.js';
 import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
-import { createAdaptiveResolution } from './perf.js';
+import { createAdaptiveResolution, MIN_RATIO } from './perf.js';
+import { createQualityTier, QUALITY_LOW, QUALITY_FULL } from './quality.js';
 import { createRecovery, shouldPanicShed } from './resilience.js';
 import { createSoundscape, readPreference, createStepClock, STEP_MIN_SPEED } from './audio.js';
 import { WALK_SPEED_EXPORT } from './player.js';
@@ -339,6 +340,21 @@ function applyResolution(ratio) {
 }
 applyResolution(resolution.ratio);
 document.body.dataset.pixelRatio = String(resolution.ratio);
+// Quality is the second lever, used only once resolution has reached its floor
+// and frames are still badly slow. Measured on a Pixel 7 profile: resolution
+// dominates (2.5 -> 10.5 fps from ratio 2 to 0.5), shadows and point lights are
+// worth ~1.4x and ~1.3x on top. The choice is remembered like resolution's.
+const QUALITY_KEY = 'amazing-adventure:quality';
+const savedQuality = localStorage.getItem(QUALITY_KEY);
+const quality = createQualityTier({ start: savedQuality === QUALITY_LOW ? QUALITY_LOW : QUALITY_FULL });
+let adaptiveQuality = savedQuality !== 'fixed';
+function applyQuality(tier) {
+  if (environment.quality === tier) return;
+  environment.setQuality(tier);
+  document.body.dataset.quality = tier;
+}
+document.body.dataset.quality = quality.tier;
+
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 // The canvas is where play happens and where focus returns after a conversation
@@ -1649,12 +1665,19 @@ function frame() {
   if (adaptiveResolution) {
     // If a frame is catastrophically long, shed resolution immediately instead
     // of waiting for the smoothed average to catch up.
-    if (shouldPanicShed(lastFrameMs, resolution.ratio <= 0.5)) {
+    if (shouldPanicShed(lastFrameMs, resolution.ratio <= MIN_RATIO)) {
       // Go through the controller so its reported ratio stays truthful.
-      applyResolution(resolution.force(0.5));
+      applyResolution(resolution.force(MIN_RATIO));
     } else {
       applyResolution(resolution.sample(lastFrameMs));
     }
+  }
+  // Quality only gets a vote once resolution is spent. Feeding it the same
+  // smoothed frame time keeps the two controllers in agreement about how slow
+  // this machine is, and the tier's own hysteresis stops it flapping.
+  if (adaptiveQuality) {
+    const atFloor = resolution.ratio <= MIN_RATIO;
+    applyQuality(quality.sample(atFloor ? resolution.smoothed : NaN));
   }
 
   requestAnimationFrame(frame);
@@ -1813,6 +1836,24 @@ window.amazingAdventure = {
       // reported value — the HUD, a test, a future bug report — would be misled.
       if (!adaptiveResolution) applyResolution(resolution.force(basePixelRatio));
       return adaptiveResolution;
+    }
+  },
+  quality: {
+    get tier() { return quality.tier; },
+    get changes() { return quality.changes; },
+    get adaptive() { return adaptiveQuality; },
+    /** Forces a tier and pins it, so a manual choice is not undone by the loop. */
+    set(tier) {
+      adaptiveQuality = false;
+      localStorage.setItem(QUALITY_KEY, 'fixed');
+      applyQuality(quality.force(tier));
+      return quality.tier;
+    },
+    /** Hands control back to the frame loop, keeping the current tier. */
+    setAdaptive(on) {
+      adaptiveQuality = Boolean(on);
+      localStorage.setItem(QUALITY_KEY, adaptiveQuality ? quality.tier : 'fixed');
+      return adaptiveQuality;
     }
   },
   basePixelRatio

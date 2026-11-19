@@ -2269,6 +2269,43 @@ try {
                     woodNoUv: propWood.woodNoUv, flatNonWood: propWood.flatNonWood }));
 
   await capture(page, 'round42-prop-uvs.png');
+  // --- 28i. The low quality tier -------------------------------------------
+  // Once adaptive resolution is at its floor and frames are still slow, the
+  // tier drops the shadow pass and the point lights' per-pixel cost. Measured
+  // on a Pixel 7 profile: 1.11 -> 1.92 fps at pinned native resolution (1.73x).
+  const quality = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const state = () => {
+      let points = 0, shadowDirs = 0, glow = 0;
+      api.scene.traverse((o) => {
+        if (o.isPointLight && o.visible) points += 1;
+        if (o.isDirectionalLight && o.castShadow) shadowDirs += 1;
+        if (o.isMesh && o.material && o.material.emissiveIntensity > 0) glow += 1;
+      });
+      return { points, shadowDirs, glow, tier: api.quality.tier,
+               attr: document.body.dataset.quality };
+    };
+    api.quality.setAdaptive(false);
+    const full = (() => { api.quality.set('full'); return state(); })();
+    const low = (() => { api.quality.set('low'); return state(); })();
+    const back = (() => { api.quality.set('full'); return state(); })();
+    api.quality.setAdaptive(true);
+    return { full, low, back };
+  });
+  checks.check('low quality drops the point lights and the shadow pass',
+    quality.low.points === 0 && quality.low.shadowDirs === 0 &&
+    quality.low.tier === 'low' && quality.low.attr === 'low',
+    JSON.stringify(quality.low));
+  checks.check('low quality keeps the lamp glow so night still reads as lit',
+    quality.low.glow === quality.full.glow && quality.low.glow > 0,
+    JSON.stringify({ lowGlow: quality.low.glow, fullGlow: quality.full.glow }));
+  checks.check('restoring full quality brings the lights and shadows back',
+    quality.back.points === quality.full.points &&
+    quality.back.shadowDirs === 1 && quality.back.tier === 'full',
+    JSON.stringify(quality.back));
+
+  await capture(page, 'round43-quality.png');
+
 
 
 
