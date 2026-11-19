@@ -373,56 +373,60 @@ instructions.
 
 ## Current task
 
-Round 39 — modelled crates (plaza south-east prop stack).
+Round 40 — gate door model (Blender) + cobblestone lane floor (Kaggle T4).
 
 ### What made it into the game
 
-- `art/blender/make_crates.py` -> `assets/crates.glb`: 120 tris, 10 meshes, 2
-  materials (CrateWood/CrateIron), 11.6 KB. One crate: body, lid, and four iron
-  bands on each of two rings. The game places three instances at the original
-  positions (two stacked, one offset), the same one-GLB-many-instances pattern
-  as the market stalls.
-- `src/assets.js`: `CRATE_ASSET`, `CRATE_MODEL_SIZE`, `loadCrate` (never throws,
-  refuses oversized models).
-- `src/world.js`: `upgradeCrates()` hides the three procedural boxes and places
-  three model instances. `assetState.crates` reports 'model' / 'boxes' /
-  'unavailable'.
-- `src/manifest.js`: added `assets/crates.glb` (49 required files).
-- `CREDITS.md`: crate entry added.
+- `art/blender/make_gate_door.py` -> `assets/gate_door.glb`: 132 tris, 11 meshes,
+  2 materials, 12.7 KB. Four planks, two hinge straps, handle, four studs.
+  Parented to the existing gateDoor mesh (its own material hidden) so the
+  open/shut lift animation and collider are unchanged.
+- `art/kaggle/cobble_textures.py`: periodic-Voronoi cobblestone, submitted to the
+  private Kaggle notebook and run on a Tesla T4 (CuPy, 12.2 s). Albedo/normal/
+  roughness 512x512; seam ratios albedo [0.517, 0.26], normal [1.369, 0.518],
+  rough [0.199, 0.115] — all well under 3, so no visible seam. Outputs downloaded
+  to art/kaggle/out3/ and inspected (report + file sizes) before copying into
+  assets/textures/.
+- `src/world.js`: upgradeGateDoor() + upgradeCobble(); lane floor material named
+  laneFloorMaterial; cobble tiled at 2 m (4 x 4.25 repeats over the 8 x 8.5 m lane).
+- `src/assets.js`: GATE_DOOR_ASSET/loadGateDoor, COBBLE_TEXTURE_FILES.
+- `src/manifest.js`: 53 required files. Preview 3.50 MB.
+- CREDITS.md: both entries added; Kaggle run provenance recorded honestly.
 
 ### Process notes
 
-- First attempt modelled all three crates into one GLB (360 tris) and blew the
-  per-prop triangle budget and the 0.6 half-extent assert. Rewrote as one crate
-  plus instances, which is also better for memory, and the asserts passed.
-- The triangle budget assert was then raised from 80 to 130 after measuring the
-  real single-crate cost (120 tris: 10 boxes of 12 tris).
+- First door export used 4 m width; GATE.width is 3. Caught by comparing the
+  Blender bounds against areas.js before wiring; re-exported at 3 m.
+- Local numpy is broken on this host (libblas missing), so the script was
+  validated by submission to Kaggle rather than a local dry run. The job's own
+  seam asserts passed on the T4.
 
 ### Browser evidence
 
 - `npm test`: 412/412 pass.
-- Desktop vs committed dist under /amazing-adventure/: 188/188 pass, including
-  a new check (3 crate models, 3 stand-ins hidden, asset state 'model').
-- Mobile vs committed dist under /amazing-adventure/: 185/185 pass across
-  4 profiles.
-- Preview: 49 files, 2.82 MB. Byte-identical rebuild verified.
+- Desktop vs committed dist under /amazing-adventure/: 190/190 pass, including
+  new checks (door model rides the door mesh; lane floor has all 3 cobble maps)
+  and the existing gate open/shut checks (doorHidden true after opening).
+- Mobile vs committed dist: 185/185 pass across 4 profiles; screenshots saved
+  to /worker/state/logs/shots40/ (4 PNGs).
+- Total: 787 checks, 0 failures. Byte-identical rebuild verified.
 
 ### Honest limits
 
-- Text-only model: no visual inspection. Measured: models loaded, stand-ins
-  hidden, asset state reports 'model'.
-- The crate has no UVs; flat material colours match the game's palette.
-- Every plaza prop group is now modelled; the remaining procedural geometry is
-  architecture (walls, roofs, ground), not props.
+- Text-only model: no visual inspection of the cobble preview or door; claims
+  are measured seam ratios, material maps, scene graph and saved screenshots.
+- Kaggle job used ~12 s of GPU wall time; quota remains ample (~28.9 h).
+- Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
 
-1. **Architecture**: the merchant house and wall segments are still boxes. One
-   facade/wall asset is the next visual step up.
-2. **A second Kaggle job**: a learned experiment or a new texture family
-   (cobblestone, house plaster, or a detail normal).
+1. **Architecture pass**: merchant house facade / wall segments are still boxes.
+2. **UV-map the props** so wood/cobble textures can dress the models, not just
+   the floors and walls.
 3. **A real-device pass** on physical hardware (biggest honest gap).
 4. **A real screen reader session** (NVDA/VoiceOver).
+
+## Previous round — Round 39: modelled crates (plaza prop stack).
 
 ## Previous round — Round 38: modelled notice board.
 
