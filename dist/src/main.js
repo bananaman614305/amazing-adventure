@@ -423,6 +423,17 @@ const world = buildWorld(renderer);
 const { scene, colliders, environment } = world;
 const npcs = createNPCs(scene);
 
+// Start the optional asset upgrade in the background. It is deliberately not
+// awaited: the plaza is fully playable with the procedural stand-ins, and making
+// the first frame wait on a network round trip would cost more than the upgrade
+// is worth. `assetsReady` exists so tests can await the settle point instead of
+// sleeping and hoping.
+const assetsReady = environment.loadAssets().catch((error) => {
+  // loadAssets is written not to reject; if it ever does, record it rather than
+  // letting an unhandled rejection surface as a console error in the browser.
+  return { fountain: 'stand-in', stone: 'flat', fountainDetail: String(error) };
+});
+
 const saves = createSaveStore();
 let state = createInitialState();
 let started = false;
@@ -1683,6 +1694,9 @@ window.amazingAdventure = {
   scene,
   camera,
   environment,
+  // Lets a test (or a bug report) ask what actually shipped rather than guessing.
+  assetState: () => environment.assetState,
+  assetsReady: () => assetsReady,
   saves,
   getState: () => state,
   setState: (next) => {
