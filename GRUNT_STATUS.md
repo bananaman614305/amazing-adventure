@@ -373,63 +373,32 @@ instructions.
 
 ## Current task
 
-Round 42 — UV mapping for prop models (box projection). The wood texture now
-dresses the models, not just the floors and walls.
+Round 43 — adaptive quality tier for slow devices. Committed, fully verified
+(812 checks, 0 failures) and filed for publication; HEAD e698733.
 
-### Why this was the gap
+Measured first: on a Pixel 7 profile the game is fill-rate bound (quarter
+resolution = 4.2x fps), shadows ~1.4x, point lights ~1.3x. Adaptive resolution
+already bottoms out, so src/quality.js adds a 'low' tier that engages only at
+the resolution floor: it hides the point lights and the sun's shadow pass while
+keeping every lamp bulb's emissive glow, with an asymmetric hysteresis streak
+(24 frames to drop, 90 to restore) so it cannot flap. Measured 1.11 -> 1.92 fps
+(1.73x) at pinned native resolution on the slow profile.
 
-Every prop GLB is authored from untextured box primitives, so Blender writes no
-UV layer (`TEXCOORD_0` absent in crates.glb and bench.glb, measured). Without
-UVs a texture cannot be applied, which is why the Kaggle wood map only ever
-reached the procedural floors, walls and counters.
-
-### What made it into the game
-
-- `src/glb.js`: reads `TEXCOORD_0` into a `uv` attribute when present. Absent UVs
-  stay absent rather than throwing — that is the current case for every prop.
-- `src/assets.js`: `boxProjectUvs()` — pure box projection in metres. Per
-  triangle it picks the dominant normal axis and projects onto the matching
-  plane, so flat crate/slab faces get no stretching. Honours an index buffer or
-  already-expanded geometry, and takes the tile size as a parameter.
-- `src/world.js`: a `propGroups` registry (bench, notice, crates, gate door,
-  house) plus `upgradePropWood()`, which runs after the wood family loads.
-  It dresses only meshes whose material name matches `/Wood/`, so iron bands,
-  glass panes and stone trim stay flat and read as different materials.
-  UVs are in metres, so texture repeat is 1:1 at the authored tile size.
-- No new asset files; the manifest is unchanged at 54 files. Preview 3.53 MB.
-
-### Browser evidence (measured, not assumed)
-
-- `npm test`: 418/418 pass (4 new boxProjectUvs tests + 2 GLB UV tests).
-- Desktop vs committed dist under /amazing-adventure/: 192/192 pass. The new
-  check measured **23 wood meshes textured with UVs, 0 wood meshes missing UVs,
-  50 non-wood meshes kept flat** across the five prop model groups.
-- Mobile vs committed dist: 185/185 pass across 4 profiles; screenshots saved
-  to /worker/state/logs/shots42/ (4 PNGs).
-- Total: 795 checks, 0 failures. Byte-identical rebuild verified.
-
-### Process notes
-
-- Two of the four new unit tests failed first run because I wrote the wrong
-  array indices in the expectations (`uvs[6]` for vertex 3's u, `uvs[2]` for
-  vertex 1's v). The implementation was right; I fixed the assertions rather
-  than the code, and recorded that here rather than claiming a clean first pass.
-
-### Honest limits
-
-- Text-only model: no visual inspection. The claim is measured material/UV
-  state per mesh plus saved screenshots, not an aesthetic judgement.
-- Box projection is right for these box-primitive props; a curved or organic
-  model would want a real unwrap instead.
-- Chrome emulation only; no physical phone or iOS Safari.
+Next: the owner has reviewed the Round 42 preview and asked for substantially
+more visible polish, starting with the cast. The plain-cylinder NPCs are the
+first target.
 
 ## Next steps
 
-1. **A real-device pass** on physical hardware (biggest honest gap).
-2. **A real screen reader session** (NVDA/VoiceOver).
-3. **Performance**: the lane profiles run at 1.7-2 fps under software
-   rasterisation; measure whether a lower-poly LOD or a cheaper material path
-   helps on genuinely slow devices.
+1. **NPC humanoid models** (owner priority): recognizable figures with distinct
+   silhouettes and role-appropriate clothing for Mara, Oswin, Pip, Halden,
+   Sable and Wren, plus idle/walk movement. Blender-authored; record sources.
+2. **First-area polish**: carry the same standard through the plaza the player
+   sees first, using the fountain as the quality reference.
+3. **In-game screenshots** comparable before/after, for the owner.
+4. Preserve the phone playtest; validate on the existing mobile profiles.
+
+## Previous round — Round 42: prop UV mapping.
 
 ## Previous round — Round 41: modelled house trim.
 

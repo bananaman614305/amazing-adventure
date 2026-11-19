@@ -1277,6 +1277,7 @@ export function buildWorld(renderer) {
 
   const environment = {
     scene,
+    quality: 'full',
     hemi,
     sun,
     fill,
@@ -1284,6 +1285,27 @@ export function buildWorld(renderer) {
     laneLamps,
     gateDoor,
     gateCollider,
+    /**
+     * Switches between full and low render quality. Low drops the shadow pass
+     * and the point lights' per-pixel contribution, which measurement showed are
+     * the only remaining levers once adaptive resolution is at its floor.
+     *
+     * The lamp bulbs keep their emissive glow and applyPhase() keeps driving
+     * light.intensity, so night still reads as lit lamps and the day/night cycle
+     * is unchanged. `quality` is recorded so a later applyPhase() and the HUD can
+     * both tell the truth about what is rendering.
+     */
+    setQuality(tier) {
+      const low = tier === 'low';
+      environment.quality = low ? 'low' : 'full';
+      for (const lamp of lamps) lamp.light.visible = !low;
+      for (const light of laneLamps) light.visible = !low;
+      // Shadows are toggled on the sun rather than the renderer, so the
+      // renderer's own shadowMap setting stays under main.js's control and a
+      // manual override cannot be silently undone here.
+      sun.castShadow = !low;
+      return environment.quality;
+    },
     /** Opens or shuts the north gate: the door lifts and its collider goes. */
     setGateOpen(open) {
       gateDoor.visible = !open;
