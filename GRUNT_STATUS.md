@@ -373,60 +373,61 @@ instructions.
 
 ## Current task
 
-Round 34 — modelled market stalls (plaza counters).
+Round 35 — audio polish: distance-driven footsteps.
 
 ### What made it into the game
 
-- `art/blender/make_market_stall.py` -> `assets/market_stall.glb`: 72 tris,
-  6 meshes, 3 materials (MarketWood/MarketRoof/MarketIron), 7.4 KB. Authored
-  at the larger (4.0 m) counter size; the smaller (3.0 m) is a uniform
-  scale-down, so one GLB serves both. Pitched awning overhangs the counter in
-  depth, like a real market canopy.
-- `src/assets.js`: `MARKET_STALL_ASSET`, `MARKET_STALL_MODEL_SIZE`,
-  `loadMarketStall` (never throws, refuses oversized *base*; the awning is
-  allowed to overhang the collider).
-- `src/world.js`: `upgradeMarketStalls()` hides both procedural counters and
-  overlays the model at each position, scaled to fit. `assetState.marketStalls`
-  reports 'model' or 'boxes'.
-- `src/manifest.js`: added `assets/market_stall.glb` (46 required files).
-- `CREDITS.md`: market stall entry added.
-- **Real bug found and fixed**: the first loader rejected the model because
-  the awning overhangs the collider. The check now filters to the base meshes
-  (MarketCounter, MarketShelf, MarketPost*) the same way the lamp loader does.
-  Probe-verified before commit.
+- `src/audio.js`: pure `createStepClock` (accumulates distance, not time, so
+  pushing into a wall is silent and half-speed walking gives half the steps),
+  `FOOTSTEP` constants, `footstepGain` (scales with speed, clamped under the
+  cue ceiling), and a `step()` method on the soundscape that renders a filtered
+  noise thud. Same safety contract as `play()`: silent when off, unstarted, or
+  when the platform cannot make noise.
+- `src/player.js`: `WALK_SPEED`/`RUN_SPEED` constants exported; `isRunning()`;
+  Shift now actually raises the speed cap (the HUD already advertised "Shift
+  run" but the cap was walk-only - a real gap fixed).
+- `src/main.js`: the game loop advances the step clock from the player's real
+  speed and fires `sound.step()` on stride boundaries, alternating the filter
+  variant so left/right feet differ. Resets the accumulator when the player
+  stops.
+- `tests/audio.test.mjs`: 9 new tests covering stride boundaries, min-speed
+  silence, non-finite deltas, multi-step frames, reset, gain scaling, the
+  footstep ceiling, and the step method's no-op safety (including a context
+  without `createBuffer`).
+
+### Real bug fixed along the way
+
+The first pass put `export const WALK_SPEED_EXPORT = WALK_SPEED` *before* the
+`const WALK_SPEED` declaration, which threw a temporal-dead-zone
+`ReferenceError` and took down every test that imports `player.js` (pathfind).
+Caught by `npm test`, fixed by ordering the constants before the exports.
 
 ### Browser evidence
 
-- `npm test`: 397/397 pass.
-- Desktop vs committed dist under /amazing-adventure/: 183/183 pass, including
-  a new collision check (walking east into the modelled counter stops at
-  x 8.58, outside the collider).
-- Mobile vs committed dist under /amazing-adventure/: 185/185 pass across
-  4 profiles.
-- Probe: 2 market-stall models, 2 standins hidden, asset state 'model'.
-- Fallback probe: blocking market_stall.glb leaves the counters as boxes
-  ('Failed to fetch') while fountain/stall/lamps/stone/plaster all stay
-  upgraded. Gameplay unaffected.
-- Preview: 46 files, 2.77 MB. Byte-identical rebuild verified.
+- `npm test`: 406/406 pass (397 + 9 new).
+- Desktop vs committed dist under /amazing-adventure/: 183/183 pass.
+- Mobile: re-run in progress at checkpoint time.
+- Preview: 46 files, 2.78 MB. Byte-identical rebuild verified.
 
 ### Honest limits
 
-- Text-only model: no visual inspection. Measured: models loaded, standins
-  hidden, asset state reports 'model'.
-- The market stall has no UVs; it uses flat material colours matching the
-  game's existing wood/roof palette.
-- The two plaza stalls are now modelled; the lane stall (round 32) remains a
-  separate, larger asset.
+- Text-only model: no auditory inspection. The step clock maths and the
+  soundscape's safety contract are unit-tested; the actual timbre of the
+  noise thud is not something I can judge.
+- The footstep uses white noise through a lowpass; it is a thud, not a
+  sampled shoe-on-stone recording. Deliberate: no audio files, no licensing.
+- `STEP_RATE` is exported but no longer used by the loop (the stride is fixed,
+  so cadence emerges from distance). Kept as documentation of intent.
 
 ## Next steps
 
-1. **Owner: push the tested dist to gh-pages** and confirm the live URL shows
-   the fountain, barrels, stall, lantern posts, market stalls and textured
-   walls on a phone at dusk.
+1. **Owner: push the tested dist to gh-pages** and confirm footsteps are
+   audible on a real phone while walking.
 2. **A real-device pass** on physical hardware (biggest honest gap).
 3. **A real screen reader session** (NVDA/VoiceOver).
-4. **Audio polish**: the synthesized soundscape has had no new content since
-   round 11; a second pass could add footsteps and a market-ambience layer.
+4. **Market ambience layer**: a second, optional soundscape bed for the lane.
+
+## Previous round — Round 34: modelled market stalls (plaza counters)
 
 ## Previous round — Round 33: modelled lantern posts + third Kaggle job (plaster lane walls)
 
