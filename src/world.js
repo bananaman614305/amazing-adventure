@@ -11,7 +11,9 @@ import {
   loadMarketStall, BENCH_ASSET, BENCH_MODEL_SIZE, loadBench,
   NOTICE_ASSET, NOTICE_MODEL_SIZE, loadNotice,
   CRATE_ASSET, CRATE_MODEL_SIZE, loadCrate,
-  WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES
+  GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
+  WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
+  COBBLE_TEXTURE_FILES
 } from './assets.js';
 import { loadGlb } from './glb.js';
 
@@ -120,9 +122,10 @@ export function buildWorld(renderer) {
   colliders.push(gateCollider);
 
   // --- The market lane, north of the gate --------------------------------
+  const laneFloorMaterial = new THREE.MeshStandardMaterial({ color: 0x9d9182, roughness: 0.93 });
   const laneFloor = new THREE.Mesh(
     new THREE.PlaneGeometry(LANE.maxX - LANE.minX, LANE.maxZ - LANE.minZ),
-    new THREE.MeshStandardMaterial({ color: 0x9d9182, roughness: 0.93 })
+    laneFloorMaterial
   );
   laneFloor.rotation.x = -Math.PI / 2;
   laneFloor.position.set(
@@ -560,6 +563,8 @@ export function buildWorld(renderer) {
     bench: 'box',
     notice: 'plane',
     crates: 'boxes',
+    gateDoor: 'box',
+    cobble: 'flat',
     wood: 'flat',
     brick: 'flat',
     fountainDetail: null,
@@ -1011,6 +1016,71 @@ export function buildWorld(renderer) {
     });
   }
 
+  function upgradeGateDoor() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.gateDoor = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadGateDoor({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.gateDoor = 'box';
+        assetState.gateDoorDetail = result.reason;
+        return assetState;
+      }
+      // Keep the procedural box as the invisible animation carrier: the game
+      // moves gateDoor.position/visible on open/shut, so parent the model to
+      // it and the lift animation works unchanged.
+      const group = new THREE.Group();
+      group.name = 'gate-door-model';
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+      gateDoor.add(group);
+      // Hide the box's own surface but keep it in the scene graph as carrier.
+      gateDoor.material.visible = false;
+      assetState.gateDoor = 'model';
+      assetState.gateDoorDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: 1
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeCobble() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.cobble = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: COBBLE_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.cobble = 'flat';
+        return assetState;
+      }
+      // The lane is 8 x 8.5 m; a 2 m tile puts ~30 cobbles across the width,
+      // a believable worn-lane scale distinct from the plaza's block paving.
+      applyTextureFamily(laneFloorMaterial, textures, 4, 4.25, 2);
+      assetState.cobble = 'textured';
+      assetState.cobbleDetail = {
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k])
+      };
+      return assetState;
+    });
+  }
+
   function upgradeStone() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -1116,7 +1186,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeCobble(), upgradeStone(), upgradeWoodBrick()]).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {

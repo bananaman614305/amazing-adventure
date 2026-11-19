@@ -2199,6 +2199,25 @@ try {
                     hidden: crates.hidden }));
 
   await capture(page, 'round39-crates.png');
+  // --- 28f. The modelled gate door + cobbled lane floor ---------------------
+  const round40 = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    let doorModels = 0;
+    api.scene.traverse((o) => {
+      if (o.name === 'gate-door-model') doorModels += 1;
+    });
+    return { state: api.assetState(), doorModels };
+  }));
+  checks.check('the modelled gate door rides the existing door mesh',
+    round40.state.gateDoor === 'model' && round40.doorModels === 1,
+    JSON.stringify({ state: round40.state.gateDoor, doorModels: round40.doorModels }));
+  checks.check('the lane floor wears the Kaggle cobblestone maps',
+    round40.state.cobble === 'textured' &&
+    round40.state.cobbleDetail.maps.length === 3,
+    JSON.stringify(round40.state.cobbleDetail));
+
+  await capture(page, 'round40-gate-cobble.png');
+
 
 
   // The upgrade must not change gameplay: the modelled counter still blocks.

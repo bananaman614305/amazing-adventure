@@ -125,3 +125,15 @@ its procedural stand-in or flat colour and stays fully playable.
   original positions (two stacked, one offset), matching the market-stall
   pattern of one GLB, many instances. Same licence as the game (generated,
   not downloaded).
+
+### Round 40 additions
+
+- `assets/gate_door.glb` — `art/blender/make_gate_door.py`. 132 tris, 11 meshes,
+  2 materials (DoorWood/DoorIron), 12.7 KB. Four planks, two hinge straps, a
+  handle and four studs. Parented to the existing door mesh so the open/shut
+  lift animation is unchanged. Same licence as the game (generated).
+- `assets/textures/cobble_*.png` — `art/kaggle/cobble_textures.py`, run on the
+  private Kaggle notebook (Tesla T4, CuPy backend, 12.2 s). Periodic-Voronoi
+  cobblestone: albedo/normal/roughness 512x512, seam ratios albedo [0.517, 0.26],
+  normal [1.369, 0.518], rough [0.199, 0.115] (all < 3 = no visible seam).
+  Fully procedural; no outside images or datasets, so no third-party licence.
