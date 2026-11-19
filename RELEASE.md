@@ -159,9 +159,11 @@ preview as final.
   interception test that aborts every off-origin request, then playing the game).
 - The build identifies itself as `0.3.0` both in code and on the page.
 
-Everything above is re-run by `npm run test:mobile` (177 checks across 4
-profiles) and `npm run test:browser` (166 desktop checks), plus 363 Node unit
-tests. 714 checks in total.
+Everything above is re-run by `npm run test:mobile` (185 checks across 4
+profiles) and `npm run test:browser` (171 desktop checks), plus 373 Node unit
+tests. **729 checks in total**, all run against the committed `dist/` artefact
+served under `/amazing-adventure/` — the subpath a GitHub Pages project site
+actually uses, not the domain root. See `DEPLOY.md`.
 
 ## A note on frame rate
 

@@ -373,72 +373,115 @@ instructions.
 
 ## Current task
 
-Round 27 — A versioned, self-contained preview package for the owner to play on a phone.
+Round 27 — A GitHub Pages preview, tested under the subpath Pages actually uses.
 
-PRs #5–#27 are published and open for the human. The owner asked for the game to be
-playable from the Grunt dashboard Play tab on a phone, which needs an HTTPS
-`pages.dev` preview. This round builds and verifies **the deployable artefact**. It
-does not deploy it: there are no Cloudflare credentials and no `wrangler` binary in
-this environment, so the upload itself sits behind the owner's deployment boundary.
+PRs #5–#27 are published and open. **The owner's deployment receipt confirms the first
+phone preview is live** at https://bananaman614305.github.io/amazing-adventure/, serving
+`gh-pages` root `1e628422` built from PR #27's commit `81ff363`. That version is
+published and done. This round prepares the **next** reviewed preview: it repoints the
+artefact from Cloudflare to GitHub Pages, tests it under `/amazing-adventure/`, and
+fixes a real rendering-reporting bug found while doing so.
 
-### What is ready to deploy
+### Readiness verdict
+
+**Ready to publish.** The artefact is committed, deterministic, drift-guarded and
+tested under the exact subpath Pages serves. I did not push a `gh-pages` branch or
+change any repo settings — that remains the owner's authorized step.
 
 | Item | Value |
 | --- | --- |
 | Source branch | `grunt/round27-preview-package` |
-| Source commit | `d2908c4fdca90147d209b3e75693ebdef91b75fb` |
-| Static output path | **`dist/`** (committed to the repo, 27 game files, 1.0 MB incl. `_redirects` + `preview.json`) |
+| Source commit | `2b9e84a6069dc6d275ac9eb9fcc0a665d776f602` |
+| Static output path | **`dist/`** (committed; 27 game files + `.nojekyll` + `preview.json` = 29 files, 1.0 MB) |
 | Startup file | **`index.html`** → loads `./src/main.js` as an ES module |
-| Content identity | `sourceDigest d9da50a8ff5db2fbadf11e77e7964f7adf93e313ca3c8118c679ff30dc7ea2f8` |
-| Build command for Pages | *(none — `dist/` is committed)*, or `node scripts/build-preview.mjs` |
-| Build output directory | `dist` |
+| Content identity | `sourceDigest ad1b0005e6ba80c1fd98e80e000c01072e32c4a41df60ff8f0d8555f3b91956f` |
+| Whole-tree SHA-256 | `0bb96852766e6d4f5d9789b4ba6ce5acbd923fb15d4c2cd375e84467bbdedd60` |
+| Build | `node scripts/build-preview.mjs` (no deps needed; output already committed) |
+| Pages output directory | `dist` |
+| Intended URL | https://bananaman614305.github.io/amazing-adventure/ |
 
-`dist/preview.json` records the version, source commit, file list and content digest,
-so a deployment can be tied to exact bytes.
+Publish options and verification commands are in `DEPLOY.md` (rewritten this round).
 
-### Why the artefact is trustworthy
+### The Cloudflare → Pages corrections
 
-- **Built from the manifest, not by hand.** `scripts/build-preview.mjs` copies exactly
-  the files `src/manifest.js` declares, so the preview cannot omit a `src/*.js` file or
-  ship a test.
-- **Deterministic.** Two builds of the same sources produce the same digest; verified.
-- **Drift-guarded.** `tests/preview.test.mjs` rebuilds from the current sources and
-  fails if the committed `dist/` no longer matches `sourceDigest`.
-- **Proven to exclude tooling**: no `tests/`, `scripts/`, `node_modules/`, `package.json`.
-- **No remote fetches**: every JS/HTML `src`, `href`, `import` and `fetch()` was scanned;
-  nothing points off-origin. Three.js is vendored.
+The artefact was built for the wrong host, so three things had to change:
 
-### Mobile evidence, captured from the deployable bytes
+1. **`_redirects` → `.nojekyll`.** `_redirects` is a Cloudflare file, meaningless on
+   Pages. Pages runs Jekyll by default, which drops underscore-prefixed paths and can
+   rewrite content; `.nojekyll` is the marker that makes it serve bytes verbatim.
+2. **Subpath testing.** A Pages *project* site lives at `/amazing-adventure/`, not the
+   domain root — the shape the previous round never tested. Added `BASE_PATH` to
+   `server.mjs` and the browser harness, so both suites now run under that prefix.
+3. **No self-referential commit field.** `dist/` is committed, so a recorded commit hash
+   can never equal the commit containing it; every rebuild re-dirtied the artefact and
+   the field was always one commit behind. Removed it. `sourceDigest` is the identity,
+   and rebuilding from a clean tree is now a genuine no-op (verified twice).
 
-The suites accept `SERVE_DIR`, so they run against `dist/` itself rather than the repo:
+### A real bug found while testing: the game lied about its resolution
+
+One desktop check failed intermittently: `resolution.ratio` reported **0.5** while the
+renderer and the DOM both said **1**. Root cause, in the game:
+
+`resolution.setAdaptive(false)` pushed `basePixelRatio` straight into the renderer
+without telling the adaptive controller, so the controller kept reporting whatever
+ratio it had last chosen. The reported value disagreed with the pixels being drawn.
+It is reachable in ordinary play — the screenshot helper pins resolution between
+captures, which is how it surfaced.
+
+Fixed by routing the pin through `resolution.force(basePixelRatio)`, so the controller,
+the renderer and `data-pixel-ratio` always agree. **Verified real**: with the fix
+stashed, both new checks fail with exactly the observed numbers (`reported: 0.5,
+ratio: 1`); restored, they pass.
+
+### Checks, all run against the committed `dist/` under `/amazing-adventure/`
 
 ```
-SERVE_DIR=dist npm run test:mobile   -> 185/185 pass, exit 0
-SERVE_DIR=dist npm run test:browser  -> 169/169 pass, exit 0
-npm test                             -> 372/372 pass
+npm test                                                     -> 373/373 pass
+SERVE_DIR=dist BASE_PATH=/amazing-adventure/ test:browser    -> 171/171 pass, exit 0
+SERVE_DIR=dist BASE_PATH=/amazing-adventure/ test:mobile     -> 185/185 pass, exit 0
 ```
 
-Four device profiles, 46 checks each, all against `dist/`:
+**729 checks total.** Four device profiles, 46 checks each:
 
 | Profile | Screenshot | Measured |
 | --- | --- | --- |
-| iPhone 13 portrait (390x844) | `artifacts/mobile-iphone-13-portrait.png` | 1170x2532, 27.2% bright, 12831 colours |
-| iPhone 13 landscape (844x390) | `artifacts/mobile-iphone-13-landscape.png` | 2532x1170, 29.2% bright, 17794 colours |
-| iPhone SE small (320x568) | `artifacts/mobile-iphone-se-small.png` | 640x1136, 28.3% bright, 7599 colours |
-| Pixel 7 portrait (412x915) | `artifacts/mobile-pixel-7-portrait.png` | 1071x2379, 35.2% bright, 11892 colours |
+| iPhone 13 portrait (390x844) | `artifacts/mobile-iphone-13-portrait.png` | 1170x2532, meanLum 96.5, 32.3% bright, 10745 colours |
+| iPhone 13 landscape (844x390) | `artifacts/mobile-iphone-13-landscape.png` | 2532x1170, meanLum 96.9, 29.1% bright, 17706 colours |
+| iPhone SE small (320x568) | `artifacts/mobile-iphone-se-small.png` | 640x1136, meanLum 89.5, 28.3% bright, 7599 colours |
+| Pixel 7 portrait (412x915) | `artifacts/mobile-pixel-7-portrait.png` | 1071x2379, meanLum 97.4, 35.1% bright, 12150 colours |
 
-Additionally verified by loading `dist/` in a 390x844 mobile viewport: version 0.3.0,
-canvas renders, 6 touch controls, journal opens, opening toasts appear, **0 external
-requests, 0 failed requests, 0 console errors**.
+Also loaded `dist/` directly at two mobile viewports under the subpath: version 0.3.0,
+canvas renders, 6 touch controls, journal opens **by tap**, 2 opening toasts, 27
+manifest files, **0 external requests, 0 failed requests, 0 console errors, 0 wrong
+JS MIME types**.
+
+Screenshots are measured programmatically (dimensions, luminance, distinct colours).
+I am text-only and **did not visually inspect them**; the numbers establish the frames
+are non-blank and richly rendered, not that they look good.
+
+### Why the artefact is trustworthy
+
+- **Built from the manifest**, so it cannot omit a `src/*.js` file or ship a test.
+- **Deterministic and stable**: rebuilding from a clean tree leaves the tree clean.
+- **Drift-guarded**: `tests/preview.test.mjs` rebuilds from current sources and fails
+  if the committed `dist/` no longer matches `sourceDigest`.
+- **Excludes tooling**: no `tests/`, `scripts/`, `node_modules/`, `package.json`,
+  no credentials, no local artifacts.
+- **No remote fetches**: every `src`, `href`, `import` and `fetch()` scanned; nothing
+  off-origin. Three.js is vendored.
+- **Subpath-safe**: a test asserts no root-absolute URL in the entry point, because one
+  would 404 on a project site.
 
 ### Honest limits
 
-- **I did not deploy anything.** No Cloudflare API token, no `wrangler`, no Pages
-  project — I checked, and did not attempt to obtain credentials. The upload is the
-  owner step.
-- **No real phone.** All mobile evidence is Chrome device emulation; iOS Safari's own
-  engine and real touch latency are untested.
-- **`_redirects` is written for Pages** (`/* /index.html 200`). Other hosts ignore it.
+- **I did not publish.** No `gh-pages` push, no repo settings change, no credentials
+  sought. The owner's receipt covers `81ff363`; this newer artefact still needs the
+  owner's authorized push.
+- **No real phone.** All mobile evidence is Chrome device emulation. iOS Safari's own
+  engine, real touch latency and real device GPU performance are untested.
+- **The live host was not tested by me.** Everything above is a local server configured
+  to match Pages' layout. GitHub Pages' actual headers/caching are only checked by the
+  `curl` commands in `DEPLOY.md`, which the operator can run.
 
 ## Previous round — Round 26: a new player was told nothing
 
@@ -1802,19 +1845,14 @@ hosting step to guess, the release now describes itself:
 
 ## Next steps
 
-1. **Get the candidate onto real hardware.** The biggest honest gap remains that
-   no physical phone or iOS Safari was available here; a real-device pass should
-   confirm touch gestures, safe-area insets on a notched phone, and frame rate on
-   an actual GPU.
-2. **A real screen reader test.** Round 24 now verifies the browser's accessibility
-   tree, which is much closer to what a screen reader consumes — but no actual NVDA or
-   VoiceOver session has been run, so verbosity, punctuation handling and announcement
-   ordering remain unverified.
-3. **A real screen reader test** remains the largest gap: nine rounds of accessibility
-   work rest on programmatic verification only.
-3. **Give the lane its own work board, or a second reason to cross the gate.**
-   The plaza board makes standing earnable early, but the lane has no equivalent,
-   so the two areas are not symmetrical in how a player recovers standing.
-3. **Give the street beyond the gate a second reason to exist.** The gate is still
-   the only route between the areas, and the lane's content now loops through the
-   plaza, so a third location is the natural next step.
+1. **Confirm the new preview on the live Pages URL.** The owner pushes this artefact;
+   then verify the deployed host really sends `text/javascript` for `.js`, serves
+   `.nojekyll`-protected files verbatim, and that gameplay starts on an actual phone.
+   The `curl` checks in `DEPLOY.md` are the fast version of this.
+2. **Get the game onto real hardware.** The largest honest gap: no physical phone or
+   iOS Safari has been available. A real-device pass should confirm touch gestures,
+   safe-area insets on a notched phone, and frame rate on a real GPU — the adaptive
+   resolution controller has only ever seen software rasterisation.
+3. **A real screen reader session.** Rounds 13, 16 and 24–25 verify the browser's
+   accessibility tree, which is close to what assistive tech consumes, but no NVDA or
+   VoiceOver run has happened, so verbosity and announcement ordering stay unverified.
