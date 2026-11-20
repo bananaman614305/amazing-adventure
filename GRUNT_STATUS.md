@@ -373,7 +373,114 @@ instructions.
 
 ## Current task
 
-Round 53 (in progress): lane lanterns. Found a real defect: the three lane point lights hung at y 2.6 with no fixture at all, and one sat at a z no bunting strand crossed — orphan glow from empty air. Added LANE_LANTERNS, lanternPlacement() and laneLanternsHang() to src/areas.js (pure, no-strand mutation case verified to fail). Next: wire lantern fixtures + light wiring into world.js, unit + desktop + mobile suites, then file the round.
+Round 53 is finished and committed on `grunt/round53-lane-continuity`
+(head `6b7f46b`, clean tree, stacked on the published round-52 branch). It
+replaced three orphan lane point lights with lanterns hung from the bunting,
+and fixed three test checks that had been lying to me.
+
+### What made it into the game
+
+- `src/areas.js`: `LANE_LANTERNS` (3 lanterns, each pinned to a real strand z),
+  plus `lanternPlacement()` and `laneLanternsHang()`. The hang rule refuses a
+  lantern whose strand does not exist, one below head height, and one outside
+  the lane walls — so the lanterns and the bunting cannot drift apart in a
+  later round. `strandHeightAt()` exposes the sag curve so the drop is computed
+  from the strand, not guessed.
+- `src/world.js`: each lane point light now gets a visible fixture hung at
+  exactly the position `lanternPlacement()` reports — tie loop, drop wire,
+  tapered body, emissive bulb — and the bulb glows with the plaza lamps at
+  dusk/night. Before this round the three lights were invisible glow at y 2.6,
+  and one sat at a z no strand crossed: light from empty air.
+- `tests/lane.test.mjs`: 7 new lantern cases (hang rule ok, no-strand rejected,
+  too-low rejected, outside-lane rejected, body hangs under the strand and
+  clears head height, and no lantern hangs into the walkable body below 1.9 m).
+
+### Checks actually run
+
+- `npm test` — **457/457 pass**.
+- `npm run test:browser` against the committed `dist/` (`SERVE_DIR=dist`) —
+  **218/218 pass, exit 0**, including `PASS no console errors`. Ran green three
+  times (twice against the work tree, once against `dist/`).
+- `npm run test:mobile` — **185/185 pass, exit 0**, captured from `dist/`. That
+  is 860 checks green this round (457 unit + 218 desktop + 185 mobile).
+- Preview rebuilt and **byte-identical on repeat**: 69 files, 3943 KB, digest
+  `7210e86daddd074a87912751062a664506afbb9edbc8ab435d071b2bfcc23006`, and a
+  clean-tree rebuild leaves `git status` empty.
+- Evidence: `artifacts/round53-lanterns.png` (captured from `dist/`) and the
+  refreshed `artifacts/mobile-*.png`. **I did not visually inspect them** — I am
+  text-only, so every visual claim above rests on the numbers below.
+
+### The three checks that were lying (and are now honest)
+
+All three were flaky or vacuous, and all three had the same root cause family:
+asserting on wall-clock time or a mid-transition frame in a suite that renders
+at a couple of frames per second under software GL.
+
+1. **`eases back after`** waited 1500 ms of wall time for a *frame-driven* ease
+   (`animateCast(ease * dt * 4)`). It flaked at 0.201, then at 0.361 — the head
+   was never stuck, the frames just had not happened. It now waits up to 90
+   frames and records the **minimum** angle reached (settled at 0.000).
+2. **`turns toward them`** asserted `bodyFaces < 0.15 || a 0.05 rad shrink`. The
+   first clause rubber-stamped a body that already happened to face the player:
+   it passed for two rounds by luck. A mutation run showed the heading closing
+   by just 0.011 rad in 4 s of wall time, because `dt` is clamped to 0.05 and
+   `turnToward` closes at most 0.2 rad/frame. It now budgets **240 frames** and
+   asserts real convergence, proven at 2.826 → 0.026 rad in 61 frames.
+3. **`head ends up nearer than the body`** read a mid-transition frame: the neck
+   still held the turn it accumulated while the body was swinging round, so on
+   the aligning frame the head pointed further from the player than the body
+   (0.497 rad). That is the ease working, not a defect. It now holds the player
+   still after the body aligns and records the best heading reached (0.044 rad).
+
+### Mutation proofs this round
+
+I re-ran the three lantern browser checks against deliberate breakage in
+`src/world.js` and each one failed for the right reason:
+
+- Light moved 0.4 m above its fixture → `FAIL each lane light sits inside its
+  fixture body — [false,false,false]`.
+- `fixture.userData` emptied (the old orphan-light state) → `FAIL the lane
+  lights hang from real lantern fixtures — {"fixtures":0,...}` plus the
+  alignment check.
+- Lane lamps pinned to a constant intensity → `FAIL lane lanterns are dark by
+  day and lit at dusk and night — {"dayLamp":[26,26,26],...}`.
+
+The no-strand case is also covered headlessly: `{ strandZ: -19.9 }` is refused
+with `reason: 'no-strand'`, which is exactly the pre-round-53 defect.
+
+### Process mistakes worth recording
+
+- My **first three mutation runs mutated `dist/src/world.js` while the suite
+  serves the work tree**, so two mutations "passed" and I nearly concluded the
+  checks were rubber stamps. They were not — I was testing a copy of the code
+  nothing ran. Mutation runs must target `src/`, and a green mutation is a
+  signal to check *which file* the harness loaded, not a conclusion.
+- A `RECORD_ARTIFACTS=1` run rewrites **every** committed screenshot, which
+  produced 31 noisy binary diffs plus 18 re-renders of already-published rounds.
+  I reverted the unrelated ones and committed only this round's evidence, then
+  re-ran the mobile suite with `RECORD_ARTIFACTS=1` deliberately to refresh the
+  four `mobile-*.png`.
+
+### Honest state of round 53
+
+Three orphan lights are now lanterns hung from the bunting, and the three
+attention checks that had been hiding behind lucky frames now fail when the
+behaviour breaks. The lane still has no gameplay reason to linger in it — that
+is the obvious next step.
+
+## Next steps
+
+1. **Give the lane a reason to stop**: the lane is now dressed but still a
+   corridor you walk through. Add one small, honest interaction there (for
+   example a lantern-lighting chore that pays standing at dusk) using the same
+   pure-rule-first path: rule in `src/areas.js`, unit tests, wiring, then
+   browser checks.
+2. **Make the dusk lanterns matter**: the fixtures light up but nothing reads
+   them. Have an NPC comment on them at dusk, or have Os win's ledger need a
+   lit lane, so the ambience connects to the quest.
+3. Keep both earlier promises: check the next round against the same bar
+   (457 unit + 218 desktop + 185 mobile, byte-identical `dist/`) and never
+   commit while a publish request is pending.
 
 
 Round 52 — market-lane ambience: bunting overhead and sacks against the stall.
