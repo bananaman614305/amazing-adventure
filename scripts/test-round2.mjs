@@ -2535,21 +2535,47 @@ try {
       if (glanceMax.v > 0.1) break; // seen one; no need to wait the full cycle
     }
     // Walk the player back next to her: attention must override the glance.
-    api.player.position.x = mara.group.position.x + 1.2;
-    api.player.position.z = mara.group.position.z + 0.4;
-    let attention = 0;
+    //
+    // Two measurement traps in a row here. First, the position is re-asserted
+    // every frame, because the game's player update pushes a teleported player
+    // out of geometry. Second -- and this is the one that mattered -- the NECK
+    // does not stay turned: the body turns to face the player (npcs.js updateNPCs
+    // turns group.rotation.y toward them), which leaves the head with less and
+    // less to do. A trace showed the neck peaking at 0.77 and then easing to
+    // rest while the body's heading error went to exactly 0.
+    //
+    // So the honest assertion is: the body ends up facing the player, and the
+    // head turned toward them during the approach. Asserting "the neck stays
+    // turned" would be asserting the wrong behaviour.
+    let maxNeck = 0;
+    let bodyFaces = Infinity; // measured on the LAST frame the player is held
     const attentionDeadline = performance.now() + 4000;
     while (performance.now() < attentionDeadline) {
       await new Promise((r) => requestAnimationFrame(r));
-      attention = Math.max(attention, Math.abs(mara.limbs.neck.rotation.y));
-      if (attention > 0.3) break;
+      api.player.position.x = mara.group.position.x + 1.2;
+      api.player.position.z = mara.group.position.z + 0.4;
+      await new Promise((r) => requestAnimationFrame(r));
+      maxNeck = Math.max(maxNeck, Math.abs(mara.limbs.neck ? mara.limbs.neck.rotation.y : 0));
+      // Third measurement trap, same root cause: reading the heading error
+      // after the loop gives a stale answer, because the game has already
+      // moved the player away again by then. Measure it while they are held.
+      const want = Math.atan2(
+        api.player.position.x - mara.group.position.x,
+        api.player.position.z - mara.group.position.z
+      );
+      let err = want - mara.group.rotation.y;
+      while (err > Math.PI) err -= Math.PI * 2;
+      while (err < -Math.PI) err += Math.PI * 2;
+      bodyFaces = Math.abs(err);
     }
+    const attention = maxNeck;
     const leanRange = leanMax.v;
     const glanceRange = glanceMax.v;
     return {
       leanRange: Number(leanRange.toFixed(4)),
       glanceRange: Number(glanceRange.toFixed(4)),
-      attention: Number(attention.toFixed(4))
+      attention: Number(attention.toFixed(4)),
+      bodyFaces: Number(bodyFaces.toFixed(3))
     };
   });
   checks.check('idle legs rock with a weight shift',
@@ -2558,11 +2584,46 @@ try {
   checks.check('the cast glances around when nobody is near',
     idle.glanceRange > 0.1,
     JSON.stringify(idle));
-  checks.check('player attention still overrides the idle glance',
-    idle.attention > 0.3,
+  // The neck peak is NOT a fixed number and should not be asserted as one:
+  // it depends how far the body already happened to be facing when the player
+  // arrived (I measured 0.80, 0.21 and 0.13 on different runs, all correct).
+  // Each attempt to pin a threshold was chasing variance, not a defect.
+  //
+  // What is deterministic is the end state: when the player is close, the NPC
+  // turns its body to face them. A character running its idle glance would not
+  // do that. The head-turn itself is already covered, and reliably, by the
+  // round-47 check ('a nearby player turns the NPC head' -> 0.9 rad).
+  checks.check('a nearby player makes the NPC turn to face them',
+    idle.bodyFaces < 0.15,
     JSON.stringify(idle));
 
   await capture(page, 'round51-idle.png');
+  // --- 28q. Lane dressing ----------------------------------------------------
+  const laneDressing = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const counts = { flags: 0, sacks: 0, strands: 0 };
+    api.scene.traverse((o) => {
+      if (o.isMesh && o.geometry && o.geometry.type === 'ConeGeometry' &&
+          o.geometry.parameters && o.geometry.parameters.radialSegments === 3) {
+        counts.flags += 1;
+      }
+      if (o.isMesh && o.material && o.material.color) {
+        const hex = o.material.color.getHex();
+        // The sack body material is 0xa89468.
+        if (hex === 0xa89468) counts.sacks += 1;
+      }
+    });
+    return counts;
+  });
+  checks.check('bunting flags hang over the lane',
+    laneDressing.flags >= 20,
+    JSON.stringify(laneDressing));
+  checks.check('sacks lean against the lane stall',
+    laneDressing.sacks === 3,
+    JSON.stringify(laneDressing));
+
+  await capture(page, 'round52-lane.png');
+
 
 
 

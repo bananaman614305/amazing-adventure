@@ -69,6 +69,89 @@ export const LANE_PROPS = [
   { kind: 'post', x: 13.4, z: -24.8, width: 0.4, depth: 0.4, height: 3.0 }
 ];
 
+/**
+ * Dressing for the market lane: bunting overhead and sacks alongside the stall.
+ *
+ * The lane was a bare corridor with four props. These are chosen so they read as
+ * a working market without narrowing the walkway: bunting hangs overhead at
+ * 2.7 m (above head height, so it needs no collider at all), and the sacks sit
+ * tight against the stall the lane already has. The clearance rule below is
+ * enforced by a test rather than by eye, because a prop that quietly blocks the
+ * way to the ledger would strand the player.
+ */
+export const LANE_BUNTING = [
+  // Across the lane, each at a slightly different height so the strands read as
+  // strung by hand rather than drawn with a ruler.
+  { z: -19.4, y: 2.72, sag: 0.18, flags: 9 },
+  { z: -21.6, y: 2.64, sag: 0.22, flags: 10 },
+  { z: -23.8, y: 2.75, sag: 0.16, flags: 9 }
+];
+
+export const LANE_SACKS = [
+  // Against the stall counter, which spans z -23.1..-19.9 at x 6.8..8.0.
+  { x: 8.35, z: -20.1, radius: 0.26, height: 0.62 },
+  { x: 8.42, z: -20.8, radius: 0.24, height: 0.55 },
+  { x: 8.30, z: -23.0, radius: 0.27, height: 0.58 }
+];
+
+/** Half-width of a sack's collider: the sack plus a little breathing room. */
+const SACK_REACH = 0.32;
+
+/** The narrowest point of the walkway, measured from the lane's free corridor. */
+export const LANE_CORRIDOR = { minX: 6.4, maxX: 13.6 };
+
+/**
+ * True when every ground prop leaves at least `need` metres of walkway beside
+ * it. Bunting is exempt because it hangs overhead: a player walks under it.
+ *
+ * This is the rule that keeps dressing from blocking the route to the ledger,
+ * and it is checked against the real prop list rather than a hand-drawn map.
+ */
+export function laneDressingClear({ sacks = LANE_SACKS, corridor = LANE_CORRIDOR, need = 1.2 } = {}) {
+  // Sacks are checked as the *widest continuous gap* through the lane at that
+  // z, not as a per-prop distance from one wall. My first version measured the
+  // wider side and passed a sack parked dead centre (4 m of clear floor on
+  // either side), which is exactly the case the rule exists to reject.
+  //
+  // Treat the sack as one obstacle in a row of obstacles at that z, then take
+  // the largest gap between adjacent obstacles (including the walls). A prop
+  // is acceptable when that gap is at least `need` metres wide, because the
+  // player only has to pass on one side.
+  const reach = SACK_REACH;
+  const laneMin = corridor.minX;
+  const laneMax = corridor.maxX;
+  const sorted = [...sacks].sort((a, b) => a.x - b.x);
+  for (const sack of sacks) {
+    // Only sacks at a similar z constrain the same crossing.
+    const row = sorted.filter((other) => Math.abs(other.z - sack.z) < Math.abs(sack.x) + 1e9
+      && Math.abs(other.z - sack.z) < 2.0);
+    const spans = row.map((other) => [other.x - reach, other.x + reach]);
+    let best = 0;
+    let cursor = laneMin;
+    for (const [lo, hi] of spans) {
+      best = Math.max(best, lo - cursor);
+      cursor = Math.max(cursor, hi);
+    }
+    best = Math.max(best, laneMax - cursor);
+    if (best < need) {
+      return { ok: false, at: { x: sack.x, z: sack.z }, widestGap: Number(best.toFixed(2)), need };
+    }
+  }
+  return { ok: true, checked: sacks.length };
+}
+
+/** True when the bunting strands are above head height and need no collider. */
+export function laneBuntingOverhead({ strands = LANE_BUNTING, headHeight = 2.0 } = {}) {
+  for (const strand of strands) {
+    // The lowest point of a sagging strand is y minus the sag.
+    const lowest = strand.y - strand.sag;
+    if (lowest <= headHeight) {
+      return { ok: false, at: { z: strand.z }, lowest, headHeight };
+    }
+  }
+  return { ok: true, checked: strands.length };
+}
+
 /** Where the missing toll ledger is tucked away, behind the far barrels. */
 export const LEDGER_SPOT = { x: 7.6, z: -25.0, range: 1.7 };
 
