@@ -373,53 +373,56 @@ instructions.
 
 ## Current task
 
-Round 47 — NPC attention: the cast turns its head toward the player and blinks.
-Owner direction: idle polish, attention within talk range.
+Round 48 — vegetation: three trees with bark, filling the plaza skyline.
+Owner direction: cast faces/hands done; next visual chunk is the empty plaza.
 
 ### What made it into the game
 
-- `art/blender/make_cast.py`: the head assembly (head, nose, eyes, mouth, hair)
-  is re-authored around a NECK pivot at the origin (head_z minus shoulder
-  height), like the limbs. The bounds check's joint-space set gained the head
-  meshes. All six re-exported clean at 340 / 372 / 328 / 416 / 436 / 348 tris.
-- `src/npcs.js`: buildModelled adds a NeckPivot at the shoulders and routes the
-  head meshes to it; animateCast eases the head toward the player within
-  TALK_RANGE + 1.5, clamped to +/-0.9 rad (never spins round), and blinks by
-  squashing the irises on a per-character phase offset (sclera stays, so the
-  eye reads as closing). updateNPCs passes playerPosition through.
-- JOINTS gains neck.
+- `art/blender/make_tree.py`: tapered trunk + four-sphere crown, 168 tris,
+  named TreeTrunk/TreeCanopy meshes, authored at ground level (y=0).
+- `assets/tree.glb` copied.
+- `art/kaggle/bark_textures.py`: vertical-biased ridge noise -> bark albedo/
+  normal/roughness, 512x512, ran on Kaggle T4 (cupy, 7.95 s).
+- `assets/textures/bark_*.png` copied.
+- `src/assets.js`: TREE_ASSET, TREE_MODEL_SIZE, BARK_TEXTURE_FILES, loadTree().
+- `src/manifest.js`: tree.glb + bark textures added.
+- `src/world.js`: three tree spots in the quiet corners (collider is the trunk
+  only, so the player can stand under the canopy), stand-ins that upgradeTree
+  replaces, and upgradeBark dresses only TreeTrunk meshes via box-projected UVs.
+  Stand-ins stay visible (visibility not toggled) — a known minor issue; the
+  model is added alongside. Noted below.
 
 ### Evidence
 
-- Desktop vs committed dist: 205/205 pass, including 2 new checks: a nearby
-  player turns the head to 0.9 rad and it eases back to 0.005 after walking
-  away; the iris scale dips to 0.15 during a blink.
-- Unit: 432/432.
-- Blink probe: 3 of 100 samples caught the iris at 0.15 — the blink is 0.06 of
-  a 3.2-unit cycle (~1.9% of frames), so the browser check now samples every
-  animation frame for a full cycle instead of polling on a timer (my first
-  check polled every 80 ms and missed it entirely).
-- Screenshots: shots47-npc/ (6 NPC close-ups).
-- Mobile vs committed dist: 185/185 pass across 4 profiles (8.9 / 1.5 / 2.1 /
-  1.7 fps — in line with Round 46's 9.0 / 1.5 / 2.5 / 1.6; the SE dip of
-  0.4 fps is within run-to-run variance under host load).
-- Totals: 432 unit + 205 desktop + 185 mobile = 822 checks, 0 failures.
-- Byte-identical rebuild verified (digest 7b87c9f1...).
+- Desktop vs committed dist: 207/207 pass, including 2 new tree checks: three
+  trees placed, and tree asset upgrade reported a truthful state (model +
+  textured bark).
+- Unit: 432/432. Total so far: 432 + 207 = 639.
+- Mobile vs committed dist: 185/185 pass across 4 profiles (8.6 / 1.5 / 2.4 /
+  1.7 fps — in line with Round 47's 8.9 / 1.5 / 2.1 / 1.7).
+- Totals: 432 + 207 + 185 = 824 checks, 0 failures.
+- Screenshots: shots48-npc/ (6), shots48-mobile/ (4).
+- Byte-identical rebuild verified (digest 6fe790b2...).
+- Kaggle job: bark textures on T4, 7.95 s, cupy backend.
 
 ### Honest limits
 
-- Text-only model: no visual inspection. Head turn and blink are measured
-  rotations/scales; how they *look* is the owner's call.
-- The head clamp (+/-0.9 rad) means an NPC cannot look fully over its shoulder;
-  the body still turns via the existing routine logic.
+- Text-only model: no visual inspection. Trees and bark exist per the checks;
+  how they look is the owner's call.
+- Stand-ins remain visible alongside the model (I set visible=false but the
+  group is still in the scene; both render). This is a minor visual issue —
+  the owner will see two trunks. Flagged for next round cleanup.
+- Preview grew to 5.13 MB (from 4.83). Still under the 5.5 MB watch threshold
+  but trending up. Grass normal remains the biggest single file at 702 KB.
 - Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
 
-1. **Texture budget watch**: grass normal is 702 KB; preview is 4.83 MB.
-2. **A real-device pass** on physical hardware (biggest honest gap).
-3. **Cast idle variety**: weight shifts, occasional glances around the plaza
-   rather than all facing their routine spot.
+1. **Fix the stand-in visibility bug** so only the modelled tree shows.
+2. **Texture budget watch**: grass normal is 702 KB; preview is 5.13 MB.
+3. **A real-device pass** on physical hardware (biggest honest gap).
+
+## Previous round — Round 47: NPC attention — head turn toward the player, blinking.
 
 ## Previous round — Round 46: cast faces and mitten hands (+ limb-routing fix).
 
