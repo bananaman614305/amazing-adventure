@@ -14,7 +14,7 @@ import {
   GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
   HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
-  COBBLE_TEXTURE_FILES, boxProjectUvs
+  COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, boxProjectUvs
 } from './assets.js';
 import { loadGlb } from './glb.js';
 
@@ -36,12 +36,46 @@ export function buildWorld(renderer) {
   scene.background = new THREE.Color(0x9fc4e8);
   scene.fog = new THREE.Fog(0x9fc4e8, 26, 62);
 
+  // A sky dome so the horizon is a gradient, not a flat colour band. The dome
+  // sits outside the fog range and is unlit, so it costs one draw call and no
+  // lighting; applyPhase() recolours it with the day/night table.
+  const skyGeometry = new THREE.SphereGeometry(120, 24, 12);
+  const skyMaterial = new THREE.MeshBasicMaterial({
+    side: THREE.BackSide, fog: false, depthWrite: false
+  });
+  const skyDome = new THREE.Mesh(skyGeometry, skyMaterial);
+  skyDome.name = 'sky-dome';
+  // Vertex colours: zenith at the top, horizon colour at and below the equator.
+  const skyColors = new Float32Array(skyGeometry.attributes.position.count * 3);
+  skyGeometry.setAttribute('color', new THREE.BufferAttribute(skyColors, 3));
+  skyMaterial.vertexColors = true;
+  scene.add(skyDome);
+  const zenithColor = new THREE.Color(0x6fa8dc);
+  const horizonColor = new THREE.Color(0x9fc4e8);
+  function paintSky(zenith, horizon) {
+    zenithColor.setHex(zenith);
+    horizonColor.setHex(horizon);
+    const pos = skyGeometry.attributes.position;
+    for (let i = 0; i < pos.count; i += 1) {
+      const y = pos.getY(i) / 120;
+      // Smooth blend over the upper hemisphere; below the equator stays horizon.
+      const t = Math.max(0, Math.min(1, y * 1.6));
+      const s = t * t * (3 - 2 * t);
+      skyColors[i * 3] = horizonColor.r + (zenithColor.r - horizonColor.r) * s;
+      skyColors[i * 3 + 1] = horizonColor.g + (zenithColor.g - horizonColor.g) * s;
+      skyColors[i * 3 + 2] = horizonColor.b + (zenithColor.b - horizonColor.b) * s;
+    }
+    skyGeometry.attributes.color.needsUpdate = true;
+  }
+  paintSky(0x6fa8dc, 0x9fc4e8);
+
   const colliders = [];
 
   // --- Ground -------------------------------------------------------------
+  const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x8a9c74, roughness: 0.95, metalness: 0 });
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE),
-    new THREE.MeshStandardMaterial({ color: 0x8a9c74, roughness: 0.95, metalness: 0 })
+    groundMaterial
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
@@ -579,6 +613,9 @@ export function buildWorld(renderer) {
     house: 'boxes',
     propWood: 'flat',
     cobble: 'flat',
+    grass: 'flat',
+    walls: 'flat',
+    sky: 'gradient',
     wood: 'flat',
     brick: 'flat',
     fountainDetail: null,
@@ -1202,6 +1239,57 @@ export function buildWorld(renderer) {
     return Promise.resolve(assetState);
   }
 
+  function upgradeGrass() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.grass = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: GRASS_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.grass = 'flat';
+        return assetState;
+      }
+      // The ground is 34 x 34 m; a 4 m tile keeps clumps at meadow scale rather
+      // than carpet scale, and the paving ring still reads as a different surface.
+      applyTextureFamily(groundMaterial, textures, 34, 34, 4);
+      assetState.grass = 'textured';
+      assetState.grassDetail = {
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k])
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeWalls() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.walls = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    // The border walls share the plaza's stone family: same blocks, different
+    // repeat. Long runs (34 m) at 3.2 m high want a 2 m tile, like the lane
+    // plaster, so courses read at wall scale.
+    return loadMaterialTextures({ THREE, files: STONE_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.walls = 'flat';
+        return assetState;
+      }
+      applyTextureFamily(wallMaterial, textures, 34, 3.2, 2);
+      assetState.walls = 'textured';
+      assetState.wallsDetail = {
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k])
+      };
+      return assetState;
+    });
+  }
+
   function upgradeStone() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -1278,6 +1366,7 @@ export function buildWorld(renderer) {
   const environment = {
     scene,
     quality: 'full',
+    paintSky,
     hemi,
     sun,
     fill,
@@ -1330,7 +1419,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeStone(), upgradeWoodBrick()])
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeStone(), upgradeWoodBrick()])
         .then(() => upgradePropWood()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
@@ -1347,6 +1436,7 @@ export function buildWorld(renderer) {
 export const PHASE_LOOKS = {
   day: {
     sky: 0x9fc4e8,
+    zenith: 0x6fa8dc,
     fog: 0x9fc4e8,
     fogNear: 26,
     fogFar: 62,
@@ -1362,6 +1452,7 @@ export const PHASE_LOOKS = {
   },
   dusk: {
     sky: 0xe08a5a,
+    zenith: 0x8a5a7a,
     fog: 0xd98e63,
     fogNear: 22,
     fogFar: 55,
@@ -1377,6 +1468,7 @@ export const PHASE_LOOKS = {
   },
   night: {
     sky: 0x0b1730,
+    zenith: 0x050a18,
     fog: 0x0b1730,
     fogNear: 14,
     fogFar: 42,
@@ -1401,6 +1493,9 @@ export function applyPhase(environment, phaseId) {
   if (!look) throw new Error(`unknown phase ${phaseId}`);
   const { scene, hemi, sun, fill, lamps } = environment;
   scene.background = new THREE.Color(look.sky);
+  if (environment.paintSky) {
+    environment.paintSky(look.zenith ?? look.sky, look.sky);
+  }
   scene.fog.color.setHex(look.fog);
   scene.fog.near = look.fogNear;
   scene.fog.far = look.fogFar;

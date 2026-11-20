@@ -29,6 +29,12 @@ export const COBBLE_TEXTURE_FILES = {
   roughnessMap: 'assets/textures/cobble_rough.png'
 };
 
+export const GRASS_TEXTURE_FILES = {
+  map: 'assets/textures/grass_albedo.png',
+  normalMap: 'assets/textures/grass_normal.png',
+  roughnessMap: 'assets/textures/grass_rough.png'
+};
+
 export const HOUSE_ASSET = 'assets/house.glb';
 
 /** Authored size of the house trim model (roof span 8 x 6, chimney to 5.33). */

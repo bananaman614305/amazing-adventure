@@ -159,3 +159,14 @@ its procedural stand-in or flat colour and stays fully playable.
   beyond the game's own terms. Colours mirror `NPC_DATA` in `src/npcs.js`, so
   the Blender source and the game cannot drift apart silently.
 
+
+### Round 45 additions
+
+- `assets/textures/grass_*.png` — `art/kaggle/grass_textures.py`, run on the
+  private Kaggle notebook (Tesla T4, CuPy backend, 10.7 s). Procedural meadow:
+  clumps, blade strokes and dry patches; albedo/normal/roughness 512x512, seam
+  ratios albedo [1.183, 0.692], normal [1.096, 0.838], rough [1.258, 0.685]
+  (all < 3 = no visible seam). Fully procedural; no outside images or datasets.
+- The sky dome and wall texturing are code, not assets: a vertex-colour gradient
+  sphere recoloured by the existing day/night table, and the border walls reuse
+  the plaza's stone texture family at wall scale.
