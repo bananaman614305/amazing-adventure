@@ -17,7 +17,11 @@ import {
 } from './state.js';
 import { startConversation, applyChoice, JOB_BOARD_SPEAKER } from './dialogue.js';
 import { reputationView, npcTier } from './factions.js';
-import { GATE, isGateOpen, gateHint, areaAt, NOTICE_BOARD, noticeText, LEDGER_SPOT, JOB_BOARD } from './areas.js';
+import {
+  GATE, isGateOpen, gateHint, areaAt, NOTICE_BOARD, noticeText, LEDGER_SPOT, JOB_BOARD,
+  LANE_LIGHTING_POST, laneLightingStatus, laneLightingHint, laneLanternsShouldGlow,
+  laneLanternsAtDawn, lightLaneLanterns
+} from './areas.js';
 import {
   chooseAmbientPair,
   buildExchange,
@@ -471,12 +475,21 @@ function syncPhase(force = false) {
   const phase = phaseAt(clockSeconds);
   if (phase.id === currentPhase && !force) return;
   currentPhase = phase.id;
-  applyPhase(environment, phase.id);
+  // Dawn puts the lane lanterns out: the round is walked again each night, so a
+  // previous night's help cannot light tonight's lane for free.
+  const dawn = laneLanternsAtDawn(state, phase.id);
+  applyPhase(environment, phase.id, laneLanternsShouldGlow(state, phase.id));
   setNPCRoutine(npcs, phase.id);
   clockPhase.textContent = phase.label;
   // The drone shifts root and level with the time of day.
   sound.setPhase(phase.id);
-  if (started && phase.id === 'dusk') toast('The lanterns are being lit.');
+  if (started && phase.id === 'dusk') {
+    toast(laneLanternsShouldGlow(state, phase.id)
+      ? 'Dusk. The lane lanterns are burning.'
+      : 'Dusk. The plaza lamps are lit; the lane lanterns are still dark.');
+  } else if (started && dawn.reset) {
+    toast(dawn.message);
+  }
 }
 
 // --- Player --------------------------------------------------------------
@@ -939,8 +952,43 @@ function interactables() {
     });
   }
 
+  // The lane's lamp post: the only place the bunting lanterns can be lit. The
+  // post always answers when the player is in reach, even in daylight, so a
+  // player who walks back at noon is told why there is nothing to do rather
+  // than finding a post that has quietly gone inert.
+  const lampDistance = Math.hypot(LANE_LIGHTING_POST.x - player.position.x, LANE_LIGHTING_POST.z - player.position.z);
+  if (lampDistance < LANE_LIGHTING_POST.range) {
+    list.push({
+      kind: 'lanterns',
+      distance: lampDistance,
+      label: laneLightingHint(state, phaseAt(clockSeconds).id) || 'the lane lanterns',
+      run: () => performLaneLighting()
+    });
+  }
+
   list.sort((a, b) => a.distance - b.distance);
   return list;
+}
+
+/**
+ * The lamp round, from the interaction to the screen. Kept beside the rest of
+ * the world actions so the interactable and the exposed test hook run the same
+ * code rather than two copies that can drift.
+ */
+function performLaneLighting() {
+  const phase = phaseAt(clockSeconds).id;
+  const result = lightLaneLanterns(state, phase);
+  toast(result.message);
+  if (result.changed) {
+    // applyPhase is cheap and phase-scoped; calling it directly avoids replaying
+    // syncPhase's dusk announcement on top of the lighting message.
+    applyPhase(environment, phase, laneLanternsShouldGlow(state, phase));
+    cue('pickup');
+    announce(`${result.message} Traders will remember it.`);
+    refreshHUD();
+    autoSave();
+  }
+  return result;
 }
 
 function restOnBench() {
@@ -1787,6 +1835,10 @@ window.amazingAdventure = {
   isGateOpen: () => isGateOpen(state),
   syncGate,
   syncPickups,
+  LANE_LIGHTING_POST,
+  laneLightingStatus: () => laneLightingStatus(state, phaseAt(clockSeconds).id),
+  laneLanternsShouldGlow: () => laneLanternsShouldGlow(state, phaseAt(clockSeconds).id),
+  performLaneLighting,
   touch: {
     get active() { return touchState.active; },
     get rootHidden() { return touchRoot.hidden; },

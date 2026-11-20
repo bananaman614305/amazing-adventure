@@ -80,10 +80,19 @@ const SCRIPTS = {
     ['b', 'In the grass, of all places. Where else would it be?'],
     ['a', 'Where else.']
   ],
-  dusk: [
-    ['a', 'Sky is turning. Lanterns will be lit soon.'],
+  // The lane's bunting lanterns are the player's to light, so the cast should
+  // notice whether somebody walked the round. Both lines have to exist: a
+  // comment only on the lit lane would let the dark lane go unremarked, and the
+  // dark lane is the state the player is meant to fix.
+  lane_lit: [
+    ['a', 'Sky is turning and the bunting is already burning.'],
     ['b', 'I never tire of that minute.'],
-    ['a', 'You say that every evening.']
+    ['a', 'Somebody walked the round. That is all it ever took.']
+  ],
+  lane_dark: [
+    ['a', 'The lane lanterns are still dark.'],
+    ['b', 'Then go and light them, or stop complaining about the dark.'],
+    ['a', 'Somebody has to be first.']
   ],
   night: [
     ['a', 'Quiet tonight.'],
@@ -104,8 +113,12 @@ export function scriptKeyFor(state, phase) {
   if (questStatus(state, 'toll') === 'done') return 'toll_done';
   if (state.perks?.oswin_debt) return 'oswin_debt';
   if (state.perks?.oswin_favour) return 'oswin_favour';
-  if (phase === 'dusk') return 'dusk';
-  if (phase === 'night') return 'night';
+  // Once there is actually something to see in the lane, the cast talks about
+  // that instead of the generic sky. Dusk is when the round is walked, so a lit
+  // lane is remarked on then; by full night an unlit lane has stopped being news
+  // and the pair fall back to the quiet-night lines.
+  if (phase === 'dusk') return state.flags?.laneLanternsLit ? 'lane_lit' : 'lane_dark';
+  if (phase === 'night') return state.flags?.laneLanternsLit ? 'lane_lit' : 'night';
   if (questStatus(state, 'lanterns') === 'done') return 'lanterns_done';
   if (questStatus(state, 'lanterns') === 'started' || questStatus(state, 'lanterns') === 'oil_bought') return 'lanterns_pending';
   if (questStatus(state, 'key') === 'done') return 'key_done';

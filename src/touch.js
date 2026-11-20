@@ -84,6 +84,7 @@ export function interactLabel(kind) {
     case 'bench': return 'Rest';
     case 'gate': return 'Gate';
     case 'notice': return 'Read';
+    case 'lanterns': return 'Light';
     default: return 'Use';
   }
 }
