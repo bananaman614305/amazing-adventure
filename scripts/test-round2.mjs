@@ -2548,6 +2548,7 @@ try {
     // head turned toward them during the approach. Asserting "the neck stays
     // turned" would be asserting the wrong behaviour.
     let maxNeck = 0;
+    let bodyFaces = Infinity; // measured on the LAST frame the player is held
     const attentionDeadline = performance.now() + 4000;
     while (performance.now() < attentionDeadline) {
       await new Promise((r) => requestAnimationFrame(r));
@@ -2555,15 +2556,18 @@ try {
       api.player.position.z = mara.group.position.z + 0.4;
       await new Promise((r) => requestAnimationFrame(r));
       maxNeck = Math.max(maxNeck, Math.abs(mara.limbs.neck ? mara.limbs.neck.rotation.y : 0));
+      // Third measurement trap, same root cause: reading the heading error
+      // after the loop gives a stale answer, because the game has already
+      // moved the player away again by then. Measure it while they are held.
+      const want = Math.atan2(
+        api.player.position.x - mara.group.position.x,
+        api.player.position.z - mara.group.position.z
+      );
+      let err = want - mara.group.rotation.y;
+      while (err > Math.PI) err -= Math.PI * 2;
+      while (err < -Math.PI) err += Math.PI * 2;
+      bodyFaces = Math.abs(err);
     }
-    const want = Math.atan2(
-      api.player.position.x - mara.group.position.x,
-      api.player.position.z - mara.group.position.z
-    );
-    let headingError = want - mara.group.rotation.y;
-    while (headingError > Math.PI) headingError -= Math.PI * 2;
-    while (headingError < -Math.PI) headingError += Math.PI * 2;
-    const bodyFaces = Math.abs(headingError);
     const attention = maxNeck;
     const leanRange = leanMax.v;
     const glanceRange = glanceMax.v;
