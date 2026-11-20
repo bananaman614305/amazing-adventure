@@ -2343,6 +2343,36 @@ try {
                     alternating: cast.alternating }));
 
   await capture(page, 'round44-cast.png');
+  // --- 28k. The plaza polish -------------------------------------------------
+  // Ground wears the Kaggle grass maps, walls wear the stone family, and the
+  // sky is a gradient dome recoloured per phase. All measured by material state.
+  const plaza = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    const state = api.assetState();
+    let dome = null;
+    api.scene.traverse((o) => { if (o.name === 'sky-dome') dome = o; });
+    const ground = api.scene.children.find((o) => o.isMesh && o.geometry.type === 'PlaneGeometry' && o.material.map);
+    return {
+      grass: state.grass, walls: state.walls, sky: state.sky,
+      grassMaps: state.grassDetail ? state.grassDetail.maps : [],
+      wallMaps: state.wallsDetail ? state.wallsDetail.maps : [],
+      dome: dome ? { vertexColors: dome.material.vertexColors,
+                     colorCount: dome.geometry.attributes.color.count } : null,
+      groundHasMap: Boolean(ground && ground.material.map)
+    };
+  }));
+  checks.check('the courtyard ground wears the grass maps',
+    plaza.grass === 'textured' && plaza.grassMaps.length === 3 && plaza.groundHasMap,
+    JSON.stringify({ grass: plaza.grass, maps: plaza.grassMaps }));
+  checks.check('the border walls wear the stone family',
+    plaza.walls === 'textured' && plaza.wallMaps.length === 3,
+    JSON.stringify({ walls: plaza.walls, maps: plaza.wallMaps }));
+  checks.check('the sky is a vertex-colour gradient dome',
+    plaza.dome && plaza.dome.vertexColors && plaza.dome.colorCount > 100,
+    JSON.stringify(plaza.dome));
+
+  await capture(page, 'round45-plaza.png');
+
 
 
 
