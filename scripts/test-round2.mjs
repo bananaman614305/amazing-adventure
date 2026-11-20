@@ -2512,6 +2512,49 @@ try {
     JSON.stringify(colorSpaces));
 
   await capture(page, 'round50-colorspace.png');
+  // --- 28p. Idle variety -----------------------------------------------------
+  // The cast used to stand bolt upright facing their routine spot. Now they
+  // rock foot to foot and glance around; player attention still wins.
+  const idle = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const mara = api.npcs.find((n) => n.id === 'mara');
+    // Send the player far away so attention does not override the glance.
+    api.player.position.x = -40;
+    api.player.position.z = -40;
+    const samples = { lean: [], glance: [] };
+    for (let i = 0; i < 120; i += 1) {
+      await new Promise((r) => requestAnimationFrame(r));
+      samples.lean.push(mara.limbs.legL ? mara.limbs.legL.rotation.z : 0);
+      samples.glance.push(mara.limbs.neck ? mara.limbs.neck.rotation.y : 0);
+    }
+    const leanRange = Math.max(...samples.lean.map(Math.abs));
+    const glanceRange = Math.max(...samples.glance.map(Math.abs));
+    // Walk the player back next to her: attention must override the glance.
+    api.player.position.x = mara.group.position.x + 1.2;
+    api.player.position.z = mara.group.position.z + 0.4;
+    let attention = 0;
+    for (let i = 0; i < 40; i += 1) {
+      await new Promise((r) => requestAnimationFrame(r));
+      attention = Math.max(attention, Math.abs(mara.limbs.neck.rotation.y));
+    }
+    return {
+      leanRange: Number(leanRange.toFixed(4)),
+      glanceRange: Number(glanceRange.toFixed(4)),
+      attention: Number(attention.toFixed(4))
+    };
+  });
+  checks.check('idle legs rock with a weight shift',
+    idle.leanRange > 0.01,
+    JSON.stringify(idle));
+  checks.check('the cast glances around when nobody is near',
+    idle.glanceRange > 0.1,
+    JSON.stringify(idle));
+  checks.check('player attention still overrides the idle glance',
+    idle.attention > 0.3,
+    JSON.stringify(idle));
+
+  await capture(page, 'round51-idle.png');
+
 
 
 
