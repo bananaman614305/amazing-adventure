@@ -373,6 +373,9 @@ instructions.
 
 ## Current task
 
+Round 53 (in progress): lane lanterns. Found a real defect: the three lane point lights hung at y 2.6 with no fixture at all, and one sat at a z no bunting strand crossed — orphan glow from empty air. Added LANE_LANTERNS, lanternPlacement() and laneLanternsHang() to src/areas.js (pure, no-strand mutation case verified to fail). Next: wire lantern fixtures + light wiring into world.js, unit + desktop + mobile suites, then file the round.
+
+
 Round 52 — market-lane ambience: bunting overhead and sacks against the stall.
 Owner direction: the lane had four props and read as a bare corridor compared to
 the plaza.
