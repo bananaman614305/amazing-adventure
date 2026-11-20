@@ -2372,6 +2372,42 @@ try {
     JSON.stringify(plaza.dome));
 
   await capture(page, 'round45-plaza.png');
+  // --- 28l. Joint-space meshes ride their joints -----------------------------
+  // A regression guard for the round-44 bug: Hand/Thumb/Boot/Pauldron are
+  // authored around their limb pivots, so they must be parented to the pivot,
+  // not the body root. Parenting them at the root renders hands at knee height
+  // and boots below the floor.
+  const joints = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const out = {};
+    for (const npc of api.npcs) {
+      let bad = 0;
+      let checked = 0;
+      npc.group.traverse((o) => {
+        if (!o.isMesh) return;
+        const isJointSpace = /^(Hand|Thumb|Boot|Pauldron)/.test(o.name);
+        if (!isJointSpace) return;
+        checked += 1;
+        // Walk up: the immediate parent must be a Limb pivot.
+        const parent = o.parent;
+        if (!parent || !/^Limb(arm|leg)/.test(parent.name || '')) bad += 1;
+      });
+      // Eye meshes belong to the head, in body space: sanity that they exist.
+      let eyes = 0;
+      npc.group.traverse((o) => { if (o.isMesh && /^Eye/.test(o.name)) eyes += 1; });
+      out[npc.id] = { checked, bad, eyes };
+    }
+    return out;
+  });
+  checks.check('joint-space meshes ride their limb pivots, not the body root',
+    Object.values(joints).every((j) => j.checked > 0 && j.bad === 0),
+    JSON.stringify(joints));
+  checks.check('every character has a face (eyes and iris) on the head',
+    Object.values(joints).every((j) => j.eyes === 4),
+    JSON.stringify(Object.fromEntries(Object.entries(joints).map(([k, v]) => [k, v.eyes]))));
+
+  await capture(page, 'round46-faces.png');
+
 
 
 
