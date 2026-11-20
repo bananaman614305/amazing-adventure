@@ -94,6 +94,25 @@ export const LANE_SACKS = [
   { x: 8.30, z: -23.0, radius: 0.27, height: 0.58 }
 ];
 
+/** How far a lantern hangs below the strand it is tied to, and its body size. */
+export const LANTERN_DROP = 0.07;
+export const LANTERN_HEIGHT = 0.34;
+
+/**
+ * Lanterns hanging from the bunting, one per strand.
+ *
+ * These exist because of a real defect: the lane's three point lights used to
+ * hover at y 2.6 with **no fixture at all**, so the lane glowed from empty air
+ * and one of the three did not even sit over a strand. Each entry names the
+ * strand it hangs from (`strandZ`) so the light is tied to a visible object, and
+ * `laneLanternsHang()` refuses a lantern whose strand does not exist.
+ */
+export const LANE_LANTERNS = [
+  { strandZ: -19.4, x: 9.1 },
+  { strandZ: -21.6, x: 8.3 },
+  { strandZ: -23.8, x: 9.9 }
+];
+
 /** Half-width of a sack's collider: the sack plus a little breathing room. */
 const SACK_REACH = 0.32;
 
@@ -150,6 +169,64 @@ export function laneBuntingOverhead({ strands = LANE_BUNTING, headHeight = 2.0 }
     }
   }
   return { ok: true, checked: strands.length };
+}
+
+/** The height of a point on a sagging strand, at fraction `t` across the lane. */
+export function strandHeightAt(strand, t) {
+  const clamped = Math.min(1, Math.max(0, t));
+  return strand.y - Math.sin(Math.PI * clamped) * strand.sag;
+}
+
+/** Where a lantern's body actually ends up, given the strand it hangs from. */
+export function lanternPlacement(lantern, { strands = LANE_BUNTING, lane = LANE } = {}) {
+  const strand = strands.find((candidate) => candidate.z === lantern.strandZ);
+  if (!strand) return null;
+  const span = lane.maxX - lane.minX;
+  const t = span > 0 ? (lantern.x - lane.minX) / span : 0;
+  const anchor = strandHeightAt(strand, t);
+  const top = anchor - LANTERN_DROP;
+  return {
+    x: lantern.x,
+    z: strand.z,
+    anchorY: Number(anchor.toFixed(3)),
+    topY: Number(top.toFixed(3)),
+    centerY: Number((top - LANTERN_HEIGHT / 2).toFixed(3)),
+    bottomY: Number((top - LANTERN_HEIGHT).toFixed(3))
+  };
+}
+
+/**
+ * True when every lantern hangs from a strand that exists, inside the lane, and
+ * with its body above head height so it needs no collider.
+ *
+ * This is the guard the orphaned point lights never had: they floated at 2.6 m
+ * with nothing above them, and one of the three sat at a z no strand crossed.
+ */
+export function laneLanternsHang({
+  lanterns = LANE_LANTERNS,
+  strands = LANE_BUNTING,
+  lane = LANE,
+  headHeight = 2.0
+} = {}) {
+  for (const lantern of lanterns) {
+    const placement = lanternPlacement(lantern, { strands, lane });
+    if (!placement) {
+      return { ok: false, reason: 'no-strand', at: { z: lantern.strandZ } };
+    }
+    if (placement.x <= lane.minX || placement.x >= lane.maxX) {
+      return { ok: false, reason: 'outside-lane', at: { x: lantern.x, z: placement.z } };
+    }
+    if (placement.bottomY <= headHeight) {
+      return {
+        ok: false,
+        reason: 'too-low',
+        at: { x: lantern.x, z: placement.z },
+        bottomY: placement.bottomY,
+        headHeight
+      };
+    }
+  }
+  return { ok: true, checked: lanterns.length };
 }
 
 /** Where the missing toll ledger is tucked away, behind the far barrels. */
