@@ -413,8 +413,11 @@ the plaza.
 - Unit: 450/450 (8 new lane cases).
 - Desktop vs committed dist: 214/214 pass, including 2 new lane checks
   (28 bunting flags, 3 sacks) and the corrected attention check.
-- Mobile suite: launched, pending at checkpoint time. Not reported as passing
-  until the run completes.
+- Mobile vs committed dist: 185/185 across 4 profiles (7.5 / 1.4 / 2.3 / 1.5
+  fps — in line with Round 51's 7.6 / 1.4 / 2.4 / 1.5).
+- Totals: 450 + 214 + 185 = 849 checks, 0 failures.
+- Byte-identical rebuild verified (digest b280635b...).
+- Screenshots: shots52-npc/ (6), shots52-mobile/ (4).
 - Screenshots: round52-lane.png captured by the suite.
 
 ### Honest limits
@@ -425,10 +428,11 @@ the plaza.
 
 ## Next steps
 
-1. **Finish the Round 52 mobile run**, then file publication.
-2. **A real-device pass** on physical hardware (biggest honest gap).
-3. **Plaza-to-lane continuity**: the gate walk still has no visual cue that
-   there is a market beyond it.
+1. **A real-device pass** on physical hardware (biggest honest gap).
+2. **Plaza-to-lane continuity**: the gate walk has no visual cue that there is
+   a market beyond it.
+3. **Lane lighting**: the lane has one lamp post at the far end; dusk falls
+   there before the plaza.
 
 ## Previous round — Round 51: idle variety — weight shifts and glances.
 
