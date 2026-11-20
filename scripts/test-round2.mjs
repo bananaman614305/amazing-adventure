@@ -2407,6 +2407,47 @@ try {
     JSON.stringify(Object.fromEntries(Object.entries(joints).map(([k, v]) => [k, v.eyes]))));
 
   await capture(page, 'round46-faces.png');
+  // --- 28m. Attention: head turns and blinks ---------------------------------
+  const attention = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const mara = api.npcs.find((n) => n.id === 'mara');
+    // Stand the player right next to Mara, slightly off her facing.
+    const pos = mara.group.position;
+    const near = { x: pos.x + 1.2, z: pos.z + 0.4 };
+    let maxTurn = 0;
+    for (let i = 0; i < 25; i += 1) {
+      api.setPlayerPositionForTest ? api.setPlayerPositionForTest(near) : null;
+      // Drive the real loop by waiting frames; updateNPCs reads player.position
+      // from the game loop, so nudge the player through the exposed player.
+      if (api.player) {
+        api.player.position.x = near.x;
+        api.player.position.z = near.z;
+      }
+      await new Promise((r) => setTimeout(r, 90));
+      const turn = Math.abs(mara.limbs.neck ? mara.limbs.neck.rotation.y : 0);
+      if (turn > maxTurn) maxTurn = turn;
+    }
+    // Walk away: head should ease back toward centre.
+    if (api.player) { api.player.position.x = pos.x + 30; }
+    await new Promise((r) => setTimeout(r, 1500));
+    const after = Math.abs(mara.limbs.neck ? mara.limbs.neck.rotation.y : 0);
+    // Blink: sample iris scale over a few seconds.
+    let sawBlink = false;
+    for (let i = 0; i < 60; i += 1) {
+      await new Promise((r) => setTimeout(r, 80));
+      const y = mara.limbs.eyeIrisL ? mara.limbs.eyeIrisL.scale.y : 1;
+      if (y < 0.5) { sawBlink = true; break; }
+    }
+    return { maxTurn: Number(maxTurn.toFixed(3)), after: Number(after.toFixed(3)), sawBlink };
+  });
+  checks.check('a nearby player turns the NPC head, and it eases back after',
+    attention.maxTurn > 0.2 && attention.after < 0.2,
+    JSON.stringify(attention));
+  checks.check('the cast blinks', attention.sawBlink === true,
+    JSON.stringify({ sawBlink: attention.sawBlink }));
+
+  await capture(page, 'round47-attention.png');
+
 
 
 
