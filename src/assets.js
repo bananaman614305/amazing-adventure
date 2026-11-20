@@ -644,8 +644,13 @@ export async function loadCast({ THREE, loadGlb, url, fetchImpl = fetch }) {
  */
 export const TEXTURE_COLOR_SPACE = {
   map: 'srgb',
-  normalMap: 'no-color-space',
-  roughnessMap: 'no-color-space'
+  // Three r160's NoColorSpace is the empty string, NOT the glTF-looking
+  // 'no-color-space'. Setting an unknown string makes Three look up a colour
+  // space that does not exist and throw on `.primaries`, which killed the
+  // render loop -- found the hard way, and the reason this is a named constant
+  // with the real value instead of a plausible-looking one.
+  normalMap: '',
+  roughnessMap: ''
 };
 
 export async function loadMaterialTextures({
@@ -663,7 +668,9 @@ export async function loadMaterialTextures({
       // Tag the colour space per map kind so colour maps are decoded as sRGB
       // and data maps stay linear.
       const space = TEXTURE_COLOR_SPACE[kind];
-      if (space && THREE.SRGBColorSpace !== undefined) texture.colorSpace = space;
+      // '' (NoColorSpace) is a real value, so this must test membership, not
+      // truthiness -- a falsy check would silently skip the linear maps.
+      if (space !== undefined) texture.colorSpace = space;
       texture.needsUpdate = true;
       return texture;
     } catch {
