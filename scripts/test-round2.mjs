@@ -2390,7 +2390,7 @@ try {
         checked += 1;
         // Walk up: the immediate parent must be a Limb pivot.
         const parent = o.parent;
-        if (!parent || !/^Limb(arm|leg)/.test(parent.name || '')) bad += 1;
+        if (!parent || !/^Limb(Arm|Leg)/.test(parent.name || '')) bad += 1;
       });
       // Eye meshes belong to the head, in body space: sanity that they exist.
       let eyes = 0;
