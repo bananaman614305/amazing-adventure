@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
-  LANE_BUNTING, LANE_SACKS
+  LANE_BUNTING, LANE_SACKS, LANE_LANTERNS, LANTERN_HEIGHT, lanternPlacement
 } from './areas.js';
 import {
   FOUNTAIN_SPOT, FOUNTAIN_COLLIDER, canLoadAssets, textureRepeat,
@@ -333,13 +333,57 @@ export function buildWorld(renderer) {
     NOTICE_BOARD.x + 0.3, NOTICE_BOARD.z + 0.9
   ));
 
-  // A row of hanging lights so the lane is not a dark tunnel at dusk.
+  // A row of hanging lights so the lane is not a dark tunnel at dusk. Each
+  // point light hangs from a real fixture tied to its bunting strand, which
+  // fixes a defect from the round the lights were added: they used to hover in
+  // mid-air with no lantern above them, so the lane glowed from nothing. The
+  // positions come from lanternPlacement() in areas.js, the same source the
+  // laneLanternsHang() test uses, so light and mesh cannot drift apart.
   const laneLamps = [];
-  for (const z of [-19.5, -22.5, -25.2]) {
+  for (const lantern of LANE_LANTERNS) {
+    const placed = lanternPlacement(lantern);
     const light = new THREE.PointLight(0xffc46b, 0, 9, 2);
-    light.position.set(LANE.minX + 3.2, 2.6, z);
+    light.position.set(placed.x, placed.centerY, placed.z);
     scene.add(light);
-    laneLamps.push(light);
+
+    // The fixture: a tie loop, a tapered body and an emissive bulb, hung from
+    // the strand at exactly the point the light sits. The bulb's emissive
+    // intensity is phase-driven in applyPhase() alongside the plaza lamps.
+    const lanternY = placed.topY - LANTERN_HEIGHT / 2;
+    const fixture = new THREE.Group();
+    fixture.name = 'lane-lantern';
+    fixture.userData = { laneLantern: true };
+
+    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.008, 6, 12), sackTieMat);
+    tie.position.set(placed.x, placed.anchorY, placed.z);
+    tie.rotation.x = Math.PI / 2;
+    fixture.add(tie);
+
+    const drop = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.006, 0.006, placed.anchorY - placed.topY, 6),
+      sackTieMat
+    );
+    drop.position.set(placed.x, (placed.anchorY + placed.topY) / 2, placed.z);
+    fixture.add(drop);
+
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09, 0.12, LANTERN_HEIGHT, 8),
+      new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.5, metalness: 0.35 })
+    );
+    body.position.set(placed.x, lanternY, placed.z);
+    body.castShadow = true;
+    fixture.add(body);
+
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.055, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xffb43a, emissiveIntensity: 0 })
+    );
+    bulb.position.set(placed.x, placed.topY - LANTERN_HEIGHT * 0.62, placed.z);
+    bulb.userData = { laneLanternBulb: true };
+    fixture.add(bulb);
+
+    scene.add(fixture);
+    laneLamps.push({ light, bulb });
   }
 
   // --- North terrace + ramp ----------------------------------------------
@@ -1594,7 +1638,7 @@ export function buildWorld(renderer) {
       const low = tier === 'low';
       environment.quality = low ? 'low' : 'full';
       for (const lamp of lamps) lamp.light.visible = !low;
-      for (const light of laneLamps) light.visible = !low;
+      for (const lampLight of laneLamps) lampLight.light.visible = !low;
       // Shadows are toggled on the sun rather than the renderer, so the
       // renderer's own shadowMap setting stays under main.js's control and a
       // manual override cannot be silently undone here.
@@ -1716,9 +1760,12 @@ export function applyPhase(environment, phaseId) {
     lamp.light.intensity = look.lampIntensity;
     lamp.mesh.material.emissiveIntensity = look.lampGlow;
   }
-  // The market lane keeps the same lighting rhythm as the plaza.
-  for (const light of environment.laneLamps || []) {
-    light.intensity = look.lampIntensity * 0.6;
+  // The market lane keeps the same lighting rhythm as the plaza, and its
+  // lantern bulbs glow with the lamps so the fixture reads as the light source
+  // rather than a decoration next to one.
+  for (const laneLamp of environment.laneLamps || []) {
+    laneLamp.light.intensity = look.lampIntensity * 0.6;
+    if (laneLamp.bulb) laneLamp.bulb.material.emissiveIntensity = look.lampGlow;
   }
   environment.phase = phaseId;
 }
