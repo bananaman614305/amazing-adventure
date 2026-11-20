@@ -373,44 +373,61 @@ instructions.
 
 ## Current task
 
-Round 49 — texture budget: all 21 textures swapped PNG -> lossless WebP.
-Owner concern: preview size trending up (4.83 -> 5.13 MB over rounds 47-48).
+Round 50 — texture colour space (a rendering bug found by probe, not by reading).
+Owner direction: cast faces/hands and vegetation are done; this round fixes a
+defect that has been affecting every textured surface since Round 30-ish.
 
-### What was measured before committing to the format
+### The bug
 
-- Re-encoded all 21 textures to lossless WebP and compared **pixel bytes**
-  against the PNG originals: identical for every file.
-  3.86 MB -> 2.63 MB (-31.8%). Lossless, so zero quality change, unlike lossy
-  WebP (-87% but unverified).
-- Chrome decode probe: same-origin fetch -> createImageBitmap and <img> both
-  decode 512x512 correctly (type image/webp). My first probe failed on a
-  cross-origin fetch from about:blank, not on WebP support — a test-harness
-  bug, not a format problem.
+A live probe walked the running scene and reported the colour space of all 204
+texture slots: **every one was `""`**. Nothing set `texture.colorSpace`, so
+Three.js decoded albedo maps as linear data instead of sRGB, which renders them
+too dark.
 
-### What made it into the game
+### The fix, and the mistake I made inside it
 
-- assets/textures/*.png removed, *.webp added (same names, .webp).
-- src/assets.js + src/manifest.js: paths swapped; manifest regenerated.
-- tests/assets.test.mjs: path-format assertions now expect .webp.
-- Preview total: 5.13 MB -> 4.0 MB (3,928 KB, 68 files).
+- `src/assets.js`: `TEXTURE_COLOR_SPACE` records which space each map kind
+  needs — albedo `srgb`, normal/roughness linear — and
+  `loadMaterialTextures` tags each texture at creation. Clones in world.js
+  inherit it automatically.
+- **My first attempt broke the game.** I used `'no-color-space'` for the data
+  maps, which is a glTF-looking name that does not exist in Three r160. Three
+  then looked up a colour space with no entry and threw on `.primaries`,
+  killing the render loop. A live probe caught it as a `pageerror` with the
+  player untouched 3 seconds after start.
+- Verified the real constants against the vendored source rather than assuming:
+  r160 defines `NoColorSpace = ""` and `SRGBColorSpace = "srgb"`. Linear maps
+  now get the empty string, and the assignment tests membership
+  (`!== undefined`) rather than truthiness, so the empty string is not silently
+  skipped.
+- Two of my own probe/checks were then wrong in the same way: they collapsed
+  `''` into `(unset)` via a falsy test. Both now use explicit undefined checks.
+
+### Regression proof
+
+Reverting just the assignment makes the check fail:
+`FAIL albedo maps are decoded as sRGB — {"map":[""],...}`. Restored, it passes.
+So the check is a real guard, not a rubber stamp.
 
 ### Evidence
 
 - Unit: 432/432.
-- Desktop vs committed dist: 207/207 pass, including all texture-family checks
-  (stone/wood/plaster/grass/cobble/bark all textured with map+normal+rough).
-- Mobile vs committed dist: 185/185 across 4 profiles (8.5 / 1.5 / 2.4 / 1.6
-  fps — in line with Round 48's 8.6 / 1.5 / 2.4 / 1.7).
-- Totals: 432 + 207 + 185 = 824 checks, 0 failures.
-- Screenshots: shots49-npc/ (6), shots49-mobile/ (4).
-- Byte-identical rebuild verified (digest 86fece50...).
+- Desktop vs committed dist: 209/209 pass, including 2 new colour-space checks
+  (`map:["srgb"]`, `normalMap:[""]`, `roughnessMap:[""]`).
+- Mobile vs committed dist: 185/185 across 4 profiles (8.0 / 1.4 / 2.2 / 1.5
+  fps — in line with Round 49's 8.5 / 1.5 / 2.4 / 1.6; small dips are within
+  run-to-run variance under host load).
+- Totals: 432 + 209 + 185 = 826 checks, 0 failures.
+- Screenshots: shots50-npc/ (6), shots50-mobile/ (4), and
+  round50-colorspace.png captured by the suite.
+- Byte-identical rebuild verified (digest 881b65c3...).
 
 ### Honest limits
 
-- Text-only model: no visual inspection. Pixel-identity was measured, not seen.
-- WebP support in iOS Safari is assumed (standard since iOS 14) but not tested
-  on real hardware; the loader still degrades gracefully to flat colours if a
-  map fails, as before.
+- Text-only model: no visual inspection. The colour space is measured off the
+  live textures, and the defect was proven by a probe, not by looking.
+- How much brighter the scene now reads is the owner's call; the change is
+  physically correct but the before/after is a judgement call.
 - Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
@@ -418,6 +435,8 @@ Owner concern: preview size trending up (4.83 -> 5.13 MB over rounds 47-48).
 1. **A real-device pass** on physical hardware (biggest honest gap).
 2. **Cast idle variety**: weight shifts, occasional glances around the plaza.
 3. **Watch the GLB budget**: asset GLBs total ~250 KB; fine for now.
+
+## Previous round — Round 49: texture budget — lossless WebP (-31.8%).
 
 ## Previous round — Round 48: vegetation — three trees with bark texture.
 
