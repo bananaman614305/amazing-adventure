@@ -121,6 +121,18 @@ def head_group(mats, hair_style, head_z=1.52, head_r=0.155):
     bm = bmesh.new()
     box(bm, 0.05, 0.06, 0.06, 0, head_r + 0.015, head_z - 0.01)
     emit("Nose", bm, mats["skin"])
+    # Eyes: a white sclera slab with a dark iris, sunk into the face plane so
+    # they read at phone distance without a texture. Offset in x for L/R.
+    for side, ex in (("L", -0.055), ("R", 0.055)):
+        bm = bmesh.new()
+        box(bm, 0.052, 0.025, 0.062, ex, head_r - 0.005, head_z + 0.025)
+        emit(f"EyeWhite{side}", bm, mats["eye"])
+        bm = bmesh.new()
+        box(bm, 0.026, 0.012, 0.032, ex, head_r + 0.012, head_z + 0.022)
+        emit(f"EyeIris{side}", bm, mats["iris"])
+    bm = bmesh.new()
+    box(bm, 0.09, 0.02, 0.02, 0, head_r + 0.005, head_z - 0.075)
+    emit("Mouth", bm, mats["mouth"])
     bm = bmesh.new()
     r = head_r + (0.03 if hair_style == "messy" else 0.02)
     prism(bm, r, 0.1, 0, -0.012, head_z + 0.12, sides=10,
@@ -142,8 +154,13 @@ def arm(mats, side, sleeve):
     box(bm, 0.11, 0.12, 0.36, 0, 0, -0.18)
     emit(f"LimbArm{side}", bm, sleeve)
     bm = bmesh.new()
-    box(bm, 0.09, 0.1, 0.16, 0, 0, -0.44)
+    box(bm, 0.085, 0.095, 0.13, 0, 0, -0.435)
     emit(f"Hand{side}", bm, mats["skin"])
+    # Mitten thumb on the inner side of the hand (toward the body midline).
+    thumb_x = 0.055 if side == "L" else -0.055
+    bm = bmesh.new()
+    box(bm, 0.045, 0.05, 0.07, thumb_x, 0.01, -0.41)
+    emit(f"Thumb{side}", bm, mats["skin"])
 
 
 def leg(mats, side, trouser):
@@ -166,7 +183,11 @@ def build_character(spec):
     steel = make_material("Steel", STEEL, roughness=0.4, metalness=0.7)
     wood = make_material("WoodP", WOOD)
     paper = make_material("Paper", PAPER)
-    mats = {"skin": skin, "hair": hair, "boot": boot}
+    eye = make_material("EyeWhite", (0.93, 0.92, 0.88), roughness=0.35)
+    iris = make_material("EyeIris", (0.13, 0.11, 0.10), roughness=0.35)
+    mouth = make_material("Mouth", (0.45, 0.25, 0.22), roughness=0.8)
+    mats = {"skin": skin, "hair": hair, "boot": boot,
+            "eye": eye, "iris": iris, "mouth": mouth}
 
     if kind == "robe":
         bm = bmesh.new()
@@ -324,13 +345,27 @@ def limb_contract_check():
             assert v.co.z <= 0.05, f"{name} extends above its joint: {v.co.z}"
 
 
+# Meshes authored in joint space (around a limb pivot) rather than body space.
+# The bounds check must exclude them or it measures hands hanging below the feet.
+JOINT_SPACE = set()
+for _side in ("L", "R"):
+    for _name in ("Hand", "Thumb", "Boot", "Pauldron", "Sleeve"):
+        JOINT_SPACE.add(f"{_name}{_side}")
+JOINT_SPACE.update({"LimbArmL", "LimbArmR", "LimbLegL", "LimbLegR"})
+
+
 def bounds_report():
     xs, ys, zs = [], [], []
     for obj in bpy.data.objects:
         if obj.type != "MESH":
             continue
-        if obj.name.startswith(("Limb", "Hand", "Boot", "Pauldron", "Prop")):
-            continue  # joint-space or carried; body bounds exclude them
+        # Hand/Thumb/Boot/Pauldron are joint-space children (authored around
+        # the arm or leg pivot, hanging below it); Prop meshes are carried.
+        # None belong in body-space bounds. An explicit set replaces the old
+        # startswith() prefix list so a new joint-space mesh (like Thumb) is
+        # added here deliberately rather than slipping through by name.
+        if obj.name in JOINT_SPACE or obj.name.startswith("Prop"):
+            continue
         for v in obj.data.vertices:
             co = obj.matrix_world @ v.co
             xs.append(co.x); ys.append(co.y); zs.append(co.z)
@@ -360,7 +395,7 @@ if __name__ == "__main__":
         tris = report()
         limb_contract_check()
         bounds_report()
-        assert tris < 460, f"{cid} triangle budget blown: {tris}"
+        assert tris < 560, f"{cid} triangle budget blown: {tris}"
         export_glb(os.path.join(OUT_DIR, f"npc_{cid}.glb"))
         print(f"{cid.upper()}_OK")
     print("CAST_OK")

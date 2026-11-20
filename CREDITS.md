@@ -170,3 +170,11 @@ its procedural stand-in or flat colour and stays fully playable.
 - The sky dome and wall texturing are code, not assets: a vertex-colour gradient
   sphere recoloured by the existing day/night table, and the border walls reuse
   the plaza's stone texture family at wall scale.
+
+### Round 46 updates
+
+- `assets/npc_*.glb` re-exported from the same `art/blender/make_cast.py`, now
+  with faces and mitten hands. Per character: two eye whites + two irises + a
+  mouth (8 boxes, 96 tris) and palm + thumb per hand. Triangle budgets raised to
+  560 per character; all six still well under (328-436). Still fully procedural,
+  no third-party assets.
