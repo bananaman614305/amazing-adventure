@@ -373,62 +373,64 @@ instructions.
 
 ## Current task
 
-Round 51 — idle variety: the cast rocks foot to foot and glances around, instead
-of six statues staring at their routine spots.
-Owner direction: exactly this item from the round-50 next-steps list.
+Round 52 — market-lane ambience: bunting overhead and sacks against the stall.
+Owner direction: the lane had four props and read as a bare corridor compared to
+the plaza.
 
 ### What made it into the game
 
-- `src/idle.js` (pure, 10 unit tests): `weightShift()` rocks each figure foot to
-  foot (max 0.05 rad, 7.5 s period); `glanceAngle()` looks around rarely (2.6 s
-  of every 11 s cycle) and alternates direction each cycle. Both are
-  deterministic functions of (time, seed), seeded from spawn position so the
-  cast never moves in unison. Non-finite time is treated as rest, not NaN.
-- `src/npcs.js` `animateCast`: idle legs get the lateral lean (cleared when
-  walking so it does not carry into the stride); the head glances when nobody
-  is nearby. **Player attention still wins** — within talk range the existing
-  head-turn overrides the glance exactly as before.
-- `manifest`: `src/idle.js` added. The manifest test caught the omission, which
-  is its entire purpose.
+- `src/areas.js`: `LANE_BUNTING` (3 strands at 2.64-2.75 m with sag, 28 flags)
+  and `LANE_SACKS` (3 sacks against the existing stall counter at x 8.0), plus
+  two testable rules: `laneDressingClear()` requires a 1.2 m walkway and
+  `laneBuntingOverhead()` requires the lowest strand point above 2.0 m — which
+  is why bunting registers **no collider** and sacks register 0.32 m colliders.
+- `src/world.js`: strands with triangular flags dipping on a sine parabola,
+  sack bodies with pinched necks.
+- `tests/lane.test.mjs` (8 cases): clearance, overhead height, bounds, sacks
+  against the stall, and a **player-sized flood-fill** proving the ledger stays
+  reachable from the gate.
 
-### The measurement mistake I made
+### Three measurement bugs of mine, and what fixed them
 
-My first browser check counted **frames** rather than time: 120 rAF samples.
-A glance occupies 2.6 s of an 11 s cycle, so it reported `glanceRange: 0` — while
-the weight shift (period 7.5 s) was clearly running at its full 0.05 peak. The
-round-47 attention check passed in the same run, which proved the animation loop
-was alive. So the failure was my sampling window, not the feature. The checks are
-now time-bounded (12 s for the glance, 4 s for attention) with early exit.
+1. My clearance rule originally measured distance from one wall, so a single
+   sack at the centre of an 8 m lane passed. That was **correct** (3.3 m each
+   side) — my *test* was wrong. It now uses a row of props that genuinely spans
+   the lane.
+2. My reachability flood-fill passed against a **completely sealed lane**, by
+   squeezing through a 0.28 m sliver. It now models a 0.35 m player radius, and
+   I verified it fails when the lane is walled.
+3. The round-51 attention check regressed mid-round (0.32 -> 0.10). A trace
+   showed the neck reaching **0.766** and easing to rest because `updateNPCs`
+   turns the **body** toward the player (final heading error 0). Asserting "the
+   neck stays turned" was asserting the wrong behaviour. The neck peak also
+   varies with the body's starting orientation (0.80 / 0.21 / 0.13 on three
+   runs, all correct), so the check now asserts only the deterministic outcome —
+   the body facing the player — while the reliable round-47 check keeps covering
+   the head turn.
 
 ### Evidence
 
-- Unit: 442/442 (10 new idle cases).
-- Desktop vs committed dist: 212/212 pass, including 3 new idle checks:
-  `{"leanRange":0.05,"glanceRange":0.1176,"attention":0.3219}` — the cast
-  rocks, glances, and still turns to face a nearby player.
-- Mobile vs committed dist: 185/185 across 4 profiles (7.6 / 1.4 / 2.4 / 1.5
-  fps — in line with Round 50's 8.0 / 1.4 / 2.2 / 1.5; the portrait dip is
-  within run-to-run variance under host load).
-- Totals: 442 + 212 + 185 = 839 checks, 0 failures.
-- Byte-identical rebuild verified (digest 7facba56...).
-- Screenshots: shots51-npc/ (6), shots51-mobile/ (4).
-- Screenshots: round51-idle.png captured by the suite.
+- Unit: 450/450 (8 new lane cases).
+- Desktop vs committed dist: 214/214 pass, including 2 new lane checks
+  (28 bunting flags, 3 sacks) and the corrected attention check.
+- Mobile suite: launched, pending at checkpoint time. Not reported as passing
+  until the run completes.
+- Screenshots: round52-lane.png captured by the suite.
 
 ### Honest limits
 
-- Text-only model: no visual inspection. Lean and glance are measured
-  rotations; whether the plaza now reads as alive rather than twitchy is the
-  owner's call.
-- The glance is clamped well under the attention clamp (0.45 vs 0.9), so a
-  character never appears to look over its shoulder unprompted.
+- Text-only model: no visual inspection. Flag counts and collider placement are
+  measured; whether the lane reads as a working market is the owner's call.
 - Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
 
-1. **A real-device pass** on physical hardware (biggest honest gap).
-2. **Watch the GLB budget**: asset GLBs total ~250 KB; fine for now.
-3. **Lane ambience**: the market lane still has fewer dressing props than the
-   plaza, and it is the second place players spend real time.
+1. **Finish the Round 52 mobile run**, then file publication.
+2. **A real-device pass** on physical hardware (biggest honest gap).
+3. **Plaza-to-lane continuity**: the gate walk still has no visual cue that
+   there is a market beyond it.
+
+## Previous round — Round 51: idle variety — weight shifts and glances.
 
 ## Previous round — Round 50: texture colour space (albedo sRGB).
 
