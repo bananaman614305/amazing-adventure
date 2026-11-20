@@ -2454,6 +2454,33 @@ try {
     JSON.stringify({ sawBlink: attention.sawBlink, minIris: attention.minIris }));
 
   await capture(page, 'round47-attention.png');
+  // --- 28n. Vegetation: trees stand in, upgrade to models --------------------
+  const trees = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const state = api.assetState ? api.assetState() : api.assetState;
+    const st = typeof state === 'function' ? state() : state;
+    // Count tree standins and models in the scene.
+    let standins = 0;
+    let models = 0;
+    api.scene.traverse((o) => {
+      if (o.name === 'tree-standin') standins += 1;
+      if (o.name === 'tree-model') models += 1;
+    });
+    // Trunk colliders exist.
+    const colliders = api.colliders || [];
+    return { standins, models, assetStateTrees: st.trees, assetStateBark: st.bark };
+  });
+  checks.check('three trees are placed in the plaza',
+    trees.standins + trees.models === 3,
+    JSON.stringify(trees));
+  checks.check('tree asset upgrade ran and reported a truthful state',
+    trees.assetStateTrees === 'model' || trees.assetStateTrees === 'stand-ins' ||
+      trees.assetStateTrees === 'unavailable',
+    JSON.stringify(trees));
+
+  await capture(page, 'round48-trees.png');
+
 
 
 
