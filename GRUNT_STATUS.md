@@ -407,12 +407,19 @@ largest plain surfaces the player sees first.
   poses each: plaza-south, plaza-east, lane-north, ground-close).
 - Byte-identical rebuild verified (digest b9f35c11...).
 
-### Mobile status
+### Mobile status — verified, with an honest cost
 
-Running at checkpoint time; not yet verified for Round 45. Must not be reported
-as passing until the suite completes. The added cost is 3 texture fetches
-(~1.1 MB) and one extra draw call (the dome); the ground/walls reuse existing
-material slots, so draw calls are otherwise unchanged.
+The mobile suite passed **185/185** across all 4 profiles against the committed
+dist. Frame rates: iPhone 13 portrait 8.5 fps, Pixel 7 1.5 fps, iPhone SE
+2.4 fps, iPhone 13 landscape 1.7 fps — about 10-15% below Round 44's run
+(9.5 / 1.7 / 2.7 / 2.0). The extra texture sampling (grass + wall maps) is not
+free the way the cast geometry was; some of the gap may be host load, but the
+direction is consistent across all four profiles, so it is reported as a real
+cost. The Round 43 quality tier absorbs it on genuinely slow devices, and all
+profiles stay above the suite's 1 fps playability floor. Screenshots saved to
+/worker/state/logs/shots45-mobile/ (4 PNGs).
+
+Totals: 432 unit + 201 desktop + 185 mobile = 818 checks, 0 failures.
 
 ### Honest limits
 
@@ -425,8 +432,9 @@ material slots, so draw calls are otherwise unchanged.
 
 ## Next steps
 
-1. **Finish the Round 45 mobile run**, then file publication.
-2. **Cast faces and hands** (eyes, mitten hands) for close-ups.
+1. **Cast faces and hands** (eyes, mitten hands) for close-ups.
+2. **Watch the texture budget**: grass normal is 702 KB; consider a smaller
+   normal or shared normals if the preview keeps growing.
 3. **A real-device pass** on physical hardware (biggest honest gap).
 
 ## Previous round — Round 44: modelled NPC cast.
