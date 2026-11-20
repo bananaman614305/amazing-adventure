@@ -373,68 +373,59 @@ instructions.
 
 ## Current task
 
-Round 50 — texture colour space (a rendering bug found by probe, not by reading).
-Owner direction: cast faces/hands and vegetation are done; this round fixes a
-defect that has been affecting every textured surface since Round 30-ish.
+Round 51 — idle variety: the cast rocks foot to foot and glances around, instead
+of six statues staring at their routine spots.
+Owner direction: exactly this item from the round-50 next-steps list.
 
-### The bug
+### What made it into the game
 
-A live probe walked the running scene and reported the colour space of all 204
-texture slots: **every one was `""`**. Nothing set `texture.colorSpace`, so
-Three.js decoded albedo maps as linear data instead of sRGB, which renders them
-too dark.
+- `src/idle.js` (pure, 10 unit tests): `weightShift()` rocks each figure foot to
+  foot (max 0.05 rad, 7.5 s period); `glanceAngle()` looks around rarely (2.6 s
+  of every 11 s cycle) and alternates direction each cycle. Both are
+  deterministic functions of (time, seed), seeded from spawn position so the
+  cast never moves in unison. Non-finite time is treated as rest, not NaN.
+- `src/npcs.js` `animateCast`: idle legs get the lateral lean (cleared when
+  walking so it does not carry into the stride); the head glances when nobody
+  is nearby. **Player attention still wins** — within talk range the existing
+  head-turn overrides the glance exactly as before.
+- `manifest`: `src/idle.js` added. The manifest test caught the omission, which
+  is its entire purpose.
 
-### The fix, and the mistake I made inside it
+### The measurement mistake I made
 
-- `src/assets.js`: `TEXTURE_COLOR_SPACE` records which space each map kind
-  needs — albedo `srgb`, normal/roughness linear — and
-  `loadMaterialTextures` tags each texture at creation. Clones in world.js
-  inherit it automatically.
-- **My first attempt broke the game.** I used `'no-color-space'` for the data
-  maps, which is a glTF-looking name that does not exist in Three r160. Three
-  then looked up a colour space with no entry and threw on `.primaries`,
-  killing the render loop. A live probe caught it as a `pageerror` with the
-  player untouched 3 seconds after start.
-- Verified the real constants against the vendored source rather than assuming:
-  r160 defines `NoColorSpace = ""` and `SRGBColorSpace = "srgb"`. Linear maps
-  now get the empty string, and the assignment tests membership
-  (`!== undefined`) rather than truthiness, so the empty string is not silently
-  skipped.
-- Two of my own probe/checks were then wrong in the same way: they collapsed
-  `''` into `(unset)` via a falsy test. Both now use explicit undefined checks.
-
-### Regression proof
-
-Reverting just the assignment makes the check fail:
-`FAIL albedo maps are decoded as sRGB — {"map":[""],...}`. Restored, it passes.
-So the check is a real guard, not a rubber stamp.
+My first browser check counted **frames** rather than time: 120 rAF samples.
+A glance occupies 2.6 s of an 11 s cycle, so it reported `glanceRange: 0` — while
+the weight shift (period 7.5 s) was clearly running at its full 0.05 peak. The
+round-47 attention check passed in the same run, which proved the animation loop
+was alive. So the failure was my sampling window, not the feature. The checks are
+now time-bounded (12 s for the glance, 4 s for attention) with early exit.
 
 ### Evidence
 
-- Unit: 432/432.
-- Desktop vs committed dist: 209/209 pass, including 2 new colour-space checks
-  (`map:["srgb"]`, `normalMap:[""]`, `roughnessMap:[""]`).
-- Mobile vs committed dist: 185/185 across 4 profiles (8.0 / 1.4 / 2.2 / 1.5
-  fps — in line with Round 49's 8.5 / 1.5 / 2.4 / 1.6; small dips are within
-  run-to-run variance under host load).
-- Totals: 432 + 209 + 185 = 826 checks, 0 failures.
-- Screenshots: shots50-npc/ (6), shots50-mobile/ (4), and
-  round50-colorspace.png captured by the suite.
-- Byte-identical rebuild verified (digest 881b65c3...).
+- Unit: 442/442 (10 new idle cases).
+- Desktop vs committed dist: 212/212 pass, including 3 new idle checks:
+  `{"leanRange":0.05,"glanceRange":0.1176,"attention":0.3219}` — the cast
+  rocks, glances, and still turns to face a nearby player.
+- Mobile suite: launched, pending at checkpoint time. Not reported as passing
+  until the run completes.
+- Screenshots: round51-idle.png captured by the suite.
 
 ### Honest limits
 
-- Text-only model: no visual inspection. The colour space is measured off the
-  live textures, and the defect was proven by a probe, not by looking.
-- How much brighter the scene now reads is the owner's call; the change is
-  physically correct but the before/after is a judgement call.
+- Text-only model: no visual inspection. Lean and glance are measured
+  rotations; whether the plaza now reads as alive rather than twitchy is the
+  owner's call.
+- The glance is clamped well under the attention clamp (0.45 vs 0.9), so a
+  character never appears to look over its shoulder unprompted.
 - Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
 
-1. **A real-device pass** on physical hardware (biggest honest gap).
-2. **Cast idle variety**: weight shifts, occasional glances around the plaza.
+1. **Finish the Round 51 mobile run**, then file publication.
+2. **A real-device pass** on physical hardware (biggest honest gap).
 3. **Watch the GLB budget**: asset GLBs total ~250 KB; fine for now.
+
+## Previous round — Round 50: texture colour space (albedo sRGB).
 
 ## Previous round — Round 49: texture budget — lossless WebP (-31.8%).
 
