@@ -373,55 +373,53 @@ instructions.
 
 ## Current task
 
-Round 48 — vegetation: three trees with bark, filling the plaza skyline.
-Owner direction: cast faces/hands done; next visual chunk is the empty plaza.
+Round 49 — texture budget: all 21 textures swapped PNG -> lossless WebP.
+Owner concern: preview size trending up (4.83 -> 5.13 MB over rounds 47-48).
+
+### What was measured before committing to the format
+
+- Re-encoded all 21 textures to lossless WebP and compared **pixel bytes**
+  against the PNG originals: identical for every file.
+  3.86 MB -> 2.63 MB (-31.8%). Lossless, so zero quality change, unlike lossy
+  WebP (-87% but unverified).
+- Chrome decode probe: same-origin fetch -> createImageBitmap and <img> both
+  decode 512x512 correctly (type image/webp). My first probe failed on a
+  cross-origin fetch from about:blank, not on WebP support — a test-harness
+  bug, not a format problem.
 
 ### What made it into the game
 
-- `art/blender/make_tree.py`: tapered trunk + four-sphere crown, 168 tris,
-  named TreeTrunk/TreeCanopy meshes, authored at ground level (y=0).
-- `assets/tree.glb` copied.
-- `art/kaggle/bark_textures.py`: vertical-biased ridge noise -> bark albedo/
-  normal/roughness, 512x512, ran on Kaggle T4 (cupy, 7.95 s).
-- `assets/textures/bark_*.png` copied.
-- `src/assets.js`: TREE_ASSET, TREE_MODEL_SIZE, BARK_TEXTURE_FILES, loadTree().
-- `src/manifest.js`: tree.glb + bark textures added.
-- `src/world.js`: three tree spots in the quiet corners (collider is the trunk
-  only, so the player can stand under the canopy), stand-ins that upgradeTree
-  replaces, and upgradeBark dresses only TreeTrunk meshes via box-projected UVs.
-  Stand-ins stay visible (visibility not toggled) — a known minor issue; the
-  model is added alongside. Noted below.
+- assets/textures/*.png removed, *.webp added (same names, .webp).
+- src/assets.js + src/manifest.js: paths swapped; manifest regenerated.
+- tests/assets.test.mjs: path-format assertions now expect .webp.
+- Preview total: 5.13 MB -> 4.0 MB (3,928 KB, 68 files).
 
 ### Evidence
 
-- Desktop vs committed dist: 207/207 pass, including 2 new tree checks: three
-  trees placed, and tree asset upgrade reported a truthful state (model +
-  textured bark).
-- Unit: 432/432. Total so far: 432 + 207 = 639.
-- Mobile vs committed dist: 185/185 pass across 4 profiles (8.6 / 1.5 / 2.4 /
-  1.7 fps — in line with Round 47's 8.9 / 1.5 / 2.1 / 1.7).
+- Unit: 432/432.
+- Desktop vs committed dist: 207/207 pass, including all texture-family checks
+  (stone/wood/plaster/grass/cobble/bark all textured with map+normal+rough).
+- Mobile vs committed dist: 185/185 across 4 profiles (8.5 / 1.5 / 2.4 / 1.6
+  fps — in line with Round 48's 8.6 / 1.5 / 2.4 / 1.7).
 - Totals: 432 + 207 + 185 = 824 checks, 0 failures.
-- Screenshots: shots48-npc/ (6), shots48-mobile/ (4).
-- Byte-identical rebuild verified (digest 6fe790b2...).
-- Kaggle job: bark textures on T4, 7.95 s, cupy backend.
+- Screenshots: shots49-npc/ (6), shots49-mobile/ (4).
+- Byte-identical rebuild verified (digest 86fece50...).
 
 ### Honest limits
 
-- Text-only model: no visual inspection. Trees and bark exist per the checks;
-  how they look is the owner's call.
-- Stand-ins are hidden (visible=false) once the model loads; a live probe
-  confirmed 3 standins visible=false and 3 models visible=true. My earlier note
-  about a stand-in visibility bug was wrong — the bug was in my reading of the
-  scene, not in the code.
-- Preview grew to 5.13 MB (from 4.83). Still under the 5.5 MB watch threshold
-  but trending up. Grass normal remains the biggest single file at 702 KB.
+- Text-only model: no visual inspection. Pixel-identity was measured, not seen.
+- WebP support in iOS Safari is assumed (standard since iOS 14) but not tested
+  on real hardware; the loader still degrades gracefully to flat colours if a
+  map fails, as before.
 - Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
 
-1. **Texture budget watch**: grass normal is 702 KB; preview is 5.13 MB.
-2. **A real-device pass** on physical hardware (biggest honest gap).
-3. **Cast idle variety**: weight shifts, occasional glances around the plaza.
+1. **A real-device pass** on physical hardware (biggest honest gap).
+2. **Cast idle variety**: weight shifts, occasional glances around the plaza.
+3. **Watch the GLB budget**: asset GLBs total ~250 KB; fine for now.
+
+## Previous round — Round 48: vegetation — three trees with bark texture.
 
 ## Previous round — Round 47: NPC attention — head turn toward the player, blinking.
 
