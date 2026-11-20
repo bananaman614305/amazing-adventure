@@ -2535,27 +2535,43 @@ try {
       if (glanceMax.v > 0.1) break; // seen one; no need to wait the full cycle
     }
     // Walk the player back next to her: attention must override the glance.
-    // The position is re-asserted every frame: the game's own player update
-    // pushes a teleported player back out of geometry, so setting it once let
-    // the player drift away mid-check and the head eased back to rest. A probe
-    // showed attention reaching 0.76 and then decaying for exactly that reason.
-    let attention = 0;
+    //
+    // Two measurement traps in a row here. First, the position is re-asserted
+    // every frame, because the game's player update pushes a teleported player
+    // out of geometry. Second -- and this is the one that mattered -- the NECK
+    // does not stay turned: the body turns to face the player (npcs.js updateNPCs
+    // turns group.rotation.y toward them), which leaves the head with less and
+    // less to do. A trace showed the neck peaking at 0.77 and then easing to
+    // rest while the body's heading error went to exactly 0.
+    //
+    // So the honest assertion is: the body ends up facing the player, and the
+    // head turned toward them during the approach. Asserting "the neck stays
+    // turned" would be asserting the wrong behaviour.
+    let maxNeck = 0;
     const attentionDeadline = performance.now() + 4000;
     while (performance.now() < attentionDeadline) {
       await new Promise((r) => requestAnimationFrame(r));
       api.player.position.x = mara.group.position.x + 1.2;
       api.player.position.z = mara.group.position.z + 0.4;
-      // Give the loop a frame with the player in place before sampling.
       await new Promise((r) => requestAnimationFrame(r));
-      attention = Math.max(attention, Math.abs(mara.limbs.neck ? mara.limbs.neck.rotation.y : 0));
-      if (attention > 0.3) break;
+      maxNeck = Math.max(maxNeck, Math.abs(mara.limbs.neck ? mara.limbs.neck.rotation.y : 0));
     }
+    const want = Math.atan2(
+      api.player.position.x - mara.group.position.x,
+      api.player.position.z - mara.group.position.z
+    );
+    let headingError = want - mara.group.rotation.y;
+    while (headingError > Math.PI) headingError -= Math.PI * 2;
+    while (headingError < -Math.PI) headingError += Math.PI * 2;
+    const bodyFaces = Math.abs(headingError);
+    const attention = maxNeck;
     const leanRange = leanMax.v;
     const glanceRange = glanceMax.v;
     return {
       leanRange: Number(leanRange.toFixed(4)),
       glanceRange: Number(glanceRange.toFixed(4)),
-      attention: Number(attention.toFixed(4))
+      attention: Number(attention.toFixed(4)),
+      bodyFaces: Number(bodyFaces.toFixed(3))
     };
   });
   checks.check('idle legs rock with a weight shift',
@@ -2564,8 +2580,8 @@ try {
   checks.check('the cast glances around when nobody is near',
     idle.glanceRange > 0.1,
     JSON.stringify(idle));
-  checks.check('player attention still overrides the idle glance',
-    idle.attention > 0.3,
+  checks.check('player attention turns the head, then the body faces them',
+    idle.attention > 0.3 && idle.bodyFaces < 0.15,
     JSON.stringify(idle));
 
   await capture(page, 'round51-idle.png');
