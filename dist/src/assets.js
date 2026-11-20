@@ -18,21 +18,21 @@ export const FOUNTAIN_COLLIDER = 2.15;
 
 /** Texture files the stone material needs, relative to the served root. */
 export const STONE_TEXTURE_FILES = {
-  map: 'assets/textures/stone_albedo.png',
-  normalMap: 'assets/textures/stone_normal.png',
-  roughnessMap: 'assets/textures/stone_rough.png'
+  map: 'assets/textures/stone_albedo.webp',
+  normalMap: 'assets/textures/stone_normal.webp',
+  roughnessMap: 'assets/textures/stone_rough.webp'
 };
 
 export const COBBLE_TEXTURE_FILES = {
-  map: 'assets/textures/cobble_albedo.png',
-  normalMap: 'assets/textures/cobble_normal.png',
-  roughnessMap: 'assets/textures/cobble_rough.png'
+  map: 'assets/textures/cobble_albedo.webp',
+  normalMap: 'assets/textures/cobble_normal.webp',
+  roughnessMap: 'assets/textures/cobble_rough.webp'
 };
 
 export const GRASS_TEXTURE_FILES = {
-  map: 'assets/textures/grass_albedo.png',
-  normalMap: 'assets/textures/grass_normal.png',
-  roughnessMap: 'assets/textures/grass_rough.png'
+  map: 'assets/textures/grass_albedo.webp',
+  normalMap: 'assets/textures/grass_normal.webp',
+  roughnessMap: 'assets/textures/grass_rough.webp'
 };
 
 export const HOUSE_ASSET = 'assets/house.glb';
@@ -87,27 +87,27 @@ export const TREE_ASSET = 'assets/tree.glb';
 export const TREE_MODEL_SIZE = { trunkRadius: 0.22, trunkHeight: 2.6, canopyRadius: 1.35 };
 
 export const BARK_TEXTURE_FILES = {
-  map: 'assets/textures/bark_albedo.png',
-  normalMap: 'assets/textures/bark_normal.png',
-  roughnessMap: 'assets/textures/bark_rough.png'
+  map: 'assets/textures/bark_albedo.webp',
+  normalMap: 'assets/textures/bark_normal.webp',
+  roughnessMap: 'assets/textures/bark_rough.webp'
 };
 
 export const WOOD_TEXTURE_FILES = {
-  map: 'assets/textures/wood_albedo.png',
-  normalMap: 'assets/textures/wood_normal.png',
-  roughnessMap: 'assets/textures/wood_rough.png'
+  map: 'assets/textures/wood_albedo.webp',
+  normalMap: 'assets/textures/wood_normal.webp',
+  roughnessMap: 'assets/textures/wood_rough.webp'
 };
 
 export const PLASTER_TEXTURE_FILES = {
-  map: 'assets/textures/plaster_albedo.png',
-  normalMap: 'assets/textures/plaster_normal.png',
-  roughnessMap: 'assets/textures/plaster_rough.png'
+  map: 'assets/textures/plaster_albedo.webp',
+  normalMap: 'assets/textures/plaster_normal.webp',
+  roughnessMap: 'assets/textures/plaster_rough.webp'
 };
 
 export const BRICK_TEXTURE_FILES = {
-  map: 'assets/textures/brick_albedo.png',
-  normalMap: 'assets/textures/brick_normal.png',
-  roughnessMap: 'assets/textures/brick_rough.png'
+  map: 'assets/textures/brick_albedo.webp',
+  normalMap: 'assets/textures/brick_normal.webp',
+  roughnessMap: 'assets/textures/brick_rough.webp'
 };
 
 /**
