@@ -115,36 +115,42 @@ def prism(bm, radius, height, cx, cy, cz, sides=8, taper_top=1.0):
 
 
 def head_group(mats, hair_style, head_z=1.52, head_r=0.155):
+    # The head assembly is authored around the NECK pivot at the origin, like
+    # the limbs: the game hangs it under a neck pivot at the shoulders and can
+    # turn it toward the player. head_z is measured from the ground in body
+    # space; subtract the neck height (shoulders) to get pivot-space offsets.
+    neck_z = 1.32
+    hz = head_z - neck_z
     bm = bmesh.new()
-    prism(bm, head_r, 0.26, 0, 0, head_z, sides=10, taper_top=0.92)
+    prism(bm, head_r, 0.26, 0, 0, hz, sides=10, taper_top=0.92)
     emit("Head", bm, mats["skin"])
     bm = bmesh.new()
-    box(bm, 0.05, 0.06, 0.06, 0, head_r + 0.015, head_z - 0.01)
+    box(bm, 0.05, 0.06, 0.06, 0, head_r + 0.015, hz - 0.01)
     emit("Nose", bm, mats["skin"])
     # Eyes: a white sclera slab with a dark iris, sunk into the face plane so
     # they read at phone distance without a texture. Offset in x for L/R.
     for side, ex in (("L", -0.055), ("R", 0.055)):
         bm = bmesh.new()
-        box(bm, 0.052, 0.025, 0.062, ex, head_r - 0.005, head_z + 0.025)
+        box(bm, 0.052, 0.025, 0.062, ex, head_r - 0.005, hz + 0.025)
         emit(f"EyeWhite{side}", bm, mats["eye"])
         bm = bmesh.new()
-        box(bm, 0.026, 0.012, 0.032, ex, head_r + 0.012, head_z + 0.022)
+        box(bm, 0.026, 0.012, 0.032, ex, head_r + 0.012, hz + 0.022)
         emit(f"EyeIris{side}", bm, mats["iris"])
     bm = bmesh.new()
-    box(bm, 0.09, 0.02, 0.02, 0, head_r + 0.005, head_z - 0.075)
+    box(bm, 0.09, 0.02, 0.02, 0, head_r + 0.005, hz - 0.075)
     emit("Mouth", bm, mats["mouth"])
     bm = bmesh.new()
     r = head_r + (0.03 if hair_style == "messy" else 0.02)
-    prism(bm, r, 0.1, 0, -0.012, head_z + 0.12, sides=10,
+    prism(bm, r, 0.1, 0, -0.012, hz + 0.12, sides=10,
           taper_top=0.7 if hair_style == "messy" else 0.85)
     emit("Hair", bm, mats["hair"])
     if hair_style == "bun":
         bm = bmesh.new()
-        prism(bm, 0.07, 0.09, 0, -head_r - 0.03, head_z + 0.1, sides=8)
+        prism(bm, 0.07, 0.09, 0, -head_r - 0.03, hz + 0.1, sides=8)
         emit("HairBun", bm, mats["hair"])
     elif hair_style == "tied":
         bm = bmesh.new()
-        box(bm, 0.07, 0.16, 0.07, 0, -head_r - 0.07, head_z - 0.02)
+        box(bm, 0.07, 0.16, 0.07, 0, -head_r - 0.07, hz - 0.02)
         emit("HairTail", bm, mats["hair"])
 
 
@@ -352,6 +358,9 @@ for _side in ("L", "R"):
     for _name in ("Hand", "Thumb", "Boot", "Pauldron", "Sleeve"):
         JOINT_SPACE.add(f"{_name}{_side}")
 JOINT_SPACE.update({"LimbArmL", "LimbArmR", "LimbLegL", "LimbLegR"})
+# The head assembly is authored around the neck pivot (origin at the shoulders).
+JOINT_SPACE.update({"Head", "Nose", "Mouth", "Hair", "HairBun", "HairTail",
+                    "EyeWhiteL", "EyeWhiteR", "EyeIrisL", "EyeIrisR"})
 
 
 def bounds_report():

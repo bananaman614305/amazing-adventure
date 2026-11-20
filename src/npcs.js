@@ -82,7 +82,8 @@ const WALK_SPEED = 1.4;
 // animateCast() works identically on both.
 export const JOINTS = {
   shoulder: { y: 1.32, x: 0.26 },
-  hip: { y: 0.78, x: 0.16 }
+  hip: { y: 0.78, x: 0.16 },
+  neck: { y: 1.32 }
 };
 
 /**
@@ -178,6 +179,14 @@ function buildModelled(data, result) {
   // transforms, so apply the same scale here for the procedural rig parity.
   const scale = data.id === 'pip' ? 0.72 : 1;
 
+  // Neck pivot: the head assembly is authored around it, so the head can turn
+  // toward the player without rotating the torso.
+  const neck = new THREE.Group();
+  neck.name = 'NeckPivot';
+  neck.position.set(0, JOINTS.neck.y, 0);
+  group.add(neck);
+  pivots.NeckPivot = neck;
+
   // Meshes authored around a joint must ride that joint's pivot. Hands, thumbs
   // and pauldrons belong to the arm; boots to the leg. Getting this wrong puts
   // them at the body root, which renders hands at knee height and boots below
@@ -185,7 +194,11 @@ function buildModelled(data, result) {
   const jointParent = {
     HandL: 'LimbArmL', ThumbL: 'LimbArmL', PauldronL: 'LimbArmL',
     HandR: 'LimbArmR', ThumbR: 'LimbArmR', PauldronR: 'LimbArmR',
-    BootL: 'LimbLegL', BootR: 'LimbLegR'
+    BootL: 'LimbLegL', BootR: 'LimbLegR',
+    Head: 'NeckPivot', Nose: 'NeckPivot', Mouth: 'NeckPivot',
+    Hair: 'NeckPivot', HairBun: 'NeckPivot', HairTail: 'NeckPivot',
+    EyeWhiteL: 'NeckPivot', EyeWhiteR: 'NeckPivot',
+    EyeIrisL: 'NeckPivot', EyeIrisR: 'NeckPivot'
   };
 
   const hands = { L: pivots.LimbArmL, R: pivots.LimbArmR };
@@ -216,9 +229,18 @@ function buildModelled(data, result) {
   }
 
   group.scale.setScalar(scale);
+  // Expose the iris meshes so animateCast() can blink them.
+  let eyeIrisL = null;
+  let eyeIrisR = null;
+  group.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.name === 'EyeIrisL') eyeIrisL = o;
+    if (o.name === 'EyeIrisR') eyeIrisR = o;
+  });
   return { group, limbs: {
     armL: pivots.LimbArmL, armR: pivots.LimbArmR,
-    legL: pivots.LimbLegL, legR: pivots.LimbLegR
+    legL: pivots.LimbLegL, legR: pivots.LimbLegR,
+    neck: pivots.NeckPivot, eyeIrisL, eyeIrisR
   }, mode: 'model' };
 }
 
@@ -342,7 +364,7 @@ export function updateNPCs(npcs, dt, playerPosition) {
       npc.group.rotation.y = turnToward(npc.group.rotation.y, desired, dt * 4);
     }
 
-    animateCast(npc, dt);
+    animateCast(npc, dt, undefined, playerPosition);
   }
 }
 
@@ -353,7 +375,7 @@ export function updateNPCs(npcs, dt, playerPosition) {
  * the cast does not march in perfect lockstep; each character is offset by its
  * spawn position.
  */
-export function animateCast(npc, dt, time = performance.now() / 1000) {
+export function animateCast(npc, dt, time = performance.now() / 1000, playerPosition = null) {
   const { limbs } = npc;
   if (!limbs) return;
   const t = time + npc.group.position.x * 1.7;
@@ -371,6 +393,30 @@ export function animateCast(npc, dt, time = performance.now() / 1000) {
     if (limbs.legL) limbs.legL.rotation.x = 0;
     if (limbs.legR) limbs.legR.rotation.x = 0;
   }
+  // Attention: within talking range, turn the head toward the player, with a
+  // little overshoot-free easing. Beyond it, ease the head back to centre.
+  if (limbs.neck) {
+    let desired = 0;
+    if (playerPosition) {
+      const dx = playerPosition.x - npc.group.position.x;
+      const dz = playerPosition.z - npc.group.position.z;
+      if (Math.hypot(dx, dz) < TALK_RANGE + 1.5) {
+        // Angle of the player relative to where the body faces.
+        desired = Math.atan2(dx, dz) - npc.group.rotation.y;
+        while (desired > Math.PI) desired -= Math.PI * 2;
+        while (desired < -Math.PI) desired += Math.PI * 2;
+        // The head cannot spin round: clamp to a believable nod range.
+        desired = Math.max(-0.9, Math.min(0.9, desired));
+      }
+    }
+    limbs.neck.rotation.y += (desired - limbs.neck.rotation.y) * Math.min(1, dt * 4);
+  }
+  // Blink: each character blinks on its own phase offset, iris squashed for
+  // ~0.12 s. The sclera stays, so the eye reads as closing, not vanishing.
+  const blinkPhase = (t * 0.42 + npc.group.position.z * 0.37) % 3.2;
+  const blink = blinkPhase < 0.06 ? 0.15 : 1;
+  if (limbs.eyeIrisL) limbs.eyeIrisL.scale.y = blink;
+  if (limbs.eyeIrisR) limbs.eyeIrisR.scale.y = blink;
 }
 
 /** Shortest-path angle interpolation so NPCs do not spin the long way round. */

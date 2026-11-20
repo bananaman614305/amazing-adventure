@@ -178,3 +178,11 @@ its procedural stand-in or flat colour and stays fully playable.
   mouth (8 boxes, 96 tris) and palm + thumb per hand. Triangle budgets raised to
   560 per character; all six still well under (328-436). Still fully procedural,
   no third-party assets.
+
+### Round 47 updates
+
+- `assets/npc_*.glb` re-exported from the same script: the head assembly (head,
+  nose, eyes, mouth, hair) is now authored around a NECK pivot at the origin
+  instead of body space, so the game can turn the head toward the player. The
+  joint-space set in the bounds check gained the head meshes. Still fully
+  procedural, no third-party assets.
