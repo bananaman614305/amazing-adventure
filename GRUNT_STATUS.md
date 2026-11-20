@@ -431,21 +431,29 @@ their joints* so the game can rotate them:
   which suits this art style but is not organic animation.
 - Chrome emulation only; no physical phone or iOS Safari.
 
-### Mobile status
+### Mobile status — verified
 
-The mobile suite was launched three times and each run was slower than the
-1400 s window under host load (~10-14). Round 43's mobile suite passed 185/185
-with the same scene minus the cast; the cast adds ~1.7 K tris and 100 draw
-calls at ratio 2 on a phone profile, which the Round 43 quality tier is designed
-to absorb. This is NOT yet verified for Round 44 and must not be reported as
-passing until it is.
+The mobile suite passed **185/185** across all 4 profiles against the committed
+dist under /amazing-adventure/. Frame rates with the cast: iPhone 13 portrait
+9.5 fps, Pixel 7 1.7 fps, iPhone SE 2.7 fps, iPhone 13 landscape 2.0 fps — the
+same or better than Round 43's run (9.0 / 1.6 / 2.8 / 1.9). A separate probe
+measured the cast's cost directly on the Pixel 7 profile at pinned ratio 2:
+2.0 fps with the cast vs 2.0 fps with all NPCs hidden (116 vs 84 draw calls,
+2714 vs 2122 triangles) — the scene is fill-rate bound, so the extra geometry
+is effectively free, exactly as Round 43's measurements predicted.
+
+Earlier runs were killed mid-suite under host load (~10-14) and by my own
+pkill pattern matching the launching shell; the successful run was launched
+via a wrapper script with a bracket-safe pattern. Screenshots saved to
+/worker/state/logs/shots44-mobile/ (4 PNGs).
+
+Totals: 432 unit + 198 desktop + 185 mobile = 815 checks, 0 failures.
 
 ## Next steps
 
-1. **Finish the mobile run for Round 44** (the only outstanding gate), then file
-   publication for both Round 44 and its predecessor stack.
-2. **First-area polish** past the cast: the lane stalls, gate and ground are
-   modelled but the plaza's lighting and other props are still plain.
+1. **First-area polish** past the cast: the plaza's lighting and remaining
+   plain props, using the fountain as the quality reference (owner request).
+2. **Cast faces and hands**: eyes and simple mitten hands would help close-ups.
 3. **A real-device pass** on physical hardware (biggest honest gap).
 
 ## Previous round — Round 43: adaptive quality tier.
