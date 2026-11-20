@@ -373,60 +373,55 @@ instructions.
 
 ## Current task
 
-Round 46 — cast faces and mitten hands, plus a shipped limb-routing bug fix.
-Owner direction: faces and hands for close-ups.
+Round 47 — NPC attention: the cast turns its head toward the player and blinks.
+Owner direction: idle polish, attention within talk range.
 
 ### What made it into the game
 
-- `art/blender/make_cast.py`: eyes (white sclera + dark iris per side), a
-  mouth, and mitten hands (palm + thumb) authored in joint space. The bounds
-  check now excludes joint-space meshes via an explicit JOINT_SPACE set instead
-  of a name-prefix list. Re-exported all six: 340 / 372 / 328 / 416 / 436 /
-  348 tris (budgets raised to 560).
-- `src/npcs.js` buildModelled: a jointParent map routes Hand/Thumb/Pauldron to
-  the arm pivot and Boot to the leg pivot.
-
-### The bug this fixed (shipped in round 44)
-
-Hand*, Thumb*, Boot* and Pauldron* meshes are authored *around their limb
-joints*, but round 44's loader attached everything except Limb* to the body
-root. Result: hands rendered at knee height and boots below the floor. There
-was no check for it; the Blender-side bounds assert surfaced the inconsistency
-when ThumbL made the body bounds sink to -0.44. Two new browser checks now
-guard it: joint-space meshes must ride a Limb pivot (regex fixed from
-lowercase to the actual capitalized pivot names after the first run failed),
-and every character must carry 4 eye meshes.
+- `art/blender/make_cast.py`: the head assembly (head, nose, eyes, mouth, hair)
+  is re-authored around a NECK pivot at the origin (head_z minus shoulder
+  height), like the limbs. The bounds check's joint-space set gained the head
+  meshes. All six re-exported clean at 340 / 372 / 328 / 416 / 436 / 348 tris.
+- `src/npcs.js`: buildModelled adds a NeckPivot at the shoulders and routes the
+  head meshes to it; animateCast eases the head toward the player within
+  TALK_RANGE + 1.5, clamped to +/-0.9 rad (never spins round), and blinks by
+  squashing the irises on a per-character phase offset (sclera stays, so the
+  eye reads as closing). updateNPCs passes playerPosition through.
+- JOINTS gains neck.
 
 ### Evidence
 
-- Desktop vs committed dist: 203/203 pass (2 new joint checks; 4 eye meshes on
-  every character, all joint-space meshes parented to pivots, 0 bad).
-- Unit: 432/432. Total so far: 432 + 203 = 635.
-- Blender asserts per character: joint envelope, ground-plane body bounds, tri
-  budget — all six clean.
-- Screenshots: shots46-npc/ (6 NPC close-ups with faces) and shots46-after/
-  (4 plaza views).
-- Mobile vs committed dist: 185/185 pass across 4 profiles (9.0 / 1.5 / 2.5 /
-  1.6 fps — in line with Round 45's 8.5 / 1.5 / 2.4 / 1.7, no regression).
-- Totals: 432 unit + 203 desktop + 185 mobile = 820 checks, 0 failures.
-- Byte-identical rebuild verified (digest 52317343...).
+- Desktop vs committed dist: 205/205 pass, including 2 new checks: a nearby
+  player turns the head to 0.9 rad and it eases back to 0.005 after walking
+  away; the iris scale dips to 0.15 during a blink.
+- Unit: 432/432.
+- Blink probe: 3 of 100 samples caught the iris at 0.15 — the blink is 0.06 of
+  a 3.2-unit cycle (~1.9% of frames), so the browser check now samples every
+  animation frame for a full cycle instead of polling on a timer (my first
+  check polled every 80 ms and missed it entirely).
+- Screenshots: shots47-npc/ (6 NPC close-ups).
+- Mobile vs committed dist: 185/185 pass across 4 profiles (8.9 / 1.5 / 2.1 /
+  1.7 fps — in line with Round 46's 9.0 / 1.5 / 2.5 / 1.6; the SE dip of
+  0.4 fps is within run-to-run variance under host load).
+- Totals: 432 unit + 205 desktop + 185 mobile = 822 checks, 0 failures.
+- Byte-identical rebuild verified (digest 7b87c9f1...).
 
 ### Honest limits
 
-- Text-only model: no visual inspection. The face meshes exist per the browser
-  check (4 eye meshes each) and joint routing is verified; how they *look* is
-  the owner's call.
-- The bug fix means round 44's published preview showed hands/boots in the
-  wrong place. The owner may have noticed; the fix is in this branch and will
-  land when it publishes.
+- Text-only model: no visual inspection. Head turn and blink are measured
+  rotations/scales; how they *look* is the owner's call.
+- The head clamp (+/-0.9 rad) means an NPC cannot look fully over its shoulder;
+  the body still turns via the existing routine logic.
 - Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
 
 1. **Texture budget watch**: grass normal is 702 KB; preview is 4.83 MB.
 2. **A real-device pass** on physical hardware (biggest honest gap).
-3. **Idle behaviour polish**: standing NPCs only sway their arms; a subtle
-   head turn toward the player within talk range would read as attention.
+3. **Cast idle variety**: weight shifts, occasional glances around the plaza
+   rather than all facing their routine spot.
+
+## Previous round — Round 46: cast faces and mitten hands (+ limb-routing fix).
 
 ## Previous round — Round 45: plaza polish (grass, sky, walls).
 
