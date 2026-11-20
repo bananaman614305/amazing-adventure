@@ -3436,3 +3436,83 @@ hosting step to guess, the release now describes itself:
 3. **A real screen reader session.** Rounds 13, 16 and 24–25 verify the browser's
    accessibility tree, which is close to what assistive tech consumes, but no NVDA or
    VoiceOver run has happened, so verbosity and announcement ordering stay unverified.
+
+---
+
+## Round 54 — the lamp round (gameplay reason to linger in the lane)
+
+**Branch:** `grunt/round54-lane-lighting` (off `grunt/round53-lane-continuity`, PR #54 unmerged).
+**Head:** `cd9ea22` (feature `cbf7769` + preview rebuild `36adccd` + evidence `cd9ea22`).
+
+### Current task
+Round 54 is complete and ready to publish: the lane lanterns now stay dark at
+dusk until the player walks the lamp round and lights them; the chore pays a
+small trader reward, resets at dawn, and the lamp post reports state honestly.
+All three test suites pass with 0 failures. Next: write `publish.json` +
+`needs-supervision.json` and end the turn for the supervisor.
+
+### What was built
+- `src/areas.js`: `laneLightingStatus`, `laneLanternsShouldGlow`,
+  `laneLanternsAtDawn` (pure), `lightLaneLanterns` (pays 2 coins + trade
+  standing, refuses in daylight / when already lit), `LANE_LIGHTING_POST`,
+  `LANE_LIGHT_REWARD`, `laneLightingHint` (never null — names the fixture when
+  the round is unavailable).
+- `src/main.js`: lamp-post interactable always answers in reach (kind
+  `'lanterns'`, label from `laneLightingHint`); `performLaneLighting()` runs the
+  round and refreshes phase/HUD/save; dawn reset in `syncPhase` uses
+  `laneLanternsAtDawn` and toasts `dawn.message`; dusk toast distinguishes lit
+  vs. dark lane.
+- `src/world.js`: lamp post head `emissiveIntensity` 0 by default and driven by
+  `applyPhase(..., laneLit)` as `look.lampGlow * 0.9` only when lit; no point
+  light (low-tier budget preserved).
+- `src/ambient.js`: `lane_lit` / `lane_dark` scripts; `scriptKeyFor` dusk
+  `lane_lit` if lit else `lane_dark`, night `lane_lit` if lit else `night`;
+  toll/perk priorities preserved; `dusk` key folded into `lane_lit`.
+- `src/touch.js`: interact label `'Light'` for `lanterns`.
+- `tests/lane.test.mjs` 23 pass; `tests/ambient.test.mjs` 16 pass;
+  `tests/touch.test.mjs` updated.
+- `scripts/test-round2.mjs`: round-54 desktop section added (daylight
+  explanation, pays once/no farming, post head matches lit state, lit all night
+  + not offered twice, dawn reset + dusk offers again, ambient both ways);
+  round-53 lane check updated for dark-until-lit semantics.
+
+### Checks actually run
+- `npm test` — **468/468 pass** (0 fail).
+- `npm run test:browser` — **225 pass, 0 fail**, exit 0 (last run `/tmp/bfinal.log`).
+- `npm run test:mobile` — **185 pass, 0 fail**, exit 0, 4 profiles
+  (`/tmp/m2.log`, `/tmp/ma.log`).
+- Mutation proof: removing the already-lit guard in `laneLightingStatus` fails
+  tests 17, 20, 22; restoring passes all 23. `scriptKeyFor` dusk-branch
+  mutations fail tests 7, 8, 11; restored, 16 pass.
+- Preview rebuilt: `node scripts/build-preview.mjs` → 69 files, 3952 KB,
+  digest `55dd8d99…`; byte-identical second rebuild verified.
+- Evidence: `artifacts/round54-lane-lighting.png` (570 KB, captured from
+  committed `dist/`); mobile captures refreshed.
+
+### Decisions
+- Lamp post always answers (never inert) so a returning player is told why there
+  is nothing to do; `laneLightingHint` never returns null.
+- Pure-logic-first: rules in `src/areas.js`, unit tests before wiring.
+- Post head is emissive only (no point light) to protect the low-tier per-pixel
+  budget; `applyPhase` drives it.
+- Ambient lane chatter is lower priority than toll/perk scripts, as intended;
+  the `laneTalk` browser check samples a fresh state so it asserts the lane
+  scripts directly.
+- Stacked branch publication; round 53 (PR #54) still unmerged, so base is
+  `grunt/round53-lane-continuity`.
+
+### Limitations
+- Text-only model: renders never visually inspected; fixture counts, lamp
+  intensities by time of day, post-lamp emissive, and quest state are measured.
+- Chrome device emulation only; no physical phone or iOS Safari.
+- No Blender/Kaggle work this round (graphics pass deferred to a later round).
+
+### Next steps
+1. Publish Round 54 via `/worker/state/outbox/publish.json` (5 fields) and
+   `needs-supervision.json`, leaving commit `cd9ea22` checked out, tree clean.
+2. Next round candidate: a small gameplay or ambience chunk that reuses the
+   lamp-round hook (e.g. a trader who notices the lit lane, or a second
+   interactable unlocked by it), or a Blender/Kaggle graphics pass on the lane
+   as flagged in the checkpoint instructions.
+3. Continue stacked-branch flow; do not wait idle for PR #54 to merge.
+
