@@ -400,8 +400,11 @@ Owner direction: idle polish, attention within talk range.
   animation frame for a full cycle instead of polling on a timer (my first
   check polled every 80 ms and missed it entirely).
 - Screenshots: shots47-npc/ (6 NPC close-ups).
-- Mobile suite launched; pending at checkpoint time. Not reported as passing
-  until the run completes.
+- Mobile vs committed dist: 185/185 pass across 4 profiles (8.9 / 1.5 / 2.1 /
+  1.7 fps — in line with Round 46's 9.0 / 1.5 / 2.5 / 1.6; the SE dip of
+  0.4 fps is within run-to-run variance under host load).
+- Totals: 432 unit + 205 desktop + 185 mobile = 822 checks, 0 failures.
+- Byte-identical rebuild verified (digest 7b87c9f1...).
 
 ### Honest limits
 
@@ -413,9 +416,10 @@ Owner direction: idle polish, attention within talk range.
 
 ## Next steps
 
-1. **Finish the Round 47 mobile run**, then file publication.
-2. **Texture budget watch**: grass normal is 702 KB; preview is 4.83 MB.
-3. **A real-device pass** on physical hardware (biggest honest gap).
+1. **Texture budget watch**: grass normal is 702 KB; preview is 4.83 MB.
+2. **A real-device pass** on physical hardware (biggest honest gap).
+3. **Cast idle variety**: weight shifts, occasional glances around the plaza
+   rather than all facing their routine spot.
 
 ## Previous round — Round 46: cast faces and mitten hands (+ limb-routing fix).
 
