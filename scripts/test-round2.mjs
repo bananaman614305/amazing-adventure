@@ -2480,6 +2480,39 @@ try {
     JSON.stringify(trees));
 
   await capture(page, 'round48-trees.png');
+  // --- 28o. Texture colour space ------------------------------------------
+  // Measured bug: every texture slot reported colorSpace "" -- nothing was set,
+  // so Three.js treated albedo maps as linear (too dark) and would have
+  // mis-decoded normal/roughness data if they had been tagged sRGB.
+  const colorSpaces = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const byKind = {};
+    api.scene.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      for (const key of ['map', 'normalMap', 'roughnessMap']) {
+        const t = o.material[key];
+        if (!t) continue;
+        if (!byKind[key]) byKind[key] = new Set();
+        // '' is Three's real NoColorSpace value, so it must not collapse into
+        // '(unset)' -- use a null/undefined test, not truthiness.
+        byKind[key].add(t.colorSpace === undefined ? '(unset)' : t.colorSpace);
+      }
+    });
+    const out = {};
+    for (const [k, v] of Object.entries(byKind)) out[k] = [...v];
+    return out;
+  });
+  checks.check('albedo maps are decoded as sRGB',
+    (colorSpaces.map || []).length === 1 && (colorSpaces.map || [])[0] === 'srgb',
+    JSON.stringify(colorSpaces));
+  checks.check('normal and roughness maps stay linear (not sRGB)',
+    ['normalMap', 'roughnessMap'].every((k) =>
+      (colorSpaces[k] || []).length === 1 && (colorSpaces[k] || [])[0] === ''),
+    JSON.stringify(colorSpaces));
+
+  await capture(page, 'round50-colorspace.png');
+
 
 
 

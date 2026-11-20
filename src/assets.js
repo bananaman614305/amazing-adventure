@@ -18,21 +18,21 @@ export const FOUNTAIN_COLLIDER = 2.15;
 
 /** Texture files the stone material needs, relative to the served root. */
 export const STONE_TEXTURE_FILES = {
-  map: 'assets/textures/stone_albedo.png',
-  normalMap: 'assets/textures/stone_normal.png',
-  roughnessMap: 'assets/textures/stone_rough.png'
+  map: 'assets/textures/stone_albedo.webp',
+  normalMap: 'assets/textures/stone_normal.webp',
+  roughnessMap: 'assets/textures/stone_rough.webp'
 };
 
 export const COBBLE_TEXTURE_FILES = {
-  map: 'assets/textures/cobble_albedo.png',
-  normalMap: 'assets/textures/cobble_normal.png',
-  roughnessMap: 'assets/textures/cobble_rough.png'
+  map: 'assets/textures/cobble_albedo.webp',
+  normalMap: 'assets/textures/cobble_normal.webp',
+  roughnessMap: 'assets/textures/cobble_rough.webp'
 };
 
 export const GRASS_TEXTURE_FILES = {
-  map: 'assets/textures/grass_albedo.png',
-  normalMap: 'assets/textures/grass_normal.png',
-  roughnessMap: 'assets/textures/grass_rough.png'
+  map: 'assets/textures/grass_albedo.webp',
+  normalMap: 'assets/textures/grass_normal.webp',
+  roughnessMap: 'assets/textures/grass_rough.webp'
 };
 
 export const HOUSE_ASSET = 'assets/house.glb';
@@ -87,27 +87,27 @@ export const TREE_ASSET = 'assets/tree.glb';
 export const TREE_MODEL_SIZE = { trunkRadius: 0.22, trunkHeight: 2.6, canopyRadius: 1.35 };
 
 export const BARK_TEXTURE_FILES = {
-  map: 'assets/textures/bark_albedo.png',
-  normalMap: 'assets/textures/bark_normal.png',
-  roughnessMap: 'assets/textures/bark_rough.png'
+  map: 'assets/textures/bark_albedo.webp',
+  normalMap: 'assets/textures/bark_normal.webp',
+  roughnessMap: 'assets/textures/bark_rough.webp'
 };
 
 export const WOOD_TEXTURE_FILES = {
-  map: 'assets/textures/wood_albedo.png',
-  normalMap: 'assets/textures/wood_normal.png',
-  roughnessMap: 'assets/textures/wood_rough.png'
+  map: 'assets/textures/wood_albedo.webp',
+  normalMap: 'assets/textures/wood_normal.webp',
+  roughnessMap: 'assets/textures/wood_rough.webp'
 };
 
 export const PLASTER_TEXTURE_FILES = {
-  map: 'assets/textures/plaster_albedo.png',
-  normalMap: 'assets/textures/plaster_normal.png',
-  roughnessMap: 'assets/textures/plaster_rough.png'
+  map: 'assets/textures/plaster_albedo.webp',
+  normalMap: 'assets/textures/plaster_normal.webp',
+  roughnessMap: 'assets/textures/plaster_rough.webp'
 };
 
 export const BRICK_TEXTURE_FILES = {
-  map: 'assets/textures/brick_albedo.png',
-  normalMap: 'assets/textures/brick_normal.png',
-  roughnessMap: 'assets/textures/brick_rough.png'
+  map: 'assets/textures/brick_albedo.webp',
+  normalMap: 'assets/textures/brick_normal.webp',
+  roughnessMap: 'assets/textures/brick_rough.webp'
 };
 
 /**
@@ -634,11 +634,30 @@ export async function loadCast({ THREE, loadGlb, url, fetchImpl = fetch }) {
  * have. Without a decoder a texture cannot exist, so this returns nulls rather
  * than pretending otherwise -- the material then falls back to its flat colour.
  */
+/**
+ * Which colour space each map kind must use.
+ *
+ * Three.js r160 tags a texture as 'srgb' or 'no-color-space' (linear). Getting
+ * this wrong is not cosmetic: an albedo map left in linear space is rendered
+ * too dark, and a normal/roughness map tagged sRGB is silently mis-decoded and
+ * lights the surface wrongly. So the choice is data, not a comment.
+ */
+export const TEXTURE_COLOR_SPACE = {
+  map: 'srgb',
+  // Three r160's NoColorSpace is the empty string, NOT the glTF-looking
+  // 'no-color-space'. Setting an unknown string makes Three look up a colour
+  // space that does not exist and throw on `.primaries`, which killed the
+  // render loop -- found the hard way, and the reason this is a named constant
+  // with the real value instead of a plausible-looking one.
+  normalMap: '',
+  roughnessMap: ''
+};
+
 export async function loadMaterialTextures({
   THREE, files = STONE_TEXTURE_FILES, fetchImpl = fetch,
   createBitmap = typeof createImageBitmap === 'function' ? createImageBitmap : null
 } = {}) {
-  const load = async (url) => {
+  const load = async (url, kind) => {
     try {
       if (!createBitmap) return null; // no decoder available in this context
       const response = await fetchImpl(url);
@@ -646,6 +665,12 @@ export async function loadMaterialTextures({
       const blob = await response.blob();
       const bitmap = await createBitmap(blob);
       const texture = new THREE.Texture(bitmap);
+      // Tag the colour space per map kind so colour maps are decoded as sRGB
+      // and data maps stay linear.
+      const space = TEXTURE_COLOR_SPACE[kind];
+      // '' (NoColorSpace) is a real value, so this must test membership, not
+      // truthiness -- a falsy check would silently skip the linear maps.
+      if (space !== undefined) texture.colorSpace = space;
       texture.needsUpdate = true;
       return texture;
     } catch {
@@ -653,7 +678,9 @@ export async function loadMaterialTextures({
     }
   };
   const [map, normalMap, roughnessMap] = await Promise.all([
-    load(files.map), load(files.normalMap), load(files.roughnessMap)
+    load(files.map, 'map'),
+    load(files.normalMap, 'normalMap'),
+    load(files.roughnessMap, 'roughnessMap')
   ]);
   return { map, normalMap, roughnessMap, anyLoaded: Boolean(map || normalMap || roughnessMap) };
 }

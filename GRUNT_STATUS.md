@@ -373,55 +373,72 @@ instructions.
 
 ## Current task
 
-Round 48 — vegetation: three trees with bark, filling the plaza skyline.
-Owner direction: cast faces/hands done; next visual chunk is the empty plaza.
+Round 50 — texture colour space (a rendering bug found by probe, not by reading).
+Owner direction: cast faces/hands and vegetation are done; this round fixes a
+defect that has been affecting every textured surface since Round 30-ish.
 
-### What made it into the game
+### The bug
 
-- `art/blender/make_tree.py`: tapered trunk + four-sphere crown, 168 tris,
-  named TreeTrunk/TreeCanopy meshes, authored at ground level (y=0).
-- `assets/tree.glb` copied.
-- `art/kaggle/bark_textures.py`: vertical-biased ridge noise -> bark albedo/
-  normal/roughness, 512x512, ran on Kaggle T4 (cupy, 7.95 s).
-- `assets/textures/bark_*.png` copied.
-- `src/assets.js`: TREE_ASSET, TREE_MODEL_SIZE, BARK_TEXTURE_FILES, loadTree().
-- `src/manifest.js`: tree.glb + bark textures added.
-- `src/world.js`: three tree spots in the quiet corners (collider is the trunk
-  only, so the player can stand under the canopy), stand-ins that upgradeTree
-  replaces, and upgradeBark dresses only TreeTrunk meshes via box-projected UVs.
-  Stand-ins stay visible (visibility not toggled) — a known minor issue; the
-  model is added alongside. Noted below.
+A live probe walked the running scene and reported the colour space of all 204
+texture slots: **every one was `""`**. Nothing set `texture.colorSpace`, so
+Three.js decoded albedo maps as linear data instead of sRGB, which renders them
+too dark.
+
+### The fix, and the mistake I made inside it
+
+- `src/assets.js`: `TEXTURE_COLOR_SPACE` records which space each map kind
+  needs — albedo `srgb`, normal/roughness linear — and
+  `loadMaterialTextures` tags each texture at creation. Clones in world.js
+  inherit it automatically.
+- **My first attempt broke the game.** I used `'no-color-space'` for the data
+  maps, which is a glTF-looking name that does not exist in Three r160. Three
+  then looked up a colour space with no entry and threw on `.primaries`,
+  killing the render loop. A live probe caught it as a `pageerror` with the
+  player untouched 3 seconds after start.
+- Verified the real constants against the vendored source rather than assuming:
+  r160 defines `NoColorSpace = ""` and `SRGBColorSpace = "srgb"`. Linear maps
+  now get the empty string, and the assignment tests membership
+  (`!== undefined`) rather than truthiness, so the empty string is not silently
+  skipped.
+- Two of my own probe/checks were then wrong in the same way: they collapsed
+  `''` into `(unset)` via a falsy test. Both now use explicit undefined checks.
+
+### Regression proof
+
+Reverting just the assignment makes the check fail:
+`FAIL albedo maps are decoded as sRGB — {"map":[""],...}`. Restored, it passes.
+So the check is a real guard, not a rubber stamp.
 
 ### Evidence
 
-- Desktop vs committed dist: 207/207 pass, including 2 new tree checks: three
-  trees placed, and tree asset upgrade reported a truthful state (model +
-  textured bark).
-- Unit: 432/432. Total so far: 432 + 207 = 639.
-- Mobile vs committed dist: 185/185 pass across 4 profiles (8.6 / 1.5 / 2.4 /
-  1.7 fps — in line with Round 47's 8.9 / 1.5 / 2.1 / 1.7).
-- Totals: 432 + 207 + 185 = 824 checks, 0 failures.
-- Screenshots: shots48-npc/ (6), shots48-mobile/ (4).
-- Byte-identical rebuild verified (digest 6fe790b2...).
-- Kaggle job: bark textures on T4, 7.95 s, cupy backend.
+- Unit: 432/432.
+- Desktop vs committed dist: 209/209 pass, including 2 new colour-space checks
+  (`map:["srgb"]`, `normalMap:[""]`, `roughnessMap:[""]`).
+- Mobile vs committed dist: 185/185 across 4 profiles (8.0 / 1.4 / 2.2 / 1.5
+  fps — in line with Round 49's 8.5 / 1.5 / 2.4 / 1.6; small dips are within
+  run-to-run variance under host load).
+- Totals: 432 + 209 + 185 = 826 checks, 0 failures.
+- Screenshots: shots50-npc/ (6), shots50-mobile/ (4), and
+  round50-colorspace.png captured by the suite.
+- Byte-identical rebuild verified (digest 881b65c3...).
 
 ### Honest limits
 
-- Text-only model: no visual inspection. Trees and bark exist per the checks;
-  how they look is the owner's call.
-- Stand-ins are hidden (visible=false) once the model loads; a live probe
-  confirmed 3 standins visible=false and 3 models visible=true. My earlier note
-  about a stand-in visibility bug was wrong — the bug was in my reading of the
-  scene, not in the code.
-- Preview grew to 5.13 MB (from 4.83). Still under the 5.5 MB watch threshold
-  but trending up. Grass normal remains the biggest single file at 702 KB.
+- Text-only model: no visual inspection. The colour space is measured off the
+  live textures, and the defect was proven by a probe, not by looking.
+- How much brighter the scene now reads is the owner's call; the change is
+  physically correct but the before/after is a judgement call.
 - Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
 
-1. **Texture budget watch**: grass normal is 702 KB; preview is 5.13 MB.
-2. **A real-device pass** on physical hardware (biggest honest gap).
-3. **Cast idle variety**: weight shifts, occasional glances around the plaza.
+1. **A real-device pass** on physical hardware (biggest honest gap).
+2. **Cast idle variety**: weight shifts, occasional glances around the plaza.
+3. **Watch the GLB budget**: asset GLBs total ~250 KB; fine for now.
+
+## Previous round — Round 49: texture budget — lossless WebP (-31.8%).
+
+## Previous round — Round 48: vegetation — three trees with bark texture.
 
 ## Previous round — Round 47: NPC attention — head turn toward the player, blinking.
 

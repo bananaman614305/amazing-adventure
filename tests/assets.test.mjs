@@ -172,7 +172,7 @@ test('stone textures degrade to nulls instead of failing', async () => {
     createBitmap: fakeBitmap,
     fetchImpl: async (url) => {
       requested.push(url);
-      if (url.endsWith('stone_albedo.png')) return okResponse({});
+      if (url.endsWith('stone_albedo.webp')) return okResponse({});
       return failResponse(404);
     }
   });
@@ -213,7 +213,7 @@ test('without a decoder, textures report unavailable rather than half-loaded', a
 test('the texture list covers the three maps the material uses', () => {
   assert.deepEqual(Object.keys(STONE_TEXTURE_FILES).sort(), ['map', 'normalMap', 'roughnessMap']);
   for (const url of Object.values(STONE_TEXTURE_FILES)) {
-    assert.match(url, /^assets\/textures\/.+\.png$/, `${url} is a served relative path`);
+    assert.match(url, /^assets\/textures\/.+\.webp$/, `${url} is a served relative path`);
   }
 });
 // --- boxProjectUvs: box projection for untextured prop models ---------------
