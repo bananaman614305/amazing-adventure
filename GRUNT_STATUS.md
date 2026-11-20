@@ -406,8 +406,12 @@ now time-bounded (12 s for the glance, 4 s for attention) with early exit.
 - Desktop vs committed dist: 212/212 pass, including 3 new idle checks:
   `{"leanRange":0.05,"glanceRange":0.1176,"attention":0.3219}` — the cast
   rocks, glances, and still turns to face a nearby player.
-- Mobile suite: launched, pending at checkpoint time. Not reported as passing
-  until the run completes.
+- Mobile vs committed dist: 185/185 across 4 profiles (7.6 / 1.4 / 2.4 / 1.5
+  fps — in line with Round 50's 8.0 / 1.4 / 2.2 / 1.5; the portrait dip is
+  within run-to-run variance under host load).
+- Totals: 442 + 212 + 185 = 839 checks, 0 failures.
+- Byte-identical rebuild verified (digest 7facba56...).
+- Screenshots: shots51-npc/ (6), shots51-mobile/ (4).
 - Screenshots: round51-idle.png captured by the suite.
 
 ### Honest limits
@@ -421,9 +425,10 @@ now time-bounded (12 s for the glance, 4 s for attention) with early exit.
 
 ## Next steps
 
-1. **Finish the Round 51 mobile run**, then file publication.
-2. **A real-device pass** on physical hardware (biggest honest gap).
-3. **Watch the GLB budget**: asset GLBs total ~250 KB; fine for now.
+1. **A real-device pass** on physical hardware (biggest honest gap).
+2. **Watch the GLB budget**: asset GLBs total ~250 KB; fine for now.
+3. **Lane ambience**: the market lane still has fewer dressing props than the
+   plaza, and it is the second place players spend real time.
 
 ## Previous round — Round 50: texture colour space (albedo sRGB).
 
