@@ -2506,7 +2506,7 @@ try {
     JSON.stringify(colorSpaces));
   checks.check('normal and roughness maps stay linear (not sRGB)',
     ['normalMap', 'roughnessMap'].every((k) =>
-      (colorSpaces[k] || []).length === 1 && (colorSpaces[k] || [])[0] === 'no-color-space'),
+      (colorSpaces[k] || []).length === 1 && (colorSpaces[k] || [])[0] === ''),
     JSON.stringify(colorSpaces));
 
   await capture(page, 'round50-colorspace.png');
