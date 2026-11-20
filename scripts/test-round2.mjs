@@ -2563,6 +2563,32 @@ try {
     JSON.stringify(idle));
 
   await capture(page, 'round51-idle.png');
+  // --- 28q. Lane dressing ----------------------------------------------------
+  const laneDressing = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const counts = { flags: 0, sacks: 0, strands: 0 };
+    api.scene.traverse((o) => {
+      if (o.isMesh && o.geometry && o.geometry.type === 'ConeGeometry' &&
+          o.geometry.parameters && o.geometry.parameters.radialSegments === 3) {
+        counts.flags += 1;
+      }
+      if (o.isMesh && o.material && o.material.color) {
+        const hex = o.material.color.getHex();
+        // The sack body material is 0xa89468.
+        if (hex === 0xa89468) counts.sacks += 1;
+      }
+    });
+    return counts;
+  });
+  checks.check('bunting flags hang over the lane',
+    laneDressing.flags >= 20,
+    JSON.stringify(laneDressing));
+  checks.check('sacks lean against the lane stall',
+    laneDressing.sacks === 3,
+    JSON.stringify(laneDressing));
+
+  await capture(page, 'round52-lane.png');
+
 
 
 
