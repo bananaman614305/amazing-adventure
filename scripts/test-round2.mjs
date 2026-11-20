@@ -2494,7 +2494,9 @@ try {
         const t = o.material[key];
         if (!t) continue;
         if (!byKind[key]) byKind[key] = new Set();
-        byKind[key].add(t.colorSpace || '(unset)');
+        // '' is Three's real NoColorSpace value, so it must not collapse into
+        // '(unset)' -- use a null/undefined test, not truthiness.
+        byKind[key].add(t.colorSpace === undefined ? '(unset)' : t.colorSpace);
       }
     });
     const out = {};
