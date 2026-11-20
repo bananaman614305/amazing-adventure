@@ -14,7 +14,8 @@ import {
   GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
   HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
-  COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, boxProjectUvs
+  COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, boxProjectUvs,
+  TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES
 } from './assets.js';
 import { loadGlb } from './glb.js';
 
@@ -479,6 +480,50 @@ export function buildWorld(renderer) {
   const benchBack = addBox(scene, [], { size: [2.2, 0.6, 0.15], position: [BENCH.x, 0.8, BENCH.z + 0.3], material: wood, castShadow: true });
   benchBack.userData = { benchStandin: true };
 
+  // --- Trees --------------------------------------------------------------
+  // The plaza had no vegetation at all: stone, grass and props read as a car
+  // park. Trees are placed in the quieter south-west and south-east corners,
+  // clear of the bench, fountain, stalls and the gate walk, so they dress the
+  // skyline without blocking any route. Each is a stand-in (trunk cylinder +
+  // canopy sphere) that upgradeTree() replaces with the modelled GLB when it
+  // loads. The collider is the trunk only: a player can stand under a canopy.
+  const TREE_SPOTS = [
+    { x: -13, z: 13, scale: 1.0 },
+    { x: 13, z: 12, scale: 0.9 },
+    { x: -14, z: 2, scale: 0.85 }
+  ];
+  const treeGroup = new THREE.Group();
+  treeGroup.name = 'trees';
+  scene.add(treeGroup);
+  const treeStandins = [];
+  for (const spot of TREE_SPOTS) {
+    const standin = new THREE.Group();
+    standin.name = 'tree-standin';
+    standin.userData = { treeStandin: true };
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(TREE_MODEL_SIZE.trunkRadius, TREE_MODEL_SIZE.trunkRadius * 1.15, TREE_MODEL_SIZE.trunkHeight, 7),
+      new THREE.MeshStandardMaterial({ color: 0x6b4728, roughness: 0.9 })
+    );
+    trunk.position.y = TREE_MODEL_SIZE.trunkHeight / 2;
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    standin.add(trunk);
+    const canopy = new THREE.Mesh(
+      new THREE.SphereGeometry(TREE_MODEL_SIZE.canopyRadius, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x4c8533, roughness: 0.85 })
+    );
+    canopy.position.y = TREE_MODEL_SIZE.trunkHeight + TREE_MODEL_SIZE.canopyRadius * 0.5;
+    canopy.castShadow = true;
+    standin.add(canopy);
+    standin.position.set(spot.x, 0, spot.z);
+    standin.scale.setScalar(spot.scale);
+    treeGroup.add(standin);
+    treeStandins.push(standin);
+    colliders.push(boxCollider(
+      spot.x - 0.5, spot.z - 0.5, spot.x + 0.5, spot.z + 0.5
+    ));
+  }
+
   for (const [x, z] of [[-5, 9], [-6.2, 9.4], [3, -7.5]]) {
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.3, 16), wood);
     barrel.position.set(x, 0.65, z);
@@ -620,7 +665,10 @@ export function buildWorld(renderer) {
     brick: 'flat',
     fountainDetail: null,
     stoneDetail: null,
-    barrelDetail: null
+    barrelDetail: null,
+    trees: 'stand-ins',
+    bark: 'flat',
+    barkDetail: null
   };
 
   function upgradeFountain() {
@@ -932,6 +980,107 @@ export function buildWorld(renderer) {
         parts: result.meshes.length,
         bytes: result.bytes,
         instances: instances.length
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeBark() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.bark = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: BARK_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.bark = 'flat';
+        return assetState;
+      }
+      // Dress the trunk meshes only. The canopy keeps its flat green.
+      let dressed = 0;
+      for (const { group } of propGroups) {
+        // Only tree groups carry a trunk mesh.
+        let isTree = false;
+        group.traverse((m) => { if (m.isMesh && m.name === 'TreeTrunk') isTree = true; });
+        if (!isTree) continue;
+        group.traverse((mesh) => {
+          if (!mesh.isMesh || mesh.name !== 'TreeTrunk') return;
+          const source = mesh.material;
+          if (!mesh.geometry.getAttribute('uv')) {
+            const position = mesh.geometry.getAttribute('position');
+            const index = mesh.geometry.getIndex();
+            const uvs = boxProjectUvs({
+              positions: position.array,
+              indices: index ? index.array : null,
+              tileMeters: 1.2
+            });
+            mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+          }
+          const material = new THREE.MeshStandardMaterial({
+            color: 0xffffff, roughness: 0.85, metalness: 0
+          });
+          for (const [key, texture] of Object.entries(textures)) {
+            if (!texture || key === 'anyLoaded') continue;
+            const copy = texture.clone();
+            copy.needsUpdate = true;
+            copy.wrapS = THREE.RepeatWrapping;
+            copy.wrapT = THREE.RepeatWrapping;
+            copy.repeat.set(1, 1);
+            material[key] = copy;
+          }
+          material.name = 'BarkWood';
+          mesh.material = material;
+          dressed += 1;
+        });
+      }
+      assetState.bark = dressed > 0 ? 'textured' : 'flat';
+      assetState.barkDetail = { dressed };
+      return assetState;
+    });
+  }
+
+  function upgradeTree() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.trees = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadTree({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.trees = 'stand-ins';
+        assetState.treeDetail = result.reason;
+        return assetState;
+      }
+      // Replace each stand-in group with the model, scaled to its spot.
+      for (let i = 0; i < TREE_SPOTS.length; i += 1) {
+        const spot = TREE_SPOTS[i];
+        const standin = treeStandins[i];
+        if (standin) standin.visible = false;
+        const group = new THREE.Group();
+        group.name = 'tree-model';
+        for (const { name, geometry, material } of result.meshes) {
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.name = name;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          group.add(mesh);
+        }
+        group.position.set(spot.x, 0, spot.z);
+        group.scale.setScalar(spot.scale);
+        treeGroup.add(group);
+        propGroups.push({ group, tile: 1.2 });
+      }
+      assetState.trees = 'model';
+      assetState.treeDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: TREE_SPOTS.length
       };
       return assetState;
     });
@@ -1419,7 +1568,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeStone(), upgradeWoodBrick()])
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeStone(), upgradeWoodBrick(), upgradeTree(), upgradeBark()])
         .then(() => upgradePropWood()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */

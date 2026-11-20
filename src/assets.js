@@ -81,6 +81,17 @@ export const CRATE_ASSET = 'assets/crates.glb';
 /** Authored size of one crate model. */
 export const CRATE_MODEL_SIZE = { width: 1.2, depth: 1.2, height: 1.2 };
 
+export const TREE_ASSET = 'assets/tree.glb';
+
+/** Authored size of the tree model (trunk + canopy). */
+export const TREE_MODEL_SIZE = { trunkRadius: 0.22, trunkHeight: 2.6, canopyRadius: 1.35 };
+
+export const BARK_TEXTURE_FILES = {
+  map: 'assets/textures/bark_albedo.png',
+  normalMap: 'assets/textures/bark_normal.png',
+  roughnessMap: 'assets/textures/bark_rough.png'
+};
+
 export const WOOD_TEXTURE_FILES = {
   map: 'assets/textures/wood_albedo.png',
   normalMap: 'assets/textures/wood_normal.png',
@@ -452,6 +463,37 @@ export async function loadNotice({ THREE, loadGlb, url = NOTICE_ASSET, fetchImpl
       : Infinity;
     if (reachX > 0.95 || reachZ > 0.35) {
       return { ok: false, reason: 'notice exceeds its collider', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
+/**
+ * Loads the tree GLB. Same contract: never throws, refuses a model whose trunk
+ * exceeds the collider (0.5 m half-extent). The canopy is allowed to overhang.
+ */
+export async function loadTree({ THREE, loadGlb, url = TREE_ASSET, fetchImpl = fetch } = {}) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const names = new Set(meshes.map((m) => m.name));
+    if (!names.has('TreeTrunk')) {
+      return { ok: false, reason: 'tree model missing TreeTrunk', url };
+    }
+    const trunkMeshes = meshes.filter((m) => m.name === 'TreeTrunk');
+    const footprint = fountainFootprint(trunkMeshes.length ? trunkMeshes : meshes);
+    const reach = footprint
+      ? Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX),
+                 Math.abs(footprint.minZ), Math.abs(footprint.maxZ))
+      : Infinity;
+    if (reach > 0.5) {
+      return { ok: false, reason: 'tree trunk exceeds its collider', footprint, url };
     }
     return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
   } catch (error) {
