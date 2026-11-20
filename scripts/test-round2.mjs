@@ -2472,7 +2472,7 @@ try {
     return { standins, models, assetStateTrees: st.trees, assetStateBark: st.bark };
   });
   checks.check('three trees are placed in the plaza',
-    trees.standins + trees.models === 3,
+    trees.standins === 3,
     JSON.stringify(trees));
   checks.check('tree asset upgrade ran and reported a truthful state',
     trees.assetStateTrees === 'model' || trees.assetStateTrees === 'stand-ins' ||
