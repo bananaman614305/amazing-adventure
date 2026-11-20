@@ -670,7 +670,7 @@ export async function loadMaterialTextures({
       const space = TEXTURE_COLOR_SPACE[kind];
       // '' (NoColorSpace) is a real value, so this must test membership, not
       // truthiness -- a falsy check would silently skip the linear maps.
-      if (space !== undefined) texture.colorSpace = space;
+      void space; // TEMP revert for regression proof
       texture.needsUpdate = true;
       return texture;
     } catch {
