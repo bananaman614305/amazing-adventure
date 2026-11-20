@@ -2512,6 +2512,58 @@ try {
     JSON.stringify(colorSpaces));
 
   await capture(page, 'round50-colorspace.png');
+  // --- 28p. Idle variety -----------------------------------------------------
+  // The cast used to stand bolt upright facing their routine spot. Now they
+  // rock foot to foot and glance around; player attention still wins.
+  const idle = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const mara = api.npcs.find((n) => n.id === 'mara');
+    // Send the player far away so attention does not override the glance.
+    api.player.position.x = -40;
+    api.player.position.z = -40;
+    // These are TIME-bounded, not frame-bounded. A glance occupies only 2.6 s
+    // of an 11 s cycle, so a fixed frame count can miss one entirely -- my
+    // first version did exactly that and reported glanceRange 0 while the
+    // weight shift (period 7.5 s) was clearly running.
+    const leanMax = { v: 0 };
+    const glanceMax = { v: 0 };
+    const deadline = performance.now() + 12000;
+    while (performance.now() < deadline) {
+      await new Promise((r) => requestAnimationFrame(r));
+      if (mara.limbs.legL) leanMax.v = Math.max(leanMax.v, Math.abs(mara.limbs.legL.rotation.z));
+      if (mara.limbs.neck) glanceMax.v = Math.max(glanceMax.v, Math.abs(mara.limbs.neck.rotation.y));
+      if (glanceMax.v > 0.1) break; // seen one; no need to wait the full cycle
+    }
+    // Walk the player back next to her: attention must override the glance.
+    api.player.position.x = mara.group.position.x + 1.2;
+    api.player.position.z = mara.group.position.z + 0.4;
+    let attention = 0;
+    const attentionDeadline = performance.now() + 4000;
+    while (performance.now() < attentionDeadline) {
+      await new Promise((r) => requestAnimationFrame(r));
+      attention = Math.max(attention, Math.abs(mara.limbs.neck.rotation.y));
+      if (attention > 0.3) break;
+    }
+    const leanRange = leanMax.v;
+    const glanceRange = glanceMax.v;
+    return {
+      leanRange: Number(leanRange.toFixed(4)),
+      glanceRange: Number(glanceRange.toFixed(4)),
+      attention: Number(attention.toFixed(4))
+    };
+  });
+  checks.check('idle legs rock with a weight shift',
+    idle.leanRange > 0.01,
+    JSON.stringify(idle));
+  checks.check('the cast glances around when nobody is near',
+    idle.glanceRange > 0.1,
+    JSON.stringify(idle));
+  checks.check('player attention still overrides the idle glance',
+    idle.attention > 0.3,
+    JSON.stringify(idle));
+
+  await capture(page, 'round51-idle.png');
+
 
 
 

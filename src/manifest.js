@@ -18,6 +18,7 @@ export const REQUIRED_FILES = [
   'src/areas.js',
   'src/terrain.js',
   'src/npcs.js',
+  'src/idle.js',
   'src/dialogue.js',
   'src/state.js',
   'src/refusal.js',

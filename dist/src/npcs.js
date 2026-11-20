@@ -1,3 +1,4 @@
+import { weightShift, glanceAngle } from './idle.js';
 import * as THREE from 'three';
 import { floorHeightAt } from './world.js';
 import { CAST_ASSETS, loadCast } from './assets.js';
@@ -381,22 +382,31 @@ export function animateCast(npc, dt, time = performance.now() / 1000, playerPosi
   const t = time + npc.group.position.x * 1.7;
   if (npc.walking) {
     const swing = Math.sin(t * 6.2) * 0.55;
+    // Clear the idle lean so a weight shift does not carry into the stride.
+    if (limbs.legL) limbs.legL.rotation.z = 0;
+    if (limbs.legR) limbs.legR.rotation.z = 0;
     if (limbs.legL) limbs.legL.rotation.x = swing;
     if (limbs.legR) limbs.legR.rotation.x = -swing;
     if (limbs.armL) limbs.armL.rotation.x = -swing * 0.7;
     if (limbs.armR) limbs.armR.rotation.x = swing * 0.7;
   } else {
-    // Idle: a slow breath in the arms and weight shift in the legs.
+    // Idle: a slow breath in the arms, and a lateral weight shift in the legs
+    // so the figure rocks from foot to foot rather than standing bolt upright.
     const sway = Math.sin(t * 1.4) * 0.06;
     if (limbs.armL) limbs.armL.rotation.x = sway;
     if (limbs.armR) limbs.armR.rotation.x = -sway;
+    const shift = weightShift(time, npc.group.position.z);
+    if (limbs.legL) limbs.legL.rotation.z = shift;
+    if (limbs.legR) limbs.legR.rotation.z = -shift;
     if (limbs.legL) limbs.legL.rotation.x = 0;
     if (limbs.legR) limbs.legR.rotation.x = 0;
   }
   // Attention: within talking range, turn the head toward the player, with a
   // little overshoot-free easing. Beyond it, ease the head back to centre.
   if (limbs.neck) {
-    let desired = 0;
+    // With nobody nearby the cast still looks around occasionally, so the
+    // plaza is not six statues staring at their routine spot.
+    let desired = glanceAngle(time, npc.group.position.z);
     if (playerPosition) {
       const dx = playerPosition.x - npc.group.position.x;
       const dz = playerPosition.z - npc.group.position.z;
