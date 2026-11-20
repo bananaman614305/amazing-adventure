@@ -406,8 +406,10 @@ and every character must carry 4 eye meshes.
   budget — all six clean.
 - Screenshots: shots46-npc/ (6 NPC close-ups with faces) and shots46-after/
   (4 plaza views).
-- Mobile suite launched; pending at checkpoint time. Not reported as passing
-  until the run completes.
+- Mobile vs committed dist: 185/185 pass across 4 profiles (9.0 / 1.5 / 2.5 /
+  1.6 fps — in line with Round 45's 8.5 / 1.5 / 2.4 / 1.7, no regression).
+- Totals: 432 unit + 203 desktop + 185 mobile = 820 checks, 0 failures.
+- Byte-identical rebuild verified (digest 52317343...).
 
 ### Honest limits
 
@@ -421,9 +423,10 @@ and every character must carry 4 eye meshes.
 
 ## Next steps
 
-1. **Finish the Round 46 mobile run**, then file publication.
-2. **Texture budget watch**: grass normal is 702 KB; preview is 4.83 MB.
-3. **A real-device pass** on physical hardware (biggest honest gap).
+1. **Texture budget watch**: grass normal is 702 KB; preview is 4.83 MB.
+2. **A real-device pass** on physical hardware (biggest honest gap).
+3. **Idle behaviour polish**: standing NPCs only sway their arms; a subtle
+   head turn toward the player within talk range would read as attention.
 
 ## Previous round — Round 45: plaza polish (grass, sky, walls).
 
