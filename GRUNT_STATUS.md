@@ -373,69 +373,59 @@ instructions.
 
 ## Current task
 
-Round 45 — plaza polish: grass ground, gradient sky, stone walls. Continues the
-owner's "much of the scene looks unfinished" direction, targeting the three
-largest plain surfaces the player sees first.
+Round 46 — cast faces and mitten hands, plus a shipped limb-routing bug fix.
+Owner direction: faces and hands for close-ups.
 
 ### What made it into the game
 
-- **Ground**: Kaggle grass maps (`art/kaggle/grass_textures.py`, Tesla T4, CuPy,
-  10.7 s; seam ratios albedo [1.183, 0.692], normal [1.096, 0.838], rough
-  [1.258, 0.685]). Procedural meadow: clumps, blade strokes, dry patches. Tiled
-  at 4 m over the 34 m courtyard so it reads as meadow, not carpet. Outputs
-  downloaded to art/kaggle/out4/ and the report inspected before copying in.
-- **Sky**: a vertex-colour gradient dome (one unlit BackSide draw call, fog
-  off, depthWrite off) recoloured per phase via new `zenith` entries in
-  PHASE_LOOKS; the horizon matches the fog colour so walls fade into it.
-- **Walls**: the border walls reuse the plaza's stone texture family at a 2 m
-  tile, so courses read at wall scale.
-- `src/world.js`: upgradeGrass() + upgradeWalls(), groundMaterial named,
-  paintSky exposed on the environment; assetState gains grass/walls/sky.
-- `src/manifest.js`: 64 required files. Preview 4.78 MB (grass maps ~1.1 MB).
+- `art/blender/make_cast.py`: eyes (white sclera + dark iris per side), a
+  mouth, and mitten hands (palm + thumb) authored in joint space. The bounds
+  check now excludes joint-space meshes via an explicit JOINT_SPACE set instead
+  of a name-prefix list. Re-exported all six: 340 / 372 / 328 / 416 / 436 /
+  348 tris (budgets raised to 560).
+- `src/npcs.js` buildModelled: a jointParent map routes Hand/Thumb/Pauldron to
+  the arm pivot and Boot to the leg pivot.
+
+### The bug this fixed (shipped in round 44)
+
+Hand*, Thumb*, Boot* and Pauldron* meshes are authored *around their limb
+joints*, but round 44's loader attached everything except Limb* to the body
+root. Result: hands rendered at knee height and boots below the floor. There
+was no check for it; the Blender-side bounds assert surfaced the inconsistency
+when ThumbL made the body bounds sink to -0.44. Two new browser checks now
+guard it: joint-space meshes must ride a Limb pivot (regex fixed from
+lowercase to the actual capitalized pivot names after the first run failed),
+and every character must carry 4 eye meshes.
 
 ### Evidence
 
-- `npm test`: 432/432 pass.
-- Desktop vs committed dist under /amazing-adventure/: 201/201 pass, including
-  3 new checks (ground has all 3 grass maps, walls have all 3 stone maps, sky
-  dome has vertex colours on 325 vertices).
-- Sky probe: applyPhase day/dusk/night recolours the dome — zenith goes
-  [0.347, 0.552, 0.807] -> [0.254, 0.102, 0.195] -> [0.002, 0.003, 0.009].
-- Before/after renders: **~63% of pixels changed** in every view (max channel
-  delta 193-203), vs ~0.87% for the cast round — this is a large visible change.
-- Screenshots: /worker/state/logs/shots45-before/ and shots45-after/ (4 fixed
-  poses each: plaza-south, plaza-east, lane-north, ground-close).
-- Byte-identical rebuild verified (digest b9f35c11...).
-
-### Mobile status — verified, with an honest cost
-
-The mobile suite passed **185/185** across all 4 profiles against the committed
-dist. Frame rates: iPhone 13 portrait 8.5 fps, Pixel 7 1.5 fps, iPhone SE
-2.4 fps, iPhone 13 landscape 1.7 fps — about 10-15% below Round 44's run
-(9.5 / 1.7 / 2.7 / 2.0). The extra texture sampling (grass + wall maps) is not
-free the way the cast geometry was; some of the gap may be host load, but the
-direction is consistent across all four profiles, so it is reported as a real
-cost. The Round 43 quality tier absorbs it on genuinely slow devices, and all
-profiles stay above the suite's 1 fps playability floor. Screenshots saved to
-/worker/state/logs/shots45-mobile/ (4 PNGs).
-
-Totals: 432 unit + 201 desktop + 185 mobile = 818 checks, 0 failures.
+- Desktop vs committed dist: 203/203 pass (2 new joint checks; 4 eye meshes on
+  every character, all joint-space meshes parented to pivots, 0 bad).
+- Unit: 432/432. Total so far: 432 + 203 = 635.
+- Blender asserts per character: joint envelope, ground-plane body bounds, tri
+  budget — all six clean.
+- Screenshots: shots46-npc/ (6 NPC close-ups with faces) and shots46-after/
+  (4 plaza views).
+- Mobile suite launched; pending at checkpoint time. Not reported as passing
+  until the run completes.
 
 ### Honest limits
 
-- Text-only model: no visual inspection. Claims are measured material state,
-  per-phase vertex colours, and a large measured pixel diff — not an aesthetic
-  judgement. The owner should look at shots45-before/after.
-- The grass normal map is 702 KB (the largest single texture); preview grew
-  from 3.68 to 4.78 MB. Still self-contained, but worth watching.
+- Text-only model: no visual inspection. The face meshes exist per the browser
+  check (4 eye meshes each) and joint routing is verified; how they *look* is
+  the owner's call.
+- The bug fix means round 44's published preview showed hands/boots in the
+  wrong place. The owner may have noticed; the fix is in this branch and will
+  land when it publishes.
 - Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
 
-1. **Cast faces and hands** (eyes, mitten hands) for close-ups.
-2. **Watch the texture budget**: grass normal is 702 KB; consider a smaller
-   normal or shared normals if the preview keeps growing.
+1. **Finish the Round 46 mobile run**, then file publication.
+2. **Texture budget watch**: grass normal is 702 KB; preview is 4.83 MB.
 3. **A real-device pass** on physical hardware (biggest honest gap).
+
+## Previous round — Round 45: plaza polish (grass, sky, walls).
 
 ## Previous round — Round 44: modelled NPC cast.
 
