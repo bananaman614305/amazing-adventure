@@ -2431,20 +2431,27 @@ try {
     if (api.player) { api.player.position.x = pos.x + 30; }
     await new Promise((r) => setTimeout(r, 1500));
     const after = Math.abs(mara.limbs.neck ? mara.limbs.neck.rotation.y : 0);
-    // Blink: sample iris scale over a few seconds.
+    // Blink: the iris squashes for 0.06 of a 3.2-unit cycle, so a sparse
+    // sampler can miss it entirely. Sample every animation frame for a full
+    // cycle (a blink recurs roughly every 7.6 s of world time) and record the
+    // minimum scale seen rather than polling on a timer.
     let sawBlink = false;
-    for (let i = 0; i < 60; i += 1) {
-      await new Promise((r) => setTimeout(r, 80));
+    let minIris = 1;
+    const deadline = performance.now() + 9000;
+    while (performance.now() < deadline && !sawBlink) {
+      await new Promise((r) => requestAnimationFrame(r));
       const y = mara.limbs.eyeIrisL ? mara.limbs.eyeIrisL.scale.y : 1;
-      if (y < 0.5) { sawBlink = true; break; }
+      if (y < minIris) minIris = y;
+      if (y < 0.5) sawBlink = true;
     }
-    return { maxTurn: Number(maxTurn.toFixed(3)), after: Number(after.toFixed(3)), sawBlink };
+    return { maxTurn: Number(maxTurn.toFixed(3)), after: Number(after.toFixed(3)),
+             sawBlink, minIris: Number(minIris.toFixed(2)) };
   });
   checks.check('a nearby player turns the NPC head, and it eases back after',
     attention.maxTurn > 0.2 && attention.after < 0.2,
     JSON.stringify(attention));
   checks.check('the cast blinks', attention.sawBlink === true,
-    JSON.stringify({ sawBlink: attention.sawBlink }));
+    JSON.stringify({ sawBlink: attention.sawBlink, minIris: attention.minIris }));
 
   await capture(page, 'round47-attention.png');
 
