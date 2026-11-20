@@ -2535,13 +2535,19 @@ try {
       if (glanceMax.v > 0.1) break; // seen one; no need to wait the full cycle
     }
     // Walk the player back next to her: attention must override the glance.
-    api.player.position.x = mara.group.position.x + 1.2;
-    api.player.position.z = mara.group.position.z + 0.4;
+    // The position is re-asserted every frame: the game's own player update
+    // pushes a teleported player back out of geometry, so setting it once let
+    // the player drift away mid-check and the head eased back to rest. A probe
+    // showed attention reaching 0.76 and then decaying for exactly that reason.
     let attention = 0;
     const attentionDeadline = performance.now() + 4000;
     while (performance.now() < attentionDeadline) {
       await new Promise((r) => requestAnimationFrame(r));
-      attention = Math.max(attention, Math.abs(mara.limbs.neck.rotation.y));
+      api.player.position.x = mara.group.position.x + 1.2;
+      api.player.position.z = mara.group.position.z + 0.4;
+      // Give the loop a frame with the player in place before sampling.
+      await new Promise((r) => requestAnimationFrame(r));
+      attention = Math.max(attention, Math.abs(mara.limbs.neck ? mara.limbs.neck.rotation.y : 0));
       if (attention > 0.3) break;
     }
     const leanRange = leanMax.v;
