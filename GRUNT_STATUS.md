@@ -373,30 +373,90 @@ instructions.
 
 ## Current task
 
-Round 43 — adaptive quality tier for slow devices. Committed, fully verified
-(812 checks, 0 failures) and filed for publication; HEAD e698733.
+Round 44 — modelled NPC cast with jointed walk animation. This is the owner's
+top priority after playing the Round 42 preview: "the people still look like
+plain cylinders". Committed at afe6a5f on `grunt/round44-cast`.
 
-Measured first: on a Pixel 7 profile the game is fill-rate bound (quarter
-resolution = 4.2x fps), shadows ~1.4x, point lights ~1.3x. Adaptive resolution
-already bottoms out, so src/quality.js adds a 'low' tier that engages only at
-the resolution floor: it hides the point lights and the sun's shadow pass while
-keeping every lamp bulb's emissive glow, with an asymmetric hysteresis streak
-(24 frames to drop, 90 to restore) so it cannot flap. Measured 1.11 -> 1.92 fps
-(1.73x) at pinned native resolution on the slow profile.
+### What made it into the game
 
-Next: the owner has reviewed the Round 42 preview and asked for substantially
-more visible polish, starting with the cast. The plain-cylinder NPCs are the
-first target.
+Six Blender-authored humanoids replace the shared cylinder+sphere figure.
+Each has a head with a nose (so faces have a direction), a hairstyle, a torso
+in role clothing, boots, and a role prop, with limb meshes authored *around
+their joints* so the game can rotate them:
+
+| Character | Tris | Silhouette |
+|---|---|---|
+| Mara the Keeper | 256 | flared blue robe, gold sash, hair bun, lantern pole |
+| Oswin the Trader | 288 | brown tunic, pale apron, red scarf, cap, coin pouch |
+| Pip | 244 | 0.72 scale child, green tunic, messy hair, wooden hoop |
+| Halden the Guard | 332 | grey tabard, steel pauldrons, nasal helmet, spear |
+| Sable the Mapmaker | 352 | purple cloak, wide-brim hat, rolled map |
+| Wren the Clerk | 264 | green coat, collar, tied-back hair, ledger board |
+
+- `src/assets.js`: `CAST_ASSETS` + `loadCast` (never throws; verifies the joint
+  contract meshes are present rather than trusting the filename).
+- `src/npcs.js`: `buildFallback` (the old cylinders, refitted onto the same
+  pivots), `buildModelled` (re-parents limb meshes under pivot groups, attaches
+  carried props to the named hand), `upgradeNPCs` (per-NPC; a failed model keeps
+  that character's fallback), `animateCast` (walk cycle + idle sway, phase
+  offset per character by spawn position).
+- `src/main.js`: cast upgrade runs in the background like the prop upgrades.
+- `src/manifest.js`: 61 required files. Preview 3.68 MB.
+
+### Evidence
+
+- Blender asserts per character: limb meshes lie within their joint envelope
+  (|x| < 0.12, |y| < 0.14, z <= 0.05), body bounds sit on the ground plane, and
+  the triangle budget holds. All six exported clean.
+- Probe: all six report `mode: 'model'`; Mara's rig carries 15 named meshes
+  (Torso, Head, Nose, Hair, HairBun, Sash, both limbs, hands, boots, prop).
+- Probe through the real game loop: sent Mara walking, sampled
+  `legL/legR.rotation.x` -> alternating -0.25 / +0.25 rad, and she covered
+  1.92 m. The walk is real limb swing, not a body bob.
+- Desktop: 198/198 pass, including 3 new cast checks.
+- Diff of before/after renders: every NPC close-up and the plaza-wide shot
+  changed (~0.87% of pixels, max channel delta 150-193). The figures visibly
+  changed on screen; this is a measurement, not a visual claim.
+- Screenshots: `/worker/state/logs/shots44-before/` and `shots44-after/`
+  (6 PNGs each, identical camera poses).
+
+### Honest limits
+
+- Text-only model: I did not look at the renders. I verified the pixel diff is
+  non-zero, in a bounding band at figure height, and that the rig state is
+  correct — I cannot vouch for whether they *look* good, only that they changed.
+- The figures are low-poly (1.74 K tris total) and stylised, not realistic; at
+  ~40 cm on a phone they read as people, up close they are faceted.
+- No skeletal blend or weight deformation: limbs rotate rigidly at their joints,
+  which suits this art style but is not organic animation.
+- Chrome emulation only; no physical phone or iOS Safari.
+
+### Mobile status — verified
+
+The mobile suite passed **185/185** across all 4 profiles against the committed
+dist under /amazing-adventure/. Frame rates with the cast: iPhone 13 portrait
+9.5 fps, Pixel 7 1.7 fps, iPhone SE 2.7 fps, iPhone 13 landscape 2.0 fps — the
+same or better than Round 43's run (9.0 / 1.6 / 2.8 / 1.9). A separate probe
+measured the cast's cost directly on the Pixel 7 profile at pinned ratio 2:
+2.0 fps with the cast vs 2.0 fps with all NPCs hidden (116 vs 84 draw calls,
+2714 vs 2122 triangles) — the scene is fill-rate bound, so the extra geometry
+is effectively free, exactly as Round 43's measurements predicted.
+
+Earlier runs were killed mid-suite under host load (~10-14) and by my own
+pkill pattern matching the launching shell; the successful run was launched
+via a wrapper script with a bracket-safe pattern. Screenshots saved to
+/worker/state/logs/shots44-mobile/ (4 PNGs).
+
+Totals: 432 unit + 198 desktop + 185 mobile = 815 checks, 0 failures.
 
 ## Next steps
 
-1. **NPC humanoid models** (owner priority): recognizable figures with distinct
-   silhouettes and role-appropriate clothing for Mara, Oswin, Pip, Halden,
-   Sable and Wren, plus idle/walk movement. Blender-authored; record sources.
-2. **First-area polish**: carry the same standard through the plaza the player
-   sees first, using the fountain as the quality reference.
-3. **In-game screenshots** comparable before/after, for the owner.
-4. Preserve the phone playtest; validate on the existing mobile profiles.
+1. **First-area polish** past the cast: the plaza's lighting and remaining
+   plain props, using the fountain as the quality reference (owner request).
+2. **Cast faces and hands**: eyes and simple mitten hands would help close-ups.
+3. **A real-device pass** on physical hardware (biggest honest gap).
+
+## Previous round — Round 43: adaptive quality tier.
 
 ## Previous round — Round 42: prop UV mapping.
 

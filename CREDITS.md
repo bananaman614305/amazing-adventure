@@ -146,3 +146,16 @@ its procedural stand-in or flat colour and stays fully playable.
   cap, two framed windows with dark panes, stone door surround with plank door.
   Overlays the procedural brick body, which keeps its Kaggle brick texture.
   Same licence as the game (generated, not downloaded).
+
+### Round 44 additions
+
+- `assets/npc_{mara,oswin,pip,halden,sable,wren}.glb` — `art/blender/make_cast.py`.
+  Six humanoid figures, 256 / 288 / 244 / 332 / 352 / 264 tris (1.74 K total),
+  20-26 KB each. Built entirely from the script's own box and prism helpers:
+  head + nose + hairstyle, torso in role clothing, two arms and two legs authored
+  around their joint origins, boots, and a role prop (lantern pole, coin pouch,
+  hoop, spear, map, ledger). Pip is exported at 0.72 scale.
+  No third-party meshes, textures, rigs or motion data — nothing to license
+  beyond the game's own terms. Colours mirror `NPC_DATA` in `src/npcs.js`, so
+  the Blender source and the game cannot drift apart silently.
+

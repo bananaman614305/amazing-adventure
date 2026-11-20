@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildWorld, applyPhase, KEY_SPOT, KEY_PICKUP_RANGE, floorHeightAt, TERRACE, STEP_HEIGHT, BENCH } from './world.js';
 import { Player } from './player.js';
-import { createNPCs, updateNPCs, setNPCRoutine, TALK_RANGE } from './npcs.js';
+import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, animateCast, TALK_RANGE } from './npcs.js';
 import { welcome } from './onboard.js';
 import {
   createInitialState,
@@ -26,6 +26,7 @@ import {
   AMBIENT_CHANCE
 } from './ambient.js';
 import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
+import { loadGlb } from './glb.js';
 import { createAdaptiveResolution, MIN_RATIO } from './perf.js';
 import { createQualityTier, QUALITY_LOW, QUALITY_FULL } from './quality.js';
 import { createRecovery, shouldPanicShed } from './resilience.js';
@@ -440,6 +441,12 @@ const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerH
 const world = buildWorld(renderer);
 const { scene, colliders, environment } = world;
 const npcs = createNPCs(scene);
+// Upgrade the cast from procedural figures to the modelled rigs in the
+// background, the same way the plaza props upgrade. Resolves to a count, so
+// tests can tell the truth about which mode actually rendered.
+const castReady = upgradeNPCs(npcs, { THREE, loadGlb }).catch((error) => {
+  return { loaded: 0, total: npcs.length, mode: 'boxes', reason: String(error) };
+});
 
 // Start the optional asset upgrade in the background. It is deliberately not
 // awaited: the plaza is fully playable with the procedural stand-ins, and making
@@ -1838,6 +1845,7 @@ window.amazingAdventure = {
       return adaptiveResolution;
     }
   },
+  castReady,
   quality: {
     get tier() { return quality.tier; },
     get changes() { return quality.changes; },

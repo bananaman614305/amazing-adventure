@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { floorHeightAt } from './world.js';
+import { CAST_ASSETS, loadCast } from './assets.js';
 
 // Round 2 cast. Each NPC has a name, a role, a palette, a routine of spots for
 // each phase of the day, and dialogue in dialogue.js (keyed by the same id).
@@ -77,63 +78,157 @@ export const NPC_DATA = [
 
 const TALK_RANGE = 2.6;
 const WALK_SPEED = 1.4;
+// Joint heights shared by the model rig and the procedural fallback, so
+// animateCast() works identically on both.
+export const JOINTS = {
+  shoulder: { y: 1.32, x: 0.26 },
+  hip: { y: 0.78, x: 0.16 }
+};
 
-/** Builds every NPC mesh and returns live handles used by the game loop. */
+/**
+ * Builds the procedural fallback figure: the original cylinder body, kept so
+ * the plaza stays populated when models are unavailable. Same pivot contract
+ * as the modelled rig, so the same animation code drives both.
+ */
+function buildFallback(data) {
+  const group = new THREE.Group();
+  const coat = new THREE.MeshStandardMaterial({ color: data.colors.coat, roughness: 0.85 });
+  const skin = new THREE.MeshStandardMaterial({ color: data.colors.skin, roughness: 0.7 });
+  const hair = new THREE.MeshStandardMaterial({ color: data.colors.hair, roughness: 0.9 });
+  const boots = new THREE.MeshStandardMaterial({ color: 0x2b2622, roughness: 0.9 });
+  const accent = new THREE.MeshStandardMaterial({
+    color: data.colors.accent, emissive: data.colors.accent,
+    emissiveIntensity: 0.15, roughness: 0.6
+  });
+
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.26, 1.05, 12), coat);
+  body.name = 'Torso';
+  body.position.y = 0.85;
+  body.castShadow = true;
+  group.add(body);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 20, 16), skin);
+  head.name = 'Head';
+  head.position.y = 1.6;
+  head.castShadow = true;
+  group.add(head);
+
+  const cap = new THREE.Mesh(
+    new THREE.SphereGeometry(0.28, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), hair
+  );
+  cap.name = 'Hair';
+  cap.position.y = 1.63;
+  cap.castShadow = true;
+  group.add(cap);
+
+  const band = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.29, 0.29, 0.09, 12, 1, true), accent
+  );
+  band.name = 'Accent';
+  band.position.y = 1.22;
+  group.add(band);
+
+  const limbs = {};
+  for (const side of ['L', 'R']) {
+    const pivot = new THREE.Group();
+    pivot.name = `LimbArm${side}`;
+    pivot.position.set(side === 'L' ? -JOINTS.shoulder.x : JOINTS.shoulder.x, JOINTS.shoulder.y, 0);
+    const limb = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.5, 0.13), coat);
+    limb.position.y = -0.25;
+    limb.castShadow = true;
+    pivot.add(limb);
+    group.add(pivot);
+    limbs[`arm${side}`] = pivot;
+
+    const legPivot = new THREE.Group();
+    legPivot.name = `LimbLeg${side}`;
+    legPivot.position.set(side === 'L' ? -JOINTS.hip.x : JOINTS.hip.x, JOINTS.hip.y, 0);
+    const legMesh = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.78, 0.15), boots);
+    legMesh.position.y = -0.39;
+    legMesh.castShadow = true;
+    legPivot.add(legMesh);
+    group.add(legPivot);
+    limbs[`leg${side}`] = legPivot;
+  }
+  return { group, limbs, mode: 'boxes' };
+}
+
+/**
+ * Builds the modelled rig from a loaded cast GLB. Limb meshes are re-parented
+ * under pivot groups at their joints, exactly matching the fallback layout.
+ * Carried props (Prop*) are attached to the named hand; other props stay on
+ * the body.
+ */
+function buildModelled(data, result) {
+  const group = new THREE.Group();
+  const pivots = {};
+  for (const side of ['L', 'R']) {
+    for (const kind of ['Arm', 'Leg']) {
+      const pivot = new THREE.Group();
+      const key = `Limb${kind}${side}`;
+      pivot.name = key;
+      const joint = kind === 'Arm' ? JOINTS.shoulder : JOINTS.hip;
+      pivot.position.set(side === 'L' ? -joint.x : joint.x, joint.y, 0);
+      group.add(pivot);
+      pivots[key] = pivot;
+    }
+  }
+
+  // Pip is authored at 0.72 scale in Blender via object scale; the loader bakes
+  // transforms, so apply the same scale here for the procedural rig parity.
+  const scale = data.id === 'pip' ? 0.72 : 1;
+
+  const hands = { L: pivots.LimbArmL, R: pivots.LimbArmR };
+  for (const { name, geometry, material } of result.meshes) {
+    if (name.startsWith('Prop')) continue; // handled after pivots exist
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = name;
+    mesh.castShadow = true;
+    if (pivots[name]) {
+      pivots[name].add(mesh);
+    } else {
+      group.add(mesh);
+    }
+  }
+  // Props: attach to a hand pivot so they swing with the arm.
+  const propHand = {
+    PropPole: 'R', PropSpear: 'R', PropMap: 'L', PropLedger: 'L', PropHoop: 'L'
+  };
+  for (const { name, geometry, material } of result.meshes) {
+    if (!name.startsWith('Prop')) continue;
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = name;
+    mesh.castShadow = true;
+    const side = propHand[name];
+    if (side) hands[side].add(mesh);
+    else group.add(mesh);
+  }
+
+  group.scale.setScalar(scale);
+  return { group, limbs: {
+    armL: pivots.LimbArmL, armR: pivots.LimbArmR,
+    legL: pivots.LimbLegL, legR: pivots.LimbLegR
+  }, mode: 'model' };
+}
+
+/**
+ * Builds every NPC and returns live handles used by the game loop. Figures are
+ * the modelled rigs when the cast GLBs are available, else the procedural
+ * fallback -- same pivots, so animation and tests are identical either way.
+ */
 export function createNPCs(scene) {
   return NPC_DATA.map((data) => {
-    const group = new THREE.Group();
+    const built = buildFallback(data);
+    const group = built.group;
     group.position.set(data.routine.day.x, 0, data.routine.day.z);
     group.rotation.y = data.routine.day.facing;
-
-    const coat = new THREE.MeshStandardMaterial({ color: data.colors.coat, roughness: 0.85 });
-    const skin = new THREE.MeshStandardMaterial({ color: data.colors.skin, roughness: 0.7 });
-    const hair = new THREE.MeshStandardMaterial({ color: data.colors.hair, roughness: 0.9 });
-    const boots = new THREE.MeshStandardMaterial({ color: 0x2b2622, roughness: 0.9 });
-    const accent = new THREE.MeshStandardMaterial({
-      color: data.colors.accent,
-      emissive: data.colors.accent,
-      emissiveIntensity: 0.15,
-      roughness: 0.6
-    });
-
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.26, 1.05, 12), coat);
-    body.position.y = 0.85;
-    body.castShadow = true;
-    group.add(body);
-
-    const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.7, 12), boots);
-    legs.position.y = 0.35;
-    legs.castShadow = true;
-    group.add(legs);
-
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 20, 16), skin);
-    head.position.y = 1.6;
-    head.castShadow = true;
-    group.add(head);
-
-    const cap = new THREE.Mesh(
-      new THREE.SphereGeometry(0.28, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2),
-      hair
-    );
-    cap.position.y = 1.63;
-    cap.castShadow = true;
-    group.add(cap);
-
-    const arms = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.16), coat);
-    arms.position.y = 1.15;
-    arms.castShadow = true;
-    group.add(arms);
-
-    // A coloured band on the coat so NPCs are told apart at a glance.
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, 0.09, 12, 1, true), accent);
-    band.position.y = 1.22;
-    group.add(band);
 
     // A soft marker so NPCs are easy to spot in a busy courtyard.
     const marker = new THREE.Mesh(
       new THREE.ConeGeometry(0.12, 0.22, 8),
       new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xffb43a, emissiveIntensity: 0.9 })
     );
+    marker.name = 'Marker';
     marker.position.y = 2.15;
     marker.rotation.x = Math.PI;
     group.add(marker);
@@ -149,16 +244,47 @@ export function createNPCs(scene) {
       routine: data.routine,
       group,
       marker,
-      // Where the NPC is heading and when it last changed phase.
+      limbs: built.limbs,
+      mode: built.mode,
       target: { x: spawn.x, z: spawn.z },
       facing: spawn.facing,
       walking: false,
       phase: null,
       lineIndex: 0,
-      // Stable talk anchor updated by the game loop (used by tests and hints).
       position: group.position
     };
   });
+}
+
+/**
+ * Upgrades every NPC from the procedural fallback to its modelled rig.
+ * Resolves once all six models have been attempted; keeps the fallback when a
+ * model fails, so a missing GLB can never empty the plaza.
+ */
+export async function upgradeNPCs(npcs, { THREE, loadGlb, fetchImpl = fetch } = {}) {
+  if (!THREE || !loadGlb) return 'boxes';
+  const results = await Promise.all(npcs.map(async (npc) => {
+    const url = CAST_ASSETS[npc.id];
+    if (!url) return { npc, ok: false };
+    const result = await loadCast({ THREE, loadGlb, url, fetchImpl });
+    if (!result.ok) return { npc, ok: false, reason: result.reason };
+    // Remove the fallback figure but keep the group (position, marker, state).
+    const doomed = [];
+    npc.group.traverse((o) => {
+      if (o.isMesh && o.name !== 'Marker') doomed.push(o);
+    });
+    for (const mesh of doomed) {
+      mesh.parent.remove(mesh);
+    }
+    const built = buildModelled(npc, result);
+    npc.group.add(built.group);
+    npc.limbs = built.limbs;
+    npc.mode = 'model';
+    npc.bytes = result.bytes;
+    return { npc, ok: true };
+  }));
+  const loaded = results.filter((r) => r.ok).length;
+  return { loaded, total: npcs.length, mode: loaded === npcs.length ? 'model' : 'mixed' };
 }
 
 /**
@@ -205,8 +331,34 @@ export function updateNPCs(npcs, dt, playerPosition) {
       npc.group.rotation.y = turnToward(npc.group.rotation.y, desired, dt * 4);
     }
 
-    const bob = npc.walking ? Math.sin(performance.now() / 90 + npc.group.position.x) * 0.05 : 0;
-    npc.group.children[0].position.y = 0.85 + bob;
+    animateCast(npc, dt);
+  }
+}
+
+/**
+ * Drives the limb pivots: a walk cycle when moving, a gentle idle sway when
+ * standing. Works identically on modelled and fallback rigs because both hang
+ * their limbs under pivots at the same joints. Phase comes from world time so
+ * the cast does not march in perfect lockstep; each character is offset by its
+ * spawn position.
+ */
+export function animateCast(npc, dt, time = performance.now() / 1000) {
+  const { limbs } = npc;
+  if (!limbs) return;
+  const t = time + npc.group.position.x * 1.7;
+  if (npc.walking) {
+    const swing = Math.sin(t * 6.2) * 0.55;
+    if (limbs.legL) limbs.legL.rotation.x = swing;
+    if (limbs.legR) limbs.legR.rotation.x = -swing;
+    if (limbs.armL) limbs.armL.rotation.x = -swing * 0.7;
+    if (limbs.armR) limbs.armR.rotation.x = swing * 0.7;
+  } else {
+    // Idle: a slow breath in the arms and weight shift in the legs.
+    const sway = Math.sin(t * 1.4) * 0.06;
+    if (limbs.armL) limbs.armL.rotation.x = sway;
+    if (limbs.armR) limbs.armR.rotation.x = -sway;
+    if (limbs.legL) limbs.legL.rotation.x = 0;
+    if (limbs.legR) limbs.legR.rotation.x = 0;
   }
 }
 
