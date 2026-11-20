@@ -409,18 +409,19 @@ Owner direction: cast faces/hands done; next visual chunk is the empty plaza.
 
 - Text-only model: no visual inspection. Trees and bark exist per the checks;
   how they look is the owner's call.
-- Stand-ins remain visible alongside the model (I set visible=false but the
-  group is still in the scene; both render). This is a minor visual issue —
-  the owner will see two trunks. Flagged for next round cleanup.
+- Stand-ins are hidden (visible=false) once the model loads; a live probe
+  confirmed 3 standins visible=false and 3 models visible=true. My earlier note
+  about a stand-in visibility bug was wrong — the bug was in my reading of the
+  scene, not in the code.
 - Preview grew to 5.13 MB (from 4.83). Still under the 5.5 MB watch threshold
   but trending up. Grass normal remains the biggest single file at 702 KB.
 - Chrome emulation only; no physical phone or iOS Safari.
 
 ## Next steps
 
-1. **Fix the stand-in visibility bug** so only the modelled tree shows.
-2. **Texture budget watch**: grass normal is 702 KB; preview is 5.13 MB.
-3. **A real-device pass** on physical hardware (biggest honest gap).
+1. **Texture budget watch**: grass normal is 702 KB; preview is 5.13 MB.
+2. **A real-device pass** on physical hardware (biggest honest gap).
+3. **Cast idle variety**: weight shifts, occasional glances around the plaza.
 
 ## Previous round — Round 47: NPC attention — head turn toward the player, blinking.
 
