@@ -2521,22 +2521,31 @@ try {
     // Send the player far away so attention does not override the glance.
     api.player.position.x = -40;
     api.player.position.z = -40;
-    const samples = { lean: [], glance: [] };
-    for (let i = 0; i < 120; i += 1) {
+    // These are TIME-bounded, not frame-bounded. A glance occupies only 2.6 s
+    // of an 11 s cycle, so a fixed frame count can miss one entirely -- my
+    // first version did exactly that and reported glanceRange 0 while the
+    // weight shift (period 7.5 s) was clearly running.
+    const leanMax = { v: 0 };
+    const glanceMax = { v: 0 };
+    const deadline = performance.now() + 12000;
+    while (performance.now() < deadline) {
       await new Promise((r) => requestAnimationFrame(r));
-      samples.lean.push(mara.limbs.legL ? mara.limbs.legL.rotation.z : 0);
-      samples.glance.push(mara.limbs.neck ? mara.limbs.neck.rotation.y : 0);
+      if (mara.limbs.legL) leanMax.v = Math.max(leanMax.v, Math.abs(mara.limbs.legL.rotation.z));
+      if (mara.limbs.neck) glanceMax.v = Math.max(glanceMax.v, Math.abs(mara.limbs.neck.rotation.y));
+      if (glanceMax.v > 0.1) break; // seen one; no need to wait the full cycle
     }
-    const leanRange = Math.max(...samples.lean.map(Math.abs));
-    const glanceRange = Math.max(...samples.glance.map(Math.abs));
     // Walk the player back next to her: attention must override the glance.
     api.player.position.x = mara.group.position.x + 1.2;
     api.player.position.z = mara.group.position.z + 0.4;
     let attention = 0;
-    for (let i = 0; i < 40; i += 1) {
+    const attentionDeadline = performance.now() + 4000;
+    while (performance.now() < attentionDeadline) {
       await new Promise((r) => requestAnimationFrame(r));
       attention = Math.max(attention, Math.abs(mara.limbs.neck.rotation.y));
+      if (attention > 0.3) break;
     }
+    const leanRange = leanMax.v;
+    const glanceRange = glanceMax.v;
     return {
       leanRange: Number(leanRange.toFixed(4)),
       glanceRange: Number(glanceRange.toFixed(4)),
