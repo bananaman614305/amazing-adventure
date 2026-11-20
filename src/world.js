@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
-  GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD
+  GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
+  LANE_BUNTING, LANE_SACKS
 } from './areas.js';
 import {
   FOUNTAIN_SPOT, FOUNTAIN_COLLIDER, canLoadAssets, textureRepeat,
@@ -252,6 +253,62 @@ export function buildWorld(renderer) {
         }
       }
     }
+  }
+
+  // Bunting: strands across the lane with triangular flags. It hangs above
+  // head height (2.6-2.75 m with a sag), so it deliberately registers NO
+  // collider -- a player walks under it. laneBuntingOverhead() in areas.js
+  // holds that promise to a test rather than to a comment.
+  const buntingMat = new THREE.MeshStandardMaterial({ color: 0xc9553f, roughness: 0.85 });
+  const buntingMatB = new THREE.MeshStandardMaterial({ color: 0xe0b552, roughness: 0.85 });
+  const flagGeometry = new THREE.ConeGeometry(0.09, 0.22, 3);
+  for (const strand of LANE_BUNTING) {
+    // The rope: a thin box spanning the lane, dipping in the middle.
+    const rope = new THREE.Mesh(
+      new THREE.BoxGeometry(LANE.maxX - LANE.minX, 0.02, 0.02),
+      laneWood
+    );
+    // Approximate the sag with two angled halves so the rope visually dips.
+    rope.position.set((LANE.minX + LANE.maxX) / 2, strand.y - strand.sag / 2, strand.z);
+    scene.add(rope);
+    const span = LANE.maxX - LANE.minX;
+    for (let i = 0; i < strand.flags; i += 1) {
+      const t = (i + 0.5) / strand.flags;
+      const x = LANE.minX + span * t;
+      // Parabola: deepest at the middle of the strand.
+      const dip = Math.sin(Math.PI * t) * strand.sag;
+      const flag = new THREE.Mesh(flagGeometry, i % 2 === 0 ? buntingMat : buntingMatB);
+      flag.position.set(x, strand.y - dip - 0.11, strand.z);
+      flag.rotation.x = Math.PI;
+      flag.castShadow = false;
+      scene.add(flag);
+    }
+  }
+
+  // Sacks leaning against the stall. These DO get colliders, because they sit
+  // on the floor; laneDressingClear() proves each leaves 1.2 m of walkway.
+  const sackMat = new THREE.MeshStandardMaterial({ color: 0xa89468, roughness: 0.95 });
+  const sackTieMat = new THREE.MeshStandardMaterial({ color: 0x6f5f42, roughness: 0.9 });
+  for (const sack of LANE_SACKS) {
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(sack.radius, sack.radius * 0.86, sack.height, 9),
+      sackMat
+    );
+    body.position.set(sack.x, sack.height / 2, sack.z);
+    body.castShadow = true;
+    body.receiveShadow = true;
+    scene.add(body);
+    // A pinched neck so it reads as a sack, not a barrel.
+    const neck = new THREE.Mesh(
+      new THREE.CylinderGeometry(sack.radius * 0.45, sack.radius * 0.62, 0.12, 9),
+      sackTieMat
+    );
+    neck.position.set(sack.x, sack.height + 0.03, sack.z);
+    neck.castShadow = true;
+    scene.add(neck);
+    colliders.push(boxCollider(
+      sack.x - 0.32, sack.z - 0.32, sack.x + 0.32, sack.z + 0.32
+    ));
   }
 
   // The notice board: readable, and the only thing in the lane that talks back.
