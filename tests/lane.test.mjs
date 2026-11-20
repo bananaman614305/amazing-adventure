@@ -3,8 +3,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   LANE_SACKS, LANE_BUNTING, LANE_CORRIDOR, LANE_LANTERNS, LANTERN_DROP, LANTERN_HEIGHT,
-  laneDressingClear, laneBuntingOverhead, laneLanternsHang, lanternPlacement, strandHeightAt
+  laneDressingClear, laneBuntingOverhead, laneLanternsHang, lanternPlacement, strandHeightAt,
+  LANE, LANE_LIGHTING_POST, LANE_LIGHT_REWARD,
+  laneLightingStatus, laneLightingHint, laneLanternsShouldGlow, laneLanternsAtDawn, lightLaneLanterns
 } from '../src/areas.js';
+import { createInitialState, coins, getFlag } from '../src/state.js';
+import { reputation } from '../src/factions.js';
 
 test('every sack leaves a usable walkway beside it', () => {
   const result = laneDressingClear();
@@ -199,6 +203,117 @@ test('lanterns register no collider because they hang overhead', () => {
     assert.ok(placed.bottomY > WALKING_BODY_TOP,
       `lantern at z ${placed.z} hangs into the walkable body: ${placed.bottomY}`);
   }
+});
+
+// --- The lamp round --------------------------------------------------------
+// The lane lanterns lit themselves on a timer until this round, so the lane had
+// nothing in it that needed the player. These tests hold the chore to a rule:
+// after sundown, once a night, from the lamp post, and never in daylight.
+
+test('the lamp post stands inside the lane and is reachable', () => {
+  assert.ok(LANE_LIGHTING_POST.x > LANE.minX && LANE_LIGHTING_POST.x < LANE.maxX,
+    `post x ${LANE_LIGHTING_POST.x} inside the lane`);
+  assert.ok(LANE_LIGHTING_POST.z > LANE.minZ && LANE_LIGHTING_POST.z < LANE.maxZ,
+    `post z ${LANE_LIGHTING_POST.z} inside the lane`);
+  assert.ok(LANE_LIGHTING_POST.range > 0.5, 'the post needs a usable reach');
+});
+
+test('the lane lanterns can only be lit after sundown', () => {
+  const state = createInitialState();
+  assert.equal(laneLightingStatus(state, 'day').available, false);
+  assert.equal(laneLightingStatus(state, 'dusk').available, true);
+  assert.equal(laneLightingStatus(state, 'night').available, true);
+  // Anything that is not a real lit phase is treated as daylight, not as dusk.
+  assert.equal(laneLightingStatus(state, undefined).available, false);
+});
+
+test('lighting the lane lanterns pays once and sets the flag', () => {
+  const state = createInitialState();
+  const beforeCoins = coins(state);
+  const beforeStanding = reputation(state, LANE_LIGHT_REWARD.factionId);
+  const result = lightLaneLanterns(state, 'dusk');
+  assert.equal(result.changed, true, JSON.stringify(result));
+  assert.equal(getFlag(state, 'laneLanternsLit'), true);
+  assert.equal(coins(state), beforeCoins + LANE_LIGHT_REWARD.coins);
+  assert.equal(reputation(state, LANE_LIGHT_REWARD.factionId), beforeStanding + LANE_LIGHT_REWARD.delta);
+  // The same night cannot be lit twice, so the reward cannot be farmed by
+  // pressing the button again in place.
+  const again = lightLaneLanterns(state, 'dusk');
+  assert.equal(again.changed, false, 'a second round in the same night must be refused');
+  assert.equal(coins(state), beforeCoins + LANE_LIGHT_REWARD.coins);
+  assert.equal(reputation(state, LANE_LIGHT_REWARD.factionId), beforeStanding + LANE_LIGHT_REWARD.delta);
+});
+
+test('lighting the lane lanterns in daylight does nothing at all', () => {
+  const state = createInitialState();
+  const beforeCoins = coins(state);
+  const result = lightLaneLanterns(state, 'day');
+  assert.equal(result.changed, false);
+  assert.equal(getFlag(state, 'laneLanternsLit'), undefined, 'no flag set in daylight');
+  assert.equal(coins(state), beforeCoins, 'no coins paid in daylight');
+});
+
+test('lane lanterns glow only once lit, and never in daylight', () => {
+  const state = createInitialState();
+  // Unlit: dark at every phase, including dusk and night.
+  for (const phase of ['day', 'dusk', 'night']) {
+    assert.equal(laneLanternsShouldGlow(state, phase), false, `${phase} must be dark before the round`);
+  }
+  lightLaneLanterns(state, 'night');
+  // Lit: glowing through dusk and night, but dawn still puts them out.
+  assert.equal(laneLanternsShouldGlow(state, 'dusk'), true);
+  assert.equal(laneLanternsShouldGlow(state, 'night'), true);
+  assert.equal(laneLanternsShouldGlow(state, 'day'), false, 'daylight never shows the lamps');
+});
+
+test('dawn puts the lane lanterns out so the round is walked again', () => {
+  const state = createInitialState();
+  lightLaneLanterns(state, 'dusk');
+  assert.equal(getFlag(state, 'laneLanternsLit'), true);
+
+  // Dusk and night leave a lit lane alone: the whole point is that it stays lit.
+  assert.equal(laneLanternsAtDawn(state, 'dusk').reset, false);
+  assert.equal(laneLanternsAtDawn(state, 'night').reset, false);
+  assert.equal(getFlag(state, 'laneLanternsLit'), true);
+
+  const dawn = laneLanternsAtDawn(state, 'day');
+  assert.equal(dawn.reset, true, JSON.stringify(dawn));
+  assert.equal(getFlag(state, 'laneLanternsLit'), false);
+  assert.equal(typeof dawn.message, 'string');
+  assert.ok(dawn.message.length > 10, 'dawn tells the player, it does not go quiet');
+
+  // A second dawn is a no-op, so the toast cannot repeat every frame of the day.
+  assert.equal(laneLanternsAtDawn(state, 'day').reset, false);
+  // And the next night can be lit again, at the normal price, once.
+  const paidBefore = coins(state);
+  const relit = lightLaneLanterns(state, 'night');
+  assert.equal(relit.changed, true, 'a new night is a new round');
+  assert.equal(coins(state), paidBefore + LANE_LIGHT_REWARD.coins);
+  assert.equal(lightLaneLanterns(state, 'night').changed, false);
+});
+
+// The reset must not be a comparison that can never be true, nor one that
+// fires at dusk and quietly un-lights the lane the player just lit.
+test('the dawn reset actually distinguishes day from dusk', () => {
+  const state = createInitialState();
+  state.flags.laneLanternsLit = true;
+  laneLanternsAtDawn(state, 'dusk');
+  assert.equal(getFlag(state, 'laneLanternsLit'), true, 'dusk must not clear a lit lane');
+  laneLanternsAtDawn(state, 'day');
+  assert.equal(getFlag(state, 'laneLanternsLit'), false, 'day must clear a lit lane');
+});
+
+test('the lamp post offers a hint when the round can be walked, and says nothing otherwise', () => {
+  const state = createInitialState();
+  assert.equal(laneLightingHint(state, 'dusk'), 'light the lane lanterns');
+  assert.equal(laneLightingHint(state, 'night'), 'light the lane lanterns');
+  // Nothing to offer when the round is impossible or already walked, but the
+  // post must still answer: a vanished hint is a dead end, not an explanation.
+  assert.equal(laneLightingHint(state, 'day'), 'the lane lamp post');
+  assert.ok(laneLightingStatus(state, 'day').reason.length > 10, 'the daylight refusal is explained');
+  lightLaneLanterns(state, 'dusk');
+  assert.equal(laneLightingHint(state, 'dusk'), 'the lane lamp post');
+  assert.ok(laneLightingStatus(state, 'dusk').reason.length > 10, 'the already-lit refusal is explained');
 });
 
 test('strandHeightAt is deepest at the middle and matches the ends', () => {

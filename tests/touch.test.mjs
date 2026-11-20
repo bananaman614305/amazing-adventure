@@ -100,12 +100,13 @@ test('touch controls appear on phones and tablets, not on touchscreen laptops', 
 });
 
 test('the interact button never says E on a phone', () => {
-  for (const kind of ['npc', 'key', 'ledger', 'bench', 'gate', 'notice']) {
+  for (const kind of ['npc', 'key', 'ledger', 'bench', 'gate', 'notice', 'lanterns']) {
     const label = interactLabel(kind);
     assert.ok(label.length > 1, `${kind} has a real label`);
     assert.doesNotMatch(label, /^E$/, `${kind} is not the desktop key`);
   }
   assert.equal(interactLabel('npc'), 'Talk');
+  assert.equal(interactLabel('lanterns'), 'Light');
   assert.equal(interactLabel(undefined), 'Use');
 });
 

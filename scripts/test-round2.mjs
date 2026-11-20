@@ -2716,11 +2716,18 @@ try {
       if (o.userData && o.userData.laneLanternBulb) bulbMeshes += 1;
     });
     const env = api.environment;
+    // Since round 54 the lane only glows once its lamp round has been walked
+    // (the gameplay gating is checked in 28s below). This section tests fixture
+    // geometry and phase wiring, so it sets the lit flag itself -- but only
+    // after the clock is past dawn, because the real dawn reset clears the flag
+    // on any day frame and would otherwise quietly wipe it before sampling.
     api.setClock(30); // day first, so the 'dark by day' reading is honest
     await new Promise((r) => setTimeout(r, 120));
     const dayLamp = env.laneLamps.map((l) => l.light.intensity);
     const dayGlow = env.laneLamps.map((l) => (l.bulb ? l.bulb.material.emissiveIntensity : null));
     api.setClock(80); // dusk
+    api.getState().flags.laneLanternsLit = true; // walked the round at sundown
+    api.setClock(80); // re-apply the phase now the lane is lit
     await new Promise((r) => setTimeout(r, 120));
     const duskLamp = env.laneLamps.map((l) => l.light.intensity);
     const duskGlow = env.laneLamps.map((l) => (l.bulb ? l.bulb.material.emissiveIntensity : null));
@@ -2762,6 +2769,161 @@ try {
     JSON.stringify(lanterns));
 
   await capture(page, 'round53-lanterns.png');
+
+  // --- 28s. The lane lamp round --------------------------------------------
+  // Round 54 gives the lane a reason to linger: the bunting lanterns stay dark
+  // at dusk until the player walks the round from the far lamp post, and dawn
+  // puts them out again. Everything below drives the real interactable at the
+  // real post position -- no direct calls to the pure rules.
+  const laneRound = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const post = api.LANE_LIGHTING_POST;
+    const hintFor = () => api.interactables().find((i) => i.kind === 'lanterns');
+    const waitFrames = async (n) => {
+      // Frame budget, not wall clock: software GL can drop frames badly enough
+      // that a millisecond sleep samples a stale scene.
+      for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(r));
+    };
+    const standAtPost = () => {
+      api.player.placeAt(post.x, post.z + 1.0, Math.PI); // in reach, facing the post
+      api.touch.refresh();
+    };
+
+    // Start from a known state rather than whatever the earlier checks left.
+    const state = api.getState();
+    state.flags.laneLanternsLit = false;
+    api.setClock(30); // day
+    standAtPost();
+    await waitFrames(4);
+
+    // Daytime: the post still answers, but says there is nothing to do. A
+    // hidden interactable would be a dead end rather than an explanation.
+    const dayHint = hintFor();
+    const dayResult = api.performLaneLighting();
+
+    // Dusk, unlit: the round is offered and lights the lane.
+    api.setClock(80);
+    standAtPost();
+    await waitFrames(4);
+    const duskHint = hintFor();
+    const beforeLamp = api.environment.laneLamps.map((l) => l.light.intensity);
+    const beforePost = api.environment.postLamp ? api.environment.postLamp.material.emissiveIntensity : null;
+    const beforeCoins = api.getState().flags.coins;
+    const duskResult = api.performLaneLighting();
+    await waitFrames(4);
+    const afterLamp = api.environment.laneLamps.map((l) => l.light.intensity);
+    const afterPost = api.environment.postLamp ? api.environment.postLamp.material.emissiveIntensity : null;
+    const afterCoins = api.getState().flags.coins;
+    const litAgain = api.performLaneLighting();
+    const coinsAfterSecond = api.getState().flags.coins;
+
+    // The lane stays lit through the night, and the post no longer offers the
+    // round (it still answers, so the player is not left with a mute object).
+    api.setClock(120);
+    standAtPost();
+    await waitFrames(4);
+    const nightLamp = api.environment.laneLamps.map((l) => l.light.intensity);
+    const nightHint = hintFor();
+    const nightAgain = api.performLaneLighting();
+
+    // Dawn puts them out, and the round is walkable again the following dusk.
+    api.setClock(30);
+    await waitFrames(4);
+    const dawnLamp = api.environment.laneLamps.map((l) => l.light.intensity);
+    const dawnPost = api.environment.postLamp ? api.environment.postLamp.material.emissiveIntensity : null;
+    const dawnFlag = api.getState().flags.laneLanternsLit;
+    api.setClock(80);
+    standAtPost();
+    await waitFrames(4);
+    const relitHint = hintFor();
+    const relit = api.performLaneLighting();
+
+    // Leave the plaza in daylight with the lane dark so later checks and the
+    // later captures do not inherit a lit lane.
+    api.setClock(30);
+    api.getState().flags.laneLanternsLit = false;
+    api.player.placeAt(0, 6, 0);
+    api.touch.refresh();
+    await waitFrames(4);
+
+    return {
+      dayHintKind: dayHint ? dayHint.kind : null,
+      dayHintLabel: dayHint ? dayHint.label : null,
+      dayReason: dayResult.message,
+      dayChanged: dayResult.changed,
+      duskHintLabel: duskHint ? duskHint.label : null,
+      beforeLamp, afterLamp, beforePost, afterPost,
+      beforeCoins, afterCoins, coinsAfterSecond,
+      duskChanged: duskResult.changed,
+      secondChanged: litAgain.changed,
+      nightLamp,
+      nightHintLabel: nightHint ? nightHint.label : null,
+      nightChanged: nightAgain.changed,
+      dawnLamp, dawnPost, dawnFlag,
+      relitLabel: relitHint ? relitHint.label : null,
+      relitChanged: relit.changed
+    };
+  });
+  checks.check('the lamp post answers in daylight with an explanation, not a dead end',
+    laneRound.dayHintKind === 'lanterns' &&
+    typeof laneRound.dayHintLabel === 'string' && laneRound.dayHintLabel.length > 5 &&
+    laneRound.dayChanged === false &&
+    laneRound.dayReason.toLowerCase().includes('sundown'),
+    JSON.stringify({ kind: laneRound.dayHintKind, label: laneRound.dayHintLabel, reason: laneRound.dayReason }));
+  checks.check('dusk offers the lamp round and walking it lights the bunting',
+    typeof laneRound.duskHintLabel === 'string' &&
+    laneRound.duskHintLabel.toLowerCase().includes('light') &&
+    laneRound.duskChanged === true &&
+    laneRound.afterLamp.every((i, n) => laneRound.beforeLamp[n] === 0 && i > 0),
+    JSON.stringify({ label: laneRound.duskHintLabel, before: laneRound.beforeLamp, after: laneRound.afterLamp }));
+  checks.check('lighting the lane pays once and cannot be farmed in place',
+    laneRound.afterCoins > laneRound.beforeCoins &&
+    laneRound.secondChanged === false &&
+    laneRound.coinsAfterSecond === laneRound.afterCoins,
+    JSON.stringify({ before: laneRound.beforeCoins, after: laneRound.afterCoins, second: laneRound.coinsAfterSecond }));
+  checks.check('the lamp post head reports the same lit state as the bunting',
+    laneRound.beforePost === 0 && laneRound.afterPost > 0,
+    JSON.stringify({ before: laneRound.beforePost, after: laneRound.afterPost }));
+  checks.check('the lane stays lit all night and the round is not offered twice',
+    laneRound.nightLamp.every((i) => i > 0) &&
+    laneRound.nightHintLabel !== laneRound.duskHintLabel &&
+    laneRound.nightChanged === false,
+    JSON.stringify({ night: laneRound.nightLamp, label: laneRound.nightHintLabel, changed: laneRound.nightChanged }));
+  checks.check('dawn puts the lane out and dusk offers the round again',
+    laneRound.dawnLamp.every((i) => i === 0) &&
+    laneRound.dawnPost === 0 &&
+    laneRound.dawnFlag === false &&
+    typeof laneRound.relitLabel === 'string' &&
+    laneRound.relitLabel.toLowerCase().includes('light') &&
+    laneRound.relitChanged === true,
+    JSON.stringify({ dawn: laneRound.dawnLamp, post: laneRound.dawnPost, flag: laneRound.dawnFlag, relit: laneRound.relitChanged }));
+
+  await capture(page, 'round54-lane-lighting.png');
+
+  // The cast has to notice the difference, or the chore is invisible outside the
+  // lane's own light. Dusk is when the pair look at the sky, so the script key
+  // is checked in both states rather than only the pretty one.
+  const laneTalk = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const { scriptKeyFor } = await import('./src/ambient.js');
+    // A fresh state, not api.getState(): by this point the suite has finished
+    // quests, and toll_done legitimately outranks the lane chatter. Asserting
+    // lane talk against a post-quest state would be asserting a priority the
+    // script is not supposed to have.
+    const { createInitialState } = await import('./src/state.js');
+    const state = createInitialState();
+    state.flags.laneLanternsLit = false;
+    const dark = scriptKeyFor(state, 'dusk');
+    state.flags.laneLanternsLit = true;
+    const lit = scriptKeyFor(state, 'dusk');
+    state.flags.laneLanternsLit = false;
+    // And confirm the live state is not one where the lane would ever be the
+    // topic, so this check explains itself if the priority ever changes.
+    return { dark, lit, live: scriptKeyFor(api.getState(), 'dusk') };
+  });
+  checks.check('the plaza cast talks about the lane lanterns at dusk, both ways',
+    laneTalk.dark === 'lane_dark' && laneTalk.lit === 'lane_lit',
+    JSON.stringify(laneTalk));
 
 
 

@@ -201,6 +201,12 @@ export function buildWorld(renderer) {
   // Props make the lane read as a working back street.
   const laneWood = new THREE.MeshStandardMaterial({ color: 0x7a5232, roughness: 0.8 });
   const laneRoof = new THREE.MeshStandardMaterial({ color: 0x6d3a2c, roughness: 0.75 });
+  // The lamp post's own head follows the lamp round too. It used to glow all day
+  // and all night, which made the post look lit while the bunting lanterns it is
+  // supposed to light were dark -- the fixture was advertising a job it had not
+  // done. It gets no point light (that is the per-pixel budget the low tier is
+  // protecting); its emissive is a state readout, and applyPhase() drives it.
+  let postLamp = null;
   for (const prop of LANE_PROPS) {
     if (prop.kind === 'post') {
       const post = new THREE.Mesh(
@@ -212,10 +218,12 @@ export function buildWorld(renderer) {
       scene.add(post);
       const lamp = new THREE.Mesh(
         new THREE.SphereGeometry(0.24, 14, 10),
-        new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xffb43a, emissiveIntensity: 0.9 })
+        new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xffb43a, emissiveIntensity: 0 })
       );
       lamp.position.set(prop.x, prop.height + 0.1, prop.z);
+      lamp.userData = { lanePostLamp: true };
       scene.add(lamp);
+      postLamp = lamp;
       colliders.push(boxCollider(prop.x - 0.25, prop.z - 0.25, prop.x + 0.25, prop.z + 0.25));
     } else if (prop.kind === 'barrel') {
       const barrel = new THREE.Mesh(
@@ -1622,6 +1630,7 @@ export function buildWorld(renderer) {
     fill,
     lamps,
     laneLamps,
+    postLamp,
     gateDoor,
     gateCollider,
     /**
@@ -1737,8 +1746,12 @@ export const PHASE_LOOKS = {
 /**
  * Applies a phase's look to the environment. Called once per phase change, not
  * every frame, so the change is cheap.
+ *
+ * `laneLit` says whether the player has walked the lamp round. It defaults to
+ * true so a direct call still produces the ordinary lit evening; main.js passes
+ * the real answer from areas.js, and the lane stays dark until they do.
  */
-export function applyPhase(environment, phaseId) {
+export function applyPhase(environment, phaseId, laneLit = true) {
   const look = PHASE_LOOKS[phaseId];
   if (!look) throw new Error(`unknown phase ${phaseId}`);
   const { scene, hemi, sun, fill, lamps } = environment;
@@ -1760,12 +1773,21 @@ export function applyPhase(environment, phaseId) {
     lamp.light.intensity = look.lampIntensity;
     lamp.mesh.material.emissiveIntensity = look.lampGlow;
   }
-  // The market lane keeps the same lighting rhythm as the plaza, and its
-  // lantern bulbs glow with the lamps so the fixture reads as the light source
-  // rather than a decoration next to one.
+  // The market lane follows the plaza's darkness, but its bunting lanterns are
+  // the player's to light: they stay dark until someone walks the round, then
+  // glow with the plaza lamps so the fixture reads as the light source rather
+  // than a decoration next to one. At day `lampIntensity` is 0 either way.
+  const laneOn = laneLit && look.lampIntensity > 0;
   for (const laneLamp of environment.laneLamps || []) {
-    laneLamp.light.intensity = look.lampIntensity * 0.6;
-    if (laneLamp.bulb) laneLamp.bulb.material.emissiveIntensity = look.lampGlow;
+    laneLamp.light.intensity = laneOn ? look.lampIntensity * 0.6 : 0;
+    if (laneLamp.bulb) {
+      laneLamp.bulb.material.emissiveIntensity = laneOn ? look.lampGlow : 0;
+    }
+  }
+  // The post head is the lamp the round is walked from, so it reports the same
+  // state rather than glowing through a dark lane.
+  if (environment.postLamp) {
+    environment.postLamp.material.emissiveIntensity = laneOn ? look.lampGlow * 0.9 : 0;
   }
   environment.phase = phaseId;
 }

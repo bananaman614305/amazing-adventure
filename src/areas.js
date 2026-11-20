@@ -5,7 +5,7 @@
 // derived from quest state, so it needs no extra save field: returning
 // Halden's key unlocks the lane and the door is open on every later load.
 
-import { questStatus } from './state.js';
+import { questStatus, getFlag, setFlag, addCoins, applyStanding } from './state.js';
 
 export const PLAZA = { id: 'plaza', name: 'The Plaza', minX: -17, maxX: 17, minZ: -17.5, maxZ: 17 };
 export const LANE = { id: 'lane', name: 'The Market Lane', minX: 6, maxX: 14, minZ: -26, maxZ: -17.5 };
@@ -227,6 +227,102 @@ export function laneLanternsHang({
     }
   }
   return { ok: true, checked: lanterns.length };
+}
+
+// --- The lamp round --------------------------------------------------------
+// Round 53 hung the lane lanterns from the bunting, but they lit themselves on
+// a timer along with the plaza lamps. The lane was still a corridor you walked
+// through, not somewhere you did anything. This is the smallest honest reason
+// to stop: the lane's lanterns stay dark at dusk until someone walks the round
+// and lights them, and the trade notices.
+
+/**
+ * The lane's lamp post: the far post the lane already has at x 13.4, z -24.8.
+ * The round can only be walked from here, so reaching it is part of the chore.
+ */
+export const LANE_LIGHTING_POST = { x: 13.4, z: -24.8, range: 2.0, height: 3.0 };
+
+/**
+ * What one lamp round is worth. Deliberately small and paid by the market
+ * traders, not a quest reward: the real cost is the walk and the clock, since it
+ * can only be done after sundown and only once per night.
+ */
+export const LANE_LIGHT_REWARD = { coins: 2, factionId: 'trade', delta: 4 };
+
+/**
+ * Whether the lane lanterns can be lit right now, and if not, why. Both refusals
+ * are real: daylight has its own light, and a night that is already lit must not
+ * pay twice.
+ */
+export function laneLightingStatus(state, phase) {
+  if (phase !== 'dusk' && phase !== 'night') {
+    return { available: false, reason: 'The lane lanterns are only lit after sundown.' };
+  }
+  if (getFlag(state, 'laneLanternsLit')) {
+    return { available: false, reason: 'The lane lanterns are already burning.' };
+  }
+  return { available: true, reason: '' };
+}
+
+/**
+ * Do the lane lanterns actually glow? Pure, so the visual wiring in world.js and
+ * the browser checks can ask the same question the rule answers, instead of each
+ * re-deriving "is it dark and has someone lit them".
+ */
+export function laneLanternsShouldGlow(state, phase) {
+  if (phase !== 'dusk' && phase !== 'night') return false;
+  return Boolean(getFlag(state, 'laneLanternsLit'));
+}
+
+/**
+ * Dawn puts the lanterns out. The chore is per-night, so a previous night's help
+ * must not light tonight's lane for free.
+ *
+ * Returns whether it actually cleared the flag, so the caller can tell the
+ * player and the save only when something really changed. It is a separate rule
+ * rather than an if inside syncPhase() because a status line that is silently
+ * wrong at dawn is exactly the kind of bug this round is about.
+ */
+export function laneLanternsAtDawn(state, phase) {
+  if (phase !== 'day') return { reset: false };
+  if (!getFlag(state, 'laneLanternsLit')) return { reset: false };
+  setFlag(state, 'laneLanternsLit', false);
+  return { reset: true, message: 'Dawn. The lane lanterns have burned out and want lighting again tonight.' };
+}
+
+/**
+ * What the lamp post is labelled when the player is close enough to use it.
+ * The post always has a label, even when the round cannot be walked, because a
+ * hint that vanishes in daylight leaves the player standing at the one object
+ * in the lane that answered a moment ago and now ignores them. When the round
+ * is unavailable the label names the fixture and the interaction itself says
+ * why -- see lightLaneLanterns(), whose refusal message is the explanation.
+ */
+export function laneLightingHint(state, phase) {
+  const status = laneLightingStatus(state, phase);
+  return status.available ? 'light the lane lanterns' : 'the lane lamp post';
+}
+
+/**
+ * Walks the lamp round: lights the lane lanterns and pays for the help. Refused
+ * in daylight or when they are already lit, so the reward cannot be collected
+ * twice in a night. The caller owns the clock and the visual refresh.
+ */
+export function lightLaneLanterns(state, phase) {
+  const status = laneLightingStatus(state, phase);
+  if (!status.available) return { changed: false, message: status.reason };
+  setFlag(state, 'laneLanternsLit', true);
+  addCoins(state, LANE_LIGHT_REWARD.coins);
+  const standing = applyStanding(state, {
+    factionId: LANE_LIGHT_REWARD.factionId,
+    delta: LANE_LIGHT_REWARD.delta
+  });
+  // The standing message is empty when the faction is already capped, so do not
+  // append a dangling separator.
+  const message = standing.message
+    ? `You light the lane lanterns. +${LANE_LIGHT_REWARD.coins} coins. ${standing.message}`
+    : `You light the lane lanterns. +${LANE_LIGHT_REWARD.coins} coins.`;
+  return { changed: true, message, reward: LANE_LIGHT_REWARD.coins, standing };
 }
 
 /** Where the missing toll ledger is tucked away, behind the far barrels. */
