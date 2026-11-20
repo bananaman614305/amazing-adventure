@@ -2624,6 +2624,66 @@ try {
 
   await capture(page, 'round52-lane.png');
 
+  // --- 28r. Lane lanterns hang from the bunting ------------------------------
+  // The lane's point lights used to float in mid-air with no fixture above
+  // them. The fix ties each light to a visible lantern on its strand. These
+  // checks walk the scene for the fixture parts and verify the light sits
+  // exactly where the rule in areas.js places the fixture, plus the dusk/night
+  // glow that makes the fixture read as the light source.
+  const lanterns = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const fixtures = [];
+    let bulbMeshes = 0;
+    api.scene.traverse((o) => {
+      if (o.userData && o.userData.laneLantern) fixtures.push(o);
+      if (o.userData && o.userData.laneLanternBulb) bulbMeshes += 1;
+    });
+    const env = api.environment;
+    const dayLamp = env.laneLamps.map((l) => l.light.intensity);
+    const dayGlow = env.laneLamps.map((l) => (l.bulb ? l.bulb.material.emissiveIntensity : null));
+    api.setClock(80); // dusk
+    await new Promise((r) => setTimeout(r, 120));
+    const duskLamp = env.laneLamps.map((l) => l.light.intensity);
+    const duskGlow = env.laneLamps.map((l) => (l.bulb ? l.bulb.material.emissiveIntensity : null));
+    api.setClock(120); // night
+    await new Promise((r) => setTimeout(r, 120));
+    const nightLamp = env.laneLamps.map((l) => l.light.intensity);
+    api.setClock(30); // back to day for later checks
+    await new Promise((r) => setTimeout(r, 120));
+    const dayRest = env.laneLamps.map((l) => l.light.intensity);
+    // The light must sit inside its own fixture's body, not floating above it.
+    const aligned = env.laneLamps.map((l) => {
+      const p = l.light.position;
+      let body = null;
+      api.scene.traverse((o) => {
+        if (o.userData && o.userData.laneLantern && !body) {
+          const found = o.children.find((c) => c.isMesh && c.geometry && c.geometry.type === 'CylinderGeometry' &&
+            c.geometry.parameters && c.geometry.parameters.radiusTop === 0.09);
+          if (found && Math.abs(found.position.x - p.x) < 0.01 &&
+              Math.abs(found.position.z - p.z) < 0.01) body = found;
+        }
+      });
+      return body ? Math.abs(body.position.y - p.y) < 0.01 : false;
+    });
+    return { fixtures: fixtures.length, bulbMeshes, dayLamp, duskLamp, nightLamp, dayRest, dayGlow, duskGlow, aligned };
+  });
+  checks.check('the lane lights hang from real lantern fixtures',
+    lanterns.fixtures === 3 && lanterns.bulbMeshes === 3,
+    JSON.stringify(lanterns));
+  checks.check('each lane light sits inside its fixture body, not above it',
+    lanterns.aligned.every(Boolean),
+    JSON.stringify(lanterns.aligned));
+  checks.check('lane lanterns are dark by day and lit at dusk and night',
+    lanterns.dayLamp.every((i) => i === 0) &&
+    lanterns.dayGlow.every((g) => g === 0) &&
+    lanterns.duskLamp.every((i) => i > 0) &&
+    lanterns.nightLamp.every((i) => i > lanterns.duskLamp[0]) &&
+    lanterns.duskGlow.every((g) => g > 0) &&
+    lanterns.dayRest.every((i) => i === 0),
+    JSON.stringify(lanterns));
+
+  await capture(page, 'round53-lanterns.png');
+
 
 
 

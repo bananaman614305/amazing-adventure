@@ -2,8 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  LANE_SACKS, LANE_BUNTING, LANE_CORRIDOR,
-  laneDressingClear, laneBuntingOverhead
+  LANE_SACKS, LANE_BUNTING, LANE_CORRIDOR, LANE_LANTERNS, LANTERN_DROP, LANTERN_HEIGHT,
+  laneDressingClear, laneBuntingOverhead, laneLanternsHang, lanternPlacement, strandHeightAt
 } from '../src/areas.js';
 
 test('every sack leaves a usable walkway beside it', () => {
@@ -127,4 +127,92 @@ test('a player can actually walk from the gate to the ledger spot', () => {
     }
   }
   assert.equal(reached, true, 'the ledger must stay reachable with the dressing in place');
+});
+
+// --- Lane lanterns ---------------------------------------------------------
+// The lane's three point lights used to float at y 2.6 with no fixture above
+// them, so the lane glowed from empty air. These tests hold the fixture to the
+// data: every lantern must hang from a strand that exists, inside the lane, and
+// above head height so it needs no collider.
+
+test('every lane lantern hangs from a real bunting strand', () => {
+  const result = laneLanternsHang();
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.checked, LANE_LANTERNS.length);
+  // Each lantern names a strand, and that strand really is in LANE_BUNTING.
+  const strandZs = new Set(LANE_BUNTING.map((s) => s.z));
+  for (const lantern of LANE_LANTERNS) {
+    assert.ok(strandZs.has(lantern.strandZ), `strand ${lantern.strandZ} must exist`);
+  }
+});
+
+test('a lantern hung from a strand that does not exist is rejected', () => {
+  // This is the exact shape of the original defect: a light at a z no strand
+  // crosses. Before the rule existed, nothing noticed.
+  const result = laneLanternsHang({ lanterns: [{ strandZ: -19.9, x: 9.1 }] });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'no-strand');
+  assert.deepEqual(result.at, { z: -19.9 });
+});
+
+test('a lantern hanging below head height is rejected', () => {
+  // Same strand, but so much drop that a player would walk into it.
+  const result = laneLanternsHang({
+    lanterns: [{ strandZ: -21.6, x: 8.3 }],
+    headHeight: 2.6
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'too-low');
+  assert.ok(result.bottomY <= 2.6, JSON.stringify(result));
+});
+
+test('a lantern outside the lane walls is rejected', () => {
+  const result = laneLanternsHang({ lanterns: [{ strandZ: -19.4, x: 15.0 }] });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'outside-lane');
+});
+
+test('lantern bodies hang under the strand and clear head height', () => {
+  for (const lantern of LANE_LANTERNS) {
+    const placed = lanternPlacement(lantern);
+    assert.ok(placed, 'placement must resolve for a real lantern');
+    // The fixture hangs below the rope it is tied to...
+    assert.ok(placed.topY < placed.anchorY, JSON.stringify(placed));
+    assert.ok(placed.centerY < placed.topY, JSON.stringify(placed));
+    assert.ok(placed.bottomY < placed.centerY, JSON.stringify(placed));
+    // ...and the whole body stays above a walking player.
+    assert.ok(placed.bottomY > 2.0, `lantern at z ${placed.z} hangs too low: ${placed.bottomY}`);
+    // The drop from strand to fixture top is the documented constant.
+    assert.ok(Math.abs((placed.anchorY - placed.topY) - LANTERN_DROP) < 1e-9);
+    // The body is the documented height.
+    assert.ok(Math.abs((placed.topY - placed.bottomY) - LANTERN_HEIGHT) < 1e-9);
+  }
+});
+
+test('lanterns register no collider because they hang overhead', () => {
+  // A lantern that blocked the walkway would strand the player, so this asserts
+  // the fixture geometry never reaches floor level anywhere in the lane. Nothing
+  // in world.js pushes a collider for a lantern; this is the data-level promise.
+  const WALKING_BODY_TOP = 1.9;
+  for (const lantern of LANE_LANTERNS) {
+    const placed = lanternPlacement(lantern);
+    assert.ok(placed.bottomY > WALKING_BODY_TOP,
+      `lantern at z ${placed.z} hangs into the walkable body: ${placed.bottomY}`);
+  }
+});
+
+test('strandHeightAt is deepest at the middle and matches the ends', () => {
+  const strand = { z: -20, y: 2.7, sag: 0.2 };
+  // Ends sit at full height; the middle sags by exactly the sag.
+  assert.ok(Math.abs(strandHeightAt(strand, 0) - 2.7) < 1e-9);
+  assert.ok(Math.abs(strandHeightAt(strand, 1) - 2.7) < 1e-9);
+  assert.ok(Math.abs(strandHeightAt(strand, 0.5) - 2.5) < 1e-9);
+  // Out-of-range t is clamped rather than extrapolated below the rope.
+  assert.ok(Math.abs(strandHeightAt(strand, -3) - 2.7) < 1e-9);
+  assert.ok(Math.abs(strandHeightAt(strand, 4) - 2.7) < 1e-9);
+  // A sagging strand is monotone down then up, never below y - sag.
+  for (let t = 0; t <= 1; t += 0.05) {
+    const h = strandHeightAt(strand, t);
+    assert.ok(h >= 2.5 - 1e-9 && h <= 2.7 + 1e-9, `t=${t} h=${h}`);
+  }
 });
