@@ -634,11 +634,25 @@ export async function loadCast({ THREE, loadGlb, url, fetchImpl = fetch }) {
  * have. Without a decoder a texture cannot exist, so this returns nulls rather
  * than pretending otherwise -- the material then falls back to its flat colour.
  */
+/**
+ * Which colour space each map kind must use.
+ *
+ * Three.js r160 tags a texture as 'srgb' or 'no-color-space' (linear). Getting
+ * this wrong is not cosmetic: an albedo map left in linear space is rendered
+ * too dark, and a normal/roughness map tagged sRGB is silently mis-decoded and
+ * lights the surface wrongly. So the choice is data, not a comment.
+ */
+export const TEXTURE_COLOR_SPACE = {
+  map: 'srgb',
+  normalMap: 'no-color-space',
+  roughnessMap: 'no-color-space'
+};
+
 export async function loadMaterialTextures({
   THREE, files = STONE_TEXTURE_FILES, fetchImpl = fetch,
   createBitmap = typeof createImageBitmap === 'function' ? createImageBitmap : null
 } = {}) {
-  const load = async (url) => {
+  const load = async (url, kind) => {
     try {
       if (!createBitmap) return null; // no decoder available in this context
       const response = await fetchImpl(url);
@@ -646,6 +660,10 @@ export async function loadMaterialTextures({
       const blob = await response.blob();
       const bitmap = await createBitmap(blob);
       const texture = new THREE.Texture(bitmap);
+      // Tag the colour space per map kind so colour maps are decoded as sRGB
+      // and data maps stay linear.
+      const space = TEXTURE_COLOR_SPACE[kind];
+      if (space && THREE.SRGBColorSpace !== undefined) texture.colorSpace = space;
       texture.needsUpdate = true;
       return texture;
     } catch {
@@ -653,7 +671,9 @@ export async function loadMaterialTextures({
     }
   };
   const [map, normalMap, roughnessMap] = await Promise.all([
-    load(files.map), load(files.normalMap), load(files.roughnessMap)
+    load(files.map, 'map'),
+    load(files.normalMap, 'normalMap'),
+    load(files.roughnessMap, 'roughnessMap')
   ]);
   return { map, normalMap, roughnessMap, anyLoaded: Boolean(map || normalMap || roughnessMap) };
 }
