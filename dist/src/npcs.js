@@ -178,14 +178,25 @@ function buildModelled(data, result) {
   // transforms, so apply the same scale here for the procedural rig parity.
   const scale = data.id === 'pip' ? 0.72 : 1;
 
+  // Meshes authored around a joint must ride that joint's pivot. Hands, thumbs
+  // and pauldrons belong to the arm; boots to the leg. Getting this wrong puts
+  // them at the body root, which renders hands at knee height and boots below
+  // the floor -- a bug that shipped in round 44 and is fixed here.
+  const jointParent = {
+    HandL: 'LimbArmL', ThumbL: 'LimbArmL', PauldronL: 'LimbArmL',
+    HandR: 'LimbArmR', ThumbR: 'LimbArmR', PauldronR: 'LimbArmR',
+    BootL: 'LimbLegL', BootR: 'LimbLegR'
+  };
+
   const hands = { L: pivots.LimbArmL, R: pivots.LimbArmR };
   for (const { name, geometry, material } of result.meshes) {
     if (name.startsWith('Prop')) continue; // handled after pivots exist
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = name;
     mesh.castShadow = true;
-    if (pivots[name]) {
-      pivots[name].add(mesh);
+    const parentKey = jointParent[name] || name;
+    if (pivots[parentKey]) {
+      pivots[parentKey].add(mesh);
     } else {
       group.add(mesh);
     }
