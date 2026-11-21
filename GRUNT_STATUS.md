@@ -12,32 +12,42 @@
 
 ## Current task
 
-**Round 56 — The Night Light.** Complete, committed and verified on
-`grunt/round55-lane-prop`; it needs publishing. Lighting the lane now pays off
-as gameplay: once the lane has ever been lit, Oswin offers a paid lamp round —
-take his order, let dawn put the lanterns out, light the lane again, and settle
-for six coins and Market standing at his stall. Two real bugs the reachability
-proof found are fixed: repeated dusk/dawn cycles minted unlimited coins and
-Market standing, and a permanent night-order gate stranded players mid-oil-order.
+**Round 57 — Physical light.** Complete, committed and receipt-verified on
+`grunt/round57-graphics` at `e0a868c`; it is queued for publishing.
 
-- Unit **480/480**; desktop **230/230**; mobile **185/185**.
-- Reachability: **33,184 states**, `truncated: false`, **0 dead ends**,
-  33,184/33,184 winnable — the soft-lock is gone, not capped away.
-- The purse pays **once ever** (`laneRoundPaid`); later nights light for free and
-  say so. A 20-cycle regression test pins it.
+The renderer now goes through a real camera pipeline instead of raw linear
+output: ACES filmic tone mapping with sRGB output encoding and a per-phase
+exposure that compensates for the much darker night phases. Sky light is no
+longer an approximation — a procedural environment map is baked from the same
+gradient/sun data the sky dome uses, run through `PMREMGenerator`, and cached so
+it is rebuilt only when the phase actually changes rather than every frame.
+Shadows were tuned for the new dynamic range: a phase-scaled shadow-map
+resolution (capped by the mobile quality tier) with tuned bias/normalBias that
+stops the acne the higher exposure exposed.
+
+- Unit **501/501**; desktop **230/230 PASS**; mobile **185/185 PASS**.
+- Trusted receipts on `e0a868c`: `tests` `def1477c`, `browser` `89d57962`,
+  `mobile` `63acdf46` — all `completed`, `exitCode 0`, `unchanged: true`,
+  same `treeDigest 8f235f06…` and `artifactDigest 9d2b83e6…`.
+- The mobile page-leak that made the phone suite time out intermittently is
+  fixed: per-profile pages are now closed explicitly.
 - The model is text-only: no screenshot was looked at. Claims rest on in-page
-  object assertions, mutation proof, frame diffs and state-function tests.
+  object assertions (`renderer.toneMapping`, `environmentMapReady()`,
+  `environmentMapsBuilt()`, shadow bias values), mutation proof that the bake
+  actually re-runs on a phase change and not otherwise, and the state-function
+  suites.
 
 ## Next steps
 
-1. **Publish Round 56** through the trusted publication channel from the clean
-   head on `grunt/round55-lane-prop`.
-2. **Give the other two factions a late chore.** The Night Light is the Market's
-   end-of-round task; Keepers and Watch have no equivalent yet, so the last third
-   of the game is still Market-shaped.
-3. **Keep closing the real-hardware gap.** Every reply, touch target and frame
-   rate so far comes from Chrome device emulation on software rasterisation. A
-   physical phone pass is still the largest honest unknown.
+1. **Publish Round 57** through the trusted publication channel from the clean
+   head `e0a868c` on `grunt/round57-graphics`.
+2. **Ship the sky dome follow-up (Round 57b).** The horizon haze band, phase
+   driven sun disc and 32×24 dome are finished and green at `c8dbb23` on
+   `grunt/round57b-sky` but were deliberately held out of this certified tree;
+   fold them in as the next round so the sky is not just brighter but shaped.
+3. **Give the other two factions a late chore.** The Night Light is still the
+   only Market-shaped end-of-round task; Keepers and Watch need equivalents so
+   the final third of the game is not one faction's story.
 
 ---
 
@@ -48,12 +58,14 @@ Market standing, and a permanent night-order gate stranded players mid-oil-order
   the human.
 - `grunt/round5-mobile-preview` — the phone playtest candidate.
 - Rounds 6–55 are documented in the sections below; each shipped as its own PR.
-- `grunt/round55-lane-prop` — **this round** (round 56), stacked on round 54.
+- `grunt/round57-graphics` — **this round** (round 57), stacked on round 56.
+- `grunt/round57b-sky` at `c8dbb23` (worktree `/worker/state/wt57`) — the
+  finished, green sky-dome follow-up, intentionally **not** part of the
+  certified round 57 tree; it ships as its own round.
 
-**Last checkpoint:** Round 56 committed at `04b4691` with a clean tree; unit,
-desktop and mobile suites all green. The committed preview digests the shipped
-sources and is unchanged by this round's harness fix. See the Round 56 section
-near the end of this file for the full record.
+**Last checkpoint:** Round 57 committed at `e0a868c` with a clean tree and all
+three trusted release receipts completed on that exact tree. See the Round 57
+section near the end of this file for the full record.
 
 ## Round 5 — playable phone preview (owner priority)
 
@@ -3724,3 +3736,58 @@ buy oil.
    CREDITS.md accurate and hold desktop/mobile frame budgets.
 3. Give Keepers and Watch a late chore of their own once the visual pass lands,
    so no single faction owns the end game.
+
+## Round 57 — Physical light
+
+### What changed
+- **Camera pipeline.** `src/graphics.js` (new) centralises tone mapping: ACES
+  Filmic with `outputColorSpace: SRGBColorSpace`, and a per-phase exposure
+  (`night 1.9`, `dawn/dusk 1.35`, `day 1.0`) so the previously crushed night
+  phases read as night rather than black. `src/main.js` applies it through the
+  renderer instead of leaving default linear output.
+- **Image-based lighting.** A procedural environment map is generated from the
+  same gradient + sun parameters the sky dome uses, filtered through
+  `PMREMGenerator`, and cached by phase key. It is deferred until assets are
+  ready and rebuilt only when the phase key actually changes —
+  `buildEnvironmentMapNow()` and `environmentMapsBuilt()` are exposed on
+  `window.amazingAdventure` for testing.
+- **Shadows.** Shadow-map resolution now scales with phase (day 2048, dusk
+ 1536, night 1024) and is capped by the mobile quality tier; bias and
+  normalBias were tuned down for the higher exposure so the acne that surfaced
+  after ACES is gone.
+- **Mobile leak fix.** `scripts/test-mobile.mjs` closes each profile page
+  explicitly; the intermittent 30 s `playSession` timeout caused by leaked
+  pages is gone.
+
+### Verification (all on `e0a868c`, clean tree)
+- Unit suite: **501/501**.
+- Desktop browser suite: **230 PASS / 0 FAIL**, exit 0, 0 console errors
+  (log `/worker/state/logs/r57-release-browser.log`).
+- Mobile browser suite: **185/185**, exit 0, 0 console errors.
+- Trusted release receipts on that exact tree — `tests` `def1477c-1049-46c1-a31d-e6f6628f2e5a`,
+  `browser` `89d57962-d345-4cb3-a668-5f2b35b5eaa0`,
+  `mobile` `63acdf46-7ba0-4367-9c8c-9b4e221bee64` — all `completed`,
+  `exitCode 0`, `unchanged: true`, `head e0a868cf92feea85700fd7665f855904c6edcd60`,
+  `treeDigest 8f235f0697dfd57082fc09831599564df4e76561ede2c0a2190d29924cd31959`,
+  `artifactDigest 9d2b83e6001756b316b9572de5c8e847b30396c49b70a021652f35dee4fabb91`.
+- Earlier `browser` receipt `dcaf6cf4` failed exit 1 on the same tree; the
+  identical command re-run locally and by the host passed 230/230. It is
+  superseded by `89d57962`; no source change was made in between.
+
+### Limitations
+- Text-only model: no visual claim. The tone mapping, exposure, environment map
+  and shadow changes are asserted as renderer/material *state* plus mutation
+  proofs (bake re-runs on a phase change, does not re-run otherwise), not by
+  looking at a picture.
+- Exposure values are hand-tuned constants; they are not derived from a
+  physical light model or measured with a photometer.
+- All evidence is Chrome on SwiftShader; frame times are not meaningful and a
+  physical phone pass is still the largest honest unknown.
+- The sky-dome haze/sun-disc follow-up is **not** in this tree; it lives on
+  `grunt/round57b-sky` at `c8dbb23` and ships as round 57b.
+
+### Next steps
+1. Publish Round 57 through `grunt_release_prepare` from `e0a868c`.
+2. Fold in the finished sky-dome work (`grunt/round57b-sky` → `c8dbb23`).
+3. Give Keepers and Watch a late chore of their own so the end game is not
+   Market-shaped.
