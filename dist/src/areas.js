@@ -5,7 +5,7 @@
 // derived from quest state, so it needs no extra save field: returning
 // Halden's key unlocks the lane and the door is open on every later load.
 
-import { questStatus, getFlag, setFlag, addCoins, applyStanding } from './state.js';
+import { questStatus, getFlag, setFlag, addCoins, applyStanding, walkNightLight } from './state.js';
 
 export const PLAZA = { id: 'plaza', name: 'The Plaza', minX: -17, maxX: 17, minZ: -17.5, maxZ: 17 };
 export const LANE = { id: 'lane', name: 'The Market Lane', minX: 6, maxX: 14, minZ: -26, maxZ: -17.5 };
@@ -250,6 +250,18 @@ export const LANE_LIGHTING_POST = { x: 13.4, z: -24.8, range: 2.0, height: 3.0 }
 export const LANE_LIGHT_REWARD = { coins: 2, factionId: 'trade', delta: 4 };
 
 /**
+ * The traders pay for the lamp round they asked for, not for every night after
+ * it: a per-night reward with a night that repeats every four minutes is an
+ * unbounded farm of coins and Market standing. So the purse is paid once, and
+ * every later night is lit for free. What a lit lane keeps buying is the
+ * gameplay round 56 added on top of it: Oswin's night order is only offered to
+ * someone the traders have seen light the lane, and the round is what walks it.
+ */
+export function laneRoundIsPaid(state) {
+  return Boolean(getFlag(state, 'laneRoundPaid'));
+}
+
+/**
  * Whether the lane lanterns can be lit right now, and if not, why. Both refusals
  * are real: daylight has its own light, and a night that is already lit must not
  * pay twice.
@@ -262,6 +274,18 @@ export function laneLightingStatus(state, phase) {
     return { available: false, reason: 'The lane lanterns are already burning.' };
   }
   return { available: true, reason: '' };
+}
+
+/**
+ * Whether the traders have ever seen this player light the lane. This is the
+ * gate on Oswin's night order, and it is permanent: a trader who watched you
+ * light the lane last night still knows you did, which is what makes the offer
+ * reachable on a night when the lane happens to be dark at talking time.
+ * Falls back to the current flag so a save written before this existed still
+ * counts the night it was lit.
+ */
+export function laneRoundWasEverWalked(state) {
+  return Boolean(getFlag(state, 'laneEverLit')) || Boolean(getFlag(state, 'laneLanternsLit'));
 }
 
 /**
@@ -380,17 +404,36 @@ export function lightLaneLanterns(state, phase) {
   const status = laneLightingStatus(state, phase);
   if (!status.available) return { changed: false, message: status.reason };
   setFlag(state, 'laneLanternsLit', true);
-  addCoins(state, LANE_LIGHT_REWARD.coins);
-  const standing = applyStanding(state, {
-    factionId: LANE_LIGHT_REWARD.factionId,
-    delta: LANE_LIGHT_REWARD.delta
-  });
+  // The first round is the paid one. Later nights are lit for the lane's sake,
+  // not for the purse: paying per night would let a repeatable clock mint
+  // unlimited coins and Market standing out of nothing.
+  const paid = !laneRoundIsPaid(state);
+  if (paid) setFlag(state, 'laneRoundPaid', true);
+  setFlag(state, 'laneEverLit', true);
+  const standing = paid
+    ? applyStanding(state, {
+      factionId: LANE_LIGHT_REWARD.factionId,
+      delta: LANE_LIGHT_REWARD.delta
+    })
+    : { changed: false, message: '' };
+  const reward = paid ? LANE_LIGHT_REWARD.coins : 0;
+  if (paid) addCoins(state, LANE_LIGHT_REWARD.coins);
   // The standing message is empty when the faction is already capped, so do not
   // append a dangling separator.
-  const message = standing.message
-    ? `You light the lane lanterns. +${LANE_LIGHT_REWARD.coins} coins. ${standing.message}`
-    : `You light the lane lanterns. +${LANE_LIGHT_REWARD.coins} coins.`;
-  return { changed: true, message, reward: LANE_LIGHT_REWARD.coins, standing };
+  // Walking the round and Oswin's night order are the same act, so the pure
+  // rule advances them together. It needs no "was it already lit" guard: the
+  // status check above already refuses an already-burning lane, so reaching
+  // here means the player really did light a dark lane tonight. If they never
+  // took his order `walkNightLight` is a no-op, which is why this lives here
+  // rather than in a caller that might forget.
+  const walked = walkNightLight(state);
+  const parts = [paid
+    ? `You light the lane lanterns. +${LANE_LIGHT_REWARD.coins} coins.`
+    : 'You light the lane lanterns. The traders already paid for this round; tonight you light it for the lane itself.'];
+  if (standing.message) parts.push(standing.message);
+  if (walked.changed) parts.push('Oswin’s night order is walked; his stall will want the word.');
+  const message = parts.join(' ');
+  return { changed: true, message, reward, paid, standing, walked: walked.changed };
 }
 
 /** Where the missing toll ledger is tucked away, behind the far barrels. */
