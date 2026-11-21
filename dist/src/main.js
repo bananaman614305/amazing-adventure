@@ -35,6 +35,9 @@ import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
 import { loadGlb } from './glb.js';
 import { createAdaptiveResolution, MIN_RATIO } from './perf.js';
 import { createQualityTier, QUALITY_LOW, QUALITY_FULL } from './quality.js';
+import {
+  configureRenderer, applyPhaseLook, buildEnvironmentMap, ambientRoomFor, shadowSettings
+} from './graphics.js';
 import { createRecovery, shouldPanicShed } from './resilience.js';
 import { createSoundscape, readPreference, createStepClock, STEP_MIN_SPEED } from './audio.js';
 import { WALK_SPEED_EXPORT } from './player.js';
@@ -364,6 +367,10 @@ document.body.dataset.quality = quality.tier;
 
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// Film tone curve, explicit sRGB output and a per-phase exposure. Without this
+// the scene renders linear-to-canvas: highlights clip to flat white and night
+// is unreadably dark. See src/graphics.js for the reasoning and the tables.
+configureRenderer(renderer, THREE);
 // The canvas is where play happens and where focus returns after a conversation
 // closes, so it has to be able to hold focus. It is not in the tab order (a keyboard
 // user reaches the game through the Play button) but programmatic focus needs it
@@ -446,6 +453,72 @@ contextLostReload.addEventListener('click', () => {
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 200);
 const world = buildWorld(renderer);
 const { scene, colliders, environment } = world;
+
+// Procedural image-based lighting. A gradient room built from the current sky
+// and ground colours is prefiltered into a PMREM and set as scene.environment,
+// so every standard material picks up real ambient specular and a directional
+// ambient tint. The sky colour is what the ambient light should agree with, so
+// the map follows the phase.
+//
+// The build is deliberately NOT done on the phase-change path. PMREM prefiltering
+// is real GPU work - on a weak phone it is tens of milliseconds, and on a
+// software rasteriser far worse - and paying it synchronously in the frame that
+// also repaints the sky is how a lighting upgrade becomes a stutter at every
+// dusk. Instead the phase change records which map is wanted and the work is
+// scheduled for the next idle moment; the scene renders immediately with the
+// hemisphere light and picks the map up a frame or two later. Maps are cached
+// per phase, so a full day/night cycle builds at most three and every later
+// cycle reuses them.
+const envMaps = new Map();
+let pendingEnvPhase = null;
+let envMapScheduled = false;
+let envMapsBuilt = 0;
+let resolveEnvMapReady;
+const envMapReady = new Promise((resolve) => { resolveEnvMapReady = resolve; });
+
+function environmentRoom(phaseId) {
+  const look = environment.phaseLook?.(phaseId);
+  if (!look) return null;
+  return ambientRoomFor(look.zenith ?? look.sky, look.sky, look.hemiGround ?? 0x5d5340);
+}
+
+function buildPendingEnvironmentMap() {
+  envMapScheduled = false;
+  const phaseId = pendingEnvPhase;
+  if (!phaseId) return null;
+  pendingEnvPhase = null;
+  let texture = envMaps.get(phaseId) || null;
+  if (!texture) {
+    const room = environmentRoom(phaseId);
+    if (!room) return null;
+    texture = buildEnvironmentMap(renderer, THREE, room);
+    // A failed build is not cached: a later phase change on a recovered context
+    // should be allowed to try again rather than be stuck without ambient.
+    if (!texture) return null;
+    envMaps.set(phaseId, texture);
+    envMapsBuilt += 1;
+  }
+  // The current phase may have moved on while the build was queued; in that
+  // case the lighting still wants the phase we just built for, so only swap in
+  // the map when it matches what the sky is showing now.
+  if (currentPhase === phaseId) {
+    scene.environment = texture;
+    applyPhaseLook(renderer, scene, phaseId);
+  }
+  resolveEnvMapReady?.(envMapsBuilt);
+  return texture;
+}
+
+/** Queues the current phase's map for the next idle slot, at most once. */
+function scheduleEnvironmentMap(phaseId) {
+  pendingEnvPhase = phaseId;
+  if (envMapScheduled) return;
+  envMapScheduled = true;
+  // requestIdleCallback is not available everywhere; a zero-delay timeout does
+  // the same job of getting off the phase-change frame.
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
+  idle(() => buildPendingEnvironmentMap());
+}
 const npcs = createNPCs(scene);
 // Upgrade the cast from procedural figures to the modelled rigs in the
 // background, the same way the plaza props upgrade. Resolves to a count, so
@@ -481,6 +554,11 @@ function syncPhase(force = false) {
   // previous night's help cannot light tonight's lane for free.
   const dawn = laneLanternsAtDawn(state, phase.id);
   applyPhase(environment, phase.id, laneLanternsShouldGlow(state, phase.id));
+  // Exposure follows the same phase as the sky and sun, so the tone curve can
+  // never disagree with the lighting it is exposing. The environment map is
+  // queued rather than built here: see scheduleEnvironmentMap above.
+  applyPhaseLook(renderer, scene, phase.id);
+  scheduleEnvironmentMap(phase.id);
   setNPCRoutine(npcs, phase.id);
   clockPhase.textContent = phase.label;
   // The drone shifts root and level with the time of day.
@@ -1810,6 +1888,16 @@ window.amazingAdventure = {
   // Lets a test (or a bug report) ask what actually shipped rather than guessing.
   assetState: () => environment.assetState,
   assetsReady: () => assetsReady,
+  // Resolves once every environment map built so far has been applied. Tests
+  // await this instead of guessing how many frames PMREM needs.
+  environmentMapReady: () => envMapReady,
+  environmentMapsBuilt: () => envMapsBuilt,
+  // Builds the current phase's map synchronously, for checks that need the
+  // final look in the same tick rather than after an idle callback.
+  buildEnvironmentMapNow: () => {
+    pendingEnvPhase = currentPhase;
+    return buildPendingEnvironmentMap();
+  },
   saves,
   getState: () => state,
   setState: (next) => {
