@@ -122,6 +122,77 @@ export async function screenshotDir() {
   return dir;
 }
 
+/**
+ * Waits until the game exposes its API after load or reload.
+ *
+ * On this software-rendered machine a boot normally takes ~3s, but a busy
+ * SwiftShader frame (a full-res evidence capture, an environment-map rebuild)
+ * can stretch one rAF callback past any fixed deadline. The old fixed-20s
+ * waitForFunction turned that stall into a bare TimeoutError that killed the
+ * whole run with every PASS line still buffered — the release browser check
+ * died exactly this way after the seventh reload. So: poll on a timer (rAF
+ * polling is starved by the very long frames we are waiting out), and if the
+ * wait still fails, report WHY — page error, failed request, WebGL context
+ * loss — and let the caller's finally close the browser and print the checks
+ * collected so far.
+ *
+ * A page stuck inside one enormous SwiftShader frame cannot answer a poll at
+ * all, so a single long deadline is fragile: host CPU contention stretched a
+ * measured boot to 157s on a tree that boots in 2.9s idle. This waits in
+ * chunks instead — each chunk re-arms the poll, an expired chunk is logged and
+ * retried, and only the whole deadline counts as a failure. Chunking also
+ * survives the CDP `Runtime.callFunctionOn` protocol timeout that a stalled
+ * renderer produces instead of a plain TimeoutError.
+ */
+export const BOOT_TIMEOUT = 180000;
+const BOOT_CHUNK = 30000;
+
+export async function waitForBoot(page, timeout = BOOT_TIMEOUT) {
+  const notes = [];
+  const onPageError = (error) => notes.push(`page error: ${error.message}`);
+  const onReqFail = (request) =>
+    notes.push(`request failed: ${request.url()} (${request.failure()?.errorText})`);
+  const onConsole = (message) => {
+    if (message.type() === 'error') notes.push(`console error: ${message.text()}`);
+  };
+  page.on('pageerror', onPageError);
+  page.on('requestfailed', onReqFail);
+  page.on('console', onConsole);
+  const started = Date.now();
+  try {
+    for (;;) {
+      const left = timeout - (Date.now() - started);
+      if (left <= 0) break;
+      try {
+        await page.waitForFunction(() => window.amazingAdventure !== undefined,
+          { timeout: Math.min(BOOT_CHUNK, left), polling: 500 });
+        return;
+      } catch (error) {
+        const elapsed = Date.now() - started;
+        if (elapsed >= timeout) break;
+        // Not fatal yet: the renderer is most likely inside one very long
+        // frame. Say so once per chunk, so a slow release machine shows up in
+        // the log instead of looking like a hang.
+        console.log(`waitForBoot: still booting after ${elapsed}ms ` +
+          `(${String(error.message || error).split('\n')[0]}) — still waiting`);
+      }
+    }
+    const diag = await page.evaluate(() => ({
+      readyState: document.readyState,
+      visibility: document.visibilityState,
+      contextLost: window.amazingAdventure
+        ? window.amazingAdventure.renderer.getContext().isContextLost()
+        : 'no api yet'
+    })).catch((e) => ({ unavailable: String(e.message || e) }));
+    throw new Error(`game did not boot within ${timeout}ms; ` +
+      `page=${JSON.stringify(diag)}; events=${JSON.stringify(notes.slice(-8))}`);
+  } finally {
+    page.off('pageerror', onPageError);
+    page.off('requestfailed', onReqFail);
+    page.off('console', onConsole);
+  }
+}
+
 /** A tiny assertion collector so every check reports PASS/FAIL explicitly. */
 export function createChecks() {
   const results = [];
@@ -144,6 +215,8 @@ export function createChecks() {
         console.log(`${result.ok ? 'PASS' : 'FAIL'} ${result.name}${result.detail ? ` — ${result.detail}` : ''}`);
       }
       console.log(errors.length ? `FAIL console errors: ${JSON.stringify(errors)}` : 'PASS no console errors');
+      const passed = results.filter((r) => r.ok).length;
+      console.log(`${passed}/${results.length} checks passed`);
     }
   };
 }

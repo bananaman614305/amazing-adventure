@@ -7,7 +7,7 @@
 // Run: node scripts/evidence-round55.mjs
 import { writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { startServer, launchBrowser } from './browser.mjs';
+import { startServer, launchBrowser, waitForBoot } from './browser.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const OUT = join(ROOT, 'artifacts');
@@ -29,7 +29,7 @@ try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
   await page.goto(server.base, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await waitForBoot(page);
   const api = await page.evaluateHandle(() => window.amazingAdventure);
   await page.evaluate(() => window.amazingAdventure.assetsReady());
   // Let the first frames run: the world is built synchronously but the camera

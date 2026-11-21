@@ -18,7 +18,7 @@
 // Run: RECORD_ARTIFACTS=1 node scripts/evidence-round57.mjs
 import { writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { startServer, launchBrowser, createChecks, screenshotDir } from './browser.mjs';
+import { startServer, launchBrowser, createChecks, screenshotDir, waitForBoot } from './browser.mjs';
 // The same pure sky functions the dome is painted with. Recomputing the
 // expected vertex colour in Node and comparing it against what the GPU buffer
 // actually holds is what turns "the haze colour is in the table" into "the haze
@@ -397,7 +397,7 @@ try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
   await page.goto(server.base, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await waitForBoot(page);
   await page.evaluate(() => window.amazingAdventure.assetsReady());
   // The environment map is built off the phase-change frame, so wait for the
   // real thing rather than assuming a fixed number of frames.

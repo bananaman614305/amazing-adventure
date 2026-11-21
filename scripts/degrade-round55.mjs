@@ -9,7 +9,7 @@
 // Run: node scripts/degrade-round55.mjs
 import { writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { startServer, launchBrowser } from './browser.mjs';
+import { startServer, launchBrowser, waitForBoot } from './browser.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const OUT = join(ROOT, 'artifacts');
@@ -43,7 +43,7 @@ try {
       else req.continue();
     });
     await page.goto(server.base, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+    await waitForBoot(page);
 
     const state = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
       const api = window.amazingAdventure;

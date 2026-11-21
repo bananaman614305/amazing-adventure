@@ -2,7 +2,7 @@
 // full quest chain through the DOM, then checks save/load and the day cycle.
 // Run: npm run test:browser
 import { resolve } from 'node:path';
-import { startServer, launchBrowser, createChecks, screenshotDir } from './browser.mjs';
+import { startServer, launchBrowser, createChecks, screenshotDir, waitForBoot } from './browser.mjs';
 
 // Screenshots go to a throwaway directory unless RECORD_ARTIFACTS=1, so a
 // verification run never dirties the committed artifacts/ evidence.
@@ -35,6 +35,9 @@ const text = (page, selector) => page.$eval(selector, (el) => el.textContent);
 const server = await startServer();
 const { browser, close } = await launchBrowser();
 
+// A thrown wait (a stalled boot, a dead page) must not swallow the PASS/FAIL
+// lines collected so far — they are the only way to see where a long run died.
+let runError = null;
 try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 800 });
@@ -45,10 +48,10 @@ try {
   page.on('pageerror', (error) => checks.recordError(error));
 
   await page.goto(server.base, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await waitForBoot(page);
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await waitForBoot(page);
   await new Promise((r) => setTimeout(r, 600));
 
   // --- 1. Scene renders and the game starts ------------------------------
@@ -96,7 +99,7 @@ try {
   // actually reached (or the timeout proves the ramp is broken).
   await page.keyboard.down('KeyW');
   const reachedTerrace = await page
-    .waitForFunction(() => window.amazingAdventure.player.groundHeight() > 1.19, { timeout: 45000, polling: 100 })
+    .waitForFunction(() => window.amazingAdventure.player.groundHeight() > 1.19, { timeout: 90000, polling: 100 })
     .then(() => true)
     .catch(() => false);
   await page.keyboard.up('KeyW');
@@ -419,7 +422,7 @@ try {
   ));
   const savedState = await page.evaluate(() => window.amazingAdventure.getState());
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await waitForBoot(page);
   await new Promise((r) => setTimeout(r, 500));
   const continueVisible = await page.evaluate(() => !document.getElementById('continue').hidden);
   checks.check('reload offers Continue when a save exists', continueVisible === true);
@@ -530,7 +533,7 @@ try {
     window.amazingAdventure.saves.clear();
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await waitForBoot(page);
   await page.click('#play');
   await new Promise((r) => setTimeout(r, 400));
 
@@ -606,7 +609,7 @@ try {
     window.amazingAdventure.saves.clear();
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await waitForBoot(page);
   await page.click('#play');
   await new Promise((r) => setTimeout(r, 400));
 
@@ -639,7 +642,7 @@ try {
   await page.evaluate(() => window.amazingAdventure.player.placeAt(9.5, -14.5, 0, 0));
   await page.keyboard.down('KeyW');
   const reachedLane = await page
-    .waitForFunction(() => window.amazingAdventure.areaAt() === 'lane', { timeout: 20000, polling: 100 })
+    .waitForFunction(() => window.amazingAdventure.areaAt() === 'lane', { timeout: 45000, polling: 100 })
     .then(() => true)
     .catch(() => false);
   await page.keyboard.up('KeyW');
@@ -678,7 +681,7 @@ try {
     window.amazingAdventure.saves.clear();
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await waitForBoot(page);
   await page.click('#play');
   await new Promise((r) => setTimeout(r, 400));
   await page.evaluate(() => window.amazingAdventure.player.placeAt(9.5, -15.6, 0, 0));
@@ -699,7 +702,7 @@ try {
     window.amazingAdventure.saves.clear();
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await waitForBoot(page);
   await page.click('#play');
   await new Promise((r) => setTimeout(r, 400));
 
@@ -1366,7 +1369,7 @@ try {
   await page.evaluate(() => window.amazingAdventure.audio.setEnabled(false));
   const mutedStored = await page.evaluate(() => localStorage.getItem('amazing-adventure:audio'));
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 25000 });
+  await waitForBoot(page);
   const afterReload = await page.evaluate(() => ({
     enabled: window.amazingAdventure.audio.enabled,
     stored: localStorage.getItem('amazing-adventure:audio')
@@ -3178,7 +3181,7 @@ try {
     localStorage.removeItem('amazing-adventure:save:v2');
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 25000 });
+  await waitForBoot(page);
   await page.click('#play');
   await new Promise((r) => setTimeout(r, 1400));
 
@@ -3229,7 +3232,7 @@ try {
 
   // A returning player must not be re-tutorialised.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 25000 });
+  await waitForBoot(page);
   const continueShown = await page.evaluate(() => !document.getElementById('continue').hidden);
   await page.click('#continue');
   await new Promise((r) => setTimeout(r, 1200));
@@ -3674,12 +3677,18 @@ try {
     JSON.stringify(reachableApi));
 
   await capture(page, 'round18-reachability.png');
+} catch (error) {
+  runError = error;
 } finally {
   await close();
   await server.stop();
 }
 
 checks.print();
+if (runError) {
+  console.log(`FAIL run aborted: ${runError.message}`);
+  process.exit(1);
+}
 console.log(`\nscreenshots: ${outDir}/round2-*.png, round3-*.png`);
 if (process.env.RECORD_ARTIFACTS !== '1' && !process.env.SCREENSHOT_DIR) {
   console.log('(temporary directory — set RECORD_ARTIFACTS=1 to refresh artifacts/)');

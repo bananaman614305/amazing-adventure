@@ -13,7 +13,7 @@
 // Run: RECORD_ARTIFACTS=1 node scripts/compare-round57.mjs
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { startServer, launchBrowser, createChecks, screenshotDir } from './browser.mjs';
+import { startServer, launchBrowser, createChecks, screenshotDir, waitForBoot } from './browser.mjs';
 
 const checks = createChecks();
 const VIEW = { x: 0, z: 10, yaw: Math.PI };
@@ -104,7 +104,7 @@ try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
   await page.goto(server.base, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 20000 });
+  await waitForBoot(page);
   await page.evaluate(() => window.amazingAdventure.assetsReady());
   await page.evaluate(() => window.amazingAdventure.buildEnvironmentMapNow());
   await page.evaluate((view) => {

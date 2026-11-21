@@ -4,7 +4,7 @@
 //
 // Run: npm run test:mobile
 import { resolve } from 'node:path';
-import { startServer, launchBrowser, screenshotDir, createChecks } from './browser.mjs';
+import { startServer, launchBrowser, screenshotDir, createChecks, waitForBoot } from './browser.mjs';
 
 const outDir = await screenshotDir();
 const checks = createChecks();
@@ -40,7 +40,7 @@ async function playSession(browser, server, profile) {
   });
   await page.emulate({ viewport: profile.viewport, userAgent: profile.userAgent });
   await page.goto(server.base, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 30000 });
+  await waitForBoot(page);
 
   const cdp = await page.createCDPSession();
   const touch = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
@@ -538,7 +538,7 @@ async function playSession(browser, server, profile) {
 
   // A real reload: the page comes back, the Continue button appears and restores.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 30000 });
+  await waitForBoot(page);
   await wait(300);
   const continueShown = await page.evaluate(() => {
     const button = document.getElementById('continue');
@@ -592,7 +592,7 @@ async function playSession(browser, server, profile) {
 
   // Starting by tapping the overlay background (not the button) must also work.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 30000 });
+  await waitForBoot(page);
   const overlayRect = await page.evaluate(() => {
     const card = document.querySelector('#overlay .card').getBoundingClientRect();
     return { x: card.x + card.width / 2, y: card.y - 30 };
@@ -609,7 +609,7 @@ async function playSession(browser, server, profile) {
     overlayStart.started && overlayStart.touchActive && overlayStart.enabled && overlayStart.rootVisible,
     JSON.stringify(overlayStart));
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.amazingAdventure !== undefined, { timeout: 30000 });
+  await waitForBoot(page);
 
   // --- Recovering from a dropped graphics context -----------------------
   // Phones drop the WebGL context under memory pressure. Without handling it
