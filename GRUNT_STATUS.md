@@ -1,31 +1,40 @@
 # Grunt status — Amazing Adventure
 
+> **Standing owner priority (from round 56 on): graphics realism.**
+> Make Amazing Adventure look substantially better and more convincing: rich
+> lighting, stronger materials, better geometry, a cohesive environment — while
+> keeping the game playable and performing on desktop and mobile. Use headless
+> Blender (`/worker/state/grunt-blender`) for meshes and bakes and the free
+> Kaggle GPU (`/worker/state/grunt-kaggle`) for texture work; free-licensed
+> third-party assets are allowed with attribution in `CREDITS.md`. Pick the
+> highest-impact work each round rather than using every tool every time.
+> No paid resources, accounts or consent changes are authorized.
+
 ## Current task
 
-**Round 55 — the modelled lane lamp and painted iron.** Complete, committed and
-verified on `grunt/round55-lane-prop`; it needs publishing. The lane's lamp post
-(the fixture the whole lamp round is walked from) is now the same `assets/lamp.glb`
-the plaza uses, rotated so its arm hangs the lantern over the walkway instead of
-into the wall, carrying a new painted-iron albedo/normal/roughness texture set.
-The material-cloning bug that had darkened the four plaza lanterns is fixed and
-pinned by a browser check that compares material *object identity*, not numbers.
+**Round 56 — The Night Light.** Complete, committed and verified on
+`grunt/round55-lane-prop`; it needs publishing. Lighting the lane now pays off
+as gameplay: once the lane has ever been lit, Oswin offers a paid lamp round —
+take his order, let dawn put the lanterns out, light the lane again, and settle
+for six coins and Market standing at his stall. Two real bugs the reachability
+proof found are fixed: repeated dusk/dawn cycles minted unlimited coins and
+Market standing, and a permanent night-order gate stranded players mid-oil-order.
 
-- Unit **479/479**; desktop **230/230**; mobile **185/185**; plus a 19-check
-degradation proof that the lane still plays when the textures or the model are
-missing. **912 checks** this round.
-- Evidence PNGs in `artifacts/round55-*`; the textures are byte-identical to the
-`art/kaggle/out5/` originals and are recorded in `CREDITS.md`.
-- The model is text-only: the screenshots were never looked at. Claims rest on
-in-page object assertions, mutation proof, and Pillow frame diffs.
+- Unit **480/480**; desktop **230/230**; mobile **185/185**.
+- Reachability: **33,184 states**, `truncated: false`, **0 dead ends**,
+  33,184/33,184 winnable — the soft-lock is gone, not capped away.
+- The purse pays **once ever** (`laneRoundPaid`); later nights light for free and
+  say so. A 20-cycle regression test pins it.
+- The model is text-only: no screenshot was looked at. Claims rest on in-page
+  object assertions, mutation proof, frame diffs and state-function tests.
 
 ## Next steps
 
-1. **Publish Round 55** to the trusted publication channel, based on
-   `grunt/round54-lane-lighting` (PR #55 is still open, so this stacks). Leave the
-   feature head checked out with a clean tree.
-2. **Give the lit lane a payoff.** The lane now looks right and lights at dusk;
-   the next round should make that visible progress change what happens — a
-   trader or quest beat that only opens once the lane is lit.
+1. **Publish Round 56** through the trusted publication channel from the clean
+   head on `grunt/round55-lane-prop`.
+2. **Give the other two factions a late chore.** The Night Light is the Market's
+   end-of-round task; Keepers and Watch have no equivalent yet, so the last third
+   of the game is still Market-shaped.
 3. **Keep closing the real-hardware gap.** Every reply, touch target and frame
    rate so far comes from Chrome device emulation on software rasterisation. A
    physical phone pass is still the largest honest unknown.
@@ -38,11 +47,13 @@ in-page object assertions, mutation proof, and Pillow frame diffs.
   (`https://github.com/bananaman614305/amazing-adventure/pull/5`), left open for
   the human.
 - `grunt/round5-mobile-preview` — the phone playtest candidate.
-- Rounds 6–54 are documented in the sections below; each shipped as its own PR.
-- `grunt/round55-lane-prop` — **this round**, stacked on round 54.
+- Rounds 6–55 are documented in the sections below; each shipped as its own PR.
+- `grunt/round55-lane-prop` — **this round** (round 56), stacked on round 54.
 
-**Last checkpoint:** Round 55 committed with a clean tree and a rebuilt preview;
-see the Round 55 section near the end of this file for the full record.
+**Last checkpoint:** Round 56 committed at `04b4691` with a clean tree; unit,
+desktop and mobile suites all green. The committed preview digests the shipped
+sources and is unchanged by this round's harness fix. See the Round 56 section
+near the end of this file for the full record.
 
 ## Round 5 — playable phone preview (owner priority)
 
@@ -3645,8 +3656,8 @@ pinned by an object-identity check.
 **Branch:** `grunt/round55-lane-prop`, feature work on top of `c7c877e`.
 
 ### Current task
-Round 56 is implemented and unit-green except the committed preview, which is
-rebuilt after this status commit. Lighting the lane now pays off as gameplay:
+Round 56 is complete and verified; it only needs publishing. Lighting the lane
+now pays off as gameplay:
 Oswin offers "The Night Light", a paid lamp round that starts only after the
 lane has ever been lit, walks when the player lights it, and settles for six
 coins at his stall. Two real bugs found by the reachability proof are fixed:
@@ -3684,17 +3695,32 @@ buy oil.
   one-night values; message states the traders already paid.
 - Debt probe: with oil bought on promise and the night order open, Oswin still
   offers "Settle the debt" and settling clears the perk.
-- Unit suite: 479/480, the sole failure the stale committed preview.
+- Unit suite: **480/480**.
+- Desktop browser suite: **230/230**, exit 0, 0 console errors (log
+  `/worker/state/logs/r56-desktop.log`). The two real-play checks that had failed
+  with 6/7 quests now report `complete:true`, `done:7` and
+  `epilogue:"The plaza at closing"` with 3 branches.
+- Mobile browser suite: **185/185**, exit 0, 0 console errors across the four
+  touch profiles (log `/worker/state/logs/r56-mobile.log`). One run failed
+  transiently on a `page.reload` wait and passed on re-run with no stray Chrome.
+- Committed preview: rebuilt on the clean tree, digest `7aa2444f...`,
+  `workingTreeClean: true`, 72 files.
 
 ### Limitations
 - Text-only model: no visual claims; lane glow is asserted as rule + emissive
   flags, not inspected.
-- Desktop and mobile browser suites for this round still to run after the
-  preview rebuild.
+- The Night Light pays a flat 6 coins; it does not scale with trader standing.
+- Only the Market gets a late chore this round; Keepers and Watch have no
+  equivalent, so the final act is still Market-shaped.
+- All device evidence is Chrome emulation on software rasterisation; a physical
+  phone pass remains the largest honest unknown.
 
 ### Next steps
-1. Commit this round, rebuild the committed preview on the clean tree, rerun
-   the unit suite to 0 failures.
-2. Run the desktop then mobile browser suites with `RECORD_ARTIFACTS=1`.
-3. Prepare the release through `grunt_release_prepare` once all three
-   `grunt_verify_release` checks (`tests`, `browser`, `mobile`) have receipts.
+1. Publish Round 56 through `grunt_release_prepare` once the `tests`, `browser`
+   and `mobile` receipts are collected on one unchanged head.
+2. **Graphics priority (owner, active):** make the world substantially richer --
+   convincing lighting, stronger materials, better geometry. Use headless Blender
+   for new or baked meshes and the free Kaggle GPU for texture work; keep
+   CREDITS.md accurate and hold desktop/mobile frame budgets.
+3. Give Keepers and Watch a late chore of their own once the visual pass lands,
+   so no single faction owns the end game.
