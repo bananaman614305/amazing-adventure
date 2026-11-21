@@ -215,9 +215,14 @@ function buildModelled(data, result) {
       group.add(mesh);
     }
   }
-  // Props: attach to a hand pivot so they swing with the arm.
+  // Props: attach to a hand pivot so they swing with the arm. Companion props
+  // (lantern on the pole, spear point on the shaft, ledger pages on the board)
+  // are authored already in place next to their parent, so they must ride the
+  // SAME pivot -- putting them on the body root would leave them behind while
+  // the arm swings.
   const propHand = {
-    PropPole: 'R', PropSpear: 'R', PropMap: 'L', PropLedger: 'L', PropHoop: 'L'
+    PropPole: 'R', PropSpear: 'R', PropMap: 'L', PropLedger: 'L', PropHoop: 'L',
+    PropLantern: 'R', PropSpearTip: 'R', PropLedgerPages: 'L'
   };
   for (const { name, geometry, material } of result.meshes) {
     if (!name.startsWith('Prop')) continue;
