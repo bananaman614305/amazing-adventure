@@ -1,15 +1,48 @@
 # Grunt status — Amazing Adventure
 
-**Branches:**
+## Current task
+
+**Round 55 — the modelled lane lamp and painted iron.** Complete, committed and
+verified on `grunt/round55-lane-prop`; it needs publishing. The lane's lamp post
+(the fixture the whole lamp round is walked from) is now the same `assets/lamp.glb`
+the plaza uses, rotated so its arm hangs the lantern over the walkway instead of
+into the wall, carrying a new painted-iron albedo/normal/roughness texture set.
+The material-cloning bug that had darkened the four plaza lanterns is fixed and
+pinned by a browser check that compares material *object identity*, not numbers.
+
+- Unit **479/479**; desktop **230/230**; mobile **185/185**; plus a 19-check
+degradation proof that the lane still plays when the textures or the model are
+missing. **912 checks** this round.
+- Evidence PNGs in `artifacts/round55-*`; the textures are byte-identical to the
+`art/kaggle/out5/` originals and are recorded in `CREDITS.md`.
+- The model is text-only: the screenshots were never looked at. Claims rest on
+in-page object assertions, mutation proof, and Pillow frame diffs.
+
+## Next steps
+
+1. **Publish Round 55** to the trusted publication channel, based on
+   `grunt/round54-lane-lighting` (PR #55 is still open, so this stacks). Leave the
+   feature head checked out with a clean tree.
+2. **Give the lit lane a payoff.** The lane now looks right and lights at dusk;
+   the next round should make that visible progress change what happens — a
+   trader or quest beat that only opens once the lane is lit.
+3. **Keep closing the real-hardware gap.** Every reply, touch target and frame
+   rate so far comes from Chrome device emulation on software rasterisation. A
+   physical phone pass is still the largest honest unknown.
+
+---
+
+**Branch history:**
 - `grunt/round3-living-world` — published inside PR #5.
 - `grunt/round4-lane-quest` at `65c6263` — **published as PR #5**
   (`https://github.com/bananaman614305/amazing-adventure/pull/5`), left open for
   the human.
-- `grunt/round5-mobile-preview` — the phone playtest candidate. This is the
-  branch this checkpoint describes.
+- `grunt/round5-mobile-preview` — the phone playtest candidate.
+- Rounds 6–54 are documented in the sections below; each shipped as its own PR.
+- `grunt/round55-lane-prop` — **this round**, stacked on round 54.
 
-**Last checkpoint:** the mobile playtest candidate, committed and verified; see
-the publication section at the end of this file.
+**Last checkpoint:** Round 55 committed with a clean tree and a rebuilt preview;
+see the Round 55 section near the end of this file for the full record.
 
 ## Round 5 — playable phone preview (owner priority)
 
@@ -3523,13 +3556,15 @@ All three test suites pass with 0 failures. Next: write `publish.json` +
 
 **Branch:** `grunt/round55-lane-prop` (off `grunt/round54-lane-lighting`; PR #55
 still open, so this is a stacked branch).
+**Head:** feature commit + the degradation proof + a clean-tree preview rebuild.
 
 ### Current task
-Round 55 is complete and ready to publish. The lane post — the fixture the whole
-lamp round is walked from — is now the same `assets/lamp.glb` the plaza uses,
-rotated so its arm hangs the lantern over the walkway, and its ironwork wears a
-new painted-iron albedo/normal/roughness family. The clone that had blacked out
-the four plaza lanterns is fixed and pinned by an object-identity check.
+Round 55 is complete, committed and verified; it only needs publishing. The lane
+post — the fixture the whole lamp round is walked from — is now the same
+`assets/lamp.glb` the plaza uses, rotated so its arm hangs the lantern over the
+walkway, and its ironwork wears a new painted-iron albedo/normal/roughness
+family. The clone that had blacked out the four plaza lanterns is fixed and
+pinned by an object-identity check.
 
 ### What was built
 - `assets/textures/lamp_{albedo,normal,rough}.webp` (512x512, lossless WebP):
@@ -3550,13 +3585,13 @@ the four plaza lanterns is fixed and pinned by an object-identity check.
 - `src/manifest.js`, `release-manifest.json`: the three maps are required files.
 
 ### Checks actually run
-- `npm test` — **479/479 pass** (0 fail) once the preview was rebuilt.
-- `npm run test:browser` — **230 PASS, 0 FAIL**, exit 0 (last green run at this
-  tree). New checks: the model replaces both stand-ins; the arm lands within
-  0.01 m of the independent argmin and > 0.2 rad from the runner-up; the
-  ironwork carries all three maps; the lane head is dark by day, dark at dusk
-  unlit, lit only when the round is walked, and dark again after; and the lane
-  bulb does not share the plaza bulb's material object.
+- `npm test` — **479/479 pass** (0 fail) at the committed head, tree clean.
+- `npm run test:desktop` (`test:browser`) — **230 PASS, 0 FAIL**, exit 0. New
+  checks: the model replaces both stand-ins; the arm lands within 0.01 m of the
+  independent argmin and > 0.2 rad from the runner-up; the ironwork carries all
+  three maps; the lane head is dark by day, dark at dusk unlit, lit only when the
+  round is walked, and dark again after; and the lane bulb does not share the
+  plaza bulb's material object.
 - Mutation proof: `needsOwnMaterial(sharedSource: true -> false)` fails
   `the lantern bulbs keep their day/night glow` (`intensity: 0`) and
   `the lane lamp does not share the plaza lamp material`
@@ -3564,12 +3599,19 @@ the four plaza lanterns is fixed and pinned by an object-identity check.
 - `npm run test:mobile` — **185 pass, 0 fail**, exit 0; profiles 7.5 / 1.5 / 2.3
   / 1.4 fps match the round-52 baseline, so the three maps cost nothing
   measurable.
-- Degradation proof, `node scripts/degrade-round55.mjs` — **14/14 pass**:
-  aborting all three map requests leaves a drawn, lightable post with
-  `lampMetal: 'flat'`; aborting only the normal map keeps the albedo+roughness
-  texture (`['map','roughnessMap']`).
+- Degradation proof, `node scripts/degrade-round55.mjs` — **19/19 pass** across
+  three blocked-asset modes: (a) all three lamp maps 404 → a drawn, lightable
+  post with `lampMetal: 'flat'`; (b) only the normal map 404 → albedo+roughness
+  survive (`['map','roughnessMap']`); (c) the lamp GLB itself 404 → the
+  procedural stand-in is drawn instead, the day/night hook stays on the stand-in
+  bulb, and the lane bunting lanterns still light. No page errors in any mode.
 - Evidence: `artifacts/round55-lane-lamp.png`, `-lit.png`, `-day.png`,
-  `-no-maps.png`, `round55-plaza-lamps-intact.png`.
+  `-no-maps.png`, `round55-plaza-lamps-intact.png`. The three lit/day/plaza PNGs
+  are 1280x720 and were frame-diffed with Pillow (`ImageChops`): lit-vs-day
+  181463 differing pixels, lit-vs-plaza 174980, day-vs-plaza 338414, all with
+  full-frame bounding boxes — consistent with a global lighting change, which is
+  what the phase system is meant to do. They were never looked at; the model is
+  text-only.
 
 ### Decisions
 - Clone a cached material only when it will be mutated (`needsOwnMaterial`), and
@@ -3592,3 +3634,6 @@ the four plaza lanterns is fixed and pinned by an object-identity check.
    unmerged), leaving the feature head checked out and the tree clean.
 2. Next candidate: a gameplay or ambience hook that pays off the lit lane, or a
    further graphics pass on the market lane.
+
+### Round 55 totals
+478 unit + 230 desktop + 185 mobile + 19 degradation = **912 checks**.
