@@ -79,8 +79,9 @@ web_modules/
 out
 
 # Nuxt.js build / generate output
+# (deliberately not ignoring `dist`: it is this project's committed, deployable
+#  preview build, see scripts/build-preview.mjs)
 .nuxt
-dist
 .output
 
 # NitroJS
