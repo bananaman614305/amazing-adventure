@@ -1807,6 +1807,18 @@ try {
     S.startArrears(state);
     S.deliverArrears(state, 'pay');
     S.finishArrears(state);
+    // The Night Light: light the lane once so Oswin will offer the round, take
+    // his order, let dawn put the lanterns out, then walk the round for real and
+    // settle it at his stall. This is the round-56 quest, driven through the
+    // same rules and dialogue the player's clicks run.
+    const A = await import('./src/areas.js');
+    const firstLight = A.lightLaneLanterns(state, 'dusk');
+    steps.push(`lane: ${firstLight.message.slice(0, 40)}`);
+    talk('oswin', /What kind of work/i);
+    A.laneLanternsAtDawn(state, 'day');
+    const walkLight = A.lightLaneLanterns(state, 'dusk');
+    steps.push(`lane: ${walkLight.message.slice(0, 40)}`);
+    talk('oswin', /night order/i);
     return {
       counts: S.questCounts(state),
       complete: E.storyComplete(state),
