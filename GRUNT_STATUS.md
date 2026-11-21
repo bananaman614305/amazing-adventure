@@ -12,8 +12,51 @@
 
 ## Current task
 
-**Round 57 — Physical light.** Complete, committed and receipt-verified on
-`grunt/round57-graphics` at `e0a868c`; it is queued for publishing.
+**Round 59 — Cast fidelity.** The six plaza NPCs are now physically correct in
+the live scene: they stand on the cobbles, they face the way they walk, and
+their role props are attached to the right pivot. Fixing it required correcting
+the asset *pipeline*, not the art.
+
+The root cause was a silent one. `art/blender/make_cast.py` positioned props by
+setting Blender object locations, and pip's child scale the same way. The GLB
+exporter with `export_apply=True` applies *modifiers* only — object transforms
+survive as glTF node `translation`/`scale`, and the reader in `src/glb.js` maps
+accessor data straight into geometry without ever reading node transforms. So
+every authored offset simply vanished at load: lanterns detached from poles,
+spear points buried inside shafts, ledger pages inside boards, and pip rendering
+full-size. The facing bug was separate but adjacent: the cast was authored with
+`dir:-1`, which put the nose along glTF −Z while the game's forward is local +Z
+(`rotation.y = atan2(dx, dz)`), so five NPCs walked backwards.
+
+- Nothing in `make_cast.py` may set `location`/`rotation`/`scale` any more; a new
+  `transform_check()` asserts every mesh object is transform-free at build time,
+  and `src/glb.js` now throws `node transforms not supported (node "<name>")`
+  rather than loading a mispositioned figure.
+- All offsets are baked into vertices: lantern at the pole top, spear point
+  starting exactly at the shaft top (`z ≥ 0.85`) instead of inside it (`0.74`),
+  ledger pages proud of the board face.
+- pip's sole 0.72 scale now lives only in `buildModelled()`; baking it in Blender
+  would have double-scaled the child to 0.518.
+- Companions ride their parent's hand pivot (`PropLantern`→`PropPole`,
+  `PropSpearTip`→`PropSpear`, `PropLedgerPages`→`PropLedger`), so a swinging arm
+  can no longer leave the lantern behind.
+- Nose and toes now point along local +Z; `dir` is threaded correctly.
+
+Checks on the committed tree: unit **558/558** (42 new in `tests/cast.test.mjs`),
+desktop **230/230 PASS**, mobile **184/184 PASS** across four emulated phone
+profiles, and `scripts/evidence-round59.mjs` **31/31 PASS** in a real headless
+Chrome page.
+
+The model is text-only: no screenshot was looked at. The evidence above is
+scene-graph measurement, not a visual claim — each NPC's meshes are measured in
+that NPC's own local frame (world coordinates are dominated by routine
+placement and would hide a rig bug), and the numbers are in
+`artifacts/round59-evidence.json`: boot soles land within 2.4 mm of world y=0 on
+all five booted figures, noses stand 0.133–0.170 in front of the head centre, and
+both halves of each companion prop resolve to the same `LimbArm*` pivot. One
+further check counts what the renderer actually submitted that frame — 357 draw
+calls and 8,942 triangles with all six modelled NPCs parented into the scene — so
+"the cast is on screen" is a number, not an impression.
 
 The renderer now goes through a real camera pipeline instead of raw linear
 output: ACES filmic tone mapping with sRGB output encoding and a per-phase
@@ -39,8 +82,13 @@ stops the acne the higher exposure exposed.
 
 ## Next steps
 
-1. **Publish Round 57** through the trusted publication channel from the clean
-   head `e0a868c` on `grunt/round57-graphics`.
+1. **Certify and publish Round 59.** Once the mobile suite is green, commit the
+   cast fixes on `grunt/round59-cast` and obtain the three trusted
+   `planId: release` receipts (`tests`, `browser`, `mobile`) on that exact head,
+   then hand it to `grunt_release_prepare`.
+2. **Publish Round 57** through the trusted publication channel from the clean
+   head `e0a868c` on `grunt/round57-graphics` — it is committed, receipt-verified
+   and still queued; this is a host-side gate, not game work.
 2. **Ship the sky dome follow-up (Round 57b).** The horizon haze band, phase
    driven sun disc and 32×24 dome are finished and green at `c8dbb23` on
    `grunt/round57b-sky` but were deliberately held out of this certified tree;

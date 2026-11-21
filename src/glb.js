@@ -91,6 +91,18 @@ export function glbToMeshes(parsed, THREE) {
   if (json.animations?.length) throw new Error('animations not supported');
   if (json.skins?.length) throw new Error('skins not supported');
   if (json.images?.length || json.textures?.length) throw new Error('embedded textures not supported');
+  // This reader maps accessor data straight into geometry and never reads node
+  // transforms, so a GLB whose nodes carry translation/rotation/scale/matrix
+  // would load with its meshes in the wrong place and no error to show for it.
+  // Refusing loudly keeps that class of bug at build time: the Blender scripts
+  // bake every transform into vertices and assert it (see transform_check in
+  // art/blender/make_cast.py).
+  const transformed = (json.nodes || []).find(
+    (n) => n.translation || n.rotation || n.scale || n.matrix
+  );
+  if (transformed) {
+    throw new Error(`node transforms not supported (node "${transformed.name || '?'}")`);
+  }
 
   const materials = (json.materials || []).map((m) => {
     const pbr = m.pbrMetallicRoughness || {};
