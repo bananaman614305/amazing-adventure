@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
-  LANE_BUNTING, LANE_SACKS, LANE_LANTERNS, LANTERN_HEIGHT, lanternPlacement
+  LANE_BUNTING, LANE_SACKS, LANE_LANTERNS, LANTERN_HEIGHT, lanternPlacement,
+  lampArmFacing, nearestLaneLantern
 } from './areas.js';
 import {
   FOUNTAIN_SPOT, FOUNTAIN_COLLIDER, canLoadAssets, textureRepeat,
@@ -16,7 +17,8 @@ import {
   HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
   COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, boxProjectUvs,
-  TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES
+  TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES, LAMP_TEXTURE_FILES,
+  needsOwnMaterial
 } from './assets.js';
 import { loadGlb } from './glb.js';
 
@@ -207,6 +209,11 @@ export function buildWorld(renderer) {
   // done. It gets no point light (that is the per-pixel budget the low tier is
   // protecting); its emissive is a state readout, and applyPhase() drives it.
   let postLamp = null;
+  // The lane post keeps its procedural cylinder here and is swapped for the
+  // modelled fixture by upgradeLaneLamp() once assets load. Declared before the
+  // prop loop on purpose: declaring it further down would put the assignment
+  // below in the temporal dead zone and throw on the first build.
+  let laneLampModel = null;
   for (const prop of LANE_PROPS) {
     if (prop.kind === 'post') {
       const post = new THREE.Mesh(
@@ -215,6 +222,7 @@ export function buildWorld(renderer) {
       );
       post.position.set(prop.x, prop.height / 2, prop.z);
       post.castShadow = true;
+      post.userData = { lanePostStandin: true };
       scene.add(post);
       const lamp = new THREE.Mesh(
         new THREE.SphereGeometry(0.24, 14, 10),
@@ -224,6 +232,7 @@ export function buildWorld(renderer) {
       lamp.userData = { lanePostLamp: true };
       scene.add(lamp);
       postLamp = lamp;
+      laneLampModel = post;
       colliders.push(boxCollider(prop.x - 0.25, prop.z - 0.25, prop.x + 0.25, prop.z + 0.25));
     } else if (prop.kind === 'barrel') {
       const barrel = new THREE.Mesh(
@@ -751,6 +760,7 @@ export function buildWorld(renderer) {
   // whole asset pass behind one 60 KB PNG.
   const propGroups = [];
   let woodTexturesLoaded = null;
+  let lampAssetPromise = null;
 
   const assetState = {
     fountain: 'stand-in',
@@ -775,6 +785,10 @@ export function buildWorld(renderer) {
     fountainDetail: null,
     stoneDetail: null,
     barrelDetail: null,
+    laneLamp: 'stand-in',
+    laneLampDetail: null,
+    lampMetal: 'flat',
+    lampMetalDetail: null,
     trees: 'stand-ins',
     bark: 'flat',
     barkDetail: null
@@ -981,7 +995,7 @@ export function buildWorld(renderer) {
       assetState.lamps = 'unavailable';
       return Promise.resolve(assetState);
     }
-    return loadLamp({ THREE, loadGlb }).then((result) => {
+    return loadLampAsset().then((result) => {
       if (!result.ok) {
         assetState.lamps = 'spheres';
         assetState.lampDetail = result.reason;
@@ -1033,6 +1047,153 @@ export function buildWorld(renderer) {
         parts: result.meshes.length,
         bytes: result.bytes,
         instances: lamps.length
+      };
+      return assetState;
+    });
+  }
+
+  /**
+   * One shared fetch of assets/lamp.glb for both the plaza posts and the lane
+   * post. The plaza upgrade used to fetch it on its own; the lane post is the
+   * same fixture, so downloading it twice would be a second round trip for a
+   * file the browser has already cached -- and, worse, two independent parse
+   * results that could disagree about the model.
+   */
+  function loadLampAsset() {
+    if (!lampAssetPromise) lampAssetPromise = loadLamp({ THREE, loadGlb });
+    return lampAssetPromise;
+  }
+
+  /**
+   * Swaps the lane's procedural post + sphere for the modelled lantern (round 55)
+   * and dresses its ironwork in the painted-metal texture family.
+   *
+   * The lane post is the fixture the whole lamp round is walked from, so it was
+   * the one lamp still made of a bare cylinder and a floating sphere: the plaza
+   * posts were modelled back in round 33 and the lane's bunting lanterns hang
+   * from modelled glass, which left the post you actually interact with looking
+   * like a placeholder. This upgrade is what makes the fixture match the light.
+   *
+   * Three things must survive the swap, and each is easy to lose:
+   *  - `environment.postLamp` must point at the *new* bulb mesh, because
+   *    applyPhase() writes its emissiveIntensity to that handle every frame. If
+   *    it kept the hidden stand-in sphere the head would stop reporting the
+   *    lit/dark state -- the exact honesty bug round 54 fixed.
+   *  - The arm is authored reaching +x, so the group is rotated to hang the
+   *    lantern over the lane instead of into the wall; lampArmFacing() owns that
+   *    maths so it is testable away from Three.js.
+   *  - The model has no UVs and cannot carry embedded textures (see glb.js), so
+   *    the iron maps are applied in code with box-projected UVs. Glass and bulb
+   *    keep their authored flat materials: a rusty metal map on glass reads as a
+   *    mistake.
+   *
+   * If the model or the maps are unavailable the stand-ins stay exactly as they
+   * are and `assetState` says why, so the round keeps working on a bare download.
+   */
+  function upgradeLaneLamp() {
+    if (!laneLampModel) {
+      assetState.laneLamp = 'stand-in';
+      return Promise.resolve(assetState);
+    }
+    const post = { x: laneLampModel.position.x, z: laneLampModel.position.z };
+    return Promise.all([
+      loadLampAsset(),
+      loadMaterialTextures({ THREE, files: LAMP_TEXTURE_FILES })
+    ]).then(([result, textures]) => {
+      if (!result.ok) {
+        assetState.laneLamp = 'stand-in';
+        assetState.laneLampDetail = result.reason;
+        return assetState;
+      }
+      const aim = lampArmFacing(post, nearestLaneLantern(post));
+      // Hide the stand-ins but keep the collider and the prop list untouched:
+      // movement, interaction range and the round's reach all key off the prop
+      // position, not off what is drawn at it.
+      laneLampModel.visible = false;
+      if (postLamp && postLamp.userData && postLamp.userData.lanePostLamp) {
+        postLamp.visible = false;
+      }
+      const group = new THREE.Group();
+      group.name = 'lane-lamp-model';
+      group.position.set(post.x, 0, post.z);
+      group.rotation.y = aim.rotationY;
+      let bulb = null;
+      let dressed = 0;
+      for (const { name, geometry, material } of result.meshes) {
+        // Clone the material: loadLampAsset() caches one parse and the plaza
+        // posts already hold these exact material objects, so mutating one here
+        // would drag the plaza bulbs down with the lane. That is not
+        // theoretical -- applyPhase() writes the lane head's emissiveIntensity
+        // to 0 on every daylight frame, and sharing the material turned the
+        // four plaza lanterns dark the moment the lane post was modelled.
+        const own = needsOwnMaterial({ mutatesMaterial: true, sharedSource: true });
+        const mesh = new THREE.Mesh(geometry, own ? material.clone() : material);
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        // Ironwork only: the housing is glass and the bulb is the light itself.
+        if (/iron/i.test(material.name || '') && textures.anyLoaded) {
+          if (!geometry.getAttribute('uv')) {
+            const position = geometry.getAttribute('position');
+            const index = geometry.getIndex();
+            geometry.setAttribute('uv', new THREE.BufferAttribute(boxProjectUvs({
+              positions: position.array,
+              indices: index ? index.array : null,
+              // The maps are painted at roughly a 0.6 m tile, so grain and chips
+              // stay the size a hand would paint them, not wallpaper.
+              tileMeters: 0.6
+            }), 2));
+          }
+          const iron = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.55,
+            metalness: 0.55,
+            name: 'LampIronPainted'
+          });
+          for (const [key, texture] of Object.entries(textures)) {
+            if (!texture || key === 'anyLoaded') continue;
+            const copy = texture.clone();
+            copy.needsUpdate = true;
+            copy.wrapS = THREE.RepeatWrapping;
+            copy.wrapT = THREE.RepeatWrapping;
+            copy.repeat.set(1, 1);
+            iron[key] = copy;
+          }
+          mesh.material = iron;
+          dressed += 1;
+        }
+        if (name === 'LampBulb') {
+          bulb = mesh;
+          mesh.material.emissive = new THREE.Color(0xffb43a);
+          mesh.material.emissiveIntensity = 1.6;
+        }
+        group.add(mesh);
+      }
+      scene.add(group);
+      // Hand the day/night hook to the modelled bulb. environment.postLamp is
+      // the handle applyPhase() reads, so it must be reassigned, not just the
+      // module-level variable.
+      if (bulb) {
+        postLamp = bulb;
+        environment.postLamp = bulb;
+      }
+      environment.laneLampGroup = group;
+      environment.laneLampAim = {
+        rotationY: aim.rotationY,
+        lanternX: aim.lanternX,
+        lanternZ: aim.lanternZ
+      };
+      assetState.laneLamp = 'model';
+      assetState.laneLampDetail = {
+        parts: result.meshes.length,
+        rotationY: Number(aim.rotationY.toFixed(4)),
+        lanternX: Number(aim.lanternX.toFixed(4)),
+        lanternZ: Number(aim.lanternZ.toFixed(4))
+      };
+      assetState.lampMetal = dressed > 0 ? 'textured' : 'flat';
+      assetState.lampMetalDetail = {
+        dressed,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((key) => textures[key])
       };
       return assetState;
     });
@@ -1678,7 +1839,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeStone(), upgradeWoodBrick(), upgradeTree(), upgradeBark()])
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeStone(), upgradeWoodBrick(), upgradeTree(), upgradeBark(), upgradeLaneLamp()])
         .then(() => upgradePropWood()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */

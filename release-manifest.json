@@ -74,6 +74,9 @@
     "assets/textures/plaster_albedo.webp",
     "assets/textures/plaster_normal.webp",
     "assets/textures/plaster_rough.webp",
+    "assets/textures/lamp_albedo.webp",
+    "assets/textures/lamp_normal.webp",
+    "assets/textures/lamp_rough.webp",
     "vendor/three.module.min.js",
     "vendor/THREE-LICENSE.txt"
   ],

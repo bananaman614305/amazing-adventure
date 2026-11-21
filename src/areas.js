@@ -291,6 +291,74 @@ export function laneLanternsAtDawn(state, phase) {
 }
 
 /**
+ * Which way round the modelled lamp post must face so its arm and lantern hang
+ * over the lane rather than into the wall.
+ *
+ * assets/lamp.glb is authored with the arm reaching +x (see
+ * art/blender/make_lamp.py), while the lane's bunting lanterns hang along the
+ * lane from `LANE_LANTERNS`. The post is a single prop, so instead of authoring a
+ * second model the game rotates it: this returns the Y rotation in radians that
+ * points the arm along the lane's hanging direction, and the world can be told
+ * where the lantern ended up without re-deriving the geometry.
+ *
+ * Pure and parameterised on the authored arm reach so a re-proportioned model
+ * cannot silently move the light away from the lantern again.
+ */
+export function lampArmFacing(post, target, armReach = LAMP_ARM_REACH) {
+  if (!post || !target) return { rotationY: 0, lanternX: post ? post.x + armReach : armReach, lanternZ: post ? post.z : 0 };
+  const dx = target.x - post.x;
+  const dz = target.z - post.z;
+  // atan2 of the target direction, then rotate the authored +x arm onto it.
+  // Normalised through `+ 0` so an exactly-aligned target yields 0 rather than
+  // -0: a negative zero would fail a strict equality and, worse, look like a
+  // mistake in a later snapshot even though it rotates identically.
+  const rotationY = -Math.atan2(dz, dx) + 0;
+  const reach = Number.isFinite(armReach) ? armReach : 0;
+  const length = Math.hypot(dx, dz);
+  const unitX = length > 1e-6 ? dx / length : 1;
+  const unitZ = length > 1e-6 ? dz / length : 0;
+  return {
+    rotationY,
+    lanternX: post.x + unitX * reach,
+    lanternZ: post.z + unitZ * reach
+  };
+}
+
+/**
+ * The bunting lantern nearest a point on the ground, as `{x, z}`.
+ *
+ * The lane's lamp post is rotated so its arm points at the lanterns it lights
+ * rather than at whichever wall is nearest. There are three lanterns and one
+ * post, so the fixture points at the closest of them: aiming at the far end of
+ * the lane from a post 1.5 m away would swing the head nearly sideways for no
+ * visual gain.
+ *
+ * Ties break toward the first declared lantern so the result is stable rather
+ * than whichever the sort happened to leave first.
+ */
+export function nearestLaneLantern(post, lanterns = LANE_LANTERNS) {
+  if (!post) return null;
+  let best = null;
+  let bestDistance = Infinity;
+  for (const lantern of lanterns || []) {
+    const dx = lantern.x - post.x;
+    const dz = lantern.strandZ - post.z;
+    const distance = dx * dx + dz * dz;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = { x: lantern.x, z: lantern.strandZ };
+    }
+  }
+  return best;
+}
+
+/**
+ * The lamp post's arm length in metres: the authored lamp.glb arm reaches +0.6
+ * from the post origin, and the lantern hangs centred on the end of it.
+ */
+export const LAMP_ARM_REACH = 0.6;
+
+/**
  * What the lamp post is labelled when the player is close enough to use it.
  * The post always has a label, even when the round cannot be walked, because a
  * hint that vanishes in daylight leaves the player standing at the one object

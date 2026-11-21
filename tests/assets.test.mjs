@@ -3,10 +3,12 @@
 // with a fake fetch, so "assets unavailable" is a tested state rather than a hope.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import {
   FOUNTAIN_COLLIDER, FOUNTAIN_SPOT, FOUNTAIN_ASSET, STONE_TEXTURE_FILES,
   canLoadAssets, textureRepeat, stoneMaterialParams, fountainFootprint,
-  footprintFitsCollider, loadFountain, loadStoneTextures, boxProjectUvs
+  footprintFitsCollider, loadFountain, loadStoneTextures, boxProjectUvs,
+  LAMP_TEXTURE_FILES, LAMP_ASSET, LAMP_MODEL_SIZE, loadMaterialTextures, needsOwnMaterial
 } from '../src/assets.js';
 
 // Minimal fake Three.js: only what these functions touch.
@@ -263,4 +265,68 @@ test('boxProjectUvs picks the dominant axis for a side face', () => {
   // Layout is [u0, v0, u1, v1, u2, v2]; v1 is at index 3, u2 at index 4.
   assert.ok(Math.abs(uvs[3] - 2) < 1e-6, `v uses y: ${uvs[3]}`);
   assert.ok(Math.abs(uvs[4] - 3) < 1e-6, `u uses z: ${uvs[4]}`);
+});
+
+// --- The painted-iron lamp maps (round 55) ---------------------------------
+
+test('the lamp texture family names the three iron maps and stays on disk', () => {
+  assert.deepEqual(Object.keys(LAMP_TEXTURE_FILES).sort(), ['map', 'normalMap', 'roughnessMap']);
+  for (const [kind, url] of Object.entries(LAMP_TEXTURE_FILES)) {
+    assert.equal(url, `assets/textures/lamp_${kind === 'map' ? 'albedo' : kind === 'normalMap' ? 'normal' : 'rough'}.webp`);
+    assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${kind} map is shipped`);
+  }
+  // The maps belong to the lamp model, and the model must still be there or the
+  // maps would dress nothing.
+  assert.ok(existsSync(new URL(`../${LAMP_ASSET}`, import.meta.url)));
+  assert.ok(LAMP_MODEL_SIZE.postHeight > 2 && LAMP_MODEL_SIZE.lanternHeight > 0);
+});
+
+test('the lamp maps load through the shared texture pipeline', async () => {
+  // Same loader the stone/wood/bark families use: this asserts the lamp job did
+  // not invent a second loading path that could drift.
+  const requested = [];
+  const loaded = await loadMaterialTextures({
+    THREE: fakeTHREE,
+    files: LAMP_TEXTURE_FILES,
+    createBitmap: async () => ({ width: 512, height: 512 }),
+    fetchImpl: async (url) => { requested.push(url); return okResponse({}); }
+  });
+  assert.equal(loaded.anyLoaded, true);
+  assert.deepEqual(requested.sort(), Object.values(LAMP_TEXTURE_FILES).sort());
+  // THREE.NoColorSpace is the empty string; colour is 'srgb'. Compare against the
+  // real constants the loader uses rather than a literal that could drift.
+  assert.equal(loaded.map.colorSpace, 'srgb');
+  assert.equal(loaded.normalMap.colorSpace, loaded.roughnessMap.colorSpace);
+  assert.notEqual(loaded.map.colorSpace, loaded.normalMap.colorSpace,
+    'normal/rough maps must not be decoded as colour');
+});
+
+test('a missing lamp map degrades to the authored flat material', async () => {
+  const loaded = await loadMaterialTextures({
+    THREE: fakeTHREE,
+    files: LAMP_TEXTURE_FILES,
+    createBitmap: async () => ({ width: 8, height: 8 }),
+    fetchImpl: async (url) => (url.endsWith('lamp_albedo.webp') ? okResponse({}) : failResponse(404))
+  });
+  assert.equal(loaded.anyLoaded, true);
+  assert.ok(loaded.map);
+  // Partial is honest: the world only reports 'textured' when something
+  // actually dressed, and the maps it names must be the ones present.
+  assert.equal(loaded.normalMap, null);
+});
+
+test('a material the world animates must not be shared with a cached model', () => {
+  // Round 55's real bug: loadLampAsset() caches one parse, so the lane post and
+  // the four plaza posts held the same material objects. applyPhase() writes the
+  // lane head's emissiveIntensity to 0 every daylight frame, and that turned all
+  // four plaza lanterns dark -- caught by a browser check, not by any unit test.
+  assert.equal(needsOwnMaterial({ mutatesMaterial: true, sharedSource: true }), true,
+    'animating a cached material must clone it');
+  // Sharing is still fine when nobody writes to the material.
+  assert.equal(needsOwnMaterial({ mutatesMaterial: false, sharedSource: true }), false);
+  // And a material the caller already owns needs no clone.
+  assert.equal(needsOwnMaterial({ mutatesMaterial: true, sharedSource: false }), false);
+  // Degenerate input must not accidentally claim ownership.
+  assert.equal(needsOwnMaterial(), false);
+  assert.equal(needsOwnMaterial({}), false);
 });

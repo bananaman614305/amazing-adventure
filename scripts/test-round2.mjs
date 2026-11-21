@@ -2116,11 +2116,16 @@ try {
   const lamps = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
     const api = window.amazingAdventure;
     const bulbs = [];
+    const laneBulbs = [];
     let models = 0;
     let hiddenStandins = 0;
     api.scene.traverse((o) => {
       if (o.name === 'lamp-model') models += 1;
-      if (o.name === 'LampBulb') bulbs.push(o);
+      // Only the plaza bulbs: round 55 hangs a fifth LampBulb under the lane
+      // post's own group, and its emissive follows the lane round rather than
+      // the plaza's day/night cycle, so mixing the two would flake.
+      if (o.name === 'LampBulb' && o.parent && o.parent.name === 'lamp-model') bulbs.push(o);
+      if (o.name === 'LampBulb' && o.parent && o.parent.name === 'lane-lamp-model') laneBulbs.push(o);
       if (o.userData && o.userData.lampStandin && !o.visible) hiddenStandins += 1;
     });
     return {
@@ -2129,7 +2134,11 @@ try {
       bulbs: bulbs.length,
       hiddenStandins,
       emissive: bulbs[0] ? bulbs[0].material.emissive.getHexString() : null,
-      intensity: bulbs[0] ? bulbs[0].material.emissiveIntensity : null
+      intensity: bulbs[0] ? bulbs[0].material.emissiveIntensity : null,
+      // Identity, not equality: two materials with the same numbers can still be
+      // one object, and that sharing is what darkened the plaza posts.
+      sharesMaterialWithLane: bulbs.length > 0 && laneBulbs.length > 0 &&
+        bulbs[0].material === laneBulbs[0].material
     };
   }));
 
@@ -2140,6 +2149,15 @@ try {
   checks.check('the lantern bulbs keep their day/night glow after the model loads',
     lamps.bulbs === 4 && lamps.emissive === 'ffb43a' && lamps.intensity > 0,
     JSON.stringify({ bulbs: lamps.bulbs, emissive: lamps.emissive, intensity: lamps.intensity }));
+
+  // The lane post is dressed from the same cached GLB parse, and applyPhase()
+  // writes the lane head's emissiveIntensity every frame. If the two share one
+  // material object the plaza lanterns inherit those writes and go dark at
+  // midday -- the check above only catches that at the instant it samples, so
+  // assert the materials are distinct objects outright.
+  checks.check('the lane lamp does not share the plaza lamp material',
+    lamps.sharesMaterialWithLane === false,
+    JSON.stringify({ sharesMaterialWithLane: lamps.sharesMaterialWithLane }));
 
   await capture(page, 'round33-lamps.png');
   // --- 28c. The modelled market stalls --------------------------------------
@@ -2899,6 +2917,118 @@ try {
     JSON.stringify({ dawn: laneRound.dawnLamp, post: laneRound.dawnPost, flag: laneRound.dawnFlag, relit: laneRound.relitChanged }));
 
   await capture(page, 'round54-lane-lighting.png');
+
+  // --- 28t. The modelled lane lamp post (round 55) ---------------------------
+  // The lane's procedural cylinder+sphere post swaps for the same lamp.glb the
+  // plaza posts use, rotated so its arm hangs the lantern over the walkway and
+  // dressed in the painted-iron maps. Three things must survive the swap: the
+  // stand-ins hide, the bulb keeps the day/night emissive handoff, and the
+  // lantern lands inside the lane corridor (the post stands at the wall edge).
+  const laneLamp = await page.evaluate(() => window.amazingAdventure.assetsReady().then(async () => {
+    const api = window.amazingAdventure;
+    const { LANE_LANTERNS, LAMP_ARM_REACH, lampArmFacing, nearestLaneLantern, LANE_LIGHTING_POST } =
+      await import('./src/areas.js');
+    const frames = async (n) => {
+      for (let i = 0; i < n; i++) await new Promise((r) => requestAnimationFrame(r));
+    };
+    let models = 0, hiddenPosts = 0, hiddenHeads = 0, ironPainted = 0, laneBulbs = 0;
+    const textured = [];
+    api.scene.traverse((o) => {
+      if (o.name === 'lane-lamp-model') models += 1;
+      if (o.userData && o.userData.lanePostStandin && !o.visible) hiddenPosts += 1;
+      if (o.userData && o.userData.lanePostLamp && !o.visible) hiddenHeads += 1;
+      if (o.isMesh && o.material && o.material.name === 'LampIronPainted') {
+        ironPainted += 1;
+        if (o.material.map && o.material.normalMap && o.material.roughnessMap) textured.push(o.name);
+      }
+      if (o.name === 'LampBulb' && o.parent && o.parent.name === 'lane-lamp-model') laneBulbs += 1;
+    });
+    // Work out where the arm *should* point without asking the rule under test,
+    // or a broken rule would supply its own expected answer and agree with
+    // itself. This is an independent argmin over the declared strands.
+    const aims = LANE_LANTERNS.map((s) => ({
+      strand: { x: s.x, z: s.strandZ },
+      d2: (s.x - LANE_LIGHTING_POST.x) ** 2 + (s.strandZ - LANE_LIGHTING_POST.z) ** 2,
+      aim: lampArmFacing(LANE_LIGHTING_POST, { x: s.x, z: s.strandZ }, LAMP_ARM_REACH)
+    }));
+    const sorted = [...aims].sort((a, b) => a.d2 - b.d2);
+    const expected = sorted[0].aim;
+    const bulb = api.environment.postLamp;
+    const aim = api.environment.laneLampAim;
+    // Where the bulb actually hangs, not where the aim arithmetic says it
+    // should: a group that never rotates still returns a plausible
+    // lanternX/lanternZ from lampArmFacing(), so only the world position can
+    // tell whether the arm is really pointing down the walkway. The GLB bakes
+    // every offset into the vertices (mesh.position is the origin), so the
+    // measure has to be the geometry's bounding-box centre in world space,
+    // not getWorldPosition().
+    let bulbWorld = null;
+    if (bulb) {
+      if (!bulb.geometry.boundingBox) bulb.geometry.computeBoundingBox();
+      const centre = bulb.geometry.boundingBox.getCenter(new (bulb.position.constructor)());
+      bulb.localToWorld(centre);
+      bulbWorld = { x: Number(centre.x.toFixed(4)), y: Number(centre.y.toFixed(4)), z: Number(centre.z.toFixed(4)) };
+    }
+    const emissive = bulb ? bulb.material.emissive.getHexString() : null;
+    // The head is a state readout, not a lamp that burns all night: it must be
+    // dark in daylight, dark at dusk before the round is walked, and lit only
+    // once the lane is lit -- otherwise it advertises a job it has not done.
+    api.setClock(30);
+    await frames(3);
+    const dayIntensity = bulb ? bulb.material.emissiveIntensity : null;
+    api.setClock(80);
+    await frames(3);
+    const duskDark = bulb ? bulb.material.emissiveIntensity : null;
+    api.getState().flags.laneLanternsLit = true;
+    api.setClock(80);
+    await frames(3);
+    const duskLit = bulb ? bulb.material.emissiveIntensity : null;
+    api.getState().flags.laneLanternsLit = false;
+    api.setClock(30);
+    await frames(3);
+    const restIntensity = bulb ? bulb.material.emissiveIntensity : null;
+    return { state: api.assetState(), models, hiddenPosts, hiddenHeads, ironPainted, textured,
+             laneBulbs, emissive, bulbWorld, dayIntensity, duskDark, duskLit, restIntensity, aim,
+             expected, runnerUp: sorted[1] ? sorted[1].aim : null };
+  }));
+  checks.check('the modelled lane lamp replaces the procedural post and head',
+    laneLamp.state.laneLamp === 'model' && laneLamp.models === 1 &&
+    laneLamp.hiddenPosts === 1 && laneLamp.hiddenHeads === 1,
+    JSON.stringify({ state: laneLamp.state.laneLamp, models: laneLamp.models,
+                     hiddenPosts: laneLamp.hiddenPosts, hiddenHeads: laneLamp.hiddenHeads }));
+  checks.check('the lane lamp arm hangs its lantern over the walkway, not the wall',
+    laneLamp.aim && Number.isFinite(laneLamp.aim.rotationY) &&
+    laneLamp.bulbWorld &&
+    // The model must actually put the bulb where the aim rule says.
+    Math.abs(laneLamp.bulbWorld.x - laneLamp.aim.lanternX) < 0.01 &&
+    Math.abs(laneLamp.bulbWorld.z - laneLamp.aim.lanternZ) < 0.01 &&
+    // And the aim must be the *nearest* strand's, matched to a millimetre, so
+    // pointing at the wrong lantern cannot pass on being vaguely in the lane.
+    Math.abs(laneLamp.aim.rotationY - laneLamp.expected.rotationY) < 0.001 &&
+    Math.abs(laneLamp.aim.lanternX - laneLamp.expected.lanternX) < 0.001 &&
+    Math.abs(laneLamp.aim.lanternZ - laneLamp.expected.lanternZ) < 0.001 &&
+    // The strands really are distinguishable, or the assertion above would be
+    // satisfied by luck. They differ by only ~7 cm in x, so rotation is what
+    // actually separates them (nearest -2.863 rad vs runner-up -2.581 rad).
+    Math.abs(laneLamp.expected.rotationY - laneLamp.runnerUp.rotationY) > 0.2 &&
+    // Off the wall (the post is at the wall edge, x 13.4) and over the lane.
+    laneLamp.aim.lanternX < 13.4,
+    JSON.stringify({ aim: laneLamp.aim, bulb: laneLamp.bulbWorld,
+                     expected: laneLamp.expected, runnerUp: laneLamp.runnerUp }));
+  checks.check('the lane lamp ironwork wears all three painted maps',
+    laneLamp.state.lampMetal === 'textured' && laneLamp.ironPainted > 0 &&
+    laneLamp.textured.length === laneLamp.ironPainted,
+    JSON.stringify({ metal: laneLamp.state.lampMetal, iron: laneLamp.ironPainted,
+                     textured: laneLamp.textured }));
+  checks.check('the modelled lane head reports the lane round instead of glowing all night',
+    laneLamp.laneBulbs === 1 && laneLamp.emissive === 'ffb43a' &&
+    laneLamp.dayIntensity === 0 && laneLamp.duskDark === 0 &&
+    laneLamp.duskLit > 0 && laneLamp.restIntensity === 0,
+    JSON.stringify({ bulbs: laneLamp.laneBulbs, emissive: laneLamp.emissive,
+                     day: laneLamp.dayIntensity, duskDark: laneLamp.duskDark,
+                     duskLit: laneLamp.duskLit, rest: laneLamp.restIntensity }));
+
+  await capture(page, 'round55-lane-lamp.png');
 
   // The cast has to notice the difference, or the chore is invisible outside the
   // lane's own light. Dusk is when the pair look at the sky, so the script key

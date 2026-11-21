@@ -5,7 +5,8 @@ import {
   LANE_SACKS, LANE_BUNTING, LANE_CORRIDOR, LANE_LANTERNS, LANTERN_DROP, LANTERN_HEIGHT,
   laneDressingClear, laneBuntingOverhead, laneLanternsHang, lanternPlacement, strandHeightAt,
   LANE, LANE_LIGHTING_POST, LANE_LIGHT_REWARD,
-  laneLightingStatus, laneLightingHint, laneLanternsShouldGlow, laneLanternsAtDawn, lightLaneLanterns
+  laneLightingStatus, laneLightingHint, laneLanternsShouldGlow, laneLanternsAtDawn, lightLaneLanterns,
+  lampArmFacing, LAMP_ARM_REACH, nearestLaneLantern
 } from '../src/areas.js';
 import { createInitialState, coins, getFlag } from '../src/state.js';
 import { reputation } from '../src/factions.js';
@@ -330,4 +331,88 @@ test('strandHeightAt is deepest at the middle and matches the ends', () => {
     const h = strandHeightAt(strand, t);
     assert.ok(h >= 2.5 - 1e-9 && h <= 2.7 + 1e-9, `t=${t} h=${h}`);
   }
+});
+
+// The modelled lamp post (round 55) swaps the lane's procedural cylinder for
+// assets/lamp.glb, whose arm reaches +0.6 in local x. The rotation returned
+// here decides which side of the lane the lantern hangs over, so a maths
+// mistake would put the glass in the wall and the light behind the player.
+test('lampArmFacing points the authored +x arm at the target', () => {
+  // Due +x needs no rotation.
+  assert.equal(lampArmFacing({ x: 0, z: 0 }, { x: 1, z: 0 }).rotationY, 0);
+  // Due -z (up-lane on the map) is a quarter turn; Three.js +Y rotation takes
+  // +x to -z, and -atan2(-1, 0) is exactly that quarter turn.
+  const nz = lampArmFacing({ x: 0, z: 0 }, { x: 0, z: -1 });
+  assert.ok(Math.abs(nz.rotationY - Math.PI / 2) < 1e-9, `rotationY ${nz.rotationY}`);
+  // Reverse direction: half a turn, not zero or a quarter.
+  const pz = lampArmFacing({ x: 0, z: 0 }, { x: 0, z: 1 });
+  assert.ok(Math.abs(Math.abs(pz.rotationY) - Math.PI / 2) < 1e-9, `rotationY ${pz.rotationY}`);
+});
+
+test('lampArmFacing lands the lantern at one arm reach along the aim line', () => {
+  const post = { x: 3, z: -4 };
+  const target = { x: 6, z: -8 }; // a 5 m diagonal, so the unit vector is (0.6, 0.8)
+  const faced = lampArmFacing(post, target, LAMP_ARM_REACH);
+  const dx = faced.lanternX - post.x;
+  const dz = faced.lanternZ - post.z;
+  const dist = Math.hypot(dx, dz);
+  assert.ok(Math.abs(dist - LAMP_ARM_REACH) < 1e-9, `lantern ${dist} from post, reach ${LAMP_ARM_REACH}`);
+  // On the post->target ray, not merely at reach distance on some other bearing.
+  assert.ok(Math.abs(dx / dist - (target.x - post.x) / 5) < 1e-9);
+  assert.ok(Math.abs(dz / dist - (target.z - post.z) / 5) < 1e-9);
+});
+
+test('lampArmFacing degrades to sane values instead of NaN when aimed at itself', () => {
+  const faced = lampArmFacing({ x: 2, z: 7 }, { x: 2, z: 7 });
+  assert.ok(Number.isFinite(faced.rotationY), `rotationY ${faced.rotationY}`);
+  assert.ok(Number.isFinite(faced.lanternX) && Number.isFinite(faced.lanternZ),
+    `lantern ${faced.lanternX}, ${faced.lanternZ}`);
+  // Missing arguments must not throw either; the world still builds without a target.
+  assert.ok(Number.isFinite(lampArmFacing(null, null).lanternX));
+});
+
+test('the real lamp post strung beside the real bunting keeps the lantern inside the lane', () => {
+  // The far post is the anchor of the first bunting strand; aim at the lane
+  // centre line and the lantern must land over the walkway, not the wall.
+  const post = LANE_LIGHTING_POST;
+  const strand = LANE_BUNTING[0];
+  const faced = lampArmFacing(post, { x: post.x, z: strand.z }, LAMP_ARM_REACH);
+  assert.ok(faced.lanternZ < LANE_LIGHTING_POST.z || faced.lanternZ > LANE_LIGHTING_POST.z,
+    'lantern has a definite side');
+  assert.ok(Math.abs(faced.lanternX - post.x) < 1e-9 ||
+    (faced.lanternX >= LANE.minX && faced.lanternX <= LANE.maxX),
+    `lantern x ${faced.lanternX} inside the lane corridor`);
+});
+
+test('nearestLaneLantern picks the strand the post actually stands beside', () => {
+  // The lane post is the near post (z -24.8); the closest strand is -23.8, not
+  // the -19.4 one at the other end of the lane.
+  const near = nearestLaneLantern(LANE_LIGHTING_POST);
+  assert.ok(near, 'the post has a nearest lantern');
+  assert.equal(near.z, LANE_LANTERNS.reduce((best, l) =>
+    Math.abs(l.strandZ - LANE_LIGHTING_POST.z) < Math.abs(best.strandZ - LANE_LIGHTING_POST.z) ? l : best
+  ).strandZ);
+  assert.ok(LANE_LANTERNS.some((l) => l.strandZ === near.z && l.x === near.x));
+});
+
+test('nearestLaneLantern is stable on a tie and safe with no post', () => {
+  // Equidistant lanterns must resolve to the first declared, not to whichever
+  // comparison happens to win on floating-point noise.
+  const tie = nearestLaneLantern({ x: 0, z: 0 }, [
+    { x: 0, strandZ: -2 }, { x: 0, strandZ: 2 }
+  ]);
+  assert.equal(tie.z, -2);
+  assert.equal(nearestLaneLantern(null), null);
+  assert.equal(nearestLaneLantern({ x: 1, z: 1 }, []), null);
+});
+
+test('the post aimed at the nearest lantern hangs its lantern over the walkway', () => {
+  const aim = nearestLaneLantern(LANE_LIGHTING_POST);
+  const faced = lampArmFacing(LANE_LIGHTING_POST, aim, LAMP_ARM_REACH);
+  // The lantern must end up inside the free corridor, not buried in the wall
+  // the post is planted against (the post sits at x 13.4, wall at 14).
+  assert.ok(faced.lanternX >= LANE_CORRIDOR.minX && faced.lanternX <= LANE_CORRIDOR.maxX,
+    `lantern x ${faced.lanternX} inside ${JSON.stringify(LANE_CORRIDOR)}`);
+  // And it must actually move inward from the post, so the arm is over the lane.
+  assert.ok(faced.lanternX < LANE_LIGHTING_POST.x, 'arm reaches in over the lane');
 });

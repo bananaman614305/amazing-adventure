@@ -1,0 +1,42 @@
+{
+  "size": 512,
+  "generator": "procedural painted iron",
+  "gpu": null,
+  "backend": "numpy",
+  "gpu_error": "No module named 'cupy'",
+  "seam_ratio_lamp_albedo": [
+    0.652,
+    0.624
+  ],
+  "seam_ratio_lamp_normal": [
+    1.278,
+    1.156
+  ],
+  "seam_ratio_lamp_rough": [
+    0.681,
+    0.626
+  ],
+  "lamp_albedo_stats": {
+    "min": 0.1095,
+    "max": 0.5711,
+    "mean": 0.2722
+  },
+  "lamp_normal_stats": {
+    "min": 0.1508,
+    "max": 1.0,
+    "mean": 0.662
+  },
+  "lamp_rough_stats": {
+    "min": 0.4292,
+    "max": 0.8597,
+    "mean": 0.5553
+  },
+  "lamp_seconds": 0.417,
+  "bytes": {
+    "lamp_albedo.png": 370696,
+    "lamp_normal.png": 605763,
+    "lamp_rough.png": 158360,
+    "lamp_preview.png": 799593
+  },
+  "total_seconds": 0.418
+}

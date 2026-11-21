@@ -3516,3 +3516,79 @@ All three test suites pass with 0 failures. Next: write `publish.json` +
    as flagged in the checkpoint instructions.
 3. Continue stacked-branch flow; do not wait idle for PR #54 to merge.
 
+
+---
+
+## Round 55 — the modelled lane lamp and painted iron
+
+**Branch:** `grunt/round55-lane-prop` (off `grunt/round54-lane-lighting`; PR #55
+still open, so this is a stacked branch).
+
+### Current task
+Round 55 is complete and ready to publish. The lane post — the fixture the whole
+lamp round is walked from — is now the same `assets/lamp.glb` the plaza uses,
+rotated so its arm hangs the lantern over the walkway, and its ironwork wears a
+new painted-iron albedo/normal/roughness family. The clone that had blacked out
+the four plaza lanterns is fixed and pinned by an object-identity check.
+
+### What was built
+- `assets/textures/lamp_{albedo,normal,rough}.webp` (512x512, lossless WebP):
+  procedural painted iron — dark blue-grey paint, mottled rust, hammered grain,
+  chipped edges — from `art/kaggle/lamp_metal_textures.py` (NumPy; CuPy was
+  unavailable). Seam ratios albedo [0.652, 0.624], normal [1.278, 1.156],
+  rough [0.681, 0.626]; all < 3, so no visible seam.
+- `src/assets.js`: `LAMP_TEXTURE_FILES`; `needsOwnMaterial({mutatesMaterial,
+  sharedSource})` as a named rule instead of an inline `material.clone()`.
+- `src/areas.js`: pure `lampArmFacing(post, target, armReach)` (atan2, normalises
+  `-0`), `nearestLaneLantern` (stable tie-break), `LAMP_ARM_REACH = 0.6`.
+- `src/world.js`: `upgradeLaneLamp()` hides the procedural post + head, keeps the
+  collider and prop position, adds the model as `lane-lamp-model`, rotates it to
+  the nearest strand, box-projects UVs onto `iron` meshes only, clones the
+  cached material before animating the bulb, reassigns `environment.postLamp`,
+  and reports `environment.laneLampAim` plus `assetState.laneLamp/lampMetal`.
+  `loadLampAsset()` shares one fetch/parse with the plaza posts.
+- `src/manifest.js`, `release-manifest.json`: the three maps are required files.
+
+### Checks actually run
+- `npm test` — **479/479 pass** (0 fail) once the preview was rebuilt.
+- `npm run test:browser` — **230 PASS, 0 FAIL**, exit 0 (last green run at this
+  tree). New checks: the model replaces both stand-ins; the arm lands within
+  0.01 m of the independent argmin and > 0.2 rad from the runner-up; the
+  ironwork carries all three maps; the lane head is dark by day, dark at dusk
+  unlit, lit only when the round is walked, and dark again after; and the lane
+  bulb does not share the plaza bulb's material object.
+- Mutation proof: `needsOwnMaterial(sharedSource: true -> false)` fails
+  `the lantern bulbs keep their day/night glow` (`intensity: 0`) and
+  `the lane lamp does not share the plaza lamp material`
+  (`sharesMaterialWithLane: true`); restored, both pass.
+- `npm run test:mobile` — **185 pass, 0 fail**, exit 0; profiles 7.5 / 1.5 / 2.3
+  / 1.4 fps match the round-52 baseline, so the three maps cost nothing
+  measurable.
+- Degradation proof, `node scripts/degrade-round55.mjs` — **14/14 pass**:
+  aborting all three map requests leaves a drawn, lightable post with
+  `lampMetal: 'flat'`; aborting only the normal map keeps the albedo+roughness
+  texture (`['map','roughnessMap']`).
+- Evidence: `artifacts/round55-lane-lamp.png`, `-lit.png`, `-day.png`,
+  `-no-maps.png`, `round55-plaza-lamps-intact.png`.
+
+### Decisions
+- Clone a cached material only when it will be mutated (`needsOwnMaterial`), and
+  assert object identity in the browser test: two distinct materials can hold
+  equal numbers, but only sharing the object reproduces the plaza blackout.
+- Aim the single post at the nearest of the three bunting lanterns (ties to the
+  first declared) so it hangs over the lane rather than swinging sideways.
+- Textures on the ironwork only; glass and bulb keep their authored flat
+  materials, because a rusty map on glass reads as a mistake.
+
+### Limitations
+- Text-only model: renders are never visually inspected; the evidence PNGs are
+  verified to exist and differ where expected, not looked at.
+- Chrome device emulation only; no physical phone or iOS Safari.
+- No CuPy in the Kaggle environment (NumPy backend).
+
+### Next steps
+1. Publish Round 55 via `/worker/state/outbox/publish.json` and
+   `needs-supervision.json`, base `grunt/round54-lane-lighting` (PR #55 still
+   unmerged), leaving the feature head checked out and the tree clean.
+2. Next candidate: a gameplay or ambience hook that pays off the lit lane, or a
+   further graphics pass on the market lane.
