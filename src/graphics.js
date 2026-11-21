@@ -83,6 +83,93 @@ export function phaseEnvIntensity(phaseId) {
 }
 
 /**
+ * Sky dome shaping. The dome is a vertex-coloured sphere, so everything here is
+ * arithmetic on a normalised elevation y: -1 at the bottom of the sphere, 0 at
+ * the horizon, +1 at the zenith. Keeping it as plain functions means the sky
+ * can be unit-tested without building geometry.
+ */
+
+/**
+ * Horizon-to-zenith ease. Unchanged from the round-56 curve, so every existing
+ * sky measurement keeps the meaning it had when it was taken.
+ */
+export function skyBlend(y) {
+  const t = Math.max(0, Math.min(1, y * 1.6));
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * How thick the haze band sits over the horizon. A real hazy sky piles scattered
+ * light up near the horizon and fades out within roughly 15-20 degrees of
+ * elevation, which is HAZE_HEIGHT in dome space. Squared so the washed-out core
+ * stays thin and the falloff is long, the way the light actually behaves.
+ */
+export const HAZE_HEIGHT = 0.28;
+
+export function skyHazeBlend(y) {
+  const t = Math.max(0, Math.min(1, 1 - Math.max(0, y) / HAZE_HEIGHT));
+  return t * t;
+}
+
+/**
+ * One dome vertex colour. The horizon-to-zenith mix happens first, then the haze
+ * is blended on top, because haze is extra scattered light laid over the sky
+ * rather than a different sky colour. Passing the same hex for haze and horizon
+ * reproduces the plain two-stop dome exactly, which is the regression guard the
+ * sky test pins.
+ */
+export function skyVertexColor(zenith, horizon, haze, y) {
+  const s = skyBlend(y);
+  const h = skyHazeBlend(y);
+  const mix = (a, b) => a + (b - a) * s;
+  const over = (base, top) => base * (1 - h) + top * h;
+  return {
+    r: over(mix(horizon.r, zenith.r), haze.r),
+    g: over(mix(horizon.g, zenith.g), haze.g),
+    b: over(mix(horizon.b, zenith.b), haze.b)
+  };
+}
+
+/**
+ * Sun disc brightness per phase. Day is a full disc, dusk keeps most of it
+ * because the low sun is the whole visual point of that phase, and night drops
+ * to a faint moon - never to zero, so the night sky keeps the one bright anchor
+ * that tells the player which way is up and where the light comes from.
+ */
+export const PHASE_SUN_DISK = Object.freeze({
+  day: 1.0,
+  dusk: 0.85,
+  night: 0.16
+});
+
+export function sunDiskIntensity(phaseId) {
+  return PHASE_SUN_DISK[phaseId] ?? 0;
+}
+
+/** Radius the sun sits at, comfortably inside the 120-unit dome. It has to
+ * clear the glow's own radius (see the test) or the glow gets clipped by the
+ * dome's edge and leaves a hard rim where the sphere ends. */
+export const SUN_DISTANCE = 100;
+/** Angular size of the bright core and of the soft glow around it. */
+export const SUN_CORE_RADIUS = 5;
+export const SUN_GLOW_RADIUS = 17;
+
+/**
+ * Where the sun disc's centre belongs for a phase: the phase's own sun
+ * direction, pushed out onto the dome. Returned as plain numbers so the test can
+ * check it against PHASE_LOOKS without a vector library.
+ */
+export function sunDiscPosition(sunPosition, distance = SUN_DISTANCE) {
+  const [x, y, z] = sunPosition;
+  const len = Math.hypot(x, y, z) || 1;
+  return {
+    x: (x / len) * distance,
+    y: (y / len) * distance,
+    z: (z / len) * distance
+  };
+}
+
+/**
  * Shadow budget per quality tier. The full tier keeps a 2048 map with a tight
  * frustum around the plaza; the low tier (weak phones) turns the shadow pass
  * off entirely, which is the single largest per-frame saving and matches what
