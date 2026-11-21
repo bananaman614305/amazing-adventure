@@ -21,7 +21,15 @@ import {
   needsOwnMaterial
 } from './assets.js';
 import { loadGlb } from './glb.js';
-import { shadowSettings } from './graphics.js';
+import {
+  shadowSettings,
+  skyVertexColor,
+  sunDiskIntensity,
+  sunDiscPosition,
+  SUN_DISTANCE,
+  SUN_CORE_RADIUS,
+  SUN_GLOW_RADIUS
+} from './graphics.js';
 
 // Almost everything you can see and bump into is built here from plain
 // primitives, so the scene has no runtime dependency on a binary asset. The
@@ -55,24 +63,67 @@ export function buildWorld(renderer) {
   skyGeometry.setAttribute('color', new THREE.BufferAttribute(skyColors, 3));
   skyMaterial.vertexColors = true;
   scene.add(skyDome);
+  // The sun: a bright disc with a soft glow around it, both parked on the dome
+  // and aimed at its centre. Unlit and unfogged so they read as sky detail
+  // rather than geometry, additive so the disc brightens the sky behind it
+  // instead of pasting a flat circle over it, and depth-write off so they can
+  // never punch a hole in anything drawn afterwards.
+  const sunCore = new THREE.Mesh(
+    new THREE.CircleGeometry(SUN_CORE_RADIUS, 24),
+    new THREE.MeshBasicMaterial({
+      fog: false, depthWrite: false, transparent: true, blending: THREE.AdditiveBlending
+    })
+  );
+  sunCore.name = 'sky-sun';
+  const sunGlow = new THREE.Mesh(
+    new THREE.CircleGeometry(SUN_GLOW_RADIUS, 24),
+    new THREE.MeshBasicMaterial({
+      fog: false, depthWrite: false, transparent: true, opacity: 0.22,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  sunGlow.name = 'sky-sun-glow';
+  const sunDisc = new THREE.Group();
+  sunDisc.name = 'sky-sun-group';
+  sunDisc.renderOrder = -1;
+  sunDisc.add(sunGlow, sunCore);
+  scene.add(sunDisc);
+
   const zenithColor = new THREE.Color(0x6fa8dc);
   const horizonColor = new THREE.Color(0x9fc4e8);
-  function paintSky(zenith, horizon) {
+  const hazeColor = new THREE.Color(0x9fc4e8);
+
+  function paintSky(zenith, horizon, haze = horizon) {
     zenithColor.setHex(zenith);
     horizonColor.setHex(horizon);
+    hazeColor.setHex(haze);
     const pos = skyGeometry.attributes.position;
     for (let i = 0; i < pos.count; i += 1) {
-      const y = pos.getY(i) / 120;
-      // Smooth blend over the upper hemisphere; below the equator stays horizon.
-      const t = Math.max(0, Math.min(1, y * 1.6));
-      const s = t * t * (3 - 2 * t);
-      skyColors[i * 3] = horizonColor.r + (zenithColor.r - horizonColor.r) * s;
-      skyColors[i * 3 + 1] = horizonColor.g + (zenithColor.g - horizonColor.g) * s;
-      skyColors[i * 3 + 2] = horizonColor.b + (zenithColor.b - horizonColor.b) * s;
+      const c = skyVertexColor(
+        zenithColor, horizonColor, hazeColor, pos.getY(i) / 120
+      );
+      skyColors[i * 3] = c.r;
+      skyColors[i * 3 + 1] = c.g;
+      skyColors[i * 3 + 2] = c.b;
     }
     skyGeometry.attributes.color.needsUpdate = true;
   }
+
+  function paintSun(colourHex, intensity, sunPosition) {
+    const p = sunDiscPosition(sunPosition, SUN_DISTANCE);
+    sunDisc.position.set(p.x, p.y, p.z);
+    // The player only ever sees the dome from inside it, so facing the centre
+    // is what makes the disc square-on to the camera at every phase.
+    sunDisc.lookAt(0, 0, 0);
+    sunCore.material.color.setHex(colourHex);
+    sunGlow.material.color.setHex(colourHex);
+    sunCore.material.opacity = intensity;
+    sunGlow.material.opacity = 0.22 * intensity;
+    sunDisc.visible = intensity > 0;
+  }
+
   paintSky(0x6fa8dc, 0x9fc4e8);
+  paintSun(0xfff1d0, sunDiskIntensity('day'), PHASE_LOOKS.day.sunPosition);
 
   const colliders = [];
 
@@ -1791,6 +1842,8 @@ export function buildWorld(renderer) {
     scene,
     quality: 'full',
     paintSky,
+    paintSun,
+    sunDisc,
     // The palette for a phase, so the camera pipeline can derive its ambient
     // room from the same numbers the sky dome is painted with.
     phaseLook,
@@ -1874,6 +1927,7 @@ export const PHASE_LOOKS = {
   day: {
     sky: 0x9fc4e8,
     zenith: 0x6fa8dc,
+    haze: 0xcfe2f5,
     fog: 0x9fc4e8,
     fogNear: 26,
     fogFar: 62,
@@ -1890,6 +1944,7 @@ export const PHASE_LOOKS = {
   dusk: {
     sky: 0xe08a5a,
     zenith: 0x8a5a7a,
+    haze: 0xf0a97c,
     fog: 0xd98e63,
     fogNear: 22,
     fogFar: 55,
@@ -1906,6 +1961,7 @@ export const PHASE_LOOKS = {
   night: {
     sky: 0x0b1730,
     zenith: 0x050a18,
+    haze: 0x1b2b4a,
     fog: 0x0b1730,
     fogNear: 14,
     fogFar: 42,
@@ -1935,7 +1991,10 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   const { scene, hemi, sun, fill, lamps } = environment;
   scene.background = new THREE.Color(look.sky);
   if (environment.paintSky) {
-    environment.paintSky(look.zenith ?? look.sky, look.sky);
+    environment.paintSky(look.zenith ?? look.sky, look.sky, look.haze ?? look.sky);
+  }
+  if (environment.paintSun) {
+    environment.paintSun(look.sunColor, sunDiskIntensity(phaseId), look.sunPosition);
   }
   scene.fog.color.setHex(look.fog);
   scene.fog.near = look.fogNear;
