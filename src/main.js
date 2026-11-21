@@ -11,6 +11,8 @@ import {
   pickUpKey,
   recoverLedger,
   watchLanterns,
+  hasItem,
+  nightLightUnlocked,
   journalEntries,
   inventoryItems,
   questCounts
@@ -980,6 +982,8 @@ function performLaneLighting() {
   const result = lightLaneLanterns(state, phase);
   toast(result.message);
   if (result.changed) {
+    // lightLaneLanterns() also walks Oswin's night order, because lighting the
+    // lane is the round: a dawn reset or a refused attempt cannot finish it.
     // applyPhase is cheap and phase-scoped; calling it directly avoids replaying
     // syncPhase's dusk announcement on top of the lighting message.
     applyPhase(environment, phase, laneLanternsShouldGlow(state, phase));
@@ -989,6 +993,18 @@ function performLaneLighting() {
     autoSave();
   }
   return result;
+}
+
+/**
+ * The lantern round and Oswin's night order, exposed for the browser checks so
+ * they can prove the gate on the same code the player uses rather than a copy.
+ */
+function nightLightWork() {
+  return {
+    unlocked: nightLightUnlocked(state),
+    status: questStatus(state, 'nightlight'),
+    hasOrder: hasItem(state, 'night_order')
+  };
 }
 
 function restOnBench() {
@@ -1839,6 +1855,7 @@ window.amazingAdventure = {
   laneLightingStatus: () => laneLightingStatus(state, phaseAt(clockSeconds).id),
   laneLanternsShouldGlow: () => laneLanternsShouldGlow(state, phaseAt(clockSeconds).id),
   performLaneLighting,
+  nightLightWork,
   touch: {
     get active() { return touchState.active; },
     get rootHidden() { return touchRoot.hidden; },

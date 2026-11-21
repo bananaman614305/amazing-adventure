@@ -242,7 +242,7 @@ test('applying every choice in every state never throws or corrupts state', () =
         assert.ok(parsed.quests, `${label}/${npcId}#${index} keeps quests`);
         for (const value of Object.values(state.quests)) {
           assert.ok(['none', 'done', 'started', 'oil_bought', 'found', 'watched',
-            'collected', 'waived', 'delivered'].includes(value),
+            'collected', 'waived', 'delivered', 'walked'].includes(value),
             `${label}/${npcId}#${index} keeps valid quest steps (saw ${value})`);
         }
       }

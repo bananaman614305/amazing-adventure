@@ -1817,7 +1817,7 @@ try {
     };
   });
   checks.check('a whole playthrough finishes the story, having paid the toll',
-    finishedRun.complete === true && finishedRun.counts?.done === 6,
+    finishedRun.complete === true && finishedRun.counts?.done === 7,
     JSON.stringify({ complete: finishedRun.complete, counts: finishedRun.counts, stuckAt: finishedRun.stuckAt, message: finishedRun.message }));
   checks.check('finishing by real play reaches the ending with all branches recorded',
     finishedRun.epilogue !== null && finishedRun.branches === 3,
@@ -3658,7 +3658,7 @@ try {
   });
   checks.check('the shipped build exposes the state functions the reachability proof covers',
     reachableApi.hasCreate && reachableApi.hasCounts && reachableApi.hasDeliver &&
-    reachableApi.hasLedger && reachableApi.quests === 6,
+    reachableApi.hasLedger && reachableApi.quests === 7,
     JSON.stringify(reachableApi));
 
   await capture(page, 'round18-reachability.png');

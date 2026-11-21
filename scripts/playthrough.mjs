@@ -13,8 +13,9 @@ import {
   startToll, collectToll, waiveToll, finishToll,
   startLedger, hearLedgerRumour, recoverLedger, returnLedger,
   startArrears, deliverArrears, reissueArrearsMark, finishArrears,
-  questCounts
+  nightLightUnlocked, startNightLight, questCounts
 } from '../src/state.js';
+import { lightLaneLanterns, laneLanternsAtDawn } from '../src/areas.js';
 import { startConversation, applyChoice } from '../src/dialogue.js';
 import { buildEpilogue, storyComplete } from '../src/epilogue.js';
 import { reputation, tierFor } from '../src/factions.js';
@@ -122,6 +123,22 @@ export function runPlaythrough({ log = () => {} } = {}) {
   log(`arrears: ${arrearsDone.message}`);
   require(state, 'arrears', log);
 
+  // --- 7. The Night Light: Oswin's paid round, gated on a lit lane ----------
+  // Two nights: the first lighting unlocks his offer, the second walks it.
+  const firstLight = lightLaneLanterns(state, 'dusk');
+  if (!firstLight.changed) throw new Error(`first lane lighting failed: ${firstLight.message}`);
+  log(`nightlight: ${firstLight.message}`);
+  talk(state, 'oswin', /What kind of work/i, log);
+  requireStep(state, 'nightlight', 'started', log);
+  const dawn = laneLanternsAtDawn(state, 'day');
+  if (!dawn.reset) throw new Error('dawn did not reset the lane');
+  log('nightlight: dawn reset the lane');
+  const secondLight = lightLaneLanterns(state, 'dusk');
+  if (!secondLight.changed) throw new Error(`second lane lighting failed: ${secondLight.message}`);
+  log(`nightlight: ${secondLight.message}`);
+  talk(state, 'oswin', /night order/i, log);
+  require(state, 'nightlight', log);
+
   return { state, counts: questCounts(state), ended: buildEpilogue(state) };
 }
 
@@ -134,6 +151,13 @@ function require(state, questId, log) {
   const status = questStatus(state, questId);
   if (status !== 'done') throw new Error(`${questId} ended as "${status}", not done`);
   log(`  ✓ ${questId} complete`);
+}
+
+
+function requireStep(state, questId, step, log) {
+  const status = questStatus(state, questId);
+  if (status !== step) throw new Error(`${questId} ended as "${status}", not ${step}`);
+  log(`  ✓ ${questId} ${step}`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

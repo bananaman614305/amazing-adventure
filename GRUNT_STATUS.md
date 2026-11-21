@@ -3637,3 +3637,64 @@ pinned by an object-identity check.
 
 ### Round 55 totals
 478 unit + 230 desktop + 185 mobile + 19 degradation = **912 checks**.
+
+---
+
+## Round 56 — The Night Light, a paid-once lamp round, and two closed exploits
+
+**Branch:** `grunt/round55-lane-prop`, feature work on top of `c7c877e`.
+
+### Current task
+Round 56 is implemented and unit-green except the committed preview, which is
+rebuilt after this status commit. Lighting the lane now pays off as gameplay:
+Oswin offers "The Night Light", a paid lamp round that starts only after the
+lane has ever been lit, walks when the player lights it, and settles for six
+coins at his stall. Two real bugs found by the reachability proof are fixed:
+repeat dusk/dawn cycles minted unlimited coins and Market standing, and a
+permanent night-order gate stranded `lanterns:'started'` players who could never
+buy oil.
+
+### What was built
+- `src/state.js`: `QUEST_ORDER` gains `nightlight`; `night_order` item;
+  `nightLightUnlocked` (permanent, keyed on `laneEverLit`/`laneLanternsLit`),
+  `startNightLight`, `walkNightLight`, `finishNightLight`
+  (`NIGHTLIGHT_REWARD = 6`, +15 Market standing, opinion +2).
+- `src/areas.js`: `laneRoundIsPaid` / `laneRoundWasEverWalked`; `lightLaneLanterns`
+  pays `LANE_LIGHT_REWARD` only on the first ever round (`laneRoundPaid`),
+  always records `laneEverLit`, calls `walkNightLight` so lighting the lane
+  after taking the order IS the walk, and returns `{ paid, reward, walked }`.
+- `src/dialogue.js`: `debtChoices` helper; the oil-purchase and oil-carrying
+  branches are hoisted above the night-light offers so no open Mara order or
+  open Oswin debt can ever be buried under an optional offer; settle choice
+  runs `finishNightLight` as the player's click, not when building the node.
+- `scripts/reachability.mjs`: reports `truncated` and exits 2 when the frontier
+  was cut off, so a capped run can no longer be mistaken for a dead-end proof.
+- `tests/lane.test.mjs`: relighting asserts `paid:false`, `reward:0`, coins and
+  standing unchanged, plus the farm regression test (20 dusk/dawn cycles pay
+  exactly what one night pays).
+- `tests/playthrough.test.mjs`: searches with a cap above the real graph
+  (~33k states) and fails on truncation before trusting any number.
+- `scripts/playthrough.mjs` and `scripts/test-round2.mjs` drive the new quest.
+
+### Verification
+- Reachability: `explored 33184 states, 33184 distinct`, `truncated: false`,
+  `complete states: 112`, `winnable: 33184/33184`, `dead ends: 0`.
+- Playthrough script: 7/7 quests done, story complete, epilogue reached.
+- Farm probe: 20 dusk/dawn cycles leave coins and trade standing at exactly the
+  one-night values; message states the traders already paid.
+- Debt probe: with oil bought on promise and the night order open, Oswin still
+  offers "Settle the debt" and settling clears the perk.
+- Unit suite: 479/480, the sole failure the stale committed preview.
+
+### Limitations
+- Text-only model: no visual claims; lane glow is asserted as rule + emissive
+  flags, not inspected.
+- Desktop and mobile browser suites for this round still to run after the
+  preview rebuild.
+
+### Next steps
+1. Commit this round, rebuild the committed preview on the clean tree, rerun
+   the unit suite to 0 failures.
+2. Run the desktop then mobile browser suites with `RECORD_ARTIFACTS=1`.
+3. Prepare the release through `grunt_release_prepare` once all three
+   `grunt_verify_release` checks (`tests`, `browser`, `mobile`) have receipts.

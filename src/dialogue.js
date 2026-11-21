@@ -9,6 +9,7 @@ import {
   questStatus,
   hasItem,
   coins,
+  getFlag,
   memoryFor,
   startLanterns,
   buyOilWithCoins,
@@ -37,6 +38,10 @@ import {
   deliverArrears,
   finishArrears,
   reissueArrearsMark,
+  nightLightUnlocked,
+  startNightLight,
+  walkNightLight,
+  finishNightLight,
   remember
 } from './state.js';
 import { npcTier, FACTIONS, NPC_FACTION } from './factions.js';
@@ -163,6 +168,15 @@ const settleDebtChoice = (state) => ({
   }
 });
 
+/**
+ * The debt-settlement option, or nothing when Oswin is not owed. Spread into
+ * every Oswin node that can be reached while a promise is open, because a
+ * permanent night-order gate sits above those nodes: without this, an unpaid
+ * promise could be buried under an offer the player keeps saying yes to and
+ * never become payable again.
+ */
+const debtChoices = (state) => (state.perks.oswin_debt ? [settleDebtChoice(state)] : []);
+
 // Every action returns { changed, message }; dialogue wrappers just remember the
 // topic so NPCs can react next time you speak to them.
 
@@ -277,18 +291,42 @@ const mara = {
   }
 };
 
+/**
+ * The settle choice: the one place that hands over the night-order coins.
+ * The payout runs as the choice's action, so the dialogue walker (and every
+ * test that drives it) goes through the same `finishNightLight()` call the
+ * player's click runs -- it must not fire as a side effect of building a node.
+ * `finishNightLight()` refuses anything but a walked round, so this choice is
+ * also safe to offer from a branch that turns out to be stale.
+ */
+function nightLightSettleChoice(state) {
+  return {
+    label: 'Settle the night order.',
+    do: () => finishNightLight(state),
+    next: () => (questStatus(state, 'nightlight') === 'done'
+      ? node('Oswin the Trader', 'Oswin counts six coins onto the counter. “Same time tomorrow, and the lane stays lit.”', [ end('Leave') ])
+      : node('Oswin the Trader', 'Oswin taps his chit. “Not yet. Walk the round first, then we settle.”', [ end('Leave') ]))
+  };
+}
+
 const oswin = {
   id: 'oswin',
   name: 'Oswin the Trader',
   talk(state, ctx) {
     const status = questStatus(state, 'lanterns');
     const mem = memoryFor(state, 'oswin');
+    const nightlight = questStatus(state, 'nightlight');
 
     // Reputation cuts both ways: a player the Market distrusts cannot shop.
     const refused = refusalNode(state, 'oswin', 'Oswin the Trader',
       'Oswin looks up, recognises you, and goes back to folding cloth. “I have nothing for you.”');
     if (refused) return refused;
 
+    // The oil trade comes first. An open order from Mara is a transaction the
+    // player already agreed to, so no later offer may preempt it: the night
+    // order's gate is permanent now, and letting it sit above this branch
+    // stranded a player who lit the lane before taking Mara's quest with no
+    // way to ever buy the oil. The night order is always still there afterwards.
     if (status === 'started') {
       return node('Oswin the Trader', `Lantern oil? The good stuff. Four coins${state.perks.oswin_debt ? ', or another promise' : ' — or a promise I can call in later'}.`, [
         {
@@ -303,9 +341,61 @@ const oswin = {
       ]);
     }
 
+    // Carrying the oil is also an open transaction, and it is the one state
+    // where Oswin can call in the promise, so it is answered before any
+    // optional work is offered. A carried obligation must never be hidden
+    // behind something the player could also say yes to.
     if (status === 'oil_bought') {
       return node('Oswin the Trader', 'The oil is yours to carry. You are paying for it one way or another.', [
         ...(state.perks.oswin_debt ? [settleDebtChoice(state)] : []),
+        end('Leave')
+      ]);
+    }
+
+    // The night-light order is the round-56 payoff: Oswin only offers paid
+    // work for the lane's lamp round once the lane is actually lit. The
+    // offer is gated on the same flag the lanterns burn under, and dawn
+    // resets it, so the night trade is a per-night opportunity.
+    if (nightlight === 'started' && getFlag(state, 'laneLanternsLit')) {
+      // The order is taken but its round is not walked yet: lighting the lane
+      // after taking the order IS the walk, so this node only points at the post.
+      return node('Oswin the Trader', 'Oswin nods at the lit lane. “Go on then — the post is at the far end. Light them and the round is yours to finish.”', [
+        { label: 'Where was the post again?', next: () => node('Oswin the Trader', 'Far end of the lane, past the barrels. You cannot miss it.') },
+        { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+        ...debtChoices(state),
+        end('Leave')
+      ]);
+    }
+    if (nightlight === 'started' && !getFlag(state, 'laneLanternsLit')) {
+      return node('Oswin the Trader', '“Dawn put your lanterns out. The night order stands — walk the round again after sundown.”', [
+        { label: 'Where was the post again?', next: () => node('Oswin the Trader', 'Far end of the lane, past the barrels. You cannot miss it.') },
+        ...debtChoices(state),
+        end('Leave')
+      ]);
+    }
+    if (nightlight === 'walked') {
+      return node('Oswin the Trader', '“You walked the round and the lane is lit. A deal is a deal.”', [
+        nightLightSettleChoice(state),
+        ...debtChoices(state),
+        end('Leave')
+      ]);
+    }
+    if (nightlight === 'done') {
+      return node('Oswin the Trader', `The night trade is good this week. You made it good.${standingGreeting(state, 'oswin')}`, [
+        { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+        ...debtChoices(state),
+        end('Leave')
+      ]);
+    }
+    if (nightLightUnlocked(state)) {
+      return node('Oswin the Trader', 'Oswin looks past you at the glowing lane and smiles. “There it is. A lit lane is a trading lane. I have work for someone who can keep it lit.”', [
+        {
+          label: 'What kind of work?',
+          do: () => startNightLight(state),
+          next: () => node('Oswin the Trader', '“Walk my lamp round after sundown. Light the lane lanterns, then come back and tell me it is done. Six coins, and the Market remembers.”')
+        },
+        { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+        ...debtChoices(state),
         end('Leave')
       ]);
     }
@@ -319,6 +409,9 @@ const oswin = {
         [
           ...(state.perks.oswin_debt ? [settleDebtChoice(state)] : []),
           { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+          ...(nightLightUnlocked(state)
+            ? [{ label: 'Anything else need doing?', next: () => node('Oswin the Trader', '“Now that the lane is lit, yes. Come back when you want the night round.”') }]
+            : []),
           end('Leave')
         ]
       );

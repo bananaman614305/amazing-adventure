@@ -7,6 +7,7 @@
 // rather than only the one a single playthrough happened to walk into.
 
 import * as S from '../src/state.js';
+import * as A from '../src/areas.js';
 import { startConversation, applyChoice } from '../src/dialogue.js';
 import { tierFor, reputation } from '../src/factions.js';
 
@@ -53,31 +54,40 @@ function actionsFrom(state) {
       });
     }
   }
-  // World actions, each of which the game exposes as a pure function.
+  // World actions, each of which the game exposes as a pure function. Each one
+  // must act on the branch it is given (`target`), never on the captured
+  // `state`: otherwise the action mutates the state it was discovered from,
+  // produces no new key, and the exploration silently loses that edge.
   const world = [
-    ['pickUpKey', () => S.pickUpKey(state)],
-    ['returnKey', () => S.returnKey(state)],
-    ['watchLanterns:dusk', () => S.watchLanterns(state, 'dusk')],
-    ['tellPip', () => S.tellPipAboutLanterns(state)],
-    ['startToll', () => S.startToll(state)],
-    ['collectToll', () => S.collectToll(state)],
-    ['waiveToll', () => S.waiveToll(state, tierFor(reputation(state, 'watch')).id)],
-    ['finishToll', () => S.finishToll(state)],
-    ['startLedger', () => S.startLedger(state, tierFor(reputation(state, 'trade')).id)],
-    ['hearRumour', () => S.hearLedgerRumour(state)],
-    ['recoverLedger', () => S.recoverLedger(state)],
-    ['returnLedger:name', () => S.returnLedger(state, 'name')],
-    ['returnLedger:cover', () => S.returnLedger(state, 'cover')],
-    ['startArrears', () => S.startArrears(state)],
-    ['deliverArrears:pay', () => S.deliverArrears(state, 'pay')],
-    ['deliverArrears:forgive', () => S.deliverArrears(state, 'forgive')],
-    ['finishArrears', () => S.finishArrears(state)]
+    ['pickUpKey', (t) => S.pickUpKey(t)],
+    ['returnKey', (t) => S.returnKey(t)],
+    ['watchLanterns:dusk', (t) => S.watchLanterns(t, 'dusk')],
+    ['tellPip', (t) => S.tellPipAboutLanterns(t)],
+    ['startToll', (t) => S.startToll(t)],
+    ['collectToll', (t) => S.collectToll(t)],
+    ['waiveToll', (t) => S.waiveToll(t, tierFor(reputation(t, 'watch')).id)],
+    ['finishToll', (t) => S.finishToll(t)],
+    ['startLedger', (t) => S.startLedger(t, tierFor(reputation(t, 'trade')).id)],
+    ['hearRumour', (t) => S.hearLedgerRumour(t)],
+    ['recoverLedger', (t) => S.recoverLedger(t)],
+    ['returnLedger:name', (t) => S.returnLedger(t, 'name')],
+    ['returnLedger:cover', (t) => S.returnLedger(t, 'cover')],
+    ['startArrears', (t) => S.startArrears(t)],
+    ['deliverArrears:pay', (t) => S.deliverArrears(t, 'pay')],
+    ['deliverArrears:forgive', (t) => S.deliverArrears(t, 'forgive')],
+    ['finishArrears', (t) => S.finishArrears(t)],
+    // The lane round and its dawn reset: lighting the lane is the walk that
+    // advances Oswin's night order, and dawn is what makes the round per-night.
+    ['lightLane:dusk', (t) => A.lightLaneLanterns(t, 'dusk')],
+    // Dawn reports `reset` rather than `changed` because it is a clock event,
+    // not a player action; `explore` accepts either as a real transition.
+    ['dawnReset', (t) => A.laneLanternsAtDawn(t, 'day')]
   ];
   for (const [key, fn] of world) {
     actions.push({
       key,
       label: key,
-      apply: () => fn()
+      apply: (target) => fn(target)
     });
   }
   return actions;
@@ -92,7 +102,7 @@ function clone(state) {
  * Explore from the initial state. Returns every reachable dead end found: states
  * that are not complete and from which no sequence of actions reaches completion.
  */
-export function findDeadEnds({ maxStates = 20000, log = () => {} } = {}) {
+export function findDeadEnds({ maxStates = 300000, log = () => {} } = {}) {
   const start = S.createInitialState();
   const startKey = stateKey(start);
 
@@ -115,7 +125,12 @@ export function findDeadEnds({ maxStates = 20000, log = () => {} } = {}) {
       } catch {
         continue;
       }
-      if (!result || !result.changed) continue;
+      // `changed` is the player-action contract; `reset` is the clock's, used
+      // by dawn putting the lane lanterns out. Both move the world, so both
+      // count as a transition -- otherwise a whole night of state (order taken,
+      // lane dark again) is invisible to the explorer and its quest step looks
+      // unreachable.
+      if (!result || !(result.changed || result.reset)) continue;
       const key = stateKey(branch);
       next.add(key);
       if (!seen.has(key)) {
@@ -126,6 +141,14 @@ export function findDeadEnds({ maxStates = 20000, log = () => {} } = {}) {
     edges.set(fromKey, next);
   }
   log(`explored ${expanded} states, ${seen.size} distinct`);
+  // A capped run is not a proof. If the frontier still had work when the cap
+  // stopped us, whole branches were never walked and the reverse pass reports
+  // them as unwinnable for no better reason than that we gave up. Saying so is
+  // the difference between "no dead ends exist" and "I looked at part of the
+  // graph", so the caller is told rather than handed a number to trust.
+  const truncated = queue.length > 0;
+  log(`truncated: ${truncated}${truncated ? ` (${queue.length} states still queued)` : ''}`);
+  let allDone=0; for(const [k,v] of seen){ if(S.questCounts(v).done===S.QUEST_ORDER.length) allDone++; } log(`all-done states: ${allDone}`);
 
   // Pass 2: which states can reach completion?
   const complete = new Set();
@@ -164,11 +187,15 @@ export function findDeadEnds({ maxStates = 20000, log = () => {} } = {}) {
       counts: S.questCounts(state)
     });
   }
-  return { explored: seen.size, complete: complete.size, winnable: winnable.size, deadEnds, startReachable: winnable.has(startKey) };
+  return { explored: seen.size, complete: complete.size, winnable: winnable.size, deadEnds, startReachable: winnable.has(startKey), truncated };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const result = findDeadEnds({ log: (line) => console.log(line) });
+  if (result.truncated) {
+    console.log('exploration was truncated by maxStates: this run proves nothing about the unexplored frontier');
+    process.exit(2);
+  }
   console.log(`start state can reach completion: ${result.startReachable}`);
   console.log(`complete states: ${result.complete} | winnable: ${result.winnable}/${result.explored}`);
   console.log(`dead ends: ${result.deadEnds.length}`);

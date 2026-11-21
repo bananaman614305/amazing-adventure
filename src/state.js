@@ -13,10 +13,11 @@ export const ITEMS = {
   toll_ledger: { name: 'Toll Ledger', description: 'Wren’s missing ledger. The last page names someone, and it is not Oswin.' },
   arrears_pouch: { name: 'Pouch of Arrears', description: 'Three weeks of lane toll money, sewn into a canvas pouch. Mara is owed this.' },
   keeper_receipt: { name: 'Keeper’s Receipt', description: 'Mara’s mark, dated and countersigned. Proof the plaza took the arrears in full.' },
-  keeper_note: { name: 'Keeper’s Note', description: 'Mara’s writing, forgiving the lane’s arrears this quarter. Wren will not like the reason.' }
+  keeper_note: { name: 'Keeper’s Note', description: 'Mara’s writing, forgiving the lane’s arrears this quarter. Wren will not like the reason.' },
+  night_order: { name: 'Night Order', description: 'Oswin’s paper chit for two lanterns before the moon is up, signed in his own hand.' }
 };
 
-export const QUEST_ORDER = ['lanterns', 'key', 'cheer', 'toll', 'ledger', 'arrears'];
+export const QUEST_ORDER = ['lanterns', 'key', 'cheer', 'toll', 'ledger', 'arrears', 'nightlight'];
 
 export const QUESTS = {
   lanterns: {
@@ -84,6 +85,14 @@ export const QUESTS = {
       pay: 'Mara took the lane’s arrears in full and signed for them. Wren’s books balance for the first time in a month.',
       forgive: 'Mara forgave the arrears instead of taking them. Wren has her note, and the Watch will have questions about the shortfall.'
     }
+  },
+  nightlight: {
+    title: 'The Night Light', giver: 'oswin',
+    steps: [
+      { id: 'started', journal: 'Oswin paid you to walk the lane’s lamp round after sundown. The post is at the far end of the market lane, near the barrels.' },
+      { id: 'walked', journal: 'You walked the round and the lane lanterns are burning. Take Oswin’s word back to his stall in the plaza.' }
+    ],
+    done: 'You walked Oswin’s lamp round and the lane lanterns burn over the market again. He paid, and he remembers.'
   }
 };
 
@@ -103,7 +112,7 @@ export const MAX_COINS = 9999;
 export function createInitialState() {
   return {
     version: 2,
-    quests: { lanterns: 'none', key: 'none', cheer: 'none', toll: 'none', ledger: 'none', arrears: 'none' },
+    quests: { lanterns: 'none', key: 'none', cheer: 'none', toll: 'none', ledger: 'none', arrears: 'none', nightlight: 'none' },
     inventory: [],
     perks: {},
     flags: { coins: 6 },
@@ -464,6 +473,64 @@ export function returnLedger(state, choice = 'name') {
     message: `Wren writes the name down. ${standing.message}`,
     topic: 'ledger_named', opinion: 1,
     reward: LEDGER_REWARD
+  };
+}
+
+// --- The Night Light: a trader's work gated on the lit lane --------------
+//
+// The lane's bunting lanterns are lit by hand at dusk (areas.js). This is the
+// round-56 payoff: a trader only offers paid work for a lantern round once the
+// lane is actually glowing, so the visible progress the player makes at the
+// lamp post becomes story progress. The light flag is the gate, the dawn reset
+// means the offer is per-night, and the quest closes at Oswin's stall.
+
+export const NIGHTLIGHT_REWARD = 6;
+
+/**
+ * Whether Oswin will offer the night-light work right now. It keys off the
+ * player having walked the lamp round at all (`laneEverLit` in areas.js), not
+ * merely the lane being dark or lit this instant: a trader who watched you
+ * light the lane still knows you did after dawn, so the offer stays reachable
+ * instead of evaporating with the flag it was gated on.
+ */
+export function nightLightUnlocked(state) {
+  return Boolean(getFlag(state, 'laneEverLit')) || Boolean(getFlag(state, 'laneLanternsLit'));
+}
+
+/** Takes Oswin's order: the promise to walk the round tonight. */
+export function startNightLight(state) {
+  if (questStatus(state, 'nightlight') !== 'none') return noChange('Oswin has already given you the night order.');
+  if (!nightLightUnlocked(state)) return noChange('Oswin waves a hand at the dark lane. “Light the lane lanterns first, then we will talk about the night trade.”');
+  setQuestStep(state, 'nightlight', 'started');
+  addItem(state, 'night_order');
+  return { changed: true, message: 'Quest started: The Night Light', topic: 'nightlight_started' };
+}
+
+/**
+ * Marks the round walked. Called after the lamp round succeeds, so the quest
+ * only advances on a real lighting, never on a dawn or a refused attempt.
+ */
+export function walkNightLight(state) {
+  if (questStatus(state, 'nightlight') !== 'started') return noChange('You are not carrying a night order.');
+  setQuestStep(state, 'nightlight', 'walked');
+  return { changed: true, message: 'You walked Oswin’s round. The lane lanterns are burning.', topic: 'nightlight_walked' };
+}
+
+/**
+ * Closes the night-light order at Oswin's stall. Pays, warms the Market (the
+ * traders paid for the light), and remembers the work. Needs the walked step,
+ * so being paid requires the lantern round to have actually happened.
+ */
+export function finishNightLight(state) {
+  if (questStatus(state, 'nightlight') !== 'walked') return noChange('Oswin is waiting on a walked lantern round, not a promise.');
+  removeItem(state, 'night_order');
+  setQuestStep(state, 'nightlight', 'done');
+  addCoins(state, NIGHTLIGHT_REWARD);
+  const standing = applyStanding(state, { factionId: 'trade', delta: 15 });
+  return {
+    changed: true,
+    message: `Quest complete: The Night Light (+${NIGHTLIGHT_REWARD} coins). ${standing.message}`,
+    topic: 'nightlight_done', opinion: 2, reward: NIGHTLIGHT_REWARD
   };
 }
 

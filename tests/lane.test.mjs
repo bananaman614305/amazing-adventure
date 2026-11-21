@@ -285,12 +285,36 @@ test('dawn puts the lane lanterns out so the round is walked again', () => {
 
   // A second dawn is a no-op, so the toast cannot repeat every frame of the day.
   assert.equal(laneLanternsAtDawn(state, 'day').reset, false);
-  // And the next night can be lit again, at the normal price, once.
+  // And the next night can be lit again, but the traders already paid for the
+  // round, so relighting is free. A per-night reward on a clock that repeats
+  // every few minutes is an unbounded coin and standing farm.
   const paidBefore = coins(state);
   const relit = lightLaneLanterns(state, 'night');
   assert.equal(relit.changed, true, 'a new night is a new round');
-  assert.equal(coins(state), paidBefore + LANE_LIGHT_REWARD.coins);
+  assert.equal(relit.paid, false, 'the purse is paid once per player, not per night');
+  assert.equal(relit.reward, 0, 'no coins for a night the market already paid for');
+  assert.equal(coins(state), paidBefore, 'relighting cannot mint coins');
   assert.equal(lightLaneLanterns(state, 'night').changed, false);
+});
+
+// The farm was real: with the reward paid per night and a clock that wraps
+// every few minutes, repeating the round minted unlimited coins and standing.
+// This is the regression test for that, in the shape an exploit would take.
+test('repeating the lamp round cannot mint coins or standing', () => {
+  const state = createInitialState();
+  const startCoins = coins(state);
+  const startStanding = reputation(state, LANE_LIGHT_REWARD.factionId);
+  for (let night = 0; night < 20; night += 1) {
+    lightLaneLanterns(state, 'dusk');
+    laneLanternsAtDawn(state, 'day');
+  }
+  assert.equal(coins(state), startCoins + LANE_LIGHT_REWARD.coins,
+    'twenty nights pay exactly what one night pays');
+  assert.equal(reputation(state, LANE_LIGHT_REWARD.factionId), startStanding + LANE_LIGHT_REWARD.delta,
+    'twenty nights of standing are capped at the first round');
+  // The gameplay gate is what repeats, not the purse: the night order stays
+  // reachable every night, which is what makes the round worth walking again.
+  assert.equal(getFlag(state, 'laneEverLit'), true, 'the lane is remembered as walked');
 });
 
 // The reset must not be a comparison that can never be true, nor one that

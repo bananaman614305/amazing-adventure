@@ -193,7 +193,13 @@ test('no reachable game state is a dead end, not just the one route I played', (
   // noted honestly that only completion was tested, not every path. This is the
   // exhaustive version: breadth-first over every legal action from the start state,
   // then reverse-reachability to find any state that can never finish the story.
-  const result = findDeadEnds({ maxStates: 20000 });
+  // maxStates is a guard against a runaway graph, not the size of the proof: a
+  // capped run stops mid-frontier and reports every unvisited branch as a dead
+  // end, which looks like a finding and is only a truncation. So the cap is set
+  // above the real graph (~33k states) and the result is checked for truncation
+  // before any of its numbers are believed.
+  const result = findDeadEnds({ maxStates: 60000 });
+  assert.equal(result.truncated, false, 'the search finished; a capped run is not a proof');
   assert.ok(result.explored > 100, `the search actually covered ground, found ${result.explored}`);
   assert.equal(result.startReachable, true, 'the game is winnable from the start');
   if (result.deadEnds.length > 0) {
