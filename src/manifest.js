@@ -11,6 +11,7 @@ export const REQUIRED_FILES = [
   'src/main.js',
   'src/player.js',
   'src/touch.js',
+  'src/graphics.js',
   'src/perf.js',
   'src/quality.js',
   'src/resilience.js',

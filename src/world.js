@@ -21,6 +21,7 @@ import {
   needsOwnMaterial
 } from './assets.js';
 import { loadGlb } from './glb.js';
+import { shadowSettings } from './graphics.js';
 
 // Almost everything you can see and bump into is built here from plain
 // primitives, so the scene has no runtime dependency on a binary asset. The
@@ -696,7 +697,11 @@ export function buildWorld(renderer) {
   sun.shadow.camera.bottom = -24;
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 70;
+  // A small normal bias removes the acne that a pure depth bias leaves on the
+  // sloped roof and octagonal fountain, which is why both are set: the depth
+  // bias fixes flat faces, the normal bias fixes grazing angles.
   sun.shadow.bias = -0.0006;
+  sun.shadow.normalBias = 0.02;
   scene.add(sun);
   scene.add(sun.target);
 
@@ -1786,6 +1791,9 @@ export function buildWorld(renderer) {
     scene,
     quality: 'full',
     paintSky,
+    // The palette for a phase, so the camera pipeline can derive its ambient
+    // room from the same numbers the sky dome is painted with.
+    phaseLook,
     hemi,
     sun,
     fill,
@@ -1813,6 +1821,15 @@ export function buildWorld(renderer) {
       // renderer's own shadowMap setting stays under main.js's control and a
       // manual override cannot be silently undone here.
       sun.castShadow = !low;
+      // Keep the map size and bias in step with the budget table rather than
+      // leaving stale numbers behind when the tier flips back to full.
+      const budget = shadowSettings(tier);
+      sun.shadow.mapSize.set(budget.mapSize, budget.mapSize);
+      sun.shadow.bias = budget.bias;
+      sun.shadow.normalBias = budget.normalBias;
+      // A changed map size needs the existing depth target rebuilt.
+      sun.shadow.map?.dispose?.();
+      sun.shadow.map = null;
       return environment.quality;
     },
     /** Opens or shuts the north gate: the door lifts and its collider goes. */
@@ -1951,6 +1968,15 @@ export function applyPhase(environment, phaseId, laneLit = true) {
     environment.postLamp.material.emissiveIntensity = laneOn ? look.lampGlow * 0.9 : 0;
   }
   environment.phase = phaseId;
+}
+
+/**
+ * The look table for a phase, or undefined for an unknown id. Exposed so the
+ * camera pipeline (src/graphics.js) can build an ambient room from the very
+ * colours the sky is about to be painted, rather than duplicating the palette.
+ */
+export function phaseLook(phaseId) {
+  return PHASE_LOOKS[phaseId];
 }
 
 /** Adds a box mesh and registers the matching floor-plane collider. */

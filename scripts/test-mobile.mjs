@@ -700,6 +700,12 @@ async function playSession(browser, server, profile) {
   const slug = profile.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
   await page.screenshot({ path: resolve(outDir, `mobile-${slug}.png`) });
 
+  // Close the profile's page before the next one starts. Each page holds its own
+  // WebGL context, shadow depth target and ambient map, and four of those alive
+  // at once is enough for a software rasteriser to starve the next profile's
+  // boot. The page's data is already collected above, so nothing is lost.
+  await page.close();
+
   return {
     profile: profile.name,
     env,
