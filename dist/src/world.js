@@ -52,7 +52,13 @@ export function buildWorld(renderer) {
   // A sky dome so the horizon is a gradient, not a flat colour band. The dome
   // sits outside the fog range and is unlit, so it costs one draw call and no
   // lighting; applyPhase() recolours it with the day/night table.
-  const skyGeometry = new THREE.SphereGeometry(120, 24, 12);
+  //
+  // 32 x 24 rather than the original 24 x 12: the vertex colours *are* the sky,
+  // so the mesh resolution is the resolution of the gradient. At 12 rings each
+  // ring is 15 degrees apart, which is coarser than the horizon haze band itself
+  // (~16 degrees) and would quantise it into one hard step. 24 rings halve that
+  // to 7.5 degrees for ~800 vertices and one draw call either way.
+  const skyGeometry = new THREE.SphereGeometry(120, 32, 24);
   const skyMaterial = new THREE.MeshBasicMaterial({
     side: THREE.BackSide, fog: false, depthWrite: false
   });
