@@ -110,6 +110,12 @@ export const BRICK_TEXTURE_FILES = {
   roughnessMap: 'assets/textures/brick_rough.webp'
 };
 
+export const LAMP_TEXTURE_FILES = {
+  map: 'assets/textures/lamp_albedo.webp',
+  normalMap: 'assets/textures/lamp_normal.webp',
+  roughnessMap: 'assets/textures/lamp_rough.webp'
+};
+
 /**
  * Whether the current context can load local assets at all. `fetch` is absent in
  * some embedded webviews and `file://` pages cannot fetch siblings even when
@@ -683,6 +689,25 @@ export async function loadMaterialTextures({
     load(files.roughnessMap, 'roughnessMap')
   ]);
   return { map, normalMap, roughnessMap, anyLoaded: Boolean(map || normalMap || roughnessMap) };
+}
+
+/**
+ * Whether a mesh the world is about to build must own a private copy of a
+ * cached model's material.
+ *
+ * loadLampAsset()/loadXAsset() cache one GLB parse and hand the same material
+ * objects to every instance. That is fine until one instance's material is
+ * animated per-frame: the lane head's emissiveIntensity is written to 0 on
+ * every daylight frame, and the plaza posts hold the same object, so the four
+ * plaza lanterns went dark the moment the lane post was modelled. Anything that
+ * mutates a material afterwards has to clone it first.
+ *
+ * Returns true when the caller intends to mutate, so the world can clone rather
+ * than share. Kept here as a named rule instead of an inline `material.clone()`
+ * so a test can hold it in place.
+ */
+export function needsOwnMaterial({ mutatesMaterial = false, sharedSource = false } = {}) {
+  return Boolean(mutatesMaterial && sharedSource);
 }
 
 /** Backwards-compatible alias: the stone family is the original user. */
