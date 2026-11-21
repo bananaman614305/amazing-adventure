@@ -32,6 +32,7 @@ export const REQUIRED_FILES = [
   'src/factions.js',
   'src/ambient.js',
   'src/daynight.js',
+  'src/atmosphere.js',
   'src/onboard.js',
   'src/glb.js',
   'src/assets.js',

@@ -35,6 +35,7 @@ import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
 import { loadGlb } from './glb.js';
 import { createAdaptiveResolution, MIN_RATIO } from './perf.js';
 import { createQualityTier, QUALITY_LOW, QUALITY_FULL } from './quality.js';
+import { applyAtmosphere, atmosphereAt } from './atmosphere.js';
 import {
   configureRenderer, applyPhaseLook, buildEnvironmentMap, ambientRoomFor, shadowSettings
 } from './graphics.js';
@@ -559,6 +560,10 @@ function syncPhase(force = false) {
   // queued rather than built here: see scheduleEnvironmentMap above.
   applyPhaseLook(renderer, scene, phase.id);
   scheduleEnvironmentMap(phase.id);
+  // Install the curve value for this instant as well: applyPhase() wrote the
+  // phase constant, and a harness that jumps the clock then reads the fog in
+  // the same tick should see the blended value, not the constant.
+  applyAtmosphere(environment, clockSeconds);
   setNPCRoutine(npcs, phase.id);
   clockPhase.textContent = phase.label;
   // The drone shifts root and level with the time of day.
@@ -1772,6 +1777,11 @@ function frame() {
 
   clockSeconds = wrapClock(clockSeconds + dt);
   syncPhase();
+  // Fog follows a smooth curve over the whole cycle rather than the per-phase
+  // constants applyPhase() installs, so the distance haze never steps at a
+  // phase boundary. applyPhase() still sets the baseline (so a single forced
+  // phase looks right immediately); this keeps it breathing between keyframes.
+  applyAtmosphere(environment, clockSeconds);
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
   maybeStartAmbient(dt);
@@ -1906,6 +1916,8 @@ window.amazingAdventure = {
   },
   interactables: () => interactables(),
   getClock: () => ({ seconds: clockSeconds, phase: phaseAt(clockSeconds).id }),
+  // The fog curve, as the game actually computed it this frame.
+  atmosphere: () => atmosphereAt(clockSeconds),
   setClock: (seconds) => {
     clockSeconds = wrapClock(seconds);
     syncPhase(true);

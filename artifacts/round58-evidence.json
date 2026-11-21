@@ -1,0 +1,184 @@
+{
+  "round": 58,
+  "title": "continuous atmosphere",
+  "generatedAt": "2026-11-21T18:31:25.102Z",
+  "view": {
+    "x": 0,
+    "z": 10,
+    "yaw": 3.141592653589793
+  },
+  "keyTimes": [
+    {
+      "at": 0,
+      "phase": "day",
+      "near": 15.003278,
+      "far": 44.005364,
+      "color": "#9fc4e8",
+      "isFog": true
+    },
+    {
+      "at": 20,
+      "phase": "day",
+      "near": 25.999808512,
+      "far": 61.999664896,
+      "color": "#9fc4e8",
+      "isFog": true
+    },
+    {
+      "at": 70,
+      "phase": "dusk",
+      "near": 21.999219311953354,
+      "far": 54.9987313819242,
+      "color": "#d98e63",
+      "isFog": true
+    },
+    {
+      "at": 105,
+      "phase": "night",
+      "near": 13.999881832647462,
+      "far": 41.99976366529492,
+      "color": "#0b1730",
+      "isFog": true
+    },
+    {
+      "at": 150,
+      "phase": "night",
+      "near": 12.000398222222222,
+      "far": 38.00079644444445,
+      "color": "#0b1730",
+      "isFog": true
+    }
+  ],
+  "profile": [
+    {
+      "label": "dawn mist",
+      "clock": 0,
+      "phase": "day",
+      "near": 15.003278,
+      "far": 44.005364,
+      "colour": "#9fc4e8",
+      "farField": 171.12
+    },
+    {
+      "label": "morning",
+      "clock": 20,
+      "phase": "day",
+      "near": 25.999808512,
+      "far": 61.999664896,
+      "colour": "#9fc4e8",
+      "farField": 171.12
+    },
+    {
+      "label": "afternoon",
+      "clock": 40,
+      "phase": "day",
+      "near": 24.568922112000003,
+      "far": 59.495613696,
+      "colour": "#b4b1b8",
+      "farField": 171.12
+    },
+    {
+      "label": "late dusk",
+      "clock": 68,
+      "phase": "day",
+      "near": 22.015178752,
+      "far": 55.026562816,
+      "colour": "#d98e64",
+      "farField": 171.12
+    },
+    {
+      "label": "early dusk",
+      "clock": 75,
+      "phase": "dusk",
+      "near": 21.522708524781343,
+      "far": 54.22440135276968,
+      "colour": "#cd8760",
+      "farField": 137.53
+    },
+    {
+      "label": "deep dusk",
+      "clock": 100,
+      "phase": "dusk",
+      "near": 14.410125434402335,
+      "far": 42.66645383090379,
+      "colour": "#161d33",
+      "farField": 137.53
+    },
+    {
+      "label": "early night",
+      "clock": 115,
+      "phase": "night",
+      "near": 13.738315851851853,
+      "far": 41.4766317037037,
+      "colour": "#0b1730",
+      "farField": 19.79
+    },
+    {
+      "label": "settled night",
+      "clock": 150,
+      "phase": "night",
+      "near": 12.000398222222222,
+      "far": 38.00079644444445,
+      "colour": "#0b1730",
+      "farField": 19.79
+    },
+    {
+      "label": "last minute",
+      "clock": 179.5,
+      "phase": "night",
+      "near": 14.999106000000001,
+      "far": 43.998212,
+      "colour": "#9fc4e8",
+      "farField": 19.79
+    }
+  ],
+  "boundarySteps": [
+    {
+      "at": 70,
+      "pair": "day->dusk"
+    },
+    {
+      "at": 105,
+      "pair": "dusk->night"
+    },
+    {
+      "at": 0,
+      "pair": "night->day"
+    }
+  ],
+  "screenProof": {
+    "clock": 150,
+    "curve": {
+      "near": 12.000894,
+      "far": 38.001788,
+      "color": "#0b1730"
+    },
+    "frozen": {
+      "near": 26,
+      "far": 62,
+      "color": "#9fc4e8"
+    },
+    "preFreezeCurve": {
+      "near": 12.005531250000002,
+      "far": 38.01106250000001,
+      "color": "#0b1730"
+    },
+    "diff": {
+      "changed": 3262,
+      "total": 97440,
+      "fraction": 0.0335,
+      "maxDelta": 306,
+      "meanCurve": 96.07,
+      "meanConstant": 95.88,
+      "brighter": 0.19,
+      "spread": 29.4,
+      "changedMeanDelta": 16.12
+    }
+  },
+  "screenshots": [
+    "round58-night-curve.png",
+    "round58-night-constant-fog.png",
+    "round58-morning.png"
+  ],
+  "note": "Pixel claims are statistics over sampled frames, not a visual inspection."
+}
