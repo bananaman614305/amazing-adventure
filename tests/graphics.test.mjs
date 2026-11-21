@@ -13,7 +13,9 @@ import {
   TONE_MAPPING_NAME, PHASE_EXPOSURE, phaseExposure,
   PHASE_ENV_INTENSITY, phaseEnvIntensity,
   ambientRoomFor, shadowSettings, configureRenderer, applyPhaseLook,
-  buildEnvironmentMap
+  buildEnvironmentMap, skyBlend, skyHazeBlend, skyVertexColor,
+  HAZE_HEIGHT, PHASE_SUN_DISK, sunDiskIntensity, SUN_DISTANCE,
+  SUN_CORE_RADIUS, SUN_GLOW_RADIUS, sunDiscPosition
 } from '../src/graphics.js';
 import { PHASE_LOOKS } from '../src/world.js';
 
@@ -136,4 +138,131 @@ test('a throwing PMREM generator is contained rather than taking the frame down'
     }
   };
   assert.equal(buildEnvironmentMap({}, THREE, { zenith: 1, horizon: 2, ground: 3 }), null);
+});
+
+// Minimal colour holder: the sky functions only read .r/.g/.b, so hex objects
+// from Three.js are not needed and the test stays GPU- and import-light.
+function THREE_COLOR(hex) {
+  return {
+    r: ((hex >> 16) & 255) / 255,
+    g: ((hex >> 8) & 255) / 255,
+    b: (hex & 255) / 255
+  };
+}
+
+// --- Sky dome ------------------------------------------------------------
+//
+// The dome is painted with vertex colours, so the shape of the sky is decided
+// entirely by these three functions. They are pinned here because a sky is the
+// one thing every screenshot contains: if the horizon stops being the hazy end,
+// or the haze band grows to swallow the whole dome, the game looks wrong in a
+// way no other test would catch.
+
+test('skyBlend eases from the horizon to the zenith and clamps outside the dome', () => {
+  assert.equal(skyBlend(0), 0);
+  assert.equal(skyBlend(1), 1);
+  // Below the equator the dome stays horizon-coloured rather than going darker.
+  assert.equal(skyBlend(-0.5), 0);
+  assert.equal(skyBlend(-1), 0);
+  assert.equal(skyBlend(2), 1);
+  // Monotonic, so no vertex is painted brighter than a vertex above it.
+  let previous = -1;
+  for (let y = 0; y <= 1; y += 0.05) {
+    const v = skyBlend(y);
+    assert.ok(v >= previous, `skyBlend dipped at y=${y}`);
+    previous = v;
+  }
+  // Still the round-56 midpoint, so earlier measurements keep their meaning.
+  assert.ok(Math.abs(skyBlend(0.5) - 0.896) < 0.01, `midpoint ${skyBlend(0.5)}`);
+});
+
+test('skyHazeBlend is strongest at the horizon and gone above the band', () => {
+  assert.equal(skyHazeBlend(0), 1);
+  assert.equal(skyHazeBlend(HAZE_HEIGHT), 0);
+  assert.equal(skyHazeBlend(HAZE_HEIGHT + 0.1), 0);
+  assert.equal(skyHazeBlend(1), 0);
+  // Below the horizon the haze stays at full strength, so the horizon line
+  // itself does not show a seam.
+  assert.equal(skyHazeBlend(-0.3), 1);
+  let previous = 2;
+  for (let y = 0; y <= HAZE_HEIGHT; y += HAZE_HEIGHT / 20) {
+    const v = skyHazeBlend(y);
+    assert.ok(v <= previous, `skyHazeBlend rose at y=${y}`);
+    previous = v;
+  }
+});
+
+test('skyVertexColor with the horizon colour as haze reproduces the plain gradient', () => {
+  // Regression guard: passing haze === horizon must give exactly the round-56
+  // two-stop dome, so the haze band is genuinely an addition, not a redefinition.
+  const zenith = { r: 0.2, g: 0.4, b: 0.8 };
+  const horizon = { r: 0.5, g: 0.7, b: 0.9 };
+  for (const y of [-1, -0.2, 0, 0.3, 0.6, 1]) {
+    const c = skyVertexColor(zenith, horizon, horizon, y);
+    const s = skyBlend(y);
+    assert.ok(Math.abs(c.r - (horizon.r + (zenith.r - horizon.r) * s)) < 1e-9);
+    assert.ok(Math.abs(c.g - (horizon.g + (zenith.g - horizon.g) * s)) < 1e-9);
+    assert.ok(Math.abs(c.b - (horizon.b + (zenith.b - horizon.b) * s)) < 1e-9);
+  }
+});
+
+test('every phase palette keeps the horizon the bright end of the sky', () => {
+  // The horizon is the hazy, scattered end and the zenith is the clean end. If
+  // a palette inverted that, the sky would read upside down; this is the check
+  // that would fail first.
+  for (const [phase, look] of Object.entries(PHASE_LOOKS)) {
+    const zenith = new THREE_COLOR(look.zenith ?? look.sky);
+    const horizon = new THREE_COLOR(look.sky);
+    const haze = new THREE_COLOR(look.haze ?? look.sky);
+    const low = skyVertexColor(zenith, horizon, haze, 0);
+    const high = skyVertexColor(zenith, horizon, haze, 1);
+    const lowLum = 0.2126 * low.r + 0.7152 * low.g + 0.0722 * low.b;
+    const highLum = 0.2126 * high.r + 0.7152 * high.g + 0.0722 * high.b;
+    assert.ok(lowLum > highLum,
+      `${phase}: horizon luminance ${lowLum} is not above zenith ${highLum}`);
+  }
+});
+
+test('the haze band lifts the horizon above the plain horizon colour', () => {
+  // The point of the band: the horizon should be a paler, hazier colour than
+  // the flat sky hex the phase table gives it.
+  for (const [phase, look] of Object.entries(PHASE_LOOKS)) {
+    const zenith = new THREE_COLOR(look.zenith ?? look.sky);
+    const horizon = new THREE_COLOR(look.sky);
+    const haze = new THREE_COLOR(look.haze ?? look.sky);
+    const withHaze = skyVertexColor(zenith, horizon, haze, 0);
+    const noHaze = skyVertexColor(zenith, horizon, horizon, 0);
+    const a = 0.2126 * withHaze.r + 0.7152 * withHaze.g + 0.0722 * withHaze.b;
+    const b = 0.2126 * noHaze.r + 0.7152 * noHaze.g + 0.0722 * noHaze.b;
+    assert.ok(a >= b, `${phase}: haze made the horizon darker (${a} < ${b})`);
+  }
+});
+
+test('the sun disc brightens across day, dusk and night without disappearing', () => {
+  assert.deepEqual({ ...PHASE_SUN_DISK }, { day: 1, dusk: 0.85, night: 0.16 });
+  assert.equal(sunDiskIntensity('day'), 1);
+  assert.equal(sunDiskIntensity('dusk'), 0.85);
+  assert.ok(sunDiskIntensity('night') > 0, 'the night sky lost its moon');
+  assert.equal(sunDiskIntensity('noon'), 0);
+  // Day must not be outshone by dusk, and night must be the faintest.
+  assert.ok(sunDiskIntensity('day') > sunDiskIntensity('dusk'));
+  assert.ok(sunDiskIntensity('dusk') > sunDiskIntensity('night'));
+});
+
+test('every phase sun position lands the disc on the dome at full radius', () => {
+  for (const [phase, look] of Object.entries(PHASE_LOOKS)) {
+    const p = sunDiscPosition(look.sunPosition, SUN_DISTANCE);
+    const len = Math.hypot(p.x, p.y, p.z);
+    assert.ok(Math.abs(len - SUN_DISTANCE) < 1e-9,
+      `${phase}: disc sits at ${len}, not ${SUN_DISTANCE}`);
+    // Same direction as the light, so the visible sun agrees with the shadows.
+    const [sx, sy, sz] = look.sunPosition;
+    const dot = (p.x * sx + p.y * sy + p.z * sz) /
+      (SUN_DISTANCE * Math.hypot(sx, sy, sz));
+    assert.ok(Math.abs(dot - 1) < 1e-9, `${phase}: disc drifted off the sun direction`);
+  }
+  // The disc and its glow must fit inside the dome, or they would be clipped
+  // and the glow would leave a hard edge where the sphere ends.
+  assert.ok(SUN_CORE_RADIUS < SUN_GLOW_RADIUS);
+  assert.ok(SUN_DISTANCE + SUN_GLOW_RADIUS < 120);
 });
