@@ -430,6 +430,71 @@ export function terraceStoneParts() {
 }
 
 /**
+ * The modelled fountain's stone meshes, split by the GLB material each one uses.
+ *
+ * The fountain is authored in two stones -- a lighter carved stone for the basin,
+ * bowl and column, and a darker one for the base plinth, finial and corner blocks
+ * -- so the dressing pass must not flatten them into one material. Listing the
+ * meshes here keeps the world and the tests reading the same list instead of
+ * re-deriving it from names in two places.
+ *
+ * The two `Water` meshes are absent on purpose: they are a reflective surface, not
+ * stone, and the stone maps would read as a wet flagstone on them.
+ */
+export function fountainStoneParts() {
+  return {
+    stone: [
+      'FountainPlinthUpper', 'FountainBasin', 'FountainColumn', 'FountainUpperBowl'
+    ],
+    dark: [
+      'FountainPlinthLower', 'FountainFinial',
+      'FountainCornerBlock0', 'FountainCornerBlock1', 'FountainCornerBlock2', 'FountainCornerBlock3'
+    ]
+  };
+}
+
+/**
+ * The authored base colour of each fountain stone, straight out of the GLB's
+ * `pbrMetallicRoughness.baseColorFactor`.
+ *
+ * A stone map must not be tinted twice, so a dressed material projects white. But
+ * `StoneDark` exists to be visibly darker than `Stone`, and throwing that away
+ * would turn the plinth, finial and corner blocks into copies of the basin. The
+ * dressing pass keeps the map at full strength and only nudges roughness and a
+ * light tint, so the courses still read at eye level while the two stones stay
+ * distinguishable.
+ */
+export const FOUNTAIN_STONE_COLORS = {
+  Stone: 0x8f8577,
+  StoneDark: 0x706a5e
+};
+
+/**
+ * Material settings for the fountain's dressed stone.
+ *
+ * `map` means the stone maps loaded, so the base colour is white and the fabric of
+ * the texture is left alone; the dark stone is still darkened by lighting and its
+ * slightly rougher surface rather than by a tint over the map.
+ */
+export function fountainStoneMaterialParams(texturesLoaded, stone = 'Stone') {
+  const dark = stone === 'StoneDark';
+  if (texturesLoaded) {
+    return {
+      color: 0xffffff,
+      roughness: 1,
+      metalness: 0,
+      useMaps: true
+    };
+  }
+  return {
+    color: dark ? FOUNTAIN_STONE_COLORS.StoneDark : FOUNTAIN_STONE_COLORS.Stone,
+    roughness: dark ? 0.9 : 0.85,
+    metalness: 0,
+    useMaps: false
+  };
+}
+
+/**
  * Copies a loaded texture family so two surfaces can tile the same maps
  * differently.
  *
