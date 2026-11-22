@@ -2089,12 +2089,12 @@ try {
     assets.minY >= -0.001 && assets.height > 2 && assets.reach <= 2.15,
     JSON.stringify({ minY: assets.minY, height: assets.height, reach: assets.reach }));
 
-  checks.check('the plaza is dressed with all three stone maps',
-    assets.state.stone === 'textured' && assets.plazaMaps &&
+  checks.check('the plaza floor is dressed with all three flagstone maps',
+    assets.state.plazaFloor === 'textured' && assets.plazaMaps &&
     assets.plazaMaps.map && assets.plazaMaps.normal && assets.plazaMaps.rough,
     JSON.stringify(assets.plazaMaps));
 
-  checks.check('the stone tiles at a believable scale and is not double-tinted',
+  checks.check('the flagstone tiles at a believable scale and is not double-tinted',
     assets.plazaMaps && assets.plazaMaps.repeat[0] === 6 &&
     assets.plazaMaps.repeat[1] === 6 && assets.plazaMaps.color === 'ffffff',
     JSON.stringify({ repeat: assets.plazaMaps && assets.plazaMaps.repeat, color: assets.plazaMaps && assets.plazaMaps.color }));

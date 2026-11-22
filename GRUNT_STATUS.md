@@ -12,52 +12,63 @@
 
 ## Current task
 
-**Round 60 — late chores for the other two factions.** Round 59 fixed the cast;
-this round closed the story gap the last checkpoint flagged: the Night Light was
-the only end-of-game chore, so the last third of the game was one faction's
-story. Keepers and Watch now each have a paid-once chore of their own, wired
-end-to-end (state, dialogue, hotspots, save/load) and pinned by tests.
+**Round 61 — a plaza floor with its own flagstone paving.** The standing owner
+priority is graphics realism. The plaza was still wearing the border-wall stone
+maps, so the biggest surface under the player's feet looked like the walls. This
+round gives it a dedicated flagstone PBR family and separates the two stone
+surfaces for good.
 
-- **The Wick Round (Mara, Keepers).** Unlocks once `lanterns` is done. Mara
-  offers it in her own menu; the *act* is a plaza hotspot at `WICKS_SPOT`
-  `{x: 2.6, z: -6.2}` — you trim the lanterns at dusk or night, never at noon.
-  Pays `WICKS_REWARD` (2 coins, Keepers +4) exactly once via the `wicksPaid`
-  flag, so a dawn reset cannot be farmed for standing. `wicksAtDawn()` clears
-  the night's work at the day phase only; the paid flag persists forever. Mara
-  closes the round for a small personal opinion bump and no reputation.
-- **The Gate Tally (Halden, Watch).** Unlocks only when the north gate is open
-  (`key` done) — `startTally` refuses at a shut gate. The act is a real walk:
-  `main.js` detects the plaza→lane transition while the quest is `started` and
-  calls `walkTally`, so standing in place cannot satisfy it. `finishTally` pays
-  `TALLY_REWARD` (2 coins, Watch +4) once via `tallyPaid`.
-- The two chores live in `CHORE_ORDER` and stay outside `QUEST_ORDER`, so the
-  six-quest spine is unchanged, `storyComplete()`/the epilogue still only count
-  the spine, and a save written before this round loads unchanged.
-- `validQuestStatus` validates chore steps through `QUESTS[].steps`, so an
-  unknown chore step in a hand-edited save degrades to `'none'` instead of
-  wedging the quest.
-- Dialogue chore choices are promise/close buttons only: the act itself is a
-  hotspot or a lane entry, so `src/dialogue.js` does not import `trimWicks` or
-  `walkTally` (unused imports removed after review).
+- **New family.** `PLAZA_FLOOR_TEXTURE_FILES` in `src/assets.js` points at three
+  new `assets/textures/plaza_floor_{albedo,normal,rough}.webp` maps, produced
+  procedurally by `art/kaggle/plaza_floor_textures.py` on the private Kaggle
+  T4 (anisotropic periodic-Voronoi flagstone: three slabs across, five courses
+  down, ~1.7:1, so it reads as dressed rectangular paving rather than the
+  lane's round cobbles). Seam ratios are all well under 3.
+- **Its own fallback.** `plazaFloorMaterialParams()` returns a lighter, dressed
+  paving colour when the maps are missing, deliberately distinct from
+  `stoneMaterialParams()`' warmer wall-block colour, so the plaza still reads
+  as a different place if textures never load.
+- **World wiring.** `world.js` builds `plazaMaterial` from the new params and
+  `upgradePlazaFloor()` replaces the old `upgradeStone()`; `assetState` gained
+  `plazaFloor`/`plazaFloorDetail` and dropped `stone`/`stoneDetail`; the border
+  wall still upgrades from `STONE_TEXTURE_FILES` in `upgradeWalls()`. The two
+  families share no file. `main.js`'s `loadAssets()` fallback object tracks the
+  renamed key.
+- **Manifest in sync.** `src/manifest.js` `REQUIRED_FILES` and the committed
+  `release-manifest.json` both list the three new maps; the committed `dist/`
+  preview was rebuilt (77 files, digest `9e190fc7…`).
+- **Evidence.** `scripts/evidence-round61.mjs` drives the real page and writes
+  `artifacts/round61-evidence.json` plus three 800x600 screenshots (wide, look
+  down, grazing). All 15 evidence checks pass in-page: the floor is `textured`,
+  all three maps load at 512x512, the mapped material is white/fully rough (not
+  tinted twice), it repeats 6x6, wraps rather than clamps, and **no other mesh
+  shares the plaza floor's maps** (sharers 0, including the border walls, which
+  report their own `[17,2]` repeat and `ffffff`).
 
-Checks on the working tree: unit **577/577** — including 8 new wick tests, 6 new
-tally tests, plus extended state (24) and dialogue (19) suites — desktop
-**229/229 PASS**, and `tests/preview.test.mjs` **10/10** after rebuilding the
-committed `dist/` preview (74 files, 4629 KB), and mobile **184/184 PASS**
-across four emulated phone profiles (exit 0, zero console errors, screenshots in
-`/tmp/amazing-adventure-shots-4doJKb/`, log kept at
-`/worker/state/logs/r60-mobile.log`). The model is text-only: no screenshot was
-looked at; every claim here is a state-function or in-page assertion. Both
-chores are reachable without touching the six-quest spine, and the whole game
-still passes the reachability and save/load suites.
+Checks on the working tree: unit **580/580 PASS** — including the 4 new plaza
+floor tests (fallback colour distinct from wall stone, family files separate
+from the cobble and wall sets, all three maps present on disk) — desktop
+**229/229 PASS** with zero console errors (`/worker/state/logs/r61-browser.log`,
+`EXIT=0`), and mobile **184/184 PASS** across four emulated phone profiles
+(`/tmp/mobile-r61b.log`, `EXIT=0`). The model is text-only: no screenshot was
+looked at; every claim here is an in-page or state-function assertion, plus a
+programmatic PNG-header check (all three captures are real 800x600 RGB frames).
 
 ## Next steps
 
-1. **Certify and publish Round 60** on `grunt/round60-chores`: obtain the three
-   trusted `planId: release` receipts (`tests`, `browser`, `mobile`) on the
-   exact committed head, then hand it to `grunt_release_prepare`. Round 57's
-   release is still host-side blocked (`needs-supervision.json`), so nothing on
-   this branch is merged or deployed by me.
+1. **Round 62 — dress the north terrace in stone.** The raised 1.2 m terrace,
+   its ramp, kerbs, rail posts and the low parapet along the lip are the largest
+   remaining flat, untextured surfaces in the plaza (flat `stepStone`
+   `0x9a9184` and `parapetMaterial` `0x7f7567`). Give them a stone family
+   through a new `upgradeTerrace()` built exactly like `upgradeWalls()` /
+   `upgradePlazaFloor()`, with real tiling in metres, unit coverage and browser
+   evidence. This is the highest-impact next step for the standing priority.
+2. **Certify and publish the graphics rounds** on their own `grunt/*` branches
+   once the graphics series settles: obtain the three trusted `planId: release`
+   receipts (`tests`, `browser`, `mobile`) on the exact committed head, then
+   hand it to `grunt_release_prepare`. Round 57's release is still host-side
+   blocked (`needs-supervision.json`), so nothing here is merged or deployed by
+   me.
 2. **Graphics realism, chunk 1: the plaza floor.** The plaza is still a flat
    single-material surface while the lane already carries a Kaggle cobble set.
    Give the plaza its own prepared floor set (Blender-baked wear or a Kaggle
@@ -84,13 +95,18 @@ still passes the reachability and save/load suites.
   certified round 57 tree; it ships as its own round.
 - `grunt/round59-cast` at `895bb72` — the cast-pipeline fix (round 59), which
   this round is stacked on.
-- `grunt/round60-chores` — **this round** (round 60), stacked on round 59.
+- `grunt/round60-chores` at `9fdb16f` — the Wick Round and Gate Tally (round
+  60), stacked on round 59.
+- `grunt/round61-plaza-floor` — **this round** (round 61), stacked on round 60:
+  the plaza floor's own flagstone PBR family, with its fallback colour, world
+  wiring, manifest entries, tests and browser evidence.
 
-**Last checkpoint:** Round 60 on `grunt/round60-chores`: the Wick Round and the
-Gate Tally wired across state, dialogue, areas and `main.js`, covered by 14 new
-tests (unit 577/577), desktop 229/229, and the committed `dist/` preview rebuilt.
-See the "Current task" section at the top of this file and the Round 59 section
-below for the cast work it builds on.
+**Last checkpoint:** Round 61 on `grunt/round61-plaza-floor`: the plaza floor
+moved off the wall-stone maps onto a dedicated flagstone family, covered by 4
+new unit tests (unit 580/580), desktop 229/229, mobile 184/184, refreshed
+evidence screenshots, and the committed `dist/` preview rebuilt at digest
+`9e190fc7…`. See the "Current task" section at the top of this file and the
+Round 60 section below for the chores it builds on.
 
 ## Round 5 — playable phone preview (owner priority)
 
@@ -452,7 +468,7 @@ instructions.
   no instructional text on a finished quest, and the rendered journal panel
   itself showing what really happened).
 
-## Current task
+## Round 53 — lane lanterns (historical current task)
 
 Round 53 is finished and committed on `grunt/round53-lane-continuity`
 (head `6b7f46b`, clean tree, stacked on the published round-52 branch). It
@@ -549,7 +565,7 @@ attention checks that had been hiding behind lucky frames now fail when the
 behaviour breaks. The lane still has no gameplay reason to linger in it — that
 is the obvious next step.
 
-## Next steps
+## Round 53 — next steps (historical)
 
 1. **Give the lane a reason to stop**: the lane is now dressed but still a
    corridor you walk through. Add one small, honest interaction there (for
@@ -617,7 +633,7 @@ the plaza.
   measured; whether the lane reads as a working market is the owner's call.
 - Chrome emulation only; no physical phone or iOS Safari.
 
-## Next steps
+## Round 52 — next steps (historical)
 
 1. **A real-device pass** on physical hardware (biggest honest gap).
 2. **Plaza-to-lane continuity**: the gate walk has no visual cue that there is

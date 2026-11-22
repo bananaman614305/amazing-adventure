@@ -540,7 +540,7 @@ const castReady = upgradeNPCs(npcs, { THREE, loadGlb }).catch((error) => {
 const assetsReady = environment.loadAssets().catch((error) => {
   // loadAssets is written not to reject; if it ever does, record it rather than
   // letting an unhandled rejection surface as a console error in the browser.
-  return { fountain: 'stand-in', stone: 'flat', fountainDetail: String(error) };
+  return { fountain: 'stand-in', plazaFloor: 'flat', fountainDetail: String(error) };
 });
 
 const saves = createSaveStore();

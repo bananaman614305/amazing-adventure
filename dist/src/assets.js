@@ -1,4 +1,5 @@
-// Loading the two hand-made assets: a modelled fountain and a stone material.
+// Loading the hand-made assets and the procedural texture families: a modelled
+// fountain plus the paving, wall, wood, brick and leaf materials.
 //
 // Design rules that shaped this file:
 //   - The game must never depend on an asset to run. If the fetch fails (offline,
@@ -27,6 +28,20 @@ export const COBBLE_TEXTURE_FILES = {
   map: 'assets/textures/cobble_albedo.webp',
   normalMap: 'assets/textures/cobble_normal.webp',
   roughnessMap: 'assets/textures/cobble_rough.webp'
+};
+
+/**
+ * The plaza floor's own paving family.
+ *
+ * Deliberately separate from COBBLE_TEXTURE_FILES: the market lane is laid with
+ * small rounded worn cobbles while the plaza is dressed with large rectangular
+ * flagstones. Same shader, different maps, so the two surfaces read as
+ * different places underfoot rather than one texture tiled twice.
+ */
+export const PLAZA_FLOOR_TEXTURE_FILES = {
+  map: 'assets/textures/plaza_floor_albedo.webp',
+  normalMap: 'assets/textures/plaza_floor_normal.webp',
+  roughnessMap: 'assets/textures/plaza_floor_rough.webp'
 };
 
 export const GRASS_TEXTURE_FILES = {
@@ -202,10 +217,13 @@ export function boxProjectUvs({ positions, indices = null, tileMeters = 1 }) {
 }
 
 /**
- * Chooses the material settings for the stone given whether textures loaded.
- * With textures: white base colour so the map is not tinted twice, plus normal
- * and roughness maps. Without: the original flat colour, so the plaza still reads
- * correctly if the textures are missing.
+ * Chooses the material settings for the border-wall stone given whether textures
+ * loaded. With textures: white base colour so the map is not tinted twice, plus
+ * normal and roughness maps. Without: the original flat block colour, so the
+ * walls still read as stone if the textures are missing.
+ *
+ * The plaza floor has its own family and fallback colour (see
+ * plazaFloorMaterialParams) so the two stone surfaces stay visually distinct.
  */
 export function stoneMaterialParams(texturesLoaded) {
   if (texturesLoaded) {
@@ -219,6 +237,26 @@ export function stoneMaterialParams(texturesLoaded) {
   return {
     color: 0xb3a892, // the plaza's original colour
     roughness: 0.9,
+    metalness: 0,
+    useMaps: false
+  };
+}
+
+/**
+ * Material settings for the plaza's flagstone paving.
+ *
+ * A separate fallback colour from stoneMaterialParams(): the plaza reads as
+ * dressed, lighter paving even when the maps are missing, while the border wall
+ * keeps stoneMaterialParams()' warmer block colour. Both are only ever the
+ * flat-colour fallback; the textured path is white in both cases.
+ */
+export function plazaFloorMaterialParams(texturesLoaded) {
+  if (texturesLoaded) {
+    return { color: 0xffffff, roughness: 1, metalness: 0, useMaps: true };
+  }
+  return {
+    color: 0x9a9384, // dressed flagstone, a touch lighter than the wall stone
+    roughness: 0.88,
     metalness: 0,
     useMaps: false
   };

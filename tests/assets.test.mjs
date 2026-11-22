@@ -6,8 +6,9 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import {
   FOUNTAIN_COLLIDER, FOUNTAIN_SPOT, FOUNTAIN_ASSET, STONE_TEXTURE_FILES,
-  canLoadAssets, textureRepeat, stoneMaterialParams, fountainFootprint,
-  footprintFitsCollider, loadFountain, loadStoneTextures, boxProjectUvs,
+  canLoadAssets, textureRepeat, stoneMaterialParams, plazaFloorMaterialParams,
+  fountainFootprint, footprintFitsCollider, loadFountain, loadStoneTextures,
+  boxProjectUvs, PLAZA_FLOOR_TEXTURE_FILES,
   LAMP_TEXTURE_FILES, LAMP_ASSET, LAMP_MODEL_SIZE, loadMaterialTextures, needsOwnMaterial
 } from '../src/assets.js';
 
@@ -67,6 +68,42 @@ test('stone falls back to the original flat colour when textures are missing', (
   assert.equal(without.color, 0xb3a892, 'the plaza keeps its original colour');
   assert.equal(without.useMaps, false);
   assert.equal(without.roughness, 0.9);
+});
+
+test('the plaza floor keeps its dressed-paving colour when maps are missing', () => {
+  const withMaps = plazaFloorMaterialParams(true);
+  assert.equal(withMaps.color, 0xffffff, 'a texture map must not be tinted twice');
+  assert.equal(withMaps.useMaps, true);
+  assert.equal(withMaps.roughness, 1);
+
+  const without = plazaFloorMaterialParams(false);
+  assert.equal(without.useMaps, false);
+  // Distinct from the wall stone: the plaza is lighter dressed paving, so a
+  // missing texture still leaves the two surfaces readable as different places.
+  assert.notEqual(without.color, stoneMaterialParams(false).color);
+  assert.ok(without.roughness < stoneMaterialParams(false).roughness);
+});
+
+test('the plaza floor family is a separate set of files from the lane cobbles', () => {
+  assert.deepEqual(
+    Object.keys(PLAZA_FLOOR_TEXTURE_FILES).sort(),
+    ['map', 'normalMap', 'roughnessMap']
+  );
+  for (const url of Object.values(PLAZA_FLOOR_TEXTURE_FILES)) {
+    assert.match(url, /^assets\/textures\/plaza_floor_.+\.webp$/, `${url} is a served relative path`);
+  }
+  // No file may be shared with the stone wall family: a shared map would mean
+  // the plaza and the border walls were really the same surface.
+  const walls = new Set(Object.values(STONE_TEXTURE_FILES));
+  for (const url of Object.values(PLAZA_FLOOR_TEXTURE_FILES)) {
+    assert.equal(walls.has(url), false, `${url} is not also a wall stone map`);
+  }
+});
+
+test('the plaza floor maps are all present on disk', () => {
+  for (const url of Object.values(PLAZA_FLOOR_TEXTURE_FILES)) {
+    assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${url} exists`);
+  }
 });
 
 test('the footprint measure covers every mesh', () => {

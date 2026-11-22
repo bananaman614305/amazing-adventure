@@ -198,3 +198,18 @@ its procedural stand-in or flat colour and stays fully playable.
   PNGs (verified with Pillow). The lane post also swaps its procedural
   cylinder+sphere stand-in for the round-46-authored `assets/lamp.glb`. Fully
   procedural; no outside images or datasets.
+
+### Round 61 additions
+
+- `assets/textures/plaza_floor_*.webp` — `art/kaggle/plaza_floor_textures.py`,
+  run on the private Kaggle notebook (Tesla T4, CuPy backend, 16.6 s including
+  the lit preview). Procedural anisotropic periodic-Voronoi flagstone paving:
+  three stones across by five courses down, so each slab is about 1.7:1 and
+  reads as dressed rectangular paving rather than the lane's round cobbles.
+  Albedo/normal/roughness 512x512, seam ratios albedo [0.129, 0.117], normal
+  [0.188, 0.138], rough [0.168, 0.149] (all well under 3 = no visible seam).
+  Shipped as high-quality lossy WebP (Pillow quality 88, method 6) from the
+  Kaggle PNGs: 8.8 KB / 18.2 KB / 11.7 KB against 160 KB / 174 KB / 109 KB for
+  the source PNGs. This replaces the plaza floor's reuse of the wall-stone
+  maps, so the plaza and the border walls are now visually distinct surfaces.
+  Fully procedural; no outside images, datasets or models to license.

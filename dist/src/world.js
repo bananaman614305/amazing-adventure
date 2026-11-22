@@ -7,7 +7,7 @@ import {
 } from './areas.js';
 import {
   FOUNTAIN_SPOT, FOUNTAIN_COLLIDER, canLoadAssets, textureRepeat,
-  stoneMaterialParams, loadFountain, loadMaterialTextures,
+  plazaFloorMaterialParams, loadFountain, loadMaterialTextures,
   BARREL_ASSET, BARREL_MODEL_SIZE, loadBarrel, STALL_ASSET, STALL_MODEL_SIZE, loadStall,
   LAMP_ASSET, LAMP_MODEL_SIZE, loadLamp, MARKET_STALL_ASSET, MARKET_STALL_MODEL_SIZE,
   loadMarketStall, BENCH_ASSET, BENCH_MODEL_SIZE, loadBench,
@@ -16,7 +16,7 @@ import {
   GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
   HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
-  COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, boxProjectUvs,
+  COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, PLAZA_FLOOR_TEXTURE_FILES, boxProjectUvs,
   TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES, LAMP_TEXTURE_FILES,
   needsOwnMaterial
 } from './assets.js';
@@ -146,7 +146,7 @@ export function buildWorld(renderer) {
   // A paved ring in the middle so the plaza reads differently from the grass.
   // Its material is created from the asset rules so the flat-colour fallback and
   // the textured version differ in exactly one place.
-  const plazaBase = stoneMaterialParams(false);
+  const plazaBase = plazaFloorMaterialParams(false);
   const plazaMaterial = new THREE.MeshStandardMaterial({
     color: plazaBase.color, roughness: plazaBase.roughness, metalness: plazaBase.metalness
   });
@@ -826,7 +826,7 @@ export function buildWorld(renderer) {
 
   const assetState = {
     fountain: 'stand-in',
-    stone: 'flat',
+    plazaFloor: 'flat',
     barrels: 'cylinders',
     stalls: 'boxes',
     lamps: 'spheres',
@@ -845,7 +845,7 @@ export function buildWorld(renderer) {
     wood: 'flat',
     brick: 'flat',
     fountainDetail: null,
-    stoneDetail: null,
+    plazaFloorDetail: null,
     barrelDetail: null,
     laneLamp: 'stand-in',
     laneLampDetail: null,
@@ -1754,9 +1754,10 @@ export function buildWorld(renderer) {
       assetState.walls = 'unavailable';
       return Promise.resolve(assetState);
     }
-    // The border walls share the plaza's stone family: same blocks, different
-    // repeat. Long runs (34 m) at 3.2 m high want a 2 m tile, like the lane
-    // plaster, so courses read at wall scale.
+    // The border walls carry the stone family; the plaza floor in front of them
+    // has its own flagstone paving, so the two stone surfaces are not the same
+    // map at two scales. Long runs (34 m) at 3.2 m high want a 2 m tile, like
+    // the lane plaster, so courses read at wall scale.
     return loadMaterialTextures({ THREE, files: STONE_TEXTURE_FILES }).then((textures) => {
       if (!textures.anyLoaded) {
         assetState.walls = 'flat';
@@ -1771,25 +1772,25 @@ export function buildWorld(renderer) {
     });
   }
 
-  function upgradeStone() {
+  function upgradePlazaFloor() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
       protocol: typeof location !== 'undefined' ? location.protocol : '',
       isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
     })) {
-      assetState.stone = 'unavailable';
+      assetState.plazaFloor = 'unavailable';
       return Promise.resolve(assetState);
     }
-    return loadMaterialTextures({ THREE, files: STONE_TEXTURE_FILES }).then((textures) => {
+    return loadMaterialTextures({ THREE, files: PLAZA_FLOOR_TEXTURE_FILES }).then((textures) => {
       if (!textures.anyLoaded) {
-        assetState.stone = 'flat';
+        assetState.plazaFloor = 'flat';
         return assetState;
       }
-      // The plaza is a 9 m radius disc; a ~3 m tile keeps the blocks a
-      // believable size underfoot rather than stretched or miniaturised.
+      // The plaza is a 9 m radius disc; the flagstone tile is 3 x 3 m, so a
+      // 6 x 6 repeat covers it with slabs a little under a metre across.
       applyTextureFamily(plazaMaterial, textures, 18, 18, 3);
-      assetState.stone = 'textured';
-      assetState.stoneDetail = {
+      assetState.plazaFloor = 'textured';
+      assetState.plazaFloorDetail = {
         maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k])
       };
       return assetState;
@@ -1915,7 +1916,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeStone(), upgradeWoodBrick(), upgradeTree(), upgradeBark(), upgradeLaneLamp()])
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradePlazaFloor(), upgradeWoodBrick(), upgradeTree(), upgradeBark(), upgradeLaneLamp()])
         .then(() => upgradePropWood()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
