@@ -80,6 +80,12 @@ export const REQUIRED_FILES = [
   'assets/textures/lamp_albedo.webp',
   'assets/textures/lamp_normal.webp',
   'assets/textures/lamp_rough.webp',
+  'assets/textures/roof_albedo.webp',
+  'assets/textures/roof_normal.webp',
+  'assets/textures/roof_rough.webp',
+  'assets/textures/leaf_albedo.webp',
+  'assets/textures/leaf_normal.webp',
+  'assets/textures/leaf_rough.webp',
   'vendor/three.module.min.js',
   'vendor/THREE-LICENSE.txt'
 ];

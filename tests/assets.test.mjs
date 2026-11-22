@@ -10,7 +10,8 @@ import {
   fountainFootprint, footprintFitsCollider, loadFountain, loadStoneTextures,
   boxProjectUvs, PLAZA_FLOOR_TEXTURE_FILES,
   terraceMaterialParams, terraceStoneParts, TERRACE_TEXTURE_TILE_METERS, cloneTextureFamily,
-  LAMP_TEXTURE_FILES, LAMP_ASSET, LAMP_MODEL_SIZE, loadMaterialTextures, needsOwnMaterial
+  LAMP_TEXTURE_FILES, LAMP_ASSET, LAMP_MODEL_SIZE, loadMaterialTextures, needsOwnMaterial,
+  ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor
 } from '../src/assets.js';
 
 // Minimal fake Three.js: only what these functions touch.
@@ -493,4 +494,76 @@ test('a material the world animates must not be shared with a cached model', () 
   // Degenerate input must not accidentally claim ownership.
   assert.equal(needsOwnMaterial(), false);
   assert.equal(needsOwnMaterial({}), false);
+});
+
+// --- Round 63: the prop material families ------------------------------------
+//
+// The roof and canopy were the two largest flat masses left in the plaza (about
+// 190 m2 and 271 m2 of untextured triangles). These tests hold the two decisions
+// that make one family dress many differently-sized props honestly: which name
+// picks which family, and that the bark/wood overlap resolves the right way.
+
+test('the roof and leaf families name their three maps and stay on disk', () => {
+  for (const family of [ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES]) {
+    assert.ok(family.map, 'the family needs an albedo map');
+    assert.ok(family.normalMap, 'the family needs a normal map');
+    assert.ok(family.roughnessMap, 'the family needs a roughness map');
+    for (const file of Object.values(family)) {
+      assert.ok(existsSync(new URL(`../${file}`, import.meta.url)),
+        `${file} must be committed next to the other textures`);
+    }
+  }
+});
+
+test('propFamilyFor picks the family from the authored material name', () => {
+  // The names Blender actually exports in the prop GLBs.
+  assert.equal(propFamilyFor('HouseRoof').id, 'roof');
+  assert.equal(propFamilyFor('MarketRoof').id, 'roof');
+  assert.equal(propFamilyFor('StallRoof').id, 'roof');
+  assert.equal(propFamilyFor('Canopy').id, 'leaf');
+  assert.equal(propFamilyFor('BenchWood').id, 'wood');
+  assert.equal(propFamilyFor('CrateWood').id, 'wood');
+  assert.equal(propFamilyFor('MarketWood').id, 'wood');
+  assert.equal(propFamilyFor('DoorWood').id, 'wood');
+  assert.equal(propFamilyFor('Trunk').id, 'bark');
+});
+
+test('material names that are not props stay flat', () => {
+  // Iron, glass and stone trim are what make the props read as mixed materials;
+  // dressing them would flatten that contrast back out.
+  // These are the real material names the shipped GLBs carry.
+  for (const name of ['BarrelIron', 'LampIron', 'LampGlass', 'StoneDark', 'Cloth',
+    'Skin', 'EyeIris', 'Paper', 'Steel', 'Water', 'HouseBrick', 'HouseGlass', '']) {
+    assert.equal(propFamilyFor(name), null, `${name} must not match a family`);
+  }
+  assert.equal(propFamilyFor(null), null);
+  assert.equal(propFamilyFor(undefined), null);
+});
+
+test('BarkWood resolves to bark, not the wood family it also matches', () => {
+  // upgradeBark() renames the trunks to `BarkWood`, which contains "Wood". If the
+  // wood family were tested first, the later prop pass would overwrite the trunk
+  // maps with plank grain -- a real bug this ordering prevents.
+  assert.equal(propFamilyFor('BarkWood').id, 'bark');
+});
+
+test('a family whose maps failed degrades to the next matching one', () => {
+  // With no bark maps downloaded, a BarkWood trunk should still get wood grain
+  // rather than render flat.
+  const barkFailed = (family) => family.id !== 'bark';
+  assert.equal(propFamilyFor('BarkWood', barkFailed).id, 'wood');
+  // If nothing matching loaded, the first (unloaded) match is returned so the
+  // caller's own anyLoaded check can skip it and leave the material flat.
+  const nothingLoaded = () => false;
+  assert.equal(propFamilyFor('HouseRoof', nothingLoaded).id, 'roof');
+});
+
+test('every family declares a positive metre tile size for the box projection', () => {
+  for (const family of PROP_FAMILIES) {
+    assert.ok(family.tileMeters > 0, `${family.id} needs a positive tileMeters`);
+    assert.ok(family.roughness >= 0 && family.roughness <= 1,
+      `${family.id} roughness must be a real value`);
+    assert.ok(family.files.map.startsWith('assets/textures/'),
+      `${family.id} maps must live in the served texture directory`);
+  }
 });

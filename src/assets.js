@@ -132,6 +132,108 @@ export const LAMP_TEXTURE_FILES = {
 };
 
 /**
+ * Roofing family: overlapping timber shingles for the house, market stalls and
+ * lane stalls. These three share `HouseRoof`/`MarketRoof`/`StallRoof` materials
+ * and were the single largest remaining flat mass in the plaza (about 190 m2 of
+ * untextured triangles), so one warm tan family dresses all of them.
+ */
+export const ROOF_TEXTURE_FILES = {
+  map: 'assets/textures/roof_albedo.webp',
+  normalMap: 'assets/textures/roof_normal.webp',
+  roughnessMap: 'assets/textures/roof_rough.webp'
+};
+
+/**
+ * Foliage family for the tree canopies (about 271 m2 of flat green geometry).
+ * A low-poly canopy has almost no silhouette detail, so the normal map carries
+ * the read: dense leaf clusters with a strong vein crease.
+ */
+export const LEAF_TEXTURE_FILES = {
+  map: 'assets/textures/leaf_albedo.webp',
+  normalMap: 'assets/textures/leaf_normal.webp',
+  roughnessMap: 'assets/textures/leaf_rough.webp'
+};
+
+/**
+ * Which loaded family dresses which authored material, and at what tile size.
+ *
+ * The prop GLBs are authored untextured and blend-named (`BenchWood`, `Canopy`,
+ * `HouseRoof`), so the family is chosen from the material name, not the mesh. One
+ * tile size per family is the whole point: box-projected UVs are in metres, so a
+ * 0.5 m crate and a 6 m awning read at the same texel density without any
+ * per-surface repeat.
+ *
+ * Order matters. `BarkWood` is renamed by upgradeBark() after it dresses the
+ * trunks, and it contains "Wood", so the bark family must be tested before the
+ * generic wood one or the last pass wins and overwrites the bark maps with
+ * planks.
+ */
+export const PROP_FAMILIES = [
+  {
+    id: 'leaf',
+    // The canopy is authored as `Canopy` (tree.glb) with no "leaf" in the name.
+    test: /canopy|leaf|foliage/i,
+    files: LEAF_TEXTURE_FILES,
+    tileMeters: 0.9,
+    roughness: 0.92
+  },
+  {
+    id: 'roof',
+    // Only the three roof materials carry this word: HouseRoof, MarketRoof and
+    // StallRoof. Keeping the pattern tight matters -- the shipped GLBs have no
+    // cloth awning material, so a broader `/awning|c cloth/` would dress a
+    // future cloth material with shingles.
+    test: /roof/i,
+    files: ROOF_TEXTURE_FILES,
+    tileMeters: 1.1,
+    roughness: 0.9
+  },
+  {
+    id: 'bark',
+    // `BarkWood` is what upgradeBark() renames the trunks to, and `Trunk` is the
+    // authored tree.glb name; both are bark, not planks. Tested before `wood`
+    // because `BarkWood` contains "Wood" -- otherwise the wood family would win
+    // and overwrite the trunk maps with plank grain.
+    test: /bark|trunk/i,
+    files: BARK_TEXTURE_FILES,
+    tileMeters: 1.2,
+    roughness: 0.85
+  },
+  {
+    id: 'wood',
+    test: /wood/i,
+    files: WOOD_TEXTURE_FILES,
+    tileMeters: 1.5,
+    roughness: 0.78
+  }
+];
+
+/**
+ * Picks the dressing family for an authored material name.
+ *
+ * Pure so the browser pass and the unit tests agree on what gets dressed instead
+ * of both re-deriving the regexes. Returns null for iron, glass, stone, cloth and
+ * every other material that should stay flat -- the props read as mixed materials
+ * precisely because the bands and trim are left alone.
+ *
+ * `isLoaded` lets a caller prefer a family whose maps actually arrived. When a
+ * material matches several families (a `BarkWood` trunk matches both bark and
+ * wood) the first *loaded* one wins, so a failed bark download degrades to wood
+ * grain instead of leaving the trunk flat. Without it the first match is used,
+ * which keeps the function total and testable on its own.
+ */
+export function propFamilyFor(materialName, isLoaded = () => true) {
+  if (!materialName) return null;
+  let fallback = null;
+  for (const family of PROP_FAMILIES) {
+    if (!family.test.test(materialName)) continue;
+    if (fallback === null) fallback = family;
+    if (isLoaded(family)) return family;
+  }
+  return fallback;
+}
+
+/**
  * Whether the current context can load local assets at all. `fetch` is absent in
  * some embedded webviews and `file://` pages cannot fetch siblings even when
  * fetch exists, so both are checked before anything is requested.

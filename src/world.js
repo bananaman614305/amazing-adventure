@@ -19,7 +19,8 @@ import {
   COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, PLAZA_FLOOR_TEXTURE_FILES, boxProjectUvs,
   TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES, LAMP_TEXTURE_FILES,
   needsOwnMaterial,
-  cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts
+  cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts,
+  ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor
 } from './assets.js';
 import { loadGlb } from './glb.js';
 import {
@@ -836,12 +837,15 @@ export function buildWorld(renderer) {
   // available they replace the stand-ins; when they are not, nothing breaks and
   // `assetState` records why, so a bug report can tell "no textures" apart from
   // "textures failed to load".
-  // Prop models load before the wood texture family (they are independent
-  // fetches, run in parallel). This registry lets upgradePropWood() dress the
-  // already-built models once the maps arrive, instead of serialising the
-  // whole asset pass behind one 60 KB PNG.
+  // Prop models load before the material families (they are independent fetches,
+  // run in parallel). This registry lets upgradePropFamilies() dress the
+  // already-built models once the maps arrive, instead of serialising the whole
+  // asset pass behind one texture download.
   const propGroups = [];
-  let woodTexturesLoaded = null;
+  // Loaded maps keyed by PROP_FAMILIES id (leaf/roof/bark/wood). One fetch each,
+  // shared by every mesh in the family; cloneTextureFamily() gives each mesh its
+  // own sampler state.
+  const familyTextures = {};
   let lampAssetPromise = null;
   // One fetch of the quarried stone family, shared by the border walls and the
   // terrace. The materials stay separate (each gets cloned textures) because they
@@ -862,6 +866,11 @@ export function buildWorld(renderer) {
     gateDoor: 'box',
     house: 'boxes',
     propWood: 'flat',
+    propWoodDetail: null,
+    roof: 'flat',
+    roofDetail: null,
+    foliage: 'flat',
+    foliageDetail: null,
     cobble: 'flat',
     grass: 'flat',
     walls: 'flat',
@@ -912,6 +921,9 @@ export function buildWorld(renderer) {
       }
       fountainGroup.remove(standIn);
       fountainGroup.add(group);
+      // Register for the wood/iron dressing pass: the fountain's carved trim and
+      // its flat-coloured rim were a large untouched mass in the plaza centre.
+      propGroups.push({ group, tile: 2 });
       assetState.fountain = 'model';
       assetState.fountainDetail = {
         parts: result.meshes.length,
@@ -971,6 +983,9 @@ export function buildWorld(renderer) {
         }
         group.position.set(inst.x, 0, inst.z);
         barrelGroup.add(group);
+        // 1.2 m staves read best at a crate-scale tile; the audit measured the
+        // barrel wood as a large flat surface in the plaza.
+        propGroups.push({ group, tile: 1.2 });
       }
       assetState.barrels = 'model';
       assetState.barrelDetail = {
@@ -1063,6 +1078,7 @@ export function buildWorld(renderer) {
         }
         group.position.set(inst.x, 0, inst.z);
         scene.add(group);
+        propGroups.push({ group, tile: 1.5 });
       }
       assetState.stalls = 'model';
       assetState.stallDetail = {
@@ -1129,6 +1145,9 @@ export function buildWorld(renderer) {
         }
         lamp.modelGroup = group;
         scene.add(group);
+        // Lamp posts are slender, so a 1.5 m tile keeps the grain from
+        // stretching along the shaft.
+        propGroups.push({ group, tile: 1.5 });
       }
       assetState.lamps = 'model';
       assetState.lampDetail = {
@@ -1332,6 +1351,7 @@ export function buildWorld(renderer) {
         }
         group.position.set(inst.x, 0, inst.z);
         scene.add(group);
+        propGroups.push({ group, tile: 1.5 });
       }
       assetState.marketStalls = 'model';
       assetState.marketStallDetail = {
@@ -1396,6 +1416,46 @@ export function buildWorld(renderer) {
       }
       assetState.bark = dressed > 0 ? 'textured' : 'flat';
       assetState.barkDetail = { dressed };
+      // Register for the generic prop pass, which consults this to decide whether
+      // a name that matches several families (BarkWood) has a loaded one to use.
+      familyTextures.bark = textures;
+      return assetState;
+    });
+  }
+
+  /**
+   * Loads the two new families the largest flat masses need: roof shingles (the
+   * house, market stall and lane-stall awnings) and canopy leaves (the trees).
+   *
+   * Kept as its own fetch step rather than folded into the wood/brick one so the
+   * reporting is honest: `assetState.roof`/`assetState.foliage` say what actually
+   * arrived, and a failed roof download leaves the awnings flat instead of
+   * silently borrowing plank grain.
+   */
+  function upgradePropMaps() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.roof = 'unavailable';
+      assetState.foliage = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return Promise.all([
+      loadMaterialTextures({ THREE, files: ROOF_TEXTURE_FILES }),
+      loadMaterialTextures({ THREE, files: LEAF_TEXTURE_FILES })
+    ]).then(([roof, foliage]) => {
+      assetState.roof = roof.anyLoaded ? 'textured' : 'flat';
+      assetState.foliage = foliage.anyLoaded ? 'textured' : 'flat';
+      familyTextures.roof = roof;
+      familyTextures.leaf = foliage;
+      assetState.roofDetail = {
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => roof[k])
+      };
+      assetState.foliageDetail = {
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => foliage[k])
+      };
       return assetState;
     });
   }
@@ -1688,44 +1748,80 @@ export function buildWorld(renderer) {
   }
 
   /**
-   * Dresses the modelled props in the wood texture family.
+   * Dresses the modelled props in the material families that match their names.
    *
    * The prop GLBs are authored from untextured box primitives, so they carry no
-   * UVs; boxProjectUvs() generates them in metres and materials share one tiling.
-   * A mesh keeps its own name-based test: only meshes whose material is a wood
-   * material (Blender names them *Wood) get the maps, so iron bands, glass and
-   * stone trim stay flat and read as different materials.
+   * UVs; boxProjectUvs() generates them in metres and every mesh in a family then
+   * shares one tiling. A mesh keeps its own name-based test: only meshes whose
+   * material matches a family (Blender names them *Wood, *Roof, Canopy, Trunk)
+   * get the maps, so iron bands, glass and stone trim stay flat and read as
+   * different materials.
+   *
+   * The projection is unconditional even though BoxGeometry ships 0..1 UVs. Those
+   * authored UVs are per-face, so a map applied to them smears one tile across a
+   * whole face instead of tiling in metres -- a crate and a house wall would show
+   * the same six pixels-per-tile look. Rewriting them is what makes the 1.5 m
+   * crate, the 6 m awning and the 2.6 m trunk agree on texel density.
+   *
+   * Bark is renamed `BarkWood` by upgradeBark() and would otherwise match the wood
+   * family, so it is dressed in its own pass first and skipped here: see the
+   * PROP_FAMILIES ordering comment. Everything else falls through to the generic
+   * loop, which keeps the trunks out of the plank pass.
    */
-  function upgradePropWood() {
-    if (!woodTexturesLoaded) {
+  function upgradePropFamilies() {
+    const loadedByFamily = new Map();
+    for (const family of PROP_FAMILIES) {
+      loadedByFamily.set(family.id, familyTextures[family.id] || null);
+    }
+    const isLoaded = (family) => {
+      const textures = loadedByFamily.get(family.id);
+      return Boolean(textures && textures.anyLoaded);
+    };
+    const anyLoaded = PROP_FAMILIES.some(isLoaded);
+    if (!anyLoaded) {
       assetState.propWood = 'flat';
       return Promise.resolve(assetState);
     }
+
     let dressed = 0;
     let projected = 0;
+    const byFamily = {};
+    for (const family of PROP_FAMILIES) byFamily[family.id] = 0;
+
     for (const { group, tile } of propGroups) {
       group.traverse((mesh) => {
         if (!mesh.isMesh) return;
         const source = mesh.material;
         const name = source && source.name ? source.name : '';
-        if (!/Wood/i.test(name)) return;
-        if (!mesh.geometry.getAttribute('uv')) {
-          const position = mesh.geometry.getAttribute('position');
-          const index = mesh.geometry.getIndex();
-          const uvs = boxProjectUvs({
-            positions: position.array,
-            indices: index ? index.array : null,
-            tileMeters: tile
-          });
-          mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-          projected += 1;
-        }
+        // Bark is already dressed by upgradeBark(); dressing it again would
+        // replace the bark maps with the wood family (its name contains "Wood").
+        if (/bark|trunk/i.test(name)) return;
+        const family = propFamilyFor(name, isLoaded);
+        if (!family) return;
+        const textures = loadedByFamily.get(family.id);
+        if (!textures || !textures.anyLoaded) return;
+
+        // Unconditional: authored per-face UVs would smear the map across each
+        // face, so every dressed mesh gets metre-space box-projected UVs.
+        const position = mesh.geometry.getAttribute('position');
+        const index = mesh.geometry.getIndex();
+        const uvs = boxProjectUvs({
+          positions: position.array,
+          indices: index ? index.array : null,
+          // The registry tile (per prop) stays the fallback, but a family with an
+          // authored metre scale wins so one roof family tiles identically on a
+          // 3 m stall awning and a 6 m house roof.
+          tileMeters: family.tileMeters || tile
+        });
+        mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+        projected += 1;
+
         const material = new THREE.MeshStandardMaterial({
           color: 0xffffff,
-          roughness: 0.78,
+          roughness: family.roughness,
           metalness: 0
         });
-        for (const [key, texture] of Object.entries(woodTexturesLoaded)) {
+        for (const [key, texture] of Object.entries(textures)) {
           if (!texture || key === 'anyLoaded') continue;
           const copy = texture.clone();
           copy.needsUpdate = true;
@@ -1739,10 +1835,16 @@ export function buildWorld(renderer) {
         material.name = name;
         mesh.material = material;
         dressed += 1;
+        byFamily[family.id] += 1;
       });
     }
     assetState.propWood = dressed > 0 ? 'textured' : 'flat';
-    assetState.propWoodDetail = { dressed, projected, groups: propGroups.length };
+    assetState.propWoodDetail = {
+      dressed,
+      projected,
+      groups: propGroups.length,
+      byFamily
+    };
     return Promise.resolve(assetState);
   }
 
@@ -1931,7 +2033,7 @@ export function buildWorld(renderer) {
       assetState.brick = brick.anyLoaded ? 'textured' : 'flat';
       assetState.plaster = plaster.anyLoaded ? 'textured' : 'flat';
       if (wood.anyLoaded) {
-        woodTexturesLoaded = wood;
+        familyTextures.wood = wood;
         applyTextureFamily(woodMat, wood, 1.5, 1.5, 1.5);
         assetState.woodDetail = {
           maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => wood[k])
@@ -2026,8 +2128,8 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradeTree(), upgradeBark(), upgradeLaneLamp()])
-        .then(() => upgradePropWood()).then(() => ({ ...assetState }));
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp()])
+        .then(() => upgradePropFamilies()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {
