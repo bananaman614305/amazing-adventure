@@ -1,0 +1,230 @@
+{
+  "round": 62,
+  "title": "north terrace: quarried stone by box projection",
+  "generatedAt": "2026-11-22T08:28:52.240Z",
+  "tileMeters": 1.6,
+  "densityTolerance": 0.05,
+  "minBytes": 4096,
+  "terrace": {
+    "state": "textured",
+    "detail": {
+      "maps": [
+        "map",
+        "normalMap",
+        "roughnessMap"
+      ],
+      "tileMeters": 1.6,
+      "projected": {
+        "tread": 2,
+        "parapet": 6
+      },
+      "parts": {
+        "tread": [
+          "terrace-tread",
+          "terrace-ramp"
+        ],
+        "parapet": [
+          "terrace-kerb",
+          "terrace-parapet"
+        ]
+      }
+    },
+    "meshCount": 8
+  },
+  "density": [
+    {
+      "name": "terrace-tread",
+      "extent": 12,
+      "span": 7.5,
+      "expected": 7.5,
+      "ratio": 1
+    },
+    {
+      "name": "terrace-ramp",
+      "extent": 4.754,
+      "span": 2.971,
+      "expected": 2.971,
+      "ratio": 1
+    },
+    {
+      "name": "terrace-kerb",
+      "extent": 4.754,
+      "span": 2.971,
+      "expected": 2.971,
+      "ratio": 1
+    },
+    {
+      "name": "terrace-kerb",
+      "extent": 4.754,
+      "span": 2.971,
+      "expected": 2.971,
+      "ratio": 1
+    },
+    {
+      "name": "terrace-parapet",
+      "extent": 4.1,
+      "span": 2.563,
+      "expected": 2.562,
+      "ratio": 1
+    },
+    {
+      "name": "terrace-parapet",
+      "extent": 4.1,
+      "span": 2.563,
+      "expected": 2.562,
+      "ratio": 1
+    },
+    {
+      "name": "terrace-parapet",
+      "extent": 3.3,
+      "span": 2.063,
+      "expected": 2.062,
+      "ratio": 1
+    },
+    {
+      "name": "terrace-parapet",
+      "extent": 3.3,
+      "span": 2.063,
+      "expected": 2.062,
+      "ratio": 1
+    }
+  ],
+  "files": {
+    "map": {
+      "url": "assets/textures/stone_albedo.webp",
+      "bytes": 56458,
+      "sha256": "fc7aa27f41cd60bd90890e7c115b492dcd9f62538108f28f2182eecc8e15d4fc"
+    },
+    "normalMap": {
+      "url": "assets/textures/stone_normal.webp",
+      "bytes": 85756,
+      "sha256": "e654cc72a21399a830e2c77dbc8c751152bd381c715dd6bee9382cb61d098fad"
+    },
+    "roughnessMap": {
+      "url": "assets/textures/stone_rough.webp",
+      "bytes": 27140,
+      "sha256": "3ed0a02acebfb5d77b7911235e743337416b414cba28095e38b407275b095b11"
+    }
+  },
+  "shots": [
+    {
+      "label": "terrace-ramp-from-plaza",
+      "file": "round62-terrace-ramp-from-plaza.png",
+      "bytes": 353669
+    },
+    {
+      "label": "terrace-deck",
+      "file": "round62-terrace-deck.png",
+      "bytes": 239058
+    },
+    {
+      "label": "terrace-parapet-edge",
+      "file": "round62-terrace-parapet-edge.png",
+      "bytes": 235653
+    }
+  ],
+  "checks": [
+    {
+      "name": "assetState reports the terrace as textured, not flat",
+      "ok": true,
+      "detail": "{\"terrace\":\"textured\"}"
+    },
+    {
+      "name": "the terrace detail names the three maps it drew",
+      "ok": true,
+      "detail": "{\"maps\":[\"map\",\"normalMap\",\"roughnessMap\"],\"tileMeters\":1.6,\"projected\":{\"tread\":2,\"parapet\":6},\"parts\":{\"tread\":[\"terrace-tread\",\"terrace-ramp\"],\"parapet\":[\"terrace-kerb\",\"terrace-parapet\"]}}"
+    },
+    {
+      "name": "all six named terrace meshes are in the loaded scene",
+      "ok": true,
+      "detail": "{\"meshCount\":8,\"treadCount\":1,\"rampCount\":1,\"kerbCount\":2,\"parapetCount\":4}"
+    },
+    {
+      "name": "every terrace surface received finite projected UVs",
+      "ok": true,
+      "detail": "[{\"name\":\"terrace-tread\",\"finite\":true},{\"name\":\"terrace-ramp\",\"finite\":true},{\"name\":\"terrace-kerb\",\"finite\":true},{\"name\":\"terrace-kerb\",\"finite\":true},{\"name\":\"terrace-parapet\",\"finite\":true},{\"name\":\"terrace-parapet\",\"finite\":true},{\"name\":\"terrace-parapet\",\"finite\":true},{\"name\":\"terrace-parapet\",\"finite\":true}]"
+    },
+    {
+      "name": "nothing is still carrying the default 0..1 per-face UVs",
+      "ok": true,
+      "detail": "[{\"name\":\"terrace-tread\",\"span\":[7.5,2.063]},{\"name\":\"terrace-ramp\",\"span\":[2.971,2.971]},{\"name\":\"terrace-kerb\",\"span\":[2.971,2.971]},{\"name\":\"terrace-kerb\",\"span\":[2.971,2.971]},{\"name\":\"terrace-parapet\",\"span\":[2.563,0.344]},{\"name\":\"terrace-parapet\",\"span\":[2.563,0.344]},{\"name\":\"terrace-parapet\",\"span\":[2.063,2.063]},{\"name\":\"terrace-parapet\",\"span\":[2.063,2.063]}]"
+    },
+    {
+      "name": "texel density is uniform: every surface is extent / one tile size",
+      "ok": true,
+      "detail": "[{\"name\":\"terrace-tread\",\"extent\":12,\"span\":7.5,\"expected\":7.5,\"ratio\":1},{\"name\":\"terrace-ramp\",\"extent\":4.754,\"span\":2.971,\"expected\":2.971,\"ratio\":1},{\"name\":\"terrace-kerb\",\"extent\":4.754,\"span\":2.971,\"expected\":2.971,\"ratio\":1},{\"name\":\"terrace-kerb\",\"extent\":4.754,\"span\":2.971,\"expected\":2.971,\"ratio\":1},{\"name\":\"terrace-parapet\",\"extent\":4.1,\"span\":2.563,\"expected\":2.562,\"ratio\":1},{\"name\":\"terrace-parapet\",\"extent\":4.1,\"span\":2.563,\"expected\":2.562,\"ratio\":1},{\"name\":\"terrace-parapet\",\"extent\":3.3,\"span\":2.063,\"expected\":2.062,\"ratio\":1},{\"name\":\"terrace-parapet\",\"extent\":3.3,\"span\":2.063,\"expected\":2.062,\"ratio\":1}]"
+    },
+    {
+      "name": "the projected UVs carry the tiling, so textures stay repeat 1:1",
+      "ok": true,
+      "detail": "[{\"name\":\"terrace-tread\",\"repeat\":[1,1]},{\"name\":\"terrace-ramp\",\"repeat\":[1,1]},{\"name\":\"terrace-kerb\",\"repeat\":[1,1]},{\"name\":\"terrace-kerb\",\"repeat\":[1,1]},{\"name\":\"terrace-parapet\",\"repeat\":[1,1]},{\"name\":\"terrace-parapet\",\"repeat\":[1,1]},{\"name\":\"terrace-parapet\",\"repeat\":[1,1]},{\"name\":\"terrace-parapet\",\"repeat\":[1,1]}]"
+    },
+    {
+      "name": "the walked tread and ramp deck share one material, so the ramp cannot shear",
+      "ok": true,
+      "detail": "{\"treadMaterialCount\":1}"
+    },
+    {
+      "name": "the upright band is its own material, so it cannot re-wrap the tread",
+      "ok": true,
+      "detail": "{\"uprightMaterialCount\":1,\"shares\":false}"
+    },
+    {
+      "name": "the two materials draw different texture objects",
+      "ok": true,
+      "detail": "{\"sharesTextureObject\":false}"
+    },
+    {
+      "name": "the border walls keep their own repeats and their own texture objects",
+      "ok": true,
+      "detail": "{\"wallCount\":3,\"wallTextured\":3,\"sharedWithWall\":0,\"wallRepeats\":[[17,2],[17,2],[17,2]]}"
+    },
+    {
+      "name": "the mapped terrace materials are white, so the stone is not tinted twice",
+      "ok": true,
+      "detail": "[{\"name\":\"terrace-tread\",\"color\":\"ffffff\"},{\"name\":\"terrace-ramp\",\"color\":\"ffffff\"},{\"name\":\"terrace-kerb\",\"color\":\"ffffff\"},{\"name\":\"terrace-kerb\",\"color\":\"ffffff\"},{\"name\":\"terrace-parapet\",\"color\":\"ffffff\"},{\"name\":\"terrace-parapet\",\"color\":\"ffffff\"},{\"name\":\"terrace-parapet\",\"color\":\"ffffff\"},{\"name\":\"terrace-parapet\",\"color\":\"ffffff\"}]"
+    },
+    {
+      "name": "the frame still draws the dressed terrace",
+      "ok": true,
+      "detail": "{\"drawCalls\":324,\"triangles\":8062}"
+    },
+    {
+      "name": "the play button enables the player, so the walk checks are meaningful",
+      "ok": true,
+      "detail": "{\"enabled\":true}"
+    },
+    {
+      "name": "the ramp still leads up onto the terrace",
+      "ok": true,
+      "detail": "{\"footGround\":0,\"climbed\":true,\"onTerrace\":{\"x\":0,\"z\":-13.40377338323505,\"ground\":1.2},\"terraceHeight\":1.2}"
+    },
+    {
+      "name": "the ramp still leads back down to the plaza",
+      "ok": true,
+      "detail": "{\"descended\":true,\"backOnPlaza\":{\"x\":-7.325836336689264e-16,\"z\":-8.418000666159612,\"ground\":0}}"
+    },
+    {
+      "name": "no page errors while the dressed terrace rendered",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "the terrace stone family is shipped and non-trivial",
+      "ok": true,
+      "detail": "{\"map\":{\"url\":\"assets/textures/stone_albedo.webp\",\"bytes\":56458,\"sha256\":\"fc7aa27f41cd60bd90890e7c115b492dcd9f62538108f28f2182eecc8e15d4fc\"},\"normalMap\":{\"url\":\"assets/textures/stone_normal.webp\",\"bytes\":85756,\"sha256\":\"e654cc72a21399a830e2c77dbc8c751152bd381c715dd6bee9382cb61d098fad\"},\"roughnessMap\":{\"url\":\"assets/textures/stone_rough.webp\",\"bytes\":27140,\"sha256\":\"3ed0a02acebfb5d77b7911235e743337416b414cba28095e38b407275b095b11\"}}"
+    },
+    {
+      "name": "the terrace groups its meshes into the same two parts the world built",
+      "ok": true,
+      "detail": "{\"tread\":[\"terrace-tread\",\"terrace-ramp\"],\"parapet\":[\"terrace-kerb\",\"terrace-parapet\"]}"
+    },
+    {
+      "name": "the tile size is a single believable metre figure",
+      "ok": true,
+      "detail": "{\"tileMeters\":1.6}"
+    }
+  ],
+  "errors": [],
+  "note": "Every claim here is a scene-graph measurement, a file byte count or a pure-math check. The model is text-only: no screenshot was looked at."
+}

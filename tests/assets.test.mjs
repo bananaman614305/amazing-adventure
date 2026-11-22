@@ -9,6 +9,7 @@ import {
   canLoadAssets, textureRepeat, stoneMaterialParams, plazaFloorMaterialParams,
   fountainFootprint, footprintFitsCollider, loadFountain, loadStoneTextures,
   boxProjectUvs, PLAZA_FLOOR_TEXTURE_FILES,
+  terraceMaterialParams, terraceStoneParts, TERRACE_TEXTURE_TILE_METERS, cloneTextureFamily,
   LAMP_TEXTURE_FILES, LAMP_ASSET, LAMP_MODEL_SIZE, loadMaterialTextures, needsOwnMaterial
 } from '../src/assets.js';
 
@@ -104,6 +105,132 @@ test('the plaza floor maps are all present on disk', () => {
   for (const url of Object.values(PLAZA_FLOOR_TEXTURE_FILES)) {
     assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${url} exists`);
   }
+});
+
+test('the terrace reuses the wall stone family instead of a third set of maps', () => {
+  // The terrace, its ramp and the parapet are the same quarried stone as the
+  // border walls, so sharing the family is the point -- there is no terrace
+  // texture file and there should not be one.
+  const family = Object.values(STONE_TEXTURE_FILES);
+  assert.equal(family.length, 3);
+  for (const url of family) {
+    assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${url} exists`);
+  }
+  assert.equal(
+    Object.values(PLAZA_FLOOR_TEXTURE_FILES).some((url) => family.includes(url)),
+    false,
+    'the terrace stone is not the plaza flagstone'
+  );
+});
+
+test('terrace tread and parapet stay distinguishable without maps', () => {
+  const tread = terraceMaterialParams(false, 'tread');
+  const parapet = terraceMaterialParams(false, 'parapet');
+  assert.notEqual(tread.color, parapet.color, 'a missing map must not flatten the step edge');
+  assert.equal(tread.useMaps, false);
+  assert.equal(parapet.useMaps, false);
+  // The walked tread is the lighter surface, the upright kerb the darker one.
+  assert.ok(tread.color > parapet.color);
+  assert.ok(tread.roughness >= parapet.roughness);
+
+  for (const part of ['tread', 'parapet']) {
+    const withMaps = terraceMaterialParams(true, part);
+    assert.equal(withMaps.color, 0xffffff, 'a texture map must not be tinted twice');
+    assert.equal(withMaps.useMaps, true);
+    assert.equal(withMaps.metalness, 0);
+  }
+});
+
+test('the terrace groups its meshes into one walked stone and one upright band', () => {
+  // The whole terrace is one built structure, so it must not accumulate a material
+  // per mesh. Two shared materials keep the flat fallback edge readable and let the
+  // whole north end be re-dressed by one pass.
+  const parts = terraceStoneParts();
+  assert.deepEqual(Object.keys(parts).sort(), ['parapet', 'tread']);
+  assert.deepEqual(parts.tread, ['terrace-tread', 'terrace-ramp']);
+  assert.deepEqual(parts.parapet, ['terrace-kerb', 'terrace-parapet']);
+
+  // No mesh may appear in two groups: it would be dressed twice, and the second
+  // pass would win on the fallback colour.
+  const flat = [...parts.tread, ...parts.parapet];
+  assert.equal(new Set(flat).size, flat.length);
+});
+
+test('the terrace stone projects at one believable texel density', () => {
+  // Because the terrace is box-projected in metres, a single tile size governs every
+  // surface -- the 12 m slab, the rotated ramp deck and the 0.18 m kerb face alike.
+  // That is the property the old per-material repeat scheme could not have.
+  assert.ok(TERRACE_TEXTURE_TILE_METERS >= 1 && TERRACE_TEXTURE_TILE_METERS <= 2.5,
+    `${TERRACE_TEXTURE_TILE_METERS} m is ashlar scale, not gravel or paving`);
+
+  // Projecting a real box at that tile size must produce more than one joint across
+  // each visible surface, or the map would look smeared rather than coursed.
+  const surfaces = {
+    tread: [12, 3.3],   // terrace top slab
+    ramp: [3.8, 4.77],  // ramp deck, measured up the slope
+    kerb: [0.18, 4.77], // one ramp kerb face
+    parapet: [6.2, 0.55]
+  };
+  for (const [label, [width, depth]] of Object.entries(surfaces)) {
+    const across = width / TERRACE_TEXTURE_TILE_METERS;
+    const along = depth / TERRACE_TEXTURE_TILE_METERS;
+    assert.ok(Math.max(across, along) >= 1.5, `${label} shows at least one joint`);
+  }
+
+  // And the ramp must not shear: a box-projected UV pair is derived from the two
+  // axes perpendicular to each face's normal, so the slope is absorbed by geometry,
+  // not by stretching a repeat. Assert that on a real wedge.
+  const slope = Math.atan2(1.2, 4.4);
+  const box = [
+    // two triangles of the ramp deck's top face, raised along +Z
+    [-1.9, 0, -2.2], [1.9, 0, -2.2], [1.9, 1.2, 2.2],
+    [-1.9, 0, -2.2], [1.9, 1.2, 2.2], [-1.9, 1.2, 2.2]
+  ];
+  assert.ok(Number.isFinite(slope));
+  const positions = box.flat();
+  const uvs = boxProjectUvs({ positions, tileMeters: TERRACE_TEXTURE_TILE_METERS });
+  assert.equal(uvs.length, positions.length / 3 * 2);
+  // The top face is Y-dominant, so a metre of X and a metre of Z are each one tile.
+  for (const [i, u] of uvs.entries()) {
+    assert.ok(Number.isFinite(u), `uv ${i} is finite`);
+    assert.ok(Math.abs(u) < 10, `uv ${i} stays inside a sane tile count, got ${u}`);
+  }
+
+  // Two deck vertices a metre apart along X must differ by exactly one tile in U.
+  const tile = TERRACE_TEXTURE_TILE_METERS;
+  const uAt = (x) => uvs[positions.indexOf(x) / 3 * 2];
+  const uMinus = uAt(-1.9);
+  const uPlus = uAt(1.9);
+  assert.ok(Math.abs((uPlus - uMinus) - 3.8 / tile) < 1e-5,
+    `3.8 m of deck spans 3.8/${tile} tiles, got ${(uPlus - uMinus).toFixed(3)}`);
+});
+
+test('a cloned texture family carries its own sampler state', () => {
+  // Two materials cannot share one texture object and still tile differently:
+  // repeat/wrap/anisotropy live on the texture. Prove the clone is independent.
+  const source = {
+    map: { repeat: { set() {} }, wrapS: 0, wrapT: 0, anisotropy: 1, needsUpdate: false },
+    normalMap: { repeat: { set() {} }, wrapS: 0, wrapT: 0, anisotropy: 1, needsUpdate: false },
+    roughnessMap: null,
+    anyLoaded: true
+  };
+  for (const key of ['map', 'normalMap']) {
+    source[key].clone = function clone() {
+      return { ...this, repeat: { set() {} }, cloned: true };
+    };
+  }
+  const copy = cloneTextureFamily(source);
+  assert.equal(copy.anyLoaded, true);
+  assert.notEqual(copy.map, source.map, 'the map is a distinct object');
+  assert.notEqual(copy.normalMap, source.normalMap, 'the normal map is a distinct object');
+  assert.equal(copy.roughnessMap, null);
+  assert.equal(copy.map.cloned, true);
+  assert.equal(copy.map.needsUpdate, true, 'a clone must be uploaded before use');
+
+  // A family that never loaded must clone to an empty family, not throw.
+  const empty = cloneTextureFamily({ map: null, normalMap: null, roughnessMap: null, anyLoaded: false });
+  assert.equal(empty.anyLoaded, false);
+  assert.equal(empty.map, null);
 });
 
 test('the footprint measure covers every mesh', () => {

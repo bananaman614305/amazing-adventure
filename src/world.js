@@ -18,7 +18,8 @@ import {
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
   COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, PLAZA_FLOOR_TEXTURE_FILES, boxProjectUvs,
   TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES, LAMP_TEXTURE_FILES,
-  needsOwnMaterial
+  needsOwnMaterial,
+  cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts
 } from './assets.js';
 import { loadGlb } from './glb.js';
 import {
@@ -462,7 +463,16 @@ export function buildWorld(renderer) {
   }
 
   // --- North terrace + ramp ----------------------------------------------
+  // The slab, its ramp deck and the kerb/parapet band are one built structure in
+  // one stone, so they share two materials, not five: `stepStone` is the walked
+  // tread (slab + ramp deck) and `parapetMaterial` the upright band. Texel density
+  // is kept uniform by box-projecting UVs at a metres-per-tile scale in
+  // upgradeTerrace(), which is also why the ramp's rotated box does not smear its
+  // joints the way a single per-material repeat would.
   const stepStone = new THREE.MeshStandardMaterial({ color: 0x9a9184, roughness: 0.9 });
+  // Every mesh the terrace stone pass should dress; collected as the structure is
+  // built so upgradeTerrace() never has to guess by geometry type or colour.
+  const terraceStoneMeshes = [];
   const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.75 });
   // The house walls get brick; stalls, crates, bench and lamp posts stay wood.
   // Both are upgraded in place by upgradeWoodBrick() if the maps load.
@@ -472,6 +482,8 @@ export function buildWorld(renderer) {
     new THREE.BoxGeometry(TERRACE.maxX - TERRACE.minX, TERRACE.height, TERRACE.maxZ - TERRACE.minZ),
     stepStone
   );
+  terrace.name = 'terrace-tread';
+  terraceStoneMeshes.push(terrace);
   terrace.position.set(
     (TERRACE.minX + TERRACE.maxX) / 2,
     TERRACE.height / 2,
@@ -487,6 +499,8 @@ export function buildWorld(renderer) {
   const rampLength = Math.hypot(TERRACE.height, rampRun);
   const rampSlope = Math.atan2(TERRACE.height, rampRun);
   const ramp = new THREE.Mesh(new THREE.BoxGeometry(rampWidth, 0.24, rampLength), stepStone);
+  ramp.name = 'terrace-ramp';
+  terraceStoneMeshes.push(ramp);
   ramp.position.set(
     (TERRACE.ramp.minX + TERRACE.ramp.maxX) / 2,
     TERRACE.height / 2,
@@ -502,6 +516,8 @@ export function buildWorld(renderer) {
   // Side kerbs and rail posts make the ramp read as a built stair, not a wedge.
   for (const x of [TERRACE.ramp.minX - 0.1, TERRACE.ramp.maxX + 0.1]) {
     const kerb = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.45, rampLength), parapetMaterial);
+    kerb.name = 'terrace-kerb';
+    terraceStoneMeshes.push(kerb);
     kerb.position.set(x, TERRACE.height / 2 + 0.22, (TERRACE.ramp.minZ + TERRACE.ramp.maxZ) / 2);
     kerb.rotation.x = rampSlope;
     kerb.castShadow = true;
@@ -526,23 +542,27 @@ export function buildWorld(renderer) {
   // wall exists to mark. These get colliders explicitly for that reason: walking off
   // the terrace should take the ramp, not the shortest line over the lip.
   for (const [from, to] of [[TERRACE.minX, TERRACE.ramp.minX], [TERRACE.ramp.maxX, TERRACE.maxX]]) {
-    addBox(scene, [], {
+    const lip = addBox(scene, [], {
       size: [to - from, 0.55, 0.22],
       position: [(from + to) / 2, TERRACE.height + 0.275, TERRACE.maxZ - 0.11],
       material: parapetMaterial,
       castShadow: true
     });
+    lip.name = 'terrace-parapet';
+    terraceStoneMeshes.push(lip);
     // The collider is a thin line at the lip itself, spanning the open width so the
     // player cannot squeeze past the end of the parapet either.
     colliders.push(boxCollider(from, TERRACE.maxZ - 0.22, to, TERRACE.maxZ));
   }
   for (const x of [TERRACE.minX, TERRACE.maxX]) {
-    addBox(scene, [], {
+    const sideWall = addBox(scene, [], {
       size: [0.22, 0.55, TERRACE.maxZ - TERRACE.minZ],
       position: [x, TERRACE.height + 0.275, (TERRACE.minZ + TERRACE.maxZ) / 2],
       material: parapetMaterial,
       castShadow: true
     });
+    sideWall.name = 'terrace-parapet';
+    terraceStoneMeshes.push(sideWall);
   }
 
   // A painted banner over the terrace marks it as the north wall.
@@ -823,6 +843,10 @@ export function buildWorld(renderer) {
   const propGroups = [];
   let woodTexturesLoaded = null;
   let lampAssetPromise = null;
+  // One fetch of the quarried stone family, shared by the border walls and the
+  // terrace. The materials stay separate (each gets cloned textures) because they
+  // need different sampler state; only the network request is shared.
+  let stoneTexturesPromise = null;
 
   const assetState = {
     fountain: 'stand-in',
@@ -841,6 +865,7 @@ export function buildWorld(renderer) {
     cobble: 'flat',
     grass: 'flat',
     walls: 'flat',
+    terrace: 'flat',
     sky: 'gradient',
     wood: 'flat',
     brick: 'flat',
@@ -853,7 +878,8 @@ export function buildWorld(renderer) {
     lampMetalDetail: null,
     trees: 'stand-ins',
     bark: 'flat',
-    barkDetail: null
+    barkDetail: null,
+    terraceDetail: null
   };
 
   function upgradeFountain() {
@@ -1758,15 +1784,99 @@ export function buildWorld(renderer) {
     // has its own flagstone paving, so the two stone surfaces are not the same
     // map at two scales. Long runs (34 m) at 3.2 m high want a 2 m tile, like
     // the lane plaster, so courses read at wall scale.
-    return loadMaterialTextures({ THREE, files: STONE_TEXTURE_FILES }).then((textures) => {
+    return loadStoneFamily().then((textures) => {
       if (!textures.anyLoaded) {
         assetState.walls = 'flat';
         return assetState;
       }
-      applyTextureFamily(wallMaterial, textures, 34, 3.2, 2);
+      // Its own copy of the maps: the terrace also tiles this family, and a shared
+      // texture object can only carry one repeat (see cloneTextureFamily).
+      applyTextureFamily(wallMaterial, cloneTextureFamily(textures), 34, 3.2, 2);
       assetState.walls = 'textured';
       assetState.wallsDetail = {
         maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k])
+      };
+      return assetState;
+    });
+  }
+
+  /**
+   * One fetch of the stone family, shared by the walls and the terrace.
+   *
+   * Both surfaces are built from the same quarried stone, so downloading the same
+   * three maps twice would be waste. The *materials* stay separate (each gets a
+   * cloned texture set) because they need different repeats; only the network
+   * request is shared.
+   */
+  function loadStoneFamily() {
+    if (!stoneTexturesPromise) {
+      stoneTexturesPromise = loadMaterialTextures({ THREE, files: STONE_TEXTURE_FILES });
+    }
+    return stoneTexturesPromise;
+  }
+
+  /**
+   * Dresses the north terrace's built stonework in the stone family.
+   *
+   * Round 61 textured the plaza floor; this is the largest flat-grey thing left in
+   * the plaza view. The terrace, its ramp deck, the ramp kerbs and the low parapet
+   * were all untextured MeshStandardMaterials, so the whole north end read as one
+   * grey mass no matter how good the paving underfoot got.
+   *
+   * Two materials are upgraded in place rather than one new material per mesh, and
+   * the UVs are box-projected in metres (terraceStoneParts() lists which meshes
+   * belong to which). That combination is what makes one stone family look right on
+   * a 12 m slab, a rotated 4.8 m ramp deck and a 0.18 m kerb face at once: the
+   * projection derives UVs from world-scale positions, so texel density is uniform
+   * by construction and the ramp's slope cannot shear the courses. A per-material
+   * repeat could only match one of those surfaces.
+   */
+  function upgradeTerrace() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.terrace = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadStoneFamily().then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.terrace = 'flat';
+        return assetState;
+      }
+      const tile = TERRACE_TEXTURE_TILE_METERS;
+      // One clone per material: sampler state lives on the texture, so the tread and
+      // the parapet cannot share an object and still wrap differently from the wall.
+      for (const mesh of terraceStoneMeshes) {
+        const position = mesh.geometry.getAttribute('position');
+        const index = mesh.geometry.getIndex();
+        if (!position) continue;
+        // BoxGeometry ships with 0..1 per-face UVs, which would smear one whole map
+        // across every face. They have to be replaced, not merely filled in when
+        // absent -- that is the difference between coursed ashlar and a stretched
+        // blur on a 12 m slab.
+        mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(boxProjectUvs({
+          positions: position.array,
+          indices: index ? index.array : null,
+          tileMeters: tile
+        }), 2));
+      }
+      // Box-projected UVs are already in tile units, so repeat stays 1:1 and the
+      // clone only carries the sampler state that keeps it off the wall's copies.
+      applyTextureFamily(stepStone,
+        { ...cloneTextureFamily(textures), anyLoaded: true }, 1, 1, 1);
+      applyTextureFamily(parapetMaterial,
+        { ...cloneTextureFamily(textures), anyLoaded: true }, 1, 1, 1);
+      assetState.terrace = 'textured';
+      assetState.terraceDetail = {
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: tile,
+        projected: Object.fromEntries(Object.entries(terraceStoneParts()).map(([part, names]) => [
+          part,
+          terraceStoneMeshes.filter((m) => names.includes(m.name)).length
+        ])),
+        parts: terraceStoneParts()
       };
       return assetState;
     });
@@ -1916,7 +2026,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradePlazaFloor(), upgradeWoodBrick(), upgradeTree(), upgradeBark(), upgradeLaneLamp()])
+      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradeTree(), upgradeBark(), upgradeLaneLamp()])
         .then(() => upgradePropWood()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */

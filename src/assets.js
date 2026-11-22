@@ -263,6 +263,104 @@ export function plazaFloorMaterialParams(texturesLoaded) {
 }
 
 /**
+ * How wide one stone map tile is on the terrace, in metres.
+ *
+ * The terrace is a built structure, not a wall: its top is a 12 x 3.3 m slab that
+ * the player walks across, so the tile has to be small enough that the joints
+ * read underfoot as paving courses, and large enough that a single slab does not
+ * look like a mosaic of pebbles. 1.6 m gives roughly two joints across the width
+ * of the walk and a handful along its length -- closer to cut ashlar than to the
+ * plaza's metre-wide flagstones or the lane's 5 cm cobbles. Because the terrace
+ * is box-projected at this scale (see upgradeTerrace), the same number also
+ * governs the ramp deck and the narrow kerb faces, so every piece of the terrace
+ * stonework ends up with one texel density.
+ */
+export const TERRACE_TEXTURE_TILE_METERS = 1.6;
+
+/**
+ * Material settings for the north terrace's built stone.
+ *
+ * Two parts share the stone maps but not the fallback colour, because they are
+ * genuinely different stonework: `tread` is the walked surface (terrace top and
+ * ramp deck) and `parapet` is the upright kerb/parapet wall. Keeping the two flat
+ * colours distinct means the step edge still reads as an edge if the maps never
+ * load, which is the same rule the plaza floor and border walls follow.
+ */
+export function terraceMaterialParams(texturesLoaded, part = 'tread') {
+  const upright = part === 'parapet';
+  if (texturesLoaded) {
+    return {
+      color: 0xffffff,
+      roughness: 1,
+      metalness: 0,
+      useMaps: true
+    };
+  }
+  return {
+    color: upright ? 0x7f7567 : 0x9a9184,
+    roughness: upright ? 0.85 : 0.9,
+    metalness: 0,
+    useMaps: false
+  };
+}
+
+/**
+ * The meshes the terrace stone pass dresses, grouped by which material each one
+ * uses.
+ *
+ * Data rather than logic so the unit tests and the browser check agree with the
+ * world about what should be dressed instead of re-deriving the list by hand.
+ * Two groups, not five, because the terrace is one structure: `tread` is shared
+ * by the slab and the ramp deck (both walked stone), and `parapet` by the kerbs
+ * and the low wall. They stay separate materials only so their flat fallback
+ * colours differ and the step edge still reads as an edge without maps.
+ *
+ * There is deliberately no per-surface repeat here. All of these are
+ * box-projected at TERRACE_TEXTURE_TILE_METERS, which is what keeps the density
+ * identical across a 12 m slab, a rotated ramp deck and a 0.2 m kerb face -- one
+ * per-material repeat cannot do that, and the ramp's rotated box would shear.
+ */
+export function terraceStoneParts() {
+  return {
+    tread: ['terrace-tread', 'terrace-ramp'],
+    parapet: ['terrace-kerb', 'terrace-parapet']
+  };
+}
+
+/**
+ * Copies a loaded texture family so two surfaces can tile the same maps
+ * differently.
+ *
+ * `applyTextureFamily()` writes `wrapS`/`wrapT`/`repeat`/`anisotropy` onto the
+ * texture itself, not onto the material. Two materials sharing one texture object
+ * therefore cannot have different sampler settings: the last one applied wins, and
+ * the first surface silently renders wrong. The terrace shares the stone maps with
+ * the border walls while projecting at a different tile scale, so each consumer
+ * gets its own copy.
+ *
+ * The clone shares the decoded image bitmap, so this costs no extra download or
+ * GPU upload of pixel data -- only a separate sampler state.
+ *
+ * Every texture in a projected family is left at `repeat = 1`: box-projected UVs
+ * are already in tile units, so a repeat here would tile the tile.
+ */
+export function cloneTextureFamily(textures) {
+  const out = { anyLoaded: Boolean(textures && textures.anyLoaded) };
+  if (!textures) return out;
+  for (const key of ['map', 'normalMap', 'roughnessMap']) {
+    const texture = textures[key];
+    if (!texture) {
+      out[key] = null;
+      continue;
+    }
+    const copy = typeof texture.clone === 'function' ? texture.clone() : texture;
+    copy.needsUpdate = true;
+    out[key] = copy;
+  }
+  return out;
+}
+
+/**
  * Bounds a loaded fountain so the caller can verify it matches the collider.
  * Walks the geometry bounding box the loader already computed, so this needs no
  * renderer and can be checked in a unit test.

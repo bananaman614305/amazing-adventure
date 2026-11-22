@@ -2058,6 +2058,39 @@ try {
       });
     }
     const plaza = api.scene.children.find((o) => o.isMesh && o.geometry.type === 'CircleGeometry');
+    // The terrace stone: named in world.js so this check does not have to guess
+    // which grey box is which. Two treads (slab + ramp deck) and the upright
+    // kerb/parapet band.
+    const named = (name) => api.scene.children.find((o) => o.isMesh && o.name === name) || null;
+    const describe = (mesh) => {
+      if (!mesh || !mesh.material) return null;
+      const m = mesh.material;
+      return {
+        map: Boolean(m.map),
+        normal: Boolean(m.normalMap),
+        rough: Boolean(m.roughnessMap),
+        repeat: m.map ? [m.map.repeat.x, m.map.repeat.y] : null,
+        color: m.color.getHexString(),
+        metalness: m.metalness
+      };
+    };
+    // A projected surface is recognisable from its UV attribute alone: real metres
+    // divided by a ~1.6 m tile means spans well past 1.0, while untouched
+    // BoxGeometry UVs sit pinned inside 0..1 on every face.
+    const uvSpan = (mesh) => {
+      const uv = mesh && mesh.geometry && mesh.geometry.getAttribute && mesh.geometry.getAttribute('uv');
+      if (!uv) return null;
+      let min = Infinity;
+      let max = -Infinity;
+      for (let i = 0; i < uv.count * 2; i += 1) {
+        const v = uv.array[i];
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      return [Number(min.toFixed(3)), Number(max.toFixed(3))];
+    };
+    const kerbs = api.scene.children.filter((o) => o.isMesh && o.name === 'terrace-kerb');
+    const parapets = api.scene.children.filter((o) => o.isMesh && o.name === 'terrace-parapet');
     return {
       state: api.assetState(),
       modelPresent: Boolean(model),
@@ -2073,7 +2106,28 @@ try {
         rough: Boolean(plaza.material.roughnessMap),
         repeat: plaza.material.map ? [plaza.material.map.repeat.x, plaza.material.map.repeat.y] : null,
         color: plaza.material.color.getHexString()
-      } : null
+      } : null,
+      terrace: {
+        tread: describe(named('terrace-tread')),
+        ramp: describe(named('terrace-ramp')),
+        kerbs: kerbs.map(describe),
+        parapets: parapets.map(describe),
+        // The tread and the ramp deck are one walked material by design, so they
+        // legitimately share a material object. What must differ is the *UV range*:
+        // it is box-projected in metres, so each surface spans its own real size.
+        treadRampSharesMaterial: Boolean(
+          named('terrace-tread')?.material &&
+          named('terrace-tread')?.material === named('terrace-ramp')?.material),
+        // The upright band is a separate material and must not share the tread's
+        // texture object, or sampler state would be shared too.
+        treadParapetSharesMap: Boolean(
+          named('terrace-tread')?.material?.map &&
+          named('terrace-tread')?.material?.map === parapets[0]?.material?.map),
+        treadUvSpan: uvSpan(named('terrace-tread')),
+        rampUvSpan: uvSpan(named('terrace-ramp')),
+        kerbUvSpan: uvSpan(kerbs[0]),
+        parapetUvSpan: uvSpan(parapets[0])
+      }
     };
   }));
 
@@ -2098,6 +2152,53 @@ try {
     assets.plazaMaps && assets.plazaMaps.repeat[0] === 6 &&
     assets.plazaMaps.repeat[1] === 6 && assets.plazaMaps.color === 'ffffff',
     JSON.stringify({ repeat: assets.plazaMaps && assets.plazaMaps.repeat, color: assets.plazaMaps && assets.plazaMaps.color }));
+
+  // Round 62: the north terrace is the largest untextured grey mass left in the
+  // plaza view. Tread, ramp deck and parapet share the wall stone family but must
+  // not share a texture object, because repeat/wrap live on the texture.
+  checks.check('the terrace tread and ramp deck are dressed from the stone family',
+    assets.state.terrace === 'textured' &&
+    assets.terrace.tread && assets.terrace.tread.map &&
+    assets.terrace.tread.normal && assets.terrace.tread.rough &&
+    assets.terrace.ramp && assets.terrace.ramp.map &&
+    assets.terrace.ramp.normal && assets.terrace.ramp.rough,
+    JSON.stringify({ terrace: assets.state.terrace, tread: assets.terrace.tread, ramp: assets.terrace.ramp }));
+
+  checks.check('the terrace stone is box-projected in metres, not stretched 0..1 per face',
+    assets.terrace.tread &&
+    assets.terrace.treadUvSpan && assets.terrace.treadUvSpan[1] > 2 &&
+    assets.terrace.rampUvSpan && assets.terrace.rampUvSpan[1] > 1.2 &&
+    assets.terrace.kerbUvSpan && assets.terrace.kerbUvSpan[1] > 1.2,
+    JSON.stringify({ tread: assets.terrace.treadUvSpan, ramp: assets.terrace.rampUvSpan,
+                     kerb: assets.terrace.kerbUvSpan, parapet: assets.terrace.parapetUvSpan }));
+
+  checks.check('projected UVs carry the tiling, so the texture repeat stays 1:1',
+    [assets.terrace.tread, assets.terrace.ramp, ...assets.terrace.parapets]
+      .every((m) => m && m.repeat && m.repeat[0] === 1 && m.repeat[1] === 1),
+    JSON.stringify({ tread: assets.terrace.tread && assets.terrace.tread.repeat,
+                     ramp: assets.terrace.ramp && assets.terrace.ramp.repeat,
+                     parapet: assets.terrace.parapets[0] && assets.terrace.parapets[0].repeat }));
+
+  checks.check('the upright band is a separate material with its own stone maps',
+    assets.terrace.kerbs.length === 2 && assets.terrace.parapets.length === 4 &&
+    assets.terrace.kerbs.every((m) => m && m.map && m.normal && m.rough) &&
+    assets.terrace.parapets.every((m) => m && m.map && m.normal && m.rough) &&
+    assets.terrace.treadParapetSharesMap === false,
+    JSON.stringify({ kerbs: assets.terrace.kerbs.length, parapets: assets.terrace.parapets.length,
+                     firstKerb: assets.terrace.kerbs[0], firstParapet: assets.terrace.parapets[0],
+                     sharesMap: assets.terrace.treadParapetSharesMap }));
+
+  checks.check('the terrace stone is white and not double-tinted',
+    [assets.terrace.tread, assets.terrace.ramp, ...assets.terrace.kerbs, ...assets.terrace.parapets]
+      .every((m) => m && m.color === 'ffffff' && m.metalness === 0),
+    JSON.stringify({ tread: assets.terrace.tread && assets.terrace.tread.color,
+                     parapet: assets.terrace.parapets[0] && assets.terrace.parapets[0].color }));
+
+  checks.check('the tread and ramp deck share one walked material, so the ramp cannot shear',
+    assets.terrace.treadRampSharesMaterial === true &&
+    JSON.stringify(assets.terrace.treadUvSpan) !== JSON.stringify(assets.terrace.rampUvSpan),
+    JSON.stringify({ sharesMaterial: assets.terrace.treadRampSharesMaterial,
+                     treadUv: assets.terrace.treadUvSpan, rampUv: assets.terrace.rampUvSpan }));
 
   // The upgrade must not change gameplay: the fountain still blocks the player.
   // Yaw 0 faces -Z (north), so walking forward from z=6 heads straight at it.

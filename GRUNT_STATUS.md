@@ -12,47 +12,53 @@
 
 ## Current task
 
-**Round 61 — a plaza floor with its own flagstone paving.** The standing owner
-priority is graphics realism. The plaza was still wearing the border-wall stone
-maps, so the biggest surface under the player's feet looked like the walls. This
-round gives it a dedicated flagstone PBR family and separates the two stone
-surfaces for good.
+**Round 62 — dress the north terrace in quarried stone (box projection).** The
+standing owner priority is graphics realism. Round 61 gave the plaza floor its
+own flagstone paving; that left the raised 1.2 m north terrace — slab, ramp
+deck, two ramp kerbs and four parapet walls — as the last large flat, untextured
+mass in the plaza, seen every time the player walks the ramp. This round dresses
+all of it in the border wall's quarried-stone family.
 
-- **New family.** `PLAZA_FLOOR_TEXTURE_FILES` in `src/assets.js` points at three
-  new `assets/textures/plaza_floor_{albedo,normal,rough}.webp` maps, produced
-  procedurally by `art/kaggle/plaza_floor_textures.py` on the private Kaggle
-  T4 (anisotropic periodic-Voronoi flagstone: three slabs across, five courses
-  down, ~1.7:1, so it reads as dressed rectangular paving rather than the
-  lane's round cobbles). Seam ratios are all well under 3.
-- **Its own fallback.** `plazaFloorMaterialParams()` returns a lighter, dressed
-  paving colour when the maps are missing, deliberately distinct from
-  `stoneMaterialParams()`' warmer wall-block colour, so the plaza still reads
-  as a different place if textures never load.
-- **World wiring.** `world.js` builds `plazaMaterial` from the new params and
-  `upgradePlazaFloor()` replaces the old `upgradeStone()`; `assetState` gained
-  `plazaFloor`/`plazaFloorDetail` and dropped `stone`/`stoneDetail`; the border
-  wall still upgrades from `STONE_TEXTURE_FILES` in `upgradeWalls()`. The two
-  families share no file. `main.js`'s `loadAssets()` fallback object tracks the
-  renamed key.
-- **Manifest in sync.** `src/manifest.js` `REQUIRED_FILES` and the committed
-  `release-manifest.json` both list the three new maps; the committed `dist/`
-  preview was rebuilt (77 files, digest `9e190fc7…`).
-- **Evidence.** `scripts/evidence-round61.mjs` drives the real page and writes
-  `artifacts/round61-evidence.json` plus three 800x600 screenshots (wide, look
-  down, grazing). All 15 evidence checks pass in-page: the floor is `textured`,
-  all three maps load at 512x512, the mapped material is white/fully rough (not
-  tinted twice), it repeats 6x6, wraps rather than clamps, and **no other mesh
-  shares the plaza floor's maps** (sharers 0, including the border walls, which
-  report their own `[17,2]` repeat and `ffffff`).
+- **One tile size, one projection, no per-surface repeats.** The older texture
+  path gave each surface its own `repeat`, which cannot work across a 12 m slab,
+  a 4.8 m ramp deck rotated ~14 degrees and a 0.18 m kerb face: either the slab
+  smears or the kerb tiles into noise. `upgradeTerrace()` instead rewrites the
+  `uv` attribute of every terrace mesh with `boxProjectUvs()` at a single
+  `TERRACE_TEXTURE_TILE_METERS = 1.6` m tile, and every mapped texture therefore
+  stays `repeat = (1,1)` — the projected UVs already carry the tiling.
+- **It replaces the UVs, it does not fill them in.** `BoxGeometry` ships with
+  0..1 per-face UVs, so a `!getAttribute('uv')` guard would have skipped the
+  projection and smeared one whole map across all six faces of a 12 m slab. The
+  projection is unconditional.
+- **Two materials, two texture families.** `terraceStoneParts()` splits the
+  meshes into `tread: ['terrace-tread','terrace-ramp']` and
+  `parapet: ['terrace-kerb','terrace-parapet']`. The tread shares one material so
+  the ramp deck cannot shear away from the slab; the upright band gets its own
+  material and its own `cloneTextureFamily()` clones, because sampler state
+  (wrap/repeat) lives on the texture object, and it must not re-wrap the tread.
+  Both are white (`0xffffff`) so the stone is not tinted twice.
+- **No new files, no new licence.** The terrace is dressed from the existing
+  `STONE_TEXTURE_FILES` family, so `REQUIRED_FILES` and `release-manifest.json`
+  are unchanged and there is no new attribution obligation.
+- **Evidence.** `scripts/evidence-round62.mjs` measures the loaded scene graph:
+  the terrace reports `textured` with all three maps; all eight named meshes
+  (1 tread, 1 ramp, 2 kerbs, 4 parapet) carry finite projected UVs; nothing is
+  still on the default 0..1 per-face UVs; **texel density is uniform to within
+  0.05 of `extent / 1.6 m` on all eight meshes**; every mapped texture is
+  `repeat (1,1)`; the tread and parapet draw different texture objects; the
+  border walls keep their own `[17,2]` repeats and share nothing; the walk checks
+  drive the real key path up the ramp and back down. Set `RECORD_ARTIFACTS=1` to
+  also write three screenshots plus `artifacts/round62-evidence.json`.
 
-Checks on the working tree: unit **580/580 PASS** — including the 4 new plaza
-floor tests (fallback colour distinct from wall stone, family files separate
-from the cobble and wall sets, all three maps present on disk) — desktop
-**229/229 PASS** with zero console errors (`/worker/state/logs/r61-browser.log`,
-`EXIT=0`), and mobile **184/184 PASS** across four emulated phone profiles
-(`/tmp/mobile-r61b.log`, `EXIT=0`). The model is text-only: no screenshot was
-looked at; every claim here is an in-page or state-function assertion, plus a
-programmatic PNG-header check (all three captures are real 800x600 RGB frames).
+Checks on the working tree: unit **585/585 PASS**; desktop browser
+**236/236 PASS, 0 FAIL** (`/worker/state/logs/r62-browser.log`); mobile
+**184/184 PASS, 0 FAIL** across four phone profiles
+(`/worker/state/logs/r62-mobile6.log`). Note on the mobile suite: an earlier
+attempt against this tree timed out at hi-DPR swiftshader boot, so the same
+suite was also run against the pre-round-62 baseline commit `9fdb16f` in
+`/worker/state/wt62base`; the baseline timed out the same way, which rules out a
+Round 61/62 texture regression and pins it on host load. The rerun above passed
+all 184.
 
 ## Next steps
 
