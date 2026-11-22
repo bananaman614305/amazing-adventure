@@ -11,7 +11,8 @@ import {
   boxProjectUvs, PLAZA_FLOOR_TEXTURE_FILES,
   terraceMaterialParams, terraceStoneParts, TERRACE_TEXTURE_TILE_METERS, cloneTextureFamily,
   LAMP_TEXTURE_FILES, LAMP_ASSET, LAMP_MODEL_SIZE, loadMaterialTextures, needsOwnMaterial,
-  ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor
+  ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor,
+  fountainStoneParts, fountainStoneMaterialParams, FOUNTAIN_STONE_COLORS
 } from '../src/assets.js';
 
 // Minimal fake Three.js: only what these functions touch.
@@ -566,4 +567,139 @@ test('every family declares a positive metre tile size for the box projection', 
     assert.ok(family.files.map.startsWith('assets/textures/'),
       `${family.id} maps must live in the served texture directory`);
   }
+});
+
+// --- The gate and the fountain's quarried stone -----------------------------
+// The border walls, the terrace and now the gate piers/lintel and the modelled
+// fountain are all the same quarried stone. They share one texture request and
+// clone their sampler state, so these tests pin the rules that keeps honest:
+// one family, projected in metres, and a material per surface that is never
+// tinted twice.
+
+test('the gate and fountain stone reuse the wall stone family, not a fourth set', () => {
+  // STONE_TEXTURE_FILES is the single source of quarried stone. If someone adds a
+  // gate_*.webp or fountain_*.webp set, this fails and the decision gets revisited
+  // rather than quietly shipping a third near-duplicate family.
+  const family = Object.values(STONE_TEXTURE_FILES);
+  assert.equal(family.length, 3, 'one stone family: albedo, normal, roughness');
+  for (const url of family) {
+    assert.ok(!/gate|fountain/i.test(url), `${url} must not be a separate stone set`);
+    assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${url} exists`);
+  }
+});
+
+test('the fountain stone parts cover every stone mesh and no water surface', () => {
+  const parts = fountainStoneParts();
+  assert.deepEqual(Object.keys(parts).sort(), ['dark', 'stone']);
+  assert.deepEqual(parts.stone, [
+    'FountainPlinthUpper', 'FountainBasin', 'FountainColumn', 'FountainUpperBowl'
+  ]);
+  assert.deepEqual(parts.dark, [
+    'FountainPlinthLower', 'FountainFinial',
+    'FountainCornerBlock0', 'FountainCornerBlock1', 'FountainCornerBlock2', 'FountainCornerBlock3'
+  ]);
+  const all = [...parts.stone, ...parts.dark];
+  // The model has 12 meshes; two of them are Water and must never be dressed.
+  assert.equal(all.length, 10, 'ten stone meshes, two water meshes left alone');
+  assert.equal(new Set(all).size, all.length, 'no mesh is dressed twice');
+  for (const name of all) {
+    assert.ok(!/Water/i.test(name), `${name} is not a water surface`);
+  }
+});
+
+test('the fountain keeps its two stones distinguishable with and without maps', () => {
+  // StoneDark exists to be visibly darker than Stone. A flat fallback that matched
+  // them would erase the plinth, finial and corner blocks the moment assets fail.
+  const stone = fountainStoneMaterialParams(false, 'Stone');
+  const dark = fountainStoneMaterialParams(false, 'StoneDark');
+  assert.notEqual(stone.color, dark.color, 'the two stones must not collapse to one');
+  assert.equal(stone.color, FOUNTAIN_STONE_COLORS.Stone);
+  assert.equal(dark.color, FOUNTAIN_STONE_COLORS.StoneDark);
+  assert.ok(dark.roughness !== undefined && stone.roughness !== undefined);
+  assert.equal(stone.useMaps, false);
+  assert.equal(dark.useMaps, false);
+
+  // With maps the base colour must stay white, or the albedo is tinted twice.
+  for (const name of ['Stone', 'StoneDark']) {
+    const dressed = fountainStoneMaterialParams(true, name);
+    assert.equal(dressed.color, 0xffffff, `${name} maps must not be tinted twice`);
+    assert.equal(dressed.roughness, 1);
+    assert.equal(dressed.metalness, 0);
+    assert.equal(dressed.useMaps, true);
+  }
+});
+
+test('the gate piers and fountain stone project at the terrace tile size', () => {
+  // A fountain bowl and a 0.2 m corner block sit metres apart in the plaza. If they
+  // projected at different tile sizes their ashlar courses would clash, so they all
+  // use the one constructed-stone scale.
+  assert.ok(TERRACE_TEXTURE_TILE_METERS >= 1 && TERRACE_TEXTURE_TILE_METERS <= 2.5);
+
+  // The gate pier is a 0.7 x 4.1 x 1.4 box and the lintel a 4.4 x 0.55 x 1.4 box;
+  // both must show more than one joint across their tallest face, or the map reads
+  // as a smear rather than courses.
+  for (const [label, width, height] of [
+    ['gate pier', 0.7, 4.1],
+    ['gate lintel', 4.4, 0.55],
+    ['fountain basin', 2.99, 0.5],
+    ['fountain plinth', 3.9, 0.18]
+  ]) {
+    assert.ok(Math.max(width, height) / TERRACE_TEXTURE_TILE_METERS >= 1.35,
+      `${label} shows at least one joint`);
+  }
+
+  // Thin members are the exception and that is expected, not a defect: a 0.55 m
+  // column or a 0.24 m finial is smaller than one 1.6 m tile, so it shows a
+  // partial course. That still beats the smooth flat colour it had, because the
+  // partial course carries the same surface fabric as the basin beside it.
+  for (const [label, width, height] of [
+    ['fountain column', 0.55, 1.15],
+    ['fountain finial', 0.24, 0.32]
+  ]) {
+    assert.ok(Math.max(width, height) / TERRACE_TEXTURE_TILE_METERS < 1,
+      `${label} is thinner than one tile by design`);
+  }
+});
+
+test('box-projecting a UV-less fountain mesh produces one uv per vertex', () => {
+  // The fountain GLB ships POSITION+NORMAL only, so the dressing pass has to
+  // generate UVs from scratch. This is the shape of that call: a 2.99 m basin disc
+  // as two triangles, projected at the terrace tile size.
+  const r = 1.495;
+  const positions = [
+    -r, 0, -r, r, 0, -r, r, 0, r,
+    -r, 0, -r, r, 0, r, -r, 0, r
+  ];
+  const uvs = boxProjectUvs({ positions, tileMeters: TERRACE_TEXTURE_TILE_METERS });
+  assert.ok(uvs instanceof Float32Array);
+  assert.equal(uvs.length, (positions.length / 3) * 2);
+  for (const [i, value] of uvs.entries()) {
+    assert.ok(Number.isFinite(value), `uv ${i} is finite`);
+  }
+  // A Y-dominant face projects X and Z: two vertices 2.99 m apart along X must be
+  // 2.99/1.6 tiles apart in U, not a whole tile. Vertex 0 sits at x=-r, vertex 1 at
+  // x=+r, so the difference between their U values is the full basin width in tiles.
+  const tile = TERRACE_TEXTURE_TILE_METERS;
+  assert.ok(Math.abs((uvs[2] - uvs[0]) - (2 * r) / tile) < 1e-5,
+    'a flat basin top tiles at the projected metre scale');
+});
+
+test('the gate and fountain stone share the wall stone request', () => {
+  // One fetch for walls, terrace, gate and fountain: these are the same three
+  // files, and a second request for them would be a wasted download on a mobile
+  // connection. cloneTextureFamily shares the decoded bitmap and only separates the
+  // sampler state, so every consumer can still tile independently.
+  const textures = {
+    map: { clone() { return { kind: 'map', repeat: { set() {} } }; } },
+    normalMap: { clone() { return { kind: 'normal', repeat: { set() {} } }; } },
+    roughnessMap: null,
+    anyLoaded: true
+  };
+  const gate = cloneTextureFamily(textures);
+  const fountain = cloneTextureFamily(textures);
+  assert.equal(gate.anyLoaded, true);
+  assert.notEqual(gate.map, textures.map, 'the gate gets its own sampler state');
+  assert.notEqual(gate.map, fountain.map, 'the fountain and gate do not share one');
+  assert.equal(gate.roughnessMap, null, 'a missing map stays missing');
+  assert.equal(fountain.roughnessMap, null);
 });

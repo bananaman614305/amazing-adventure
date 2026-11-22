@@ -20,6 +20,7 @@ import {
   TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES, LAMP_TEXTURE_FILES,
   needsOwnMaterial,
   cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts,
+  fountainStoneParts, fountainStoneMaterialParams,
   ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor
 } from './assets.js';
 import { loadGlb } from './glb.js';
@@ -195,18 +196,23 @@ export function buildWorld(renderer) {
   // Two stone piers frame the opening; the door itself is a slab that lifts
   // when the gate is unlocked.
   const pierMaterial = new THREE.MeshStandardMaterial({ color: 0x7b7163, roughness: 0.82 });
+  const gateStoneMeshes = [];
   for (const x of [GATE.minX - 0.35, GATE.maxX + 0.35]) {
-    addBox(scene, colliders, {
+    const pier = addBox(scene, colliders, {
       size: [0.7, wallHeight + 0.9, 1.4],
       position: [x, (wallHeight + 0.9) / 2, -HALF],
       material: pierMaterial,
       castShadow: true
     });
+    pier.name = 'gate-pier';
+    gateStoneMeshes.push(pier);
   }
   const lintel = new THREE.Mesh(new THREE.BoxGeometry(GATE.width + 1.4, 0.55, 1.4), pierMaterial);
+  lintel.name = 'gate-lintel';
   lintel.position.set(GATE.x, wallHeight + 0.62, -HALF);
   lintel.castShadow = true;
   scene.add(lintel);
+  gateStoneMeshes.push(lintel);
 
   const gateDoor = new THREE.Mesh(
     new THREE.BoxGeometry(GATE.width, wallHeight - 0.3, 0.28),
@@ -620,13 +626,21 @@ export function buildWorld(renderer) {
   // Market stalls east and west.
   const eastCounter = addBox(scene, colliders, { size: [4, 1, 0.4], position: [11, 0.5, -3], material: wood, castShadow: true });
   eastCounter.userData = { marketStallStandin: true, marketStallSize: 'large' };
-  addBox(scene, colliders, { size: [4.4, 0.3, 2.6], position: [11, 2.2, -3], material: roof, castShadow: true });
-  addBox(scene, colliders, { size: [0.2, 2.2, 0.2], position: [9.3, 1.1, -4.1], material: wood });
-  addBox(scene, colliders, { size: [0.2, 2.2, 0.2], position: [12.7, 1.1, -4.1], material: wood });
+  // The whole stand-in gets the marker, not just the counter: the modelled
+  // awning and posts replace the flat roof slab and the stick posts, and
+  // leaving any of them visible doubles the stall. Only the counter carries a
+  // size, because only it defines where and how big the model instance sits.
+  const eastRoofSlab = addBox(scene, colliders, { size: [4.4, 0.3, 2.6], position: [11, 2.2, -3], material: roof, castShadow: true });
+  eastRoofSlab.userData = { marketStallStandin: true };
+  const eastPostNear = addBox(scene, colliders, { size: [0.2, 2.2, 0.2], position: [9.3, 1.1, -4.1], material: wood });
+  eastPostNear.userData = { marketStallStandin: true };
+  const eastPostFar = addBox(scene, colliders, { size: [0.2, 2.2, 0.2], position: [12.7, 1.1, -4.1], material: wood });
+  eastPostFar.userData = { marketStallStandin: true };
 
   const westCounter = addBox(scene, colliders, { size: [3, 0.9, 0.4], position: [-11, 0.45, 6], material: wood, castShadow: true });
   westCounter.userData = { marketStallStandin: true, marketStallSize: 'small' };
-  addBox(scene, colliders, { size: [3.4, 0.3, 2.2], position: [-11, 1.7, 6], material: roof, castShadow: true });
+  const westRoofSlab = addBox(scene, colliders, { size: [3.4, 0.3, 2.2], position: [-11, 1.7, 6], material: roof, castShadow: true });
+  westRoofSlab.userData = { marketStallStandin: true };
 
   // Crates south-east break up sightlines and hide the brass key nearby.
   const crate0 = addBox(scene, colliders, { size: [1.2, 1.2, 1.2], position: [5, 0.6, 8], material: wood, castShadow: true });
@@ -874,6 +888,8 @@ export function buildWorld(renderer) {
     cobble: 'flat',
     grass: 'flat',
     walls: 'flat',
+    gateStone: 'flat',
+    fountainStone: 'flat',
     terrace: 'flat',
     sky: 'gradient',
     wood: 'flat',
@@ -888,7 +904,9 @@ export function buildWorld(renderer) {
     trees: 'stand-ins',
     bark: 'flat',
     barkDetail: null,
-    terraceDetail: null
+    terraceDetail: null,
+    gateStoneDetail: null,
+    fountainStoneDetail: null
   };
 
   function upgradeFountain() {
@@ -995,6 +1013,29 @@ export function buildWorld(renderer) {
       };
       return assetState;
     });
+  }
+
+  /**
+   * Builds a dressed stone material for one of the fountain's two stones.
+   *
+   * The maps are cloned per stone because `applyTextureFamily` (and every other
+   * dresser here) writes sampler state onto the texture object: sharing one object
+   * between Stone and StoneDark would be harmless while both project at 1.6 m, but
+   * it is the kind of sharing that breaks silently the next time one of them wants
+   * a different repeat. The colour stays white so the map is not tinted twice;
+   * the dark stone stays darker because it keeps its authored roughness.
+   */
+  function fountainStoneMaterial(source, textures) {
+    const params = fountainStoneMaterialParams(true, source.name);
+    const material = new THREE.MeshStandardMaterial({
+      color: params.color,
+      roughness: params.roughness,
+      metalness: params.metalness,
+      side: source.side
+    });
+    material.name = source.name;
+    applyTextureFamily(material, { ...cloneTextureFamily(textures), anyLoaded: true }, 1, 1, 1);
+    return material;
   }
 
   /**
@@ -1321,12 +1362,17 @@ export function buildWorld(renderer) {
         assetState.marketStallDetail = result.reason;
         return assetState;
       }
-      // Hide the procedural counters; keep their colliders.
+      // Hide the whole procedural stand-in -- counter, roof slab and posts --
+      // but keep its colliders: the modelled awning replaces the flat slab
+      // instead of duplicating it, and the modelled posts replace the sticks.
       const standins = scene.children.filter((c) => c.userData && c.userData.marketStallStandin);
       for (const c of standins) c.visible = false;
-      // Place the model at each standin's position, scaled to fit that counter.
+      // Only counters define an instance. The roof and post stand-ins carry the
+      // same hide marker but no size; scaling the model to a roof slab's height
+      // would stretch it to 4.4 m tall.
       const instances = [];
       for (const c of standins) {
+        if (!c.userData.marketStallSize) continue;
         instances.push({
           x: c.position.x,
           z: c.position.z,
@@ -1918,6 +1964,129 @@ export function buildWorld(renderer) {
   }
 
   /**
+   * Dresses the north gate's piers and lintel in the quarried stone family.
+   *
+   * The gate piers and lintel are large flat stone masses sitting dead ahead of
+   * the plaza spawn, but they were still a bare 0x7b7163 material while the walls
+   * beside them were dressed. They are the same quarried stone, so this shares
+   * the walls' one stone request and clones its own texture set (propFamilyFor
+   * deliberately resolves null for stone, so STONE_TEXTURE_FILES is used here
+   * directly).
+   */
+  function upgradeGateStone() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.gateStone = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadStoneFamily().then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.gateStone = 'flat';
+        return assetState;
+      }
+      // Unconditional: BoxGeometry ships 0..1 per-face UVs, which would smear one
+      // whole map across every face. Replacing them with metre-space projection
+      // is what keeps the ashlar courses at eye-level wall scale on the piers.
+      for (const mesh of gateStoneMeshes) {
+        const position = mesh.geometry.getAttribute('position');
+        const index = mesh.geometry.getIndex();
+        if (!position) continue;
+        mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(boxProjectUvs({
+          positions: position.array,
+          indices: index ? index.array : null,
+          tileMeters: TERRACE_TEXTURE_TILE_METERS
+        }), 2));
+      }
+      // Box-projected UVs already carry the tiling, so repeat stays 1:1; the
+      // clone keeps this sampler state off the walls' and terrace's copies.
+      applyTextureFamily(pierMaterial,
+        { ...cloneTextureFamily(textures), anyLoaded: true }, 1, 1, 1);
+      assetState.gateStone = 'textured';
+      assetState.gateStoneDetail = {
+        meshes: gateStoneMeshes.length,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: TERRACE_TEXTURE_TILE_METERS
+      };
+      return assetState;
+    });
+  }
+
+  /**
+   * Dresses the modelled fountain's carved stone in the quarried stone family.
+   *
+   * The GLB gives its stone two flat-coloured materials, Stone and StoneDark, and
+   * no UVs at all, so the bowl, column, basin and plinth read as smooth sculpted
+   * plastic while the walls and terrace beside them are coursed ashlar. Both stone
+   * materials share the walls' one stone request; each gets its own cloned texture
+   * set because their authored base colours differ -- StoneDark has to stay the
+   * darker stone (see `fountainStoneParts`), so its material keeps the authored
+   * roughness while the shared maps carry the surface fabric.
+   *
+   * Water is deliberately left alone: `propFamilyFor` resolves null for it, and a
+   * rippled stone albedo over a reflective surface would read as a wet flagstone.
+   */
+  function upgradeFountainStone() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.fountainStone = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadStoneFamily().then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.fountainStone = 'flat';
+        return assetState;
+      }
+      const model = fountainGroup.getObjectByName('fountain-model');
+      if (!model) {
+        // The procedural stand-in is still in place; there is nothing projected to
+        // dress yet, and upgradeFountain may still swap the model in behind us.
+        assetState.fountainStone = 'stand-in';
+        return assetState;
+      }
+      const parts = fountainStoneParts();
+      const byPart = { stone: 0, dark: 0 };
+      model.traverse((mesh) => {
+        if (!mesh.isMesh) return;
+        const material = mesh.material;
+        const name = material && material.name ? material.name : '';
+        if (name !== 'Stone' && name !== 'StoneDark') return;
+        // The GLB ships POSITION+NORMAL only, so every stone mesh needs projected
+        // UVs before a map can be attached at all -- there is no authored UV set
+        // to preserve.
+        const position = mesh.geometry.getAttribute('position');
+        if (!position) return;
+        const index = mesh.geometry.getIndex();
+        mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(boxProjectUvs({
+          positions: position.array,
+          indices: index ? index.array : null,
+          tileMeters: TERRACE_TEXTURE_TILE_METERS
+        }), 2));
+        // The same maps, cloned once per material, because the two stone colours
+        // differ: a shared sampler would force one tint on both.
+        mesh.material = fountainStoneMaterial(material, textures);
+        if (name === 'Stone') byPart.stone += 1;
+        else byPart.dark += 1;
+      });
+      assetState.fountainStone = 'textured';
+      assetState.fountainStoneDetail = {
+        meshes: byPart.stone + byPart.dark,
+        stone: byPart.stone,
+        dark: byPart.dark,
+        parts: parts.stone.length + parts.dark.length,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: TERRACE_TEXTURE_TILE_METERS
+      };
+      return assetState;
+    });
+  }
+
+  /**
    * Dresses the north terrace's built stonework in the stone family.
    *
    * Round 61 textured the plaza floor; this is the largest flat-grey thing left in
@@ -2128,7 +2297,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain(), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp()])
+      return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp()])
         .then(() => upgradePropFamilies()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */

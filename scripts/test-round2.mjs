@@ -2200,6 +2200,185 @@ try {
     JSON.stringify({ sharesMaterial: assets.terrace.treadRampSharesMaterial,
                      treadUv: assets.terrace.treadUvSpan, rampUv: assets.terrace.rampUvSpan }));
 
+  // Round 64: the fountain's carved stone was the last smooth flat-coloured mass
+  // in the plaza centre while the walls, terrace and gate beside it are coursed
+  // ashlar. The GLB ships no UVs at all, so the dressing pass has to generate
+  // them; a surface with no uv attribute is proof the pass did not run.
+  const fountainStone = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const found = {};
+    api.scene.traverse((o) => {
+      if (o.isMesh && o.parent && o.parent.name === 'fountain-model') found[o.name] = o;
+    });
+    const describe = (mesh) => {
+      if (!mesh || !mesh.material) return null;
+      const m = mesh.material;
+      const uv = mesh.geometry.getAttribute && mesh.geometry.getAttribute('uv');
+      let span = null;
+      if (uv) {
+        let min = Infinity;
+        let max = -Infinity;
+        for (let i = 0; i < uv.count * 2; i += 1) {
+          const v = uv.array[i];
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+        span = [Number(min.toFixed(3)), Number(max.toFixed(3))];
+      }
+      return {
+        uv: Boolean(uv),
+        uvSpan: span,
+        map: Boolean(m.map),
+        normal: Boolean(m.normalMap),
+        rough: Boolean(m.roughnessMap),
+        repeat: m.map ? [m.map.repeat.x, m.map.repeat.y] : null,
+        color: m.color.getHexString(),
+        metalness: m.metalness,
+        roughness: Number(m.roughness.toFixed(3))
+      };
+    };
+    const stone = ['FountainPlinthUpper', 'FountainBasin', 'FountainColumn', 'FountainUpperBowl'];
+    const dark = ['FountainPlinthLower', 'FountainFinial',
+      'FountainCornerBlock0', 'FountainCornerBlock1', 'FountainCornerBlock2', 'FountainCornerBlock3'];
+    const water = ['FountainWaterLower', 'FountainWaterUpper'];
+    return {
+      state: api.assetState(),
+      stone: stone.map((n) => ({ name: n, ...describe(found[n]) })),
+      dark: dark.map((n) => ({ name: n, ...describe(found[n]) })),
+      water: water.map((n) => ({ name: n, ...describe(found[n]) })),
+      // One map object per material, not one shared by all ten: Stone and
+      // StoneDark project at the same scale but must stay separable.
+      sharesMap: Boolean(
+        found.FountainBasin?.material?.map &&
+        (found.FountainBasin.material.map === found.FountainPlinthUpper?.material?.map ||
+         found.FountainBasin.material.map === found.FountainPlinthLower?.material?.map)),
+      sharesMaterial: Boolean(
+        found.FountainBasin?.material &&
+        found.FountainBasin.material === found.FountainUpperBowl?.material),
+      basinMaterialEqPlinth: Boolean(
+        found.FountainBasin?.material &&
+        found.FountainBasin.material === found.FountainPlinthLower?.material)
+    };
+  });
+
+  checks.check('the fountain stone is dressed from the quarried stone family',
+    fountainStone.state.fountainStone === 'textured' &&
+    [...fountainStone.stone, ...fountainStone.dark]
+      .every((m) => m && m.map && m.normal && m.rough),
+    JSON.stringify({ state: fountainStone.state.fountainStone,
+                     stone: fountainStone.stone, dark: fountainStone.dark }));
+
+  checks.check('the UV-less fountain stone gets projected UVs in metres',
+    // The authored meshes had no uv attribute at all, so any UV range at all
+    // proves generation; a range past 1.0 proves it is projected in metres and
+    // not squeezed into 0..1 per face.
+    [...fountainStone.stone, ...fountainStone.dark].every((m) => m && m.uv) &&
+    [...fountainStone.stone, ...fountainStone.dark].some((m) => m && m.uvSpan &&
+      (m.uvSpan[1] - m.uvSpan[0]) > 1),
+    JSON.stringify([...fountainStone.stone, ...fountainStone.dark]
+      .map((m) => ({ name: m.name, uv: m.uv, span: m.uvSpan }))));
+
+  checks.check('the fountain stone is white and not double-tinted',
+    [...fountainStone.stone, ...fountainStone.dark]
+      .every((m) => m && m.color === 'ffffff' && m.metalness === 0),
+    JSON.stringify([...fountainStone.stone, ...fountainStone.dark]
+      .map((m) => ({ name: m.name, color: m.color }))));
+
+  checks.check('the two fountain stones keep separate materials and maps',
+    // Stone and StoneDark differ in the model; merging them would erase the
+    // plinth/finial/corner blocks that give the fountain its base.
+    fountainStone.sharesMaterial === false &&
+    fountainStone.basinMaterialEqPlinth === false &&
+    fountainStone.sharesMap === false,
+    JSON.stringify({ sharesMaterial: fountainStone.sharesMaterial,
+                     basinEqPlinth: fountainStone.basinMaterialEqPlinth,
+                     sharesMap: fountainStone.sharesMap }));
+
+  checks.check('the fountain water is left undressed and reflective',
+    // A stone albedo over the water surface would read as a wet flagstone, so the
+    // dressing pass must skip it entirely -- no uv rewrite, no map.
+    fountainStone.water.every((m) => m && m.map === false && m.uv === false &&
+      m.roughness < 0.5 && m.metalness > 0),
+    JSON.stringify(fountainStone.water));
+
+  checks.check('projected fountain UVs carry the tiling, so repeat stays 1:1',
+    [...fountainStone.stone, ...fountainStone.dark]
+      .every((m) => m && m.repeat && m.repeat[0] === 1 && m.repeat[1] === 1),
+    JSON.stringify([...fountainStone.stone, ...fountainStone.dark]
+      .map((m) => ({ name: m.name, repeat: m.repeat }))));
+
+  // Round 64: the north gate piers and lintel. They are the tallest untextured
+  // stone in the plaza's main sight line, so they get the same family and the
+  // same metre projection as the walls they stand in.
+  const gateStone = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const named = (name) => api.scene.children.find((o) => o.isMesh && o.name === name) || null;
+    const describe = (mesh) => {
+      if (!mesh || !mesh.material) return null;
+      const m = mesh.material;
+      const uv = mesh.geometry.getAttribute && mesh.geometry.getAttribute('uv');
+      let span = null;
+      if (uv) {
+        let min = Infinity;
+        let max = -Infinity;
+        for (let i = 0; i < uv.count * 2; i += 1) {
+          const v = uv.array[i];
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
+        span = [Number(min.toFixed(3)), Number(max.toFixed(3))];
+      }
+      return {
+        uv: Boolean(uv),
+        uvSpan: span,
+        map: Boolean(m.map),
+        normal: Boolean(m.normalMap),
+        rough: Boolean(m.roughnessMap),
+        repeat: m.map ? [m.map.repeat.x, m.map.repeat.y] : null,
+        color: m.color.getHexString(),
+        metalness: m.metalness
+      };
+    };
+    const piers = api.scene.children.filter((o) => o.isMesh && o.name === 'gate-pier');
+    const lintels = api.scene.children.filter((o) => o.isMesh && o.name === 'gate-lintel');
+    return {
+      state: api.assetState(),
+      piers: piers.map(describe),
+      lintels: lintels.map(describe),
+      // The piers and lintel are one structure, so they may share one material;
+      // what must not happen is sharing a texture object with the walls, whose
+      // repeat is a whole-wall 34 m projection.
+      sharesMapWithWall: Boolean(
+        piers[0]?.material?.map &&
+        piers[0].material.map === lintels[0]?.material?.map &&
+        lintels[0]?.material?.map?.repeat?.x === 34),
+      pierLintelShareMaterial: Boolean(
+        piers[0]?.material && piers[0].material === lintels[0]?.material)
+    };
+  });
+
+  checks.check('the gate piers and lintel are dressed from the stone family',
+    gateStone.state.gateStone === 'textured' &&
+    gateStone.piers.length === 2 && gateStone.lintels.length === 1 &&
+    [...gateStone.piers, ...gateStone.lintels]
+      .every((m) => m && m.map && m.normal && m.rough),
+    JSON.stringify({ state: gateStone.state.gateStone, piers: gateStone.piers,
+                     lintels: gateStone.lintels }));
+
+  checks.check('the gate stone is box-projected in metres and not double-tinted',
+    // A 4.1 m pier must span more than one 1.6 m tile in UV space, and the base
+    // colour must stay white or the albedo is tinted twice.
+    [...gateStone.piers, ...gateStone.lintels].every((m) => m && m.uv) &&
+    gateStone.piers.some((m) => m && m.uvSpan && (m.uvSpan[1] - m.uvSpan[0]) > 1) &&
+    gateStone.lintels.some((m) => m && m.uvSpan && (m.uvSpan[1] - m.uvSpan[0]) > 1) &&
+    [...gateStone.piers, ...gateStone.lintels].every((m) => m.color === 'ffffff' && m.metalness === 0),
+    JSON.stringify({ piers: gateStone.piers, lintels: gateStone.lintels }));
+
+  checks.check('the gate stone does not borrow the walls\' whole-wall repeat',
+    gateStone.sharesMapWithWall === false,
+    JSON.stringify({ sharesMapWithWall: gateStone.sharesMapWithWall,
+                     pierRepeat: gateStone.piers[0] && gateStone.piers[0].repeat }));
+
   // The upgrade must not change gameplay: the fountain still blocks the player.
   // Yaw 0 faces -Z (north), so walking forward from z=6 heads straight at it.
   const fountainBlocks = await page.evaluate(async () => {
@@ -2284,6 +2463,8 @@ try {
     const api = window.amazingAdventure;
     let models = 0;
     let hidden = 0;
+    // Six stand-ins are marked, not two: each counter's awning slab and both of its
+    // stick posts must hide too, or the model is doubled by a floating box roof.
     api.scene.traverse((o) => {
       if (o.name === 'market-stall-model') models += 1;
       if (o.userData && o.userData.marketStallStandin && !o.visible) hidden += 1;
@@ -2292,7 +2473,7 @@ try {
   }));
   checks.check('the modelled market stalls replace both procedural counters',
     marketStalls.state.marketStalls === 'model' && marketStalls.models === 2 &&
-    marketStalls.hidden === 2,
+    marketStalls.hidden === 6,
     JSON.stringify({ state: marketStalls.state.marketStalls, models: marketStalls.models,
                     hidden: marketStalls.hidden }));
 
