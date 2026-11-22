@@ -38,6 +38,10 @@ bower_components
 build/Release
 
 # Dependency directories
+# The trailing slash only matches a real directory, so a worktree that symlinks
+# node_modules would otherwise show up as an untracked file and make every
+# preview build claim the tree was dirty. Ignore the bare name too.
+node_modules
 node_modules/
 jspm_packages/
 
