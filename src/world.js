@@ -267,8 +267,14 @@ export function buildWorld(renderer) {
   }
 
   // Props make the lane read as a working back street.
+  // Named so the prop-family dressing pass can match them: upgradePropFamilies()
+  // keys off the material name through propFamilyFor(), so an unnamed material is
+  // invisible to it no matter how the mesh is registered. `LaneWood` must not
+  // contain "Roof", and the awning is named for the roof family on purpose.
   const laneWood = new THREE.MeshStandardMaterial({ color: 0x7a5232, roughness: 0.8 });
+  laneWood.name = 'LaneWood';
   const laneRoof = new THREE.MeshStandardMaterial({ color: 0x6d3a2c, roughness: 0.75 });
+  laneRoof.name = 'LaneRoof';
   // The lamp post's own head follows the lamp round too. It used to glow all day
   // and all night, which made the post look lit while the bunting lanterns it is
   // supposed to light were dark -- the fixture was advertising a job it had not
@@ -280,6 +286,20 @@ export function buildWorld(renderer) {
   // prop loop on purpose: declaring it further down would put the assignment
   // below in the temporal dead zone and throw on the first build.
   let laneLampModel = null;
+  // The lane's procedural props were the last large surfaces in the scene that
+  // no dressing pass could reach. upgradePropFamilies() walks the `propGroups`
+  // registry, and that registry was only ever populated from loaded GLB models --
+  // so a run where the lane GLBs do not arrive left the counters, crates, barrel,
+  // sacks and notice frame as bare colour. A live scene-graph audit
+  // (scripts/audit-materials.mjs) ranked exactly those meshes as the biggest flat
+  // area in the world. Collecting them as they are built means the existing
+  // family pass dresses them from the same maps as the models would have used,
+  // with no second code path and no per-mesh rules to keep in sync.
+  const lanePropsGroup = new THREE.Group();
+  lanePropsGroup.name = 'lane-props-standin';
+  scene.add(lanePropsGroup);
+  const lanePropMeshes = [];
+
   for (const prop of LANE_PROPS) {
     if (prop.kind === 'post') {
       const post = new THREE.Mesh(
@@ -290,6 +310,7 @@ export function buildWorld(renderer) {
       post.castShadow = true;
       post.userData = { lanePostStandin: true };
       scene.add(post);
+      lanePropMeshes.push(post);
       const lamp = new THREE.Mesh(
         new THREE.SphereGeometry(0.24, 14, 10),
         new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xffb43a, emissiveIntensity: 0 })
@@ -308,7 +329,9 @@ export function buildWorld(renderer) {
       barrel.position.set(prop.x, prop.height / 2, prop.z);
       barrel.castShadow = true;
       barrel.receiveShadow = true;
+      barrel.userData = { barrelStandin: true };
       scene.add(barrel);
+      lanePropMeshes.push(barrel);
       colliders.push(boxCollider(
         prop.x - prop.width / 2, prop.z - prop.depth / 2,
         prop.x + prop.width / 2, prop.z + prop.depth / 2
@@ -317,9 +340,16 @@ export function buildWorld(renderer) {
       addBox(scene, colliders, {
         size: [prop.width, prop.height, prop.depth],
         position: [prop.x, prop.height / 2, prop.z],
-        material: prop.kind === 'stall' ? laneWood : laneRoof,
+        // The stall counter and the lane crates are planked, not shingled, so
+        // they take the wood family. Only the awning above is laneRoof; the
+        // crates used to share it, which would have dressed a 1.1 m crate in
+        // 1.1 m roof tiles.
+        material: laneWood,
         castShadow: true
       });
+      // The counter/board box addBox() just appended is the last scene child.
+      const boardBox = scene.children[scene.children.length - 1];
+      if (boardBox && boardBox.isMesh) lanePropMeshes.push(boardBox);
       if (prop.kind === 'stall') {
         const roofBox = addBox(scene, [], {
           size: [prop.width + 0.5, 0.25, prop.depth + 0.4],
@@ -328,6 +358,7 @@ export function buildWorld(renderer) {
           castShadow: true
         });
         roofBox.userData = { stallStandin: true };
+        lanePropMeshes.push(roofBox);
         // The counter box added just above is the previous scene child.
         const counterBox = scene.children[scene.children.length - 2];
         if (counterBox && counterBox.isMesh) {
@@ -338,10 +369,23 @@ export function buildWorld(renderer) {
     }
   }
 
+  // The lane meshes are reparented into `lanePropsGroup` just below, once every
+  // push has happened: an earlier loop here silently left anything collected
+  // later -- the sacks and the notice frame -- outside the group, and so
+  // outside the family dressing pass. The group registers with that pass
+  // beside the `propGroups` declaration further down.
+
   // Bunting: strands across the lane with triangular flags. It hangs above
   // head height (2.6-2.75 m with a sag), so it deliberately registers NO
   // collider -- a player walks under it. laneBuntingOverhead() in areas.js
   // holds that promise to a test rather than to a comment.
+  // The rope is its own material, not `laneWood`. It used to share laneWood,
+  // which meant three thin visible BoxGeometry ropes carried a name that the
+  // family pass dresses -- and kept the authored 0..1 per-face UVs, so a live
+  // audit found exactly three visible mapped meshes whose texel density varied
+  // 20x across their own faces. A 2 cm rope should not be planked anyway.
+  const ropeMat = new THREE.MeshStandardMaterial({ color: 0x6b5236, roughness: 0.95 });
+  ropeMat.name = 'LaneRope';
   const buntingMat = new THREE.MeshStandardMaterial({ color: 0xc9553f, roughness: 0.85 });
   const buntingMatB = new THREE.MeshStandardMaterial({ color: 0xe0b552, roughness: 0.85 });
   const flagGeometry = new THREE.ConeGeometry(0.09, 0.22, 3);
@@ -349,7 +393,7 @@ export function buildWorld(renderer) {
     // The rope: a thin box spanning the lane, dipping in the middle.
     const rope = new THREE.Mesh(
       new THREE.BoxGeometry(LANE.maxX - LANE.minX, 0.02, 0.02),
-      laneWood
+      ropeMat
     );
     // Approximate the sag with two angled halves so the rope visually dips.
     rope.position.set((LANE.minX + LANE.maxX) / 2, strand.y - strand.sag / 2, strand.z);
@@ -372,6 +416,13 @@ export function buildWorld(renderer) {
   // on the floor; laneDressingClear() proves each leaves 1.2 m of walkway.
   const sackMat = new THREE.MeshStandardMaterial({ color: 0xa89468, roughness: 0.95 });
   const sackTieMat = new THREE.MeshStandardMaterial({ color: 0x6f5f42, roughness: 0.9 });
+  // Named so the family pass can tell them apart: neither name matches a
+  // shipped family, so the sacks and their ties stay flat for now. A cloth
+  // family (burlap weave) is the next obvious gap -- a live audit put Cloth and
+  // SackCloth at 12 m2 -- but it needs its own maps before it can be dressed,
+  // and naming them here means that family can be added by name alone.
+  sackMat.name = 'SackCloth';
+  sackTieMat.name = 'SackTie';
   for (const sack of LANE_SACKS) {
     const body = new THREE.Mesh(
       new THREE.CylinderGeometry(sack.radius, sack.radius * 0.86, sack.height, 9),
@@ -381,6 +432,7 @@ export function buildWorld(renderer) {
     body.castShadow = true;
     body.receiveShadow = true;
     scene.add(body);
+    lanePropMeshes.push(body);
     // A pinched neck so it reads as a sack, not a barrel.
     const neck = new THREE.Mesh(
       new THREE.CylinderGeometry(sack.radius * 0.45, sack.radius * 0.62, 0.12, 9),
@@ -389,6 +441,7 @@ export function buildWorld(renderer) {
     neck.position.set(sack.x, sack.height + 0.03, sack.z);
     neck.castShadow = true;
     scene.add(neck);
+    lanePropMeshes.push(neck);
     colliders.push(boxCollider(
       sack.x - 0.32, sack.z - 0.32, sack.x + 0.32, sack.z + 0.32
     ));
@@ -403,6 +456,7 @@ export function buildWorld(renderer) {
   });
   boardFrame.rotation.y = Math.PI / 2;
   boardFrame.userData = { noticeStandin: true };
+  lanePropMeshes.push(boardFrame);
   const boardFace = new THREE.Mesh(
     new THREE.PlaneGeometry(1.4, 1.2),
     new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.95 })
@@ -415,6 +469,16 @@ export function buildWorld(renderer) {
     NOTICE_BOARD.x - 0.3, NOTICE_BOARD.z - 0.9,
     NOTICE_BOARD.x + 0.3, NOTICE_BOARD.z + 0.9
   ));
+
+  // Every lane prop is now collected. Reparent, do not clone: the meshes keep
+  // their world transforms and the colliders above keep referencing the same
+  // prop data, so gameplay is unchanged; what changes is that the family
+  // dressing pass, registered to this group beside the propGroups declaration,
+  // can now reach them.
+  for (const mesh of lanePropMeshes) {
+    if (mesh.parent) mesh.parent.remove(mesh);
+    lanePropsGroup.add(mesh);
+  }
 
   // A row of hanging lights so the lane is not a dark tunnel at dusk. Each
   // point light hangs from a real fixture tied to its bunting strand, which
@@ -740,6 +804,11 @@ export function buildWorld(renderer) {
     barrel.position.set(x, 0.65, z);
     barrel.castShadow = true;
     barrel.receiveShadow = true;
+    // Marked so upgradeBarrels() can find and remove this cylinder when the
+    // modelled barrel arrives. It used to look for a mesh named
+    // 'barrel-standin', but nothing was ever given that name, so the procedural
+    // cylinders stayed drawn underneath the models -- a duplicate every load.
+    barrel.userData = { barrelStandin: true };
     scene.add(barrel);
     colliders.push(boxCollider(x - 0.55, z - 0.55, x + 0.55, z + 0.55));
   }
@@ -856,6 +925,10 @@ export function buildWorld(renderer) {
   // already-built models once the maps arrive, instead of serialising the whole
   // asset pass behind one texture download.
   const propGroups = [];
+  // The procedural lane props (counters, crates, barrel, sacks, notice frame)
+  // were collected into `lanePropsGroup` earlier in the build, before this
+  // registry existed. Register them now so upgradePropFamilies() dresses them.
+  propGroups.push({ group: lanePropsGroup, tile: 1.5 });
   // Loaded maps keyed by PROP_FAMILIES id (leaf/roof/bark/wood). One fetch each,
   // shared by every mesh in the family; cloneTextureFamily() gives each mesh its
   // own sampler state.
@@ -983,9 +1056,16 @@ export function buildWorld(renderer) {
         assetState.barrelDetail = result.reason;
         return assetState;
       }
-      // Remove the procedural cylinders so the model is what you see.
-      const standins = scene.children.filter((c) => c.name === 'barrel-standin');
-      for (const s of standins) scene.remove(s);
+      // Remove the procedural cylinders so the model is what you see. Traverse
+      // the whole graph: the lane barrel lives in lanePropsGroup now, and
+      // scene.remove() cannot detach a child of another group.
+      const standins = [];
+      scene.traverse((c) => {
+        if (c.userData && c.userData.barrelStandin) standins.push(c);
+      });
+      for (const s of standins) {
+        if (s.parent) s.parent.remove(s);
+      }
       for (const inst of barrelInstances) {
         const group = new THREE.Group();
         group.name = 'barrel-model';
@@ -1093,19 +1173,22 @@ export function buildWorld(renderer) {
         return assetState;
       }
       // Hide the procedural lane stall boxes so only the model shows.
-      for (const c of scene.children) {
+      // Search the whole scene graph, not scene.children: the lane props were
+      // reparented into lanePropsGroup so the family dressing pass could reach
+      // them, and a direct-children scan silently stopped finding them.
+      scene.traverse((c) => {
         if (c.userData && c.userData.stallStandin) c.visible = false;
-      }
+      });
       // Discover lane stall positions from the lane props data.
       const laneStallPositions = [];
       // We re-derive from the same LANE_PROPS the build loop used; simpler to
       // scan the scene for standin markers' positions.
-      for (const c of scene.children) {
+      scene.traverse((c) => {
         if (c.userData && c.userData.stallStandin && c.position) {
           // counter box centre -> model origin at ground
           laneStallPositions.push({ x: c.position.x, z: c.position.z, height: 1.0 });
         }
-      }
+      });
       // Deduplicate (counter + roof both marked) by rounding.
       const seen = new Set();
       const unique = [];
@@ -1468,6 +1551,9 @@ export function buildWorld(renderer) {
           }
           material.name = 'BarkWood';
           mesh.material = material;
+          // Same marker the generic prop pass sets: this mesh is dressed, so an
+          // audit can tell it apart from a bark-named material nothing touched.
+          mesh.userData.propFamily = 'bark';
           dressed += 1;
         });
       }
@@ -1615,10 +1701,12 @@ export function buildWorld(renderer) {
         assetState.noticeDetail = result.reason;
         return assetState;
       }
-      // Hide the procedural frame and face; the collider stays.
-      for (const c of scene.children) {
+      // Hide the procedural frame and face; the collider stays. Traverse the
+      // whole graph: the frame was reparented into lanePropsGroup for the family
+      // pass, so a scene.children scan would leave it drawn under the model.
+      scene.traverse((c) => {
         if (c.userData && c.userData.noticeStandin) c.visible = false;
-      }
+      });
       const group = new THREE.Group();
       group.name = 'notice-model';
       // The model is authored long-side-along-x; the game wants it facing
@@ -1810,9 +1898,9 @@ export function buildWorld(renderer) {
    * The prop GLBs are authored from untextured box primitives, so they carry no
    * UVs; boxProjectUvs() generates them in metres and every mesh in a family then
    * shares one tiling. A mesh keeps its own name-based test: only meshes whose
-   * material matches a family (Blender names them *Wood, *Roof, Canopy, Trunk)
-   * get the maps, so iron bands, glass and stone trim stay flat and read as
-   * different materials.
+   * material matches a family (Blender names them *Wood, *Roof, *Brick,
+   * HouseStone, Canopy, Trunk) get the maps, so iron bands and glass panes stay
+   * flat and read as different materials.
    *
    * The projection is unconditional even though BoxGeometry ships 0..1 UVs. Those
    * authored UVs are per-face, so a map applied to them smears one tile across a
@@ -1891,6 +1979,11 @@ export function buildWorld(renderer) {
         // Keep the source name so later code and tests can identify the family.
         material.name = name;
         mesh.material = material;
+        // Marks the mesh as dressed by this pass, so an audit can tell a mesh
+        // this pass owns from a family-named material that lives outside the
+        // prop registry (the cast's WoodP props and the fountain's own stone
+        // pass) and is deliberately left alone here.
+        mesh.userData.propFamily = family.id;
         dressed += 1;
         byFamily[family.id] += 1;
       });
@@ -1969,7 +2062,14 @@ export function buildWorld(renderer) {
    */
   function loadStoneFamily() {
     if (!stoneTexturesPromise) {
-      stoneTexturesPromise = loadMaterialTextures({ THREE, files: STONE_TEXTURE_FILES });
+      stoneTexturesPromise = loadMaterialTextures({ THREE, files: STONE_TEXTURE_FILES })
+        .then((textures) => {
+          // The prop pass dresses the house trim (HouseStone) from this shared
+          // fetch, so walls, terrace, gate and house all download the stone
+          // family exactly once.
+          if (textures.anyLoaded) familyTextures.stone = textures;
+          return textures;
+        });
     }
     return stoneTexturesPromise;
   }
@@ -2220,6 +2320,9 @@ export function buildWorld(renderer) {
         };
       }
       if (brick.anyLoaded) {
+        // The prop pass dresses the modelled house's HouseBrick meshes from this
+        // same set; its per-mesh clones reset repeat to 1:1 metre-space UVs.
+        familyTextures.brick = brick;
         applyTextureFamily(brickMat, brick, 7, 3, 2);
         assetState.brickDetail = {
           maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => brick[k])

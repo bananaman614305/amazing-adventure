@@ -1,0 +1,600 @@
+{
+ "families": {
+  "propWood": "textured",
+  "propWoodDetail": {
+   "dressed": 77,
+   "projected": 77,
+   "groups": 23,
+   "byFamily": {
+    "leaf": 12,
+    "roof": 7,
+    "bark": 0,
+    "wood": 49,
+    "brick": 3,
+    "stone": 6
+   }
+  },
+  "fountainStone": "textured",
+  "fountainStoneDetail": {
+   "meshes": 10,
+   "stone": 4,
+   "dark": 6,
+   "parts": 10,
+   "maps": [
+    "map",
+    "normalMap",
+    "roughnessMap"
+   ],
+   "tileMeters": 1.6
+  }
+ },
+ "meshes": [
+  {
+   "material": "LaneRope",
+   "mesh": null,
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#6b5236",
+   "roughness": 0.95,
+   "hasMap": false,
+   "hasNormal": false,
+   "hasRoughness": false,
+   "repeat": null,
+   "wrap": null,
+   "area": 0.64,
+   "triangles": 12,
+   "tileMin": 0.02,
+   "tileMean": 0.273,
+   "tileMax": 0.4
+  },
+  {
+   "material": "LaneRope",
+   "mesh": null,
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#6b5236",
+   "roughness": 0.95,
+   "hasMap": false,
+   "hasNormal": false,
+   "hasRoughness": false,
+   "repeat": null,
+   "wrap": null,
+   "area": 0.64,
+   "triangles": 12,
+   "tileMin": 0.02,
+   "tileMean": 0.273,
+   "tileMax": 0.4
+  },
+  {
+   "material": "LaneRope",
+   "mesh": null,
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#6b5236",
+   "roughness": 0.95,
+   "hasMap": false,
+   "hasNormal": false,
+   "hasRoughness": false,
+   "repeat": null,
+   "wrap": null,
+   "area": 0.64,
+   "triangles": 12,
+   "tileMin": 0.02,
+   "tileMean": 0.273,
+   "tileMax": 0.4
+  },
+  {
+   "material": "StoneDark",
+   "mesh": "FountainPlinthLower",
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#c8cbc9",
+   "roughness": 1,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 23.66,
+   "triangles": 28,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "Stone",
+   "mesh": "FountainPlinthUpper",
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#ffffff",
+   "roughness": 1,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 18.63,
+   "triangles": 28,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "Stone",
+   "mesh": "FountainBasin",
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#ffffff",
+   "roughness": 1,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 18.55,
+   "triangles": 70,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "Stone",
+   "mesh": "FountainColumn",
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#ffffff",
+   "roughness": 1,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 2.13,
+   "triangles": 28,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "Stone",
+   "mesh": "FountainUpperBowl",
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#ffffff",
+   "roughness": 1,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 5.01,
+   "triangles": 98,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "StoneDark",
+   "mesh": "FountainFinial",
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#c8cbc9",
+   "roughness": 1,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 0.25,
+   "triangles": 28,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "StoneDark",
+   "mesh": "FountainCornerBlock0",
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#c8cbc9",
+   "roughness": 1,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 0.44,
+   "triangles": 10,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "StoneDark",
+   "mesh": "FountainCornerBlock1",
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#c8cbc9",
+   "roughness": 1,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 0.44,
+   "triangles": 10,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "StoneDark",
+   "mesh": "FountainCornerBlock2",
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#c8cbc9",
+   "roughness": 1,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 0.44,
+   "triangles": 10,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "StoneDark",
+   "mesh": "FountainCornerBlock3",
+   "visible": true,
+   "dressedBy": null,
+   "family": null,
+   "color": "#c8cbc9",
+   "roughness": 1,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 0.44,
+   "triangles": 10,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "HouseBrick",
+   "mesh": "HouseGable_-3.4",
+   "visible": true,
+   "dressedBy": "brick",
+   "family": "brick",
+   "color": "#ffffff",
+   "roughness": 0.9,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 9.67,
+   "triangles": 8,
+   "tileMin": 2,
+   "tileMean": 2,
+   "tileMax": 2
+  },
+  {
+   "material": "HouseBrick",
+   "mesh": "HouseGable_3.4",
+   "visible": true,
+   "dressedBy": "brick",
+   "family": "brick",
+   "color": "#ffffff",
+   "roughness": 0.9,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 9.67,
+   "triangles": 8,
+   "tileMin": 2,
+   "tileMean": 2,
+   "tileMax": 2
+  },
+  {
+   "material": "HouseBrick",
+   "mesh": "HouseChimney",
+   "visible": true,
+   "dressedBy": "brick",
+   "family": "brick",
+   "color": "#ffffff",
+   "roughness": 0.9,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 5.46,
+   "triangles": 12,
+   "tileMin": 2,
+   "tileMean": 2,
+   "tileMax": 2
+  },
+  {
+   "material": "HouseStone",
+   "mesh": "HouseChimneyCap",
+   "visible": true,
+   "dressedBy": "stone",
+   "family": "stone",
+   "color": "#ffffff",
+   "roughness": 0.9,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 2.16,
+   "triangles": 12,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "HouseStone",
+   "mesh": "HouseWindowFrame_-2.0",
+   "visible": true,
+   "dressedBy": "stone",
+   "family": "stone",
+   "color": "#ffffff",
+   "roughness": 0.9,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 3.44,
+   "triangles": 12,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "HouseStone",
+   "mesh": "HouseWindowFrame_2.0",
+   "visible": true,
+   "dressedBy": "stone",
+   "family": "stone",
+   "color": "#ffffff",
+   "roughness": 0.9,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 3.44,
+   "triangles": 12,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "HouseStone",
+   "mesh": "HouseDoorJamb_-0.85",
+   "visible": true,
+   "dressedBy": "stone",
+   "family": "stone",
+   "color": "#ffffff",
+   "roughness": 0.9,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 3.15,
+   "triangles": 12,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "HouseStone",
+   "mesh": "HouseDoorJamb_0.85",
+   "visible": true,
+   "dressedBy": "stone",
+   "family": "stone",
+   "color": "#ffffff",
+   "roughness": 0.9,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 3.15,
+   "triangles": 12,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  },
+  {
+   "material": "HouseStone",
+   "mesh": "HouseDoorLintel",
+   "visible": true,
+   "dressedBy": "stone",
+   "family": "stone",
+   "color": "#ffffff",
+   "roughness": 0.9,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true,
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "area": 2.76,
+   "triangles": 12,
+   "tileMin": 1.6,
+   "tileMean": 1.6,
+   "tileMax": 1.6
+  }
+ ],
+ "files": [
+  {
+   "id": "brick",
+   "kind": "map",
+   "path": "assets/textures/brick_albedo.webp",
+   "file": "/worker/state/wt60/assets/textures/brick_albedo.webp",
+   "bytes": 51576,
+   "sha256": "86639cf693c462c53ee91f5719ffca77c08a4c672e425fa592772453765801f5"
+  },
+  {
+   "id": "brick",
+   "kind": "normalMap",
+   "path": "assets/textures/brick_normal.webp",
+   "file": "/worker/state/wt60/assets/textures/brick_normal.webp",
+   "bytes": 88698,
+   "sha256": "b96ac04ecdd5c8433780e1acad50c13f7a974ac453f34f9b23572847a8b79a30"
+  },
+  {
+   "id": "brick",
+   "kind": "roughnessMap",
+   "path": "assets/textures/brick_rough.webp",
+   "file": "/worker/state/wt60/assets/textures/brick_rough.webp",
+   "bytes": 23270,
+   "sha256": "58ca29c5d9bebc93f8ccbfd17964709742ac0fbd71eddbf90828eec21243695b"
+  },
+  {
+   "id": "stone",
+   "kind": "map",
+   "path": "assets/textures/stone_albedo.webp",
+   "file": "/worker/state/wt60/assets/textures/stone_albedo.webp",
+   "bytes": 56458,
+   "sha256": "fc7aa27f41cd60bd90890e7c115b492dcd9f62538108f28f2182eecc8e15d4fc"
+  },
+  {
+   "id": "stone",
+   "kind": "normalMap",
+   "path": "assets/textures/stone_normal.webp",
+   "file": "/worker/state/wt60/assets/textures/stone_normal.webp",
+   "bytes": 85756,
+   "sha256": "e654cc72a21399a830e2c77dbc8c751152bd381c715dd6bee9382cb61d098fad"
+  },
+  {
+   "id": "stone",
+   "kind": "roughnessMap",
+   "path": "assets/textures/stone_rough.webp",
+   "file": "/worker/state/wt60/assets/textures/stone_rough.webp",
+   "bytes": 27140,
+   "sha256": "3ed0a02acebfb5d77b7911235e743337416b414cba28095e38b407275b095b11"
+  }
+ ],
+ "play": {
+  "walked": true,
+  "z": -8.815,
+  "ground": 0.056,
+  "quests": 9
+ },
+ "shots": [
+  {
+   "label": "house-door",
+   "file": "/worker/state/wt60/artifacts/round66-house-door.png",
+   "bytes": 414088
+  },
+  {
+   "label": "house-gables",
+   "file": "/worker/state/wt60/artifacts/round66-house-gables.png",
+   "bytes": 356885
+  },
+  {
+   "label": "house-chimney",
+   "file": "/worker/state/wt60/artifacts/round66-house-chimney.png",
+   "bytes": 339587
+  },
+  {
+   "label": "lane-ropes",
+   "file": "/worker/state/wt60/artifacts/round66-lane-ropes.png",
+   "bytes": 422483
+  }
+ ],
+ "screenshots": [
+  "/worker/state/wt60/artifacts/round66-house-door.png",
+  "/worker/state/wt60/artifacts/round66-house-gables.png",
+  "/worker/state/wt60/artifacts/round66-house-chimney.png",
+  "/worker/state/wt60/artifacts/round66-lane-ropes.png"
+ ],
+ "familyOrder": [
+  "leaf",
+  "roof",
+  "bark",
+  "wood",
+  "brick",
+  "stone"
+ ]
+}

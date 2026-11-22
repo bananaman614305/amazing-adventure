@@ -527,14 +527,24 @@ test('propFamilyFor picks the family from the authored material name', () => {
   assert.equal(propFamilyFor('MarketWood').id, 'wood');
   assert.equal(propFamilyFor('DoorWood').id, 'wood');
   assert.equal(propFamilyFor('Trunk').id, 'bark');
+  // Round 66: the modelled house's gables/chimney and trim join the prop
+  // families, dressed from the committed brick and stone wall maps.
+  assert.equal(propFamilyFor('HouseBrick').id, 'brick');
+  assert.equal(propFamilyFor('HouseStone').id, 'stone');
 });
 
 test('material names that are not props stay flat', () => {
-  // Iron, glass and stone trim are what make the props read as mixed materials;
-  // dressing them would flatten that contrast back out.
+  // Iron and glass trim are what make the props read as mixed materials;
+  // dressing them would flatten that contrast back out. StoneDark belongs to
+  // the fountain's own tinted pass, which is why the house's stone family is
+  // anchored to HouseStone instead of a broad /stone/.
   // These are the real material names the shipped GLBs carry.
   for (const name of ['BarrelIron', 'LampIron', 'LampGlass', 'StoneDark', 'Cloth',
-    'Skin', 'EyeIris', 'Paper', 'Steel', 'Water', 'HouseBrick', 'HouseGlass', '']) {
+    'Skin', 'EyeIris', 'Paper', 'Steel', 'Water', 'HouseGlass', '',
+    // The bunting rope used to borrow `LaneWood`, which made three visible 2 cm
+    // ropes report as planked wood while keeping their authored per-face UVs.
+    // Its own name must never pick up a family.
+    'LaneRope']) {
     assert.equal(propFamilyFor(name), null, `${name} must not match a family`);
   }
   assert.equal(propFamilyFor(null), null);
