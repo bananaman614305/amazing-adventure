@@ -4,7 +4,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  createInitialState, questStatus, setQuestStep, advanceQuest, startLanterns, buyOilWithCoins, buyOilWithPromise, deliverOil, startKey, pickUpKey, returnKey, startCheer, watchLanterns, tellPipAboutLanterns, addCoins, coins, addItem, hasItem, removeItem, inventoryItems, journalEntries, questCounts, remember, memoryFor, serialize, deserialize, createSaveStore, SAVE_KEY, startToll, collectToll, waiveToll, finishToll, startLedger, hearLedgerRumour, recoverLedger, returnLedger, QUEST_ORDER, QUESTS
+  createInitialState, questStatus, setQuestStep, advanceQuest, startLanterns, buyOilWithCoins, buyOilWithPromise, deliverOil, startKey, pickUpKey, returnKey, startCheer, watchLanterns, tellPipAboutLanterns, addCoins, coins, addItem, hasItem, removeItem, inventoryItems, journalEntries, questCounts, remember, memoryFor, serialize, deserialize, createSaveStore, SAVE_KEY, startToll, collectToll, waiveToll, finishToll, startLedger, hearLedgerRumour, recoverLedger, returnLedger, QUEST_ORDER, CHORE_ORDER, QUESTS,
+  startWicks, trimWicks, finishWicks, startTally, walkTally, finishTally, getFlag
 } from '../src/state.js';
 
 test('new state starts with no quests and 6 coins', () => {
@@ -253,4 +254,43 @@ test('an old save with no recorded outcome still opens a journal entry', () => {
   const entry = journalEntries(legacy).find((e) => e.id === 'lanterns');
   assert.equal(entry.done, true);
   assert.ok(entry.text.length > 10, 'falls back to a real sentence rather than crashing');
+});
+
+test('the chores are tracked outside the spine order, and a save keeps them', () => {
+  const state = createInitialState();
+  // The spine is the seven quests; the chores are not part of its order.
+  assert.equal(QUEST_ORDER.length, 7);
+  assert.deepEqual(CHORE_ORDER, ['wicks', 'tally']);
+  for (const id of CHORE_ORDER) {
+    assert.ok(!QUEST_ORDER.includes(id), `${id} stays outside the spine`);
+    assert.equal(questStatus(state, id), 'none', `${id} starts at none`);
+  }
+
+  startKey(state); pickUpKey(state); returnKey(state);
+  startTally(state); walkTally(state); finishTally(state);
+  setQuestStep(state, 'lanterns', 'done');
+  startWicks(state); trimWicks(state, 'dusk'); finishWicks(state);
+
+  const restored = deserialize(serialize(state));
+  assert.ok(restored, 'the save parses');
+  assert.equal(questStatus(restored, 'wicks'), 'done', 'the wick round survives a load');
+  assert.equal(questStatus(restored, 'tally'), 'done', 'the tally survives a load');
+  assert.equal(getFlag(restored, 'wicksPaid'), true, 'the paid flag survives');
+  assert.equal(getFlag(restored, 'tallyPaid'), true, 'the paid flag survives');
+  // Both chores are in the journal and counted, on top of the spine.
+  assert.match(journalEntries(restored).find((e) => e.id === 'wicks').text, /Mara knows it/);
+  assert.match(journalEntries(restored).find((e) => e.id === 'tally').text, /watch stands easier/);
+  // done: the key quest (the gate opening) plus the two chores, so three.
+  // The lanterns step is set to done directly and counted too, which is why
+  // this pins the total rather than re-deriving it.
+  assert.equal(questCounts(restored).done, 4);
+  assert.deepEqual(questCounts(restored), { active: 0, done: 4 });
+});
+
+test('an unknown chore step in a save falls back to none instead of wedging', () => {
+  const corrupt = deserialize(JSON.stringify({
+    state: { quests: { wicks: 'double-wicked', tally: 'walked' } }
+  }));
+  assert.equal(questStatus(corrupt, 'wicks'), 'none', 'an unknown step is dropped');
+  assert.equal(questStatus(corrupt, 'tally'), 'walked', 'a valid step is kept');
 });

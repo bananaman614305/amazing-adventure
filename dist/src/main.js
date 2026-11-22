@@ -13,6 +13,10 @@ import {
   watchLanterns,
   hasItem,
   nightLightUnlocked,
+  wicksAtDawn,
+  trimWicks,
+  tallyUnlocked,
+  walkTally,
   journalEntries,
   inventoryItems,
   questCounts
@@ -22,7 +26,7 @@ import { reputationView, npcTier } from './factions.js';
 import {
   GATE, isGateOpen, gateHint, areaAt, NOTICE_BOARD, noticeText, LEDGER_SPOT, JOB_BOARD,
   LANE_LIGHTING_POST, laneLightingStatus, laneLightingHint, laneLanternsShouldGlow,
-  laneLanternsAtDawn, lightLaneLanterns
+  laneLanternsAtDawn, lightLaneLanterns, WICKS_SPOT, wicksActive, wicksHint
 } from './areas.js';
 import {
   chooseAmbientPair,
@@ -552,8 +556,10 @@ function syncPhase(force = false) {
   if (phase.id === currentPhase && !force) return;
   currentPhase = phase.id;
   // Dawn puts the lane lanterns out: the round is walked again each night, so a
-  // previous night's help cannot light tonight's lane for free.
+  // previous night's help cannot light tonight's lane for free. The wick
+  // round's act is dusk-scoped the same way, so dawn clears its walk.
   const dawn = laneLanternsAtDawn(state, phase.id);
+  const wicksDawn = wicksAtDawn(state, phase.id);
   applyPhase(environment, phase.id, laneLanternsShouldGlow(state, phase.id));
   // Exposure follows the same phase as the sky and sun, so the tone curve can
   // never disagree with the lighting it is exposing. The environment map is
@@ -572,8 +578,8 @@ function syncPhase(force = false) {
     toast(laneLanternsShouldGlow(state, phase.id)
       ? 'Dusk. The lane lanterns are burning.'
       : 'Dusk. The plaza lamps are lit; the lane lanterns are still dark.');
-  } else if (started && dawn.reset) {
-    toast(dawn.message);
+  } else if (started && (dawn.reset || wicksDawn.reset)) {
+    toast(dawn.reset ? dawn.message : 'Dawn. The plaza lanterns are out; the wick round is walked for tonight.');
   }
 }
 
@@ -1051,6 +1057,19 @@ function interactables() {
     });
   }
 
+  // The wick round's hotspot: the plaza lanterns, trimmed at dusk. It answers
+  // at any hour so a player who walks up at noon is told why there is nothing
+  // to trim rather than finding an inert lantern.
+  const wicksDistance = Math.hypot(WICKS_SPOT.x - player.position.x, WICKS_SPOT.z - player.position.z);
+  if (wicksDistance < WICKS_SPOT.range && wicksActive(state)) {
+    list.push({
+      kind: 'wicks',
+      distance: wicksDistance,
+      label: wicksHint(state, phaseAt(clockSeconds).id),
+      run: () => performWicksTrim()
+    });
+  }
+
   list.sort((a, b) => a.distance - b.distance);
   return list;
 }
@@ -1072,6 +1091,23 @@ function performLaneLighting() {
     applyPhase(environment, phase, laneLanternsShouldGlow(state, phase));
     cue('pickup');
     announce(`${result.message} Traders will remember it.`);
+    refreshHUD();
+    autoSave();
+  }
+  return result;
+}
+
+/**
+ * The wick round, from the interaction to the screen. Same shape as the lamp
+ * round: the interactable and the exposed test hook run the same code.
+ */
+function performWicksTrim() {
+  const phase = phaseAt(clockSeconds).id;
+  const result = trimWicks(state, phase);
+  toast(result.message);
+  if (result.changed) {
+    cue('pickup');
+    announce(result.message);
     refreshHUD();
     autoSave();
   }
@@ -1752,6 +1788,10 @@ function renderAmbient() {
 // --- Loop ----------------------------------------------------------------
 const clock = new THREE.Clock();
 let hudTimer = 0;
+// The area the player occupied on the previous frame, for the Gate Tally's
+// crossing detection. Seeded to the starting area so the first frame cannot
+// count as a walk.
+let prevArea = 'plaza';
 
 let lastFrameMs = 16;
 function frame() {
@@ -1808,6 +1848,21 @@ function frame() {
     sound.setArea(area);
     if (started) announceArea(area);
   }
+
+  // The Gate Tally: the act is the walk. Stepping from the plaza through the
+  // north gate into the lane while carrying Halden's tally is the count he
+  // asked for, so the chore cannot be paid for by talk alone. Halden stands in
+  // the plaza, so the outward crossing is the only one a player can make after
+  // taking the tally; one crossing is enough.
+  if (questStatus(state, 'tally') === 'started' && document.body.dataset.area === 'lane' && prevArea === 'plaza') {
+    const walked = walkTally(state);
+    if (walked.changed) {
+      toast(walked.message);
+      announce(walked.message);
+      autoSave();
+    }
+  }
+  prevArea = area;
 
   hudTimer += dt;
   if (hudTimer > 0.2) {

@@ -12,90 +12,61 @@
 
 ## Current task
 
-**Round 59 — Cast fidelity.** The six plaza NPCs are now physically correct in
-the live scene: they stand on the cobbles, they face the way they walk, and
-their role props are attached to the right pivot. Fixing it required correcting
-the asset *pipeline*, not the art.
+**Round 60 — late chores for the other two factions.** Round 59 fixed the cast;
+this round closed the story gap the last checkpoint flagged: the Night Light was
+the only end-of-game chore, so the last third of the game was one faction's
+story. Keepers and Watch now each have a paid-once chore of their own, wired
+end-to-end (state, dialogue, hotspots, save/load) and pinned by tests.
 
-The root cause was a silent one. `art/blender/make_cast.py` positioned props by
-setting Blender object locations, and pip's child scale the same way. The GLB
-exporter with `export_apply=True` applies *modifiers* only — object transforms
-survive as glTF node `translation`/`scale`, and the reader in `src/glb.js` maps
-accessor data straight into geometry without ever reading node transforms. So
-every authored offset simply vanished at load: lanterns detached from poles,
-spear points buried inside shafts, ledger pages inside boards, and pip rendering
-full-size. The facing bug was separate but adjacent: the cast was authored with
-`dir:-1`, which put the nose along glTF −Z while the game's forward is local +Z
-(`rotation.y = atan2(dx, dz)`), so five NPCs walked backwards.
+- **The Wick Round (Mara, Keepers).** Unlocks once `lanterns` is done. Mara
+  offers it in her own menu; the *act* is a plaza hotspot at `WICKS_SPOT`
+  `{x: 2.6, z: -6.2}` — you trim the lanterns at dusk or night, never at noon.
+  Pays `WICKS_REWARD` (2 coins, Keepers +4) exactly once via the `wicksPaid`
+  flag, so a dawn reset cannot be farmed for standing. `wicksAtDawn()` clears
+  the night's work at the day phase only; the paid flag persists forever. Mara
+  closes the round for a small personal opinion bump and no reputation.
+- **The Gate Tally (Halden, Watch).** Unlocks only when the north gate is open
+  (`key` done) — `startTally` refuses at a shut gate. The act is a real walk:
+  `main.js` detects the plaza→lane transition while the quest is `started` and
+  calls `walkTally`, so standing in place cannot satisfy it. `finishTally` pays
+  `TALLY_REWARD` (2 coins, Watch +4) once via `tallyPaid`.
+- The two chores live in `CHORE_ORDER` and stay outside `QUEST_ORDER`, so the
+  six-quest spine is unchanged, `storyComplete()`/the epilogue still only count
+  the spine, and a save written before this round loads unchanged.
+- `validQuestStatus` validates chore steps through `QUESTS[].steps`, so an
+  unknown chore step in a hand-edited save degrades to `'none'` instead of
+  wedging the quest.
+- Dialogue chore choices are promise/close buttons only: the act itself is a
+  hotspot or a lane entry, so `src/dialogue.js` does not import `trimWicks` or
+  `walkTally` (unused imports removed after review).
 
-- Nothing in `make_cast.py` may set `location`/`rotation`/`scale` any more; a new
-  `transform_check()` asserts every mesh object is transform-free at build time,
-  and `src/glb.js` now throws `node transforms not supported (node "<name>")`
-  rather than loading a mispositioned figure.
-- All offsets are baked into vertices: lantern at the pole top, spear point
-  starting exactly at the shaft top (`z ≥ 0.85`) instead of inside it (`0.74`),
-  ledger pages proud of the board face.
-- pip's sole 0.72 scale now lives only in `buildModelled()`; baking it in Blender
-  would have double-scaled the child to 0.518.
-- Companions ride their parent's hand pivot (`PropLantern`→`PropPole`,
-  `PropSpearTip`→`PropSpear`, `PropLedgerPages`→`PropLedger`), so a swinging arm
-  can no longer leave the lantern behind.
-- Nose and toes now point along local +Z; `dir` is threaded correctly.
-
-Checks on the committed tree: unit **558/558** (42 new in `tests/cast.test.mjs`),
-desktop **230/230 PASS**, mobile **184/184 PASS** across four emulated phone
-profiles, and `scripts/evidence-round59.mjs` **31/31 PASS** in a real headless
-Chrome page.
-
-The model is text-only: no screenshot was looked at. The evidence above is
-scene-graph measurement, not a visual claim — each NPC's meshes are measured in
-that NPC's own local frame (world coordinates are dominated by routine
-placement and would hide a rig bug), and the numbers are in
-`artifacts/round59-evidence.json`: boot soles land within 2.4 mm of world y=0 on
-all five booted figures, noses stand 0.133–0.170 in front of the head centre, and
-both halves of each companion prop resolve to the same `LimbArm*` pivot. One
-further check counts what the renderer actually submitted that frame — 357 draw
-calls and 8,942 triangles with all six modelled NPCs parented into the scene — so
-"the cast is on screen" is a number, not an impression.
-
-The renderer now goes through a real camera pipeline instead of raw linear
-output: ACES filmic tone mapping with sRGB output encoding and a per-phase
-exposure that compensates for the much darker night phases. Sky light is no
-longer an approximation — a procedural environment map is baked from the same
-gradient/sun data the sky dome uses, run through `PMREMGenerator`, and cached so
-it is rebuilt only when the phase actually changes rather than every frame.
-Shadows were tuned for the new dynamic range: a phase-scaled shadow-map
-resolution (capped by the mobile quality tier) with tuned bias/normalBias that
-stops the acne the higher exposure exposed.
-
-- Unit **501/501**; desktop **230/230 PASS**; mobile **185/185 PASS**.
-- Trusted receipts on `e0a868c`: `tests` `def1477c`, `browser` `89d57962`,
-  `mobile` `63acdf46` — all `completed`, `exitCode 0`, `unchanged: true`,
-  same `treeDigest 8f235f06…` and `artifactDigest 9d2b83e6…`.
-- The mobile page-leak that made the phone suite time out intermittently is
-  fixed: per-profile pages are now closed explicitly.
-- The model is text-only: no screenshot was looked at. Claims rest on in-page
-  object assertions (`renderer.toneMapping`, `environmentMapReady()`,
-  `environmentMapsBuilt()`, shadow bias values), mutation proof that the bake
-  actually re-runs on a phase change and not otherwise, and the state-function
-  suites.
+Checks on the working tree: unit **577/577** — including 8 new wick tests, 6 new
+tally tests, plus extended state (24) and dialogue (19) suites — desktop
+**229/229 PASS**, and `tests/preview.test.mjs` **10/10** after rebuilding the
+committed `dist/` preview (74 files, 4629 KB), and mobile **184/184 PASS**
+across four emulated phone profiles (exit 0, zero console errors, screenshots in
+`/tmp/amazing-adventure-shots-4doJKb/`, log kept at
+`/worker/state/logs/r60-mobile.log`). The model is text-only: no screenshot was
+looked at; every claim here is a state-function or in-page assertion. Both
+chores are reachable without touching the six-quest spine, and the whole game
+still passes the reachability and save/load suites.
 
 ## Next steps
 
-1. **Certify and publish Round 59.** Once the mobile suite is green, commit the
-   cast fixes on `grunt/round59-cast` and obtain the three trusted
-   `planId: release` receipts (`tests`, `browser`, `mobile`) on that exact head,
-   then hand it to `grunt_release_prepare`.
-2. **Publish Round 57** through the trusted publication channel from the clean
-   head `e0a868c` on `grunt/round57-graphics` — it is committed, receipt-verified
-   and still queued; this is a host-side gate, not game work.
-2. **Ship the sky dome follow-up (Round 57b).** The horizon haze band, phase
+1. **Certify and publish Round 60** on `grunt/round60-chores`: obtain the three
+   trusted `planId: release` receipts (`tests`, `browser`, `mobile`) on the
+   exact committed head, then hand it to `grunt_release_prepare`. Round 57's
+   release is still host-side blocked (`needs-supervision.json`), so nothing on
+   this branch is merged or deployed by me.
+2. **Graphics realism, chunk 1: the plaza floor.** The plaza is still a flat
+   single-material surface while the lane already carries a Kaggle cobble set.
+   Give the plaza its own prepared floor set (Blender-baked wear or a Kaggle
+   texture job) and a proper material/tiling setup, then re-run the mobile suite
+   on the result — the owner priority from round 56 still stands.
+3. **Fold in the sky-dome follow-up (Round 57b).** The horizon haze band, phase
    driven sun disc and 32×24 dome are finished and green at `c8dbb23` on
-   `grunt/round57b-sky` but were deliberately held out of this certified tree;
-   fold them in as the next round so the sky is not just brighter but shaped.
-3. **Give the other two factions a late chore.** The Night Light is still the
-   only Market-shaped end-of-round task; Keepers and Watch need equivalents so
-   the final third of the game is not one faction's story.
+   `grunt/round57b-sky` but were deliberately held out of the certified tree;
+   ship them so the sky is not just brighter but shaped.
 
 ---
 
@@ -106,14 +77,20 @@ stops the acne the higher exposure exposed.
   the human.
 - `grunt/round5-mobile-preview` — the phone playtest candidate.
 - Rounds 6–55 are documented in the sections below; each shipped as its own PR.
-- `grunt/round57-graphics` — **this round** (round 57), stacked on round 56.
+- `grunt/round57-graphics` at `e0a868c` — round 57, receipt-verified; its
+  release is host-side blocked (`/worker/state/outbox/needs-supervision.json`).
 - `grunt/round57b-sky` at `c8dbb23` (worktree `/worker/state/wt57`) — the
   finished, green sky-dome follow-up, intentionally **not** part of the
   certified round 57 tree; it ships as its own round.
+- `grunt/round59-cast` at `895bb72` — the cast-pipeline fix (round 59), which
+  this round is stacked on.
+- `grunt/round60-chores` — **this round** (round 60), stacked on round 59.
 
-**Last checkpoint:** Round 57 committed at `e0a868c` with a clean tree and all
-three trusted release receipts completed on that exact tree. See the Round 57
-section near the end of this file for the full record.
+**Last checkpoint:** Round 60 on `grunt/round60-chores`: the Wick Round and the
+Gate Tally wired across state, dialogue, areas and `main.js`, covered by 14 new
+tests (unit 577/577), desktop 229/229, and the committed `dist/` preview rebuilt.
+See the "Current task" section at the top of this file and the Round 59 section
+below for the cast work it builds on.
 
 ## Round 5 — playable phone preview (owner priority)
 
@@ -3839,3 +3816,42 @@ buy oil.
 2. Fold in the finished sky-dome work (`grunt/round57b-sky` → `c8dbb23`).
 3. Give Keepers and Watch a late chore of their own so the end game is not
    Market-shaped.
+
+## Round 59 — Cast fidelity
+
+The six plaza NPCs are physically correct in the live scene: they stand on the
+cobbles, they face the way they walk, and their role props are attached to the
+right pivot. Fixing it required correcting the asset *pipeline*, not the art.
+
+The root cause was a silent one. `art/blender/make_cast.py` positioned props by
+setting Blender object locations, and pip's child scale the same way. The GLB
+exporter with `export_apply=True` applies *modifiers* only — object transforms
+survive as glTF node `translation`/`scale`, and the reader in `src/glb.js` maps
+accessor data straight into geometry without ever reading node transforms. So
+every authored offset simply vanished at load: lanterns detached from poles,
+spear points buried inside shafts, ledger pages inside boards, and pip rendering
+full-size. The facing bug was separate but adjacent: the cast was authored with
+`dir:-1`, which put the nose along glTF −Z while the game's forward is local +Z
+(`rotation.y = atan2(dx, dz)`), so five NPCs walked backwards.
+
+- Nothing in `make_cast.py` may set `location`/`rotation`/`scale` any more; a new
+  `transform_check()` asserts every mesh object is transform-free at build time,
+  and `src/glb.js` now throws `node transforms not supported (node "<name>")`
+  rather than loading a mispositioned figure.
+- All offsets are baked into vertices: lantern at the pole top, spear point
+  starting exactly at the shaft top (`z ≥ 0.85`) instead of inside it (`0.74`),
+  ledger pages proud of the board face.
+- pip's sole 0.72 scale now lives only in `buildModelled()`; baking it in Blender
+  would have double-scaled the child to 0.518.
+- Companions ride their parent's hand pivot (`PropLantern`→`PropPole`,
+  `PropSpearTip`→`PropSpear`, `PropLedgerPages`→`PropLedger`), so a swinging arm
+  can no longer leave the lantern behind.
+- Nose and toes now point along local +Z; `dir` is threaded correctly.
+
+Checks on the committed tree: unit **558/558** (42 new in `tests/cast.test.mjs`),
+desktop **230/230 PASS**, mobile **184/184 PASS** across four emulated phone
+profiles, and `scripts/evidence-round59.mjs` **31/31 PASS** in a real headless
+Chrome page. Boot soles land within 2.4 mm of world y=0 on all five booted
+figures, noses stand 0.133–0.170 in front of the head centre, both halves of each
+companion prop resolve to the same `LimbArm*` pivot, and the renderer submitted
+357 draw calls / 8,942 triangles with all six modelled NPCs parented in.

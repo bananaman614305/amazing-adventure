@@ -93,10 +93,43 @@ export const QUESTS = {
       { id: 'walked', journal: 'You walked the round and the lane lanterns are burning. Take Oswin’s word back to his stall in the plaza.' }
     ],
     done: 'You walked Oswin’s lamp round and the lane lanterns burn over the market again. He paid, and he remembers.'
+  },
+  // --- Late faction chores (round 60) --------------------------------------
+  // Two short errands that only become reachable in the last third of the game,
+  // so the ending is not one faction’s story. They deliberately live outside
+  // QUEST_ORDER: the six-quest spine stays six quests, while a player who did
+  // the side work still gets the recognition for it.
+  wicks: {
+    title: 'The Wick Round', giver: 'mara',
+    steps: [
+      { id: 'started', journal: 'Mara asked you to walk the plaza’s wick round at dusk, checking every lantern the oil quest saved.' },
+      { id: 'trimmed', journal: 'You trimmed the plaza lanterns at dusk. Mara is by the fountain, north side.' }
+    ],
+    done: 'You walked the plaza’s wick round at dusk. The lanterns burn steady, and Mara knows it.'
+  },
+  tally: {
+    title: 'The Gate Tally', giver: 'halden',
+    steps: [
+      { id: 'started', journal: 'Halden wants a walked gate tally for the open gate. Step out into the market lane and back so the watch has a count.' },
+      { id: 'walked', journal: 'You walked out through the north gate and back. Halden is at his post by the gate.' }
+    ],
+    done: 'You walked Halden’s gate tally. The open gate has a count, and the watch stands easier.'
   }
 };
 
 export const PHASES = ['day', 'dusk', 'night'];
+
+/**
+ * The late chores, kept apart from QUEST_ORDER on purpose. The spine is the
+ * seven main quests; these two are the small end-of-game errands that make the
+ * Keepers and the Watch matter in the final third. They still need to be
+ * persisted, journalled and counted, so every place that walks quest state
+ * walks this list too.
+ */
+export const CHORE_ORDER = ['wicks', 'tally'];
+
+/** Every quest-shaped id the game tracks: the spine first, then the chores. */
+const ALL_QUEST_IDS = [...QUEST_ORDER, ...CHORE_ORDER];
 
 export const TOLL_COST = 5;
 
@@ -109,10 +142,109 @@ export const TOLL_COST = 5;
  */
 export const MAX_COINS = 9999;
 
+// --- The late faction chores (round 60) ------------------------------------
+//
+// The Night Light (round 56) made the Market matter at the end of the game. The
+// Keepers and the Watch still had nothing late to offer, so the final third read
+// as one faction's story. These two chores fix that.
+//
+// Rules shared by both, so neither becomes a button:
+//  - gated on visible progress, not on standing (lanterns delivered for Mara, an
+//    open gate for Halden);
+//  - paid once, keyed on a flag, so dawn or any clock trick cannot farm them;
+//  - the purse is the same shape as the lamp round: a few coins and a little
+//    standing, with the real cost being the walk and the phase;
+//  - the quest closes with the giver, so the walk and the word are two acts.
+
+export const WICKS_REWARD = { coins: 2, factionId: 'keepers', delta: 4 };
+export const TALLY_REWARD = { coins: 2, factionId: 'watch', delta: 4 };
+
+/** Whether Mara will offer the wick round right now. */
+export function wicksUnlocked(state) {
+  return isQuestDone(state, 'lanterns');
+}
+
+/** Takes Mara's wick round: the promise to trim the plaza lanterns at dusk. */
+export function startWicks(state) {
+  if (questStatus(state, 'wicks') !== 'none') return noChange('Mara has already given you the wick round.');
+  if (!wicksUnlocked(state)) return noChange('Mara shakes her head. "Get the north lantern burning first. Then we will talk about the rest."');
+  setQuestStep(state, 'wicks', 'started');
+  return { changed: true, message: 'Quest started: The Wick Round', topic: 'wicks_started' };
+}
+
+/** The act: trimming the plaza lanterns at dusk. Advances the promised chore. */
+export function trimWicks(state, phase) {
+  if (questStatus(state, 'wicks') !== 'started') return noChange('You are not carrying the wick round.');
+  if (phase !== 'dusk' && phase !== 'night') return noChange('The wick round is walked at dusk, when the lanterns are lit.');
+  if (getFlag(state, 'wicksTrimmed')) return noChange('The plaza lanterns are already trimmed tonight.');
+  setFlag(state, 'wicksTrimmed', true);
+  const paid = !getFlag(state, 'wicksPaid');
+  if (paid) setFlag(state, 'wicksPaid', true);
+  setQuestStep(state, 'wicks', 'trimmed');
+  const parts = ['You trim the plaza lanterns and check each flame. The square burns steady.'];
+  if (paid) {
+    addCoins(state, WICKS_REWARD.coins);
+    const standing = applyStanding(state, { factionId: WICKS_REWARD.factionId, delta: WICKS_REWARD.delta });
+    parts[0] = `You trim the plaza lanterns and check each flame. +${WICKS_REWARD.coins} coins.`;
+    if (standing.message) parts.push(standing.message);
+  }
+  return { changed: true, message: parts.join(' '), reward: paid ? WICKS_REWARD.coins : 0 };
+}
+
+/** Closes the wick round with Mara. Pays once; the act is the gate. */
+export function finishWicks(state) {
+  if (questStatus(state, 'wicks') !== 'trimmed') return noChange('Mara is waiting on a walked wick round, not a promise.');
+  setQuestStep(state, 'wicks', 'done');
+  return { changed: true, message: 'Quest complete: The Wick Round. Mara nods, which from her is a speech.', topic: 'wicks_done', opinion: 2 };
+}
+
+/** Whether Halden will offer the gate tally right now. */
+export function tallyUnlocked(state) {
+  return questStatus(state, 'key') === 'done';
+}
+
+/** Takes Halden's tally: the promise to walk out through the gate and back. */
+export function startTally(state) {
+  if (questStatus(state, 'tally') !== 'none') return noChange('Halden has already given you the gate tally.');
+  if (!tallyUnlocked(state)) return noChange('Halden jerks a thumb at the shut gate. "Open it first. Then I need a count I can trust."');
+  setQuestStep(state, 'tally', 'started');
+  return { changed: true, message: 'Quest started: The Gate Tally', topic: 'tally_started' };
+}
+
+/** The act: walking out through the open gate into the lane. Advances the chore. */
+export function walkTally(state) {
+  if (questStatus(state, 'tally') !== 'started') return noChange('You are not carrying the gate tally.');
+  if (!tallyUnlocked(state)) return noChange('The gate is shut; there is nothing to tally.');
+  setFlag(state, 'tallyWalked', true);
+  setQuestStep(state, 'tally', 'walked');
+  return { changed: true, message: 'You walk out through the north gate and back. The watch has its count.', topic: 'tally_walked' };
+}
+
+/** Closes the tally with Halden. Pays once; the walk is the gate. */
+export function finishTally(state) {
+  if (questStatus(state, 'tally') !== 'walked') return noChange('Halden is waiting on a walked gate tally, not a promise.');
+  if (getFlag(state, 'tallyPaid')) return noChange('Halden has already paid for this tally.');
+  setFlag(state, 'tallyPaid', true);
+  setQuestStep(state, 'tally', 'done');
+  addCoins(state, TALLY_REWARD.coins);
+  const standing = applyStanding(state, { factionId: TALLY_REWARD.factionId, delta: TALLY_REWARD.delta });
+  const parts = [`Quest complete: The Gate Tally (+${TALLY_REWARD.coins} coins). The watch stands easier for it.`];
+  if (standing.message) parts.push(standing.message);
+  return { changed: true, message: parts.join(' '), topic: 'tally_done', opinion: 2, reward: TALLY_REWARD.coins };
+}
+
+/** Dawn puts the wick round's act to bed, the same as the lane lanterns. */
+export function wicksAtDawn(state, phase) {
+  if (phase !== 'day') return { reset: false };
+  if (!getFlag(state, 'wicksTrimmed')) return { reset: false };
+  setFlag(state, 'wicksTrimmed', false);
+  return { reset: true };
+}
+
 export function createInitialState() {
   return {
     version: 2,
-    quests: { lanterns: 'none', key: 'none', cheer: 'none', toll: 'none', ledger: 'none', arrears: 'none', nightlight: 'none' },
+    quests: { lanterns: 'none', key: 'none', cheer: 'none', toll: 'none', ledger: 'none', arrears: 'none', nightlight: 'none', wicks: 'none', tally: 'none' },
     inventory: [],
     perks: {},
     flags: { coins: 6 },
@@ -718,7 +850,7 @@ export function remember(state, npcId, { topic, opinionDelta = 0 } = {}) {
 /** The journal view: one entry per started quest, current step text only. */
 export function journalEntries(state) {
   const entries = [];
-  for (const questId of QUEST_ORDER) {
+  for (const questId of ALL_QUEST_IDS) {
     const status = questStatus(state, questId);
     if (status === 'none') continue;
     const quest = QUESTS[questId];
@@ -746,7 +878,7 @@ export function journalEntries(state) {
 export function questCounts(state) {
   let active = 0;
   let done = 0;
-  for (const questId of QUEST_ORDER) {
+  for (const questId of ALL_QUEST_IDS) {
     const status = questStatus(state, questId);
     if (status === 'none') continue;
     if (status === 'done') done += 1;
@@ -825,7 +957,7 @@ export function deserialize(raw) {
   if (!saved.quests || typeof saved.quests !== 'object' || Array.isArray(saved.quests)) return null;
 
   const state = createInitialState();
-  for (const questId of QUEST_ORDER) {
+  for (const questId of ALL_QUEST_IDS) {
     const status = saved.quests[questId];
     if (validQuestStatus(questId, status)) state.quests[questId] = status;
   }

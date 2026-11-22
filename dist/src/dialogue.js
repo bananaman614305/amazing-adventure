@@ -42,6 +42,12 @@ import {
   startNightLight,
   walkNightLight,
   finishNightLight,
+  wicksUnlocked,
+  startWicks,
+  finishWicks,
+  tallyUnlocked,
+  startTally,
+  finishTally,
   remember
 } from './state.js';
 import { npcTier, FACTIONS, NPC_FACTION } from './factions.js';
@@ -248,15 +254,35 @@ const mara = {
     }
 
     if (status === 'done') {
-      return node(
-        'Mara the Keeper',
-        'The north lantern burns steady now. You did that.',
-        [
-          { label: 'Who keeps the lanterns usually?', next: () => node('Mara the Keeper', 'I do. Twenty years of trimming wicks. My hands know the work better than my eyes do.') },
-          { label: 'Ask about Oswin.', next: () => node('Mara the Keeper', state.perks.oswin_debt ? 'Oswin tells me you owe him. Settle it when you can — he remembers every debt.' : 'Oswin is honest enough, for a trader. He just never lets a favour go.') },
-          end('Leave')
-        ]
-      );
+      const wicks = questStatus(state, 'wicks');
+      const choices = [
+        { label: 'Who keeps the lanterns usually?', next: () => node('Mara the Keeper', 'I do. Twenty years of trimming wicks. My hands know the work better than my eyes do.') },
+        { label: 'Ask about Oswin.', next: () => node('Mara the Keeper', state.perks.oswin_debt ? 'Oswin tells me you owe him. Settle it when you can — he remembers every debt.' : 'Oswin is honest enough, for a trader. He just never lets a favour go.') }
+      ];
+      if (wicks === 'none' && wicksUnlocked(state)) {
+        choices.unshift({
+          label: 'Anything else need doing?',
+          do: () => startWicks(state),
+          next: () => node('Mara the Keeper', '“The plaza lanterns want trimming at dusk. Walk the wick round, check every flame, and come back to me. Two coins, and the Keepers remember.”')
+        });
+      }
+      if (wicks === 'started') {
+        choices.unshift({
+          label: 'About the wick round.',
+          next: () => node('Mara the Keeper', 'Trim them at dusk, when the lanterns are lit. Come back when you have checked every one.')
+        });
+      }
+      if (wicks === 'trimmed') {
+        choices.unshift({
+          label: 'The wick round is walked.',
+          do: () => finishWicks(state),
+          next: () => node('Mara the Keeper', questStatus(state, 'wicks') === 'done'
+            ? '“Good. The square burns steady, and I will not have to check it twice.”'
+            : '“Not yet. Trim the lanterns at dusk first.”')
+        });
+      }
+      choices.push(end('Leave'));
+      return node('Mara the Keeper', 'The north lantern burns steady now. You did that.', choices);
     }
 
     if (status === 'started') {
@@ -514,11 +540,35 @@ const halden = {
     }
 
     if (status === 'done') {
-      return node('Halden the Guard', 'Gate is locked proper again. Much obliged.', [
+      const tally = questStatus(state, 'tally');
+      const choices = [
         { label: 'Who else has a key?', next: () => node('Halden the Guard', 'Mara, the captain, and me. That is the whole list, and it stays that way.') },
-        tollChoice(state),
-        end('Leave')
-      ]);
+        tollChoice(state)
+      ];
+      if (tally === 'none' && tallyUnlocked(state)) {
+        choices.push({
+          label: 'Anything else need doing?',
+          do: () => startTally(state),
+          next: () => node('Halden the Guard', '“The open gate wants a count. Walk out through it and back, and I will pay for the tally. Two coins, and the Watch remembers.”')
+        });
+      }
+      if (tally === 'started') {
+        choices.push({
+          label: 'About the gate tally.',
+          next: () => node('Halden the Guard', 'Walk out through the gate and back. I will be here with the coin.')
+        });
+      }
+      if (tally === 'walked') {
+        choices.push({
+          label: 'The tally is walked.',
+          do: () => finishTally(state),
+          next: () => node('Halden the Guard', questStatus(state, 'tally') === 'done'
+            ? '“Counted and logged. The Watch stands easier.”'
+            : '“Not yet. Walk it first.”')
+        });
+      }
+      choices.push(end('Leave'));
+      return node('Halden the Guard', 'Gate is locked proper again. Much obliged.', choices);
     }
 
     if (status === 'started') {

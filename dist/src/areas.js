@@ -395,6 +395,28 @@ export function laneLightingHint(state, phase) {
   return status.available ? 'light the lane lanterns' : 'the lane lamp post';
 }
 
+// --- The Wick Round (round 60) ---------------------------------------------
+// The plaza's side of the lamp round: Mara's late chore for the Keepers. The
+// hotspot sits at the plaza lanterns, and the act is a dusk (or night) walk, so
+// the chore costs the same thing the lane round costs: a real walk in the right
+// phase. It answers at any hour so a noon visitor is told why there is nothing
+// to do rather than finding an inert lantern.
+
+/** Where the plaza lanterns stand, for the wick round's hotspot. */
+export const WICKS_SPOT = { x: 2.6, z: -6.2, range: 2.0 };
+
+/** Whether the wick round's hotspot should answer at all right now. */
+export function wicksActive(state) {
+  return questStatus(state, 'wicks') === 'started';
+}
+
+/** What the plaza lanterns are labelled when the player is in reach. */
+export function wicksHint(state, phase) {
+  const trimmed = getFlag(state, 'wicksTrimmed');
+  if (trimmed) return 'the plaza lanterns';
+  return (phase === 'dusk' || phase === 'night') ? 'trim the plaza lanterns' : 'the plaza lanterns';
+}
+
 /**
  * Walks the lamp round: lights the lane lanterns and pays for the help. Refused
  * in daylight or when they are already lit, so the reward cannot be collected

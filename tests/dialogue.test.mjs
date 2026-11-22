@@ -7,7 +7,8 @@ import {
   buyOilWithPromise, deliverOil, startKey, pickUpKey, returnKey,
   startCheer, watchLanterns, tellPipAboutLanterns,
   startToll, collectToll, waiveToll, finishToll,
-  hasItem, coins
+  hasItem, coins, startWicks, trimWicks, finishWicks, startTally, walkTally, finishTally,
+  setQuestStep
 } from '../src/state.js';
 import { startConversation, applyChoice, DIALOGUE } from '../src/dialogue.js';
 
@@ -256,4 +257,50 @@ test('choice actions report a changed flag and a message when they do something'
   const result = applyChoice(state, 'mara', open.choices[0]);
   assert.equal(result.changed, true);
   assert.match(result.message, /Quest started/);
+});
+
+test('Mara offers the wick round in the dialogue once the lanterns are saved', () => {
+  const state = createInitialState();
+  startKey(state); pickUpKey(state); returnKey(state);
+  setQuestStep(state, 'lanterns', 'done');
+  const open = startConversation(state, 'mara');
+  const labels = open.choices.map((c) => c.label);
+  assert.ok(labels.some((l) => /else need doing/.test(l)), 'Mara offers the extra work: ' + labels.join(' | '));
+  applyChoice(state, 'mara', open.choices.find((c) => /else need doing/.test(c.label)));
+  assert.equal(questStatus(state, 'wicks'), 'started', 'the choice takes the chore');
+
+  // The walk is not a dialogue button; the hotspot does it, then Mara closes it.
+  trimWicks(state, 'dusk');
+  const again = startConversation(state, 'mara');
+  const finish = again.choices.find((c) => /wick round is walked/.test(c.label));
+  assert.ok(finish, 'Mara offers to close a walked round');
+  applyChoice(state, 'mara', finish);
+  assert.equal(questStatus(state, 'wicks'), 'done');
+});
+
+test('Halden offers the gate tally in the dialogue once the gate is open', () => {
+  const state = createInitialState();
+  startKey(state); pickUpKey(state); returnKey(state);
+  const open = startConversation(state, 'halden');
+  const labels = open.choices.map((c) => c.label);
+  assert.ok(labels.some((l) => /else need doing/.test(l)), 'Halden offers the extra work: ' + labels.join(' | '));
+  applyChoice(state, 'halden', open.choices.find((c) => /else need doing/.test(c.label)));
+  assert.equal(questStatus(state, 'tally'), 'started', 'the choice takes the chore');
+
+  walkTally(state);
+  const again = startConversation(state, 'halden');
+  const finish = again.choices.find((c) => /tally is walked/.test(c.label));
+  assert.ok(finish, 'Halden offers to close a walked tally');
+  applyChoice(state, 'halden', finish);
+  assert.equal(questStatus(state, 'tally'), 'done');
+});
+
+test('neither chore is offered before its gate opens', () => {
+  const state = createInitialState();
+  const mara = startConversation(state, 'mara');
+  assert.ok(!mara.choices.some((c) => /else need doing/.test(c.label)), 'Mara waits for the lanterns');
+  const halden = startConversation(state, 'halden');
+  assert.ok(!halden.choices.some((c) => /else need doing/.test(c.label)), 'Halden waits for the key');
+  assert.equal(startWicks(state).changed, false);
+  assert.equal(startTally(state).changed, false);
 });
