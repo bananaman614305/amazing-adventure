@@ -205,6 +205,28 @@ export const PROP_FAMILIES = [
     files: WOOD_TEXTURE_FILES,
     tileMeters: 1.5,
     roughness: 0.78
+  },
+  {
+    // The modelled house's brick gables and chimney (round 66). Tight on purpose:
+    // the procedural house walls keep their own upgradeWoodBrick() repeat, and
+    // no other shipped material carries "Brick".
+    id: 'brick',
+    test: /brick/i,
+    files: BRICK_TEXTURE_FILES,
+    tileMeters: 2,
+    roughness: 0.9
+  },
+  {
+    // The house trim: window frames, door jambs and the chimney cap. A broad
+    // /stone/ would also catch the fountain's Stone and StoneDark, which keep
+    // their own tinted pass, so the test stays anchored to the house's material
+    // name. The tile matches TERRACE_TEXTURE_TILE_METERS, which is declared
+    // further down this file, hence the literal.
+    id: 'stone',
+    test: /housestone/i,
+    files: STONE_TEXTURE_FILES,
+    tileMeters: 1.6,
+    roughness: 0.9
   }
 ];
 
@@ -212,9 +234,11 @@ export const PROP_FAMILIES = [
  * Picks the dressing family for an authored material name.
  *
  * Pure so the browser pass and the unit tests agree on what gets dressed instead
- * of both re-deriving the regexes. Returns null for iron, glass, stone, cloth and
- * every other material that should stay flat -- the props read as mixed materials
- * precisely because the bands and trim are left alone.
+ * of both re-deriving the regexes. Returns null for iron, glass and every other
+ * material that should stay flat -- the props read as mixed materials precisely
+ * because the iron bands and glass panes are left alone. HouseBrick and
+ * HouseStone ARE dressed (round 66) from the committed wall maps, while the
+ * fountain's two stones keep their own tinted dressing pass.
  *
  * `isLoaded` lets a caller prefer a family whose maps actually arrived. When a
  * material matches several families (a `BarkWood` trunk matches both bark and
