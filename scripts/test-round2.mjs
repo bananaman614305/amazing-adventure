@@ -2257,7 +2257,18 @@ try {
         found.FountainBasin.material === found.FountainUpperBowl?.material),
       basinMaterialEqPlinth: Boolean(
         found.FountainBasin?.material &&
-        found.FountainBasin.material === found.FountainPlinthLower?.material)
+        found.FountainBasin.material === found.FountainPlinthLower?.material),
+      // Luma of the dark stone's tint multiplier. The authored tones differ by
+      // ~21% luma, so a multiplier in this band is a visible tone shift without
+      // washing the map out; 255 would mean the two stones render identically.
+      darkColorLuma: (() => {
+        const hex = found.FountainPlinthLower?.material?.color?.getHexString();
+        if (!hex) return null;
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        return Number((0.2126 * r + 0.7152 * g + 0.0722 * b).toFixed(1));
+      })()
     };
   });
 
@@ -2278,11 +2289,24 @@ try {
     JSON.stringify([...fountainStone.stone, ...fountainStone.dark]
       .map((m) => ({ name: m.name, uv: m.uv, span: m.uvSpan }))));
 
-  checks.check('the fountain stone is white and not double-tinted',
-    [...fountainStone.stone, ...fountainStone.dark]
-      .every((m) => m && m.color === 'ffffff' && m.metalness === 0),
-    JSON.stringify([...fountainStone.stone, ...fountainStone.dark]
-      .map((m) => ({ name: m.name, color: m.color }))));
+  checks.check('the fountain stone is white where the map carries the albedo',
+    // The light Stone must stay white so its map is not tinted twice. The dark
+    // stone is deliberately *not* white: see the next check.
+    fountainStone.stone.every((m) => m && m.color === 'ffffff' && m.metalness === 0),
+    JSON.stringify(fountainStone.stone.map((m) => ({ name: m.name, color: m.color }))));
+
+  checks.check('the two fountain stones still look different once mapped',
+    // A white multiplier on both stones would render StoneDark byte-identical to
+    // Stone, and the fountain would lose its plinth, finial and corner blocks --
+    // the base that makes it read as a built fountain rather than a bowl. The dark
+    // stone therefore carries the ratio of the two authored tones as a multiplier,
+    // which keeps the map's own contrast and only shifts the overall tone.
+    fountainStone.dark.every((m) => m && m.color !== 'ffffff') &&
+    fountainStone.dark.every((m) => m && m.color === fountainStone.dark[0].color) &&
+    fountainStone.darkColorLuma < 235 &&
+    fountainStone.darkColorLuma > 160,
+    JSON.stringify({ dark: fountainStone.dark.map((m) => ({ name: m.name, color: m.color })),
+                     darkLuma: fountainStone.darkColorLuma }));
 
   checks.check('the two fountain stones keep separate materials and maps',
     // Stone and StoneDark differ in the model; merging them would erase the

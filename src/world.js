@@ -20,7 +20,7 @@ import {
   TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES, LAMP_TEXTURE_FILES,
   needsOwnMaterial,
   cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts,
-  fountainStoneParts, fountainStoneMaterialParams,
+  fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint,
   ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor
 } from './assets.js';
 import { loadGlb } from './glb.js';
@@ -1022,19 +1022,22 @@ export function buildWorld(renderer) {
    * dresser here) writes sampler state onto the texture object: sharing one object
    * between Stone and StoneDark would be harmless while both project at 1.6 m, but
    * it is the kind of sharing that breaks silently the next time one of them wants
-   * a different repeat. The colour stays white so the map is not tinted twice;
-   * the dark stone stays darker because it keeps its authored roughness.
+   * a different repeat. The colour is white for `Stone`, so the map's own albedo
+   * is not tinted twice; `StoneDark` keeps a tint multiplier (see
+   * `fountainStoneTint`) because a white map would otherwise make the plinth,
+   * finial and corner blocks identical to the basin they sit under.
    */
   function fountainStoneMaterial(source, textures) {
     const params = fountainStoneMaterialParams(true, source.name);
     const material = new THREE.MeshStandardMaterial({
-      color: params.color,
+      color: fountainStoneTint(source.name, true),
       roughness: params.roughness,
       metalness: params.metalness,
       side: source.side
     });
     material.name = source.name;
-    applyTextureFamily(material, { ...cloneTextureFamily(textures), anyLoaded: true }, 1, 1, 1);
+    applyTextureFamily(material, { ...cloneTextureFamily(textures), anyLoaded: true }, 1, 1, 1,
+      fountainStoneTint(source.name, true));
     return material;
   }
 
@@ -1042,8 +1045,16 @@ export function buildWorld(renderer) {
    * Applies one loaded texture family to a material. Shared by stone, wood and
    * brick so the tiling/anisotropy rules live in exactly one place.
    * `widthMeters`/`heightMeters` pick the repeat so texel density stays sane.
+   *
+   * `tint` is the multiplier written into `material.color`, white by default
+   * because a map must not be tinted twice. The one caller that passes a
+   * non-white tint is the fountain's dark stone, which has to stay visibly
+   * darker than the light one while both share a map (see `fountainStoneTint`).
+   * This parameter is deliberate rather than the caller resetting `color` after
+   * the call: the reset below is the rule, and a caller quietly undoing it
+   * afterwards would be invisible to anyone reading this function.
    */
-  function applyTextureFamily(material, textures, widthMeters, heightMeters, tileMeters) {
+  function applyTextureFamily(material, textures, widthMeters, heightMeters, tileMeters, tint = 0xffffff) {
     let applied = 0;
     for (const [key, texture] of Object.entries(textures)) {
       if (!texture || key === 'anyLoaded') continue;
@@ -1056,7 +1067,7 @@ export function buildWorld(renderer) {
     }
     // A textured map must not be tinted twice: white base, and the maps carry
     // the roughness/metalness detail.
-    material.color.setHex(0xffffff);
+    material.color.setHex(tint);
     material.roughness = 1;
     material.metalness = 0;
     if (textures.map) material.map = textures.map;

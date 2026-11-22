@@ -3,7 +3,7 @@
 // with a fake fetch, so "assets unavailable" is a tested state rather than a hope.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import {
   FOUNTAIN_COLLIDER, FOUNTAIN_SPOT, FOUNTAIN_ASSET, STONE_TEXTURE_FILES,
   canLoadAssets, textureRepeat, stoneMaterialParams, plazaFloorMaterialParams,
@@ -12,7 +12,7 @@ import {
   terraceMaterialParams, terraceStoneParts, TERRACE_TEXTURE_TILE_METERS, cloneTextureFamily,
   LAMP_TEXTURE_FILES, LAMP_ASSET, LAMP_MODEL_SIZE, loadMaterialTextures, needsOwnMaterial,
   ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor,
-  fountainStoneParts, fountainStoneMaterialParams, FOUNTAIN_STONE_COLORS
+  fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint, FOUNTAIN_STONE_COLORS
 } from '../src/assets.js';
 
 // Minimal fake Three.js: only what these functions touch.
@@ -619,14 +619,32 @@ test('the fountain keeps its two stones distinguishable with and without maps', 
   assert.equal(stone.useMaps, false);
   assert.equal(dark.useMaps, false);
 
-  // With maps the base colour must stay white, or the albedo is tinted twice.
+  // With maps the light stone must stay white, or its albedo is tinted twice.
   for (const name of ['Stone', 'StoneDark']) {
     const dressed = fountainStoneMaterialParams(true, name);
-    assert.equal(dressed.color, 0xffffff, `${name} maps must not be tinted twice`);
     assert.equal(dressed.roughness, 1);
     assert.equal(dressed.metalness, 0);
     assert.equal(dressed.useMaps, true);
   }
+  assert.equal(fountainStoneMaterialParams(true, 'Stone').color, 0xffffff,
+    'the light stone maps must not be tinted twice');
+
+  // The dark stone is the exception, and it has to be: with a white multiplier it
+  // would render byte-identical to the light stone and the plinth, finial and
+  // corner blocks would vanish into the basin. It uses the *ratio* of the two
+  // authored stones as a multiplier rather than the authored colour itself, so the
+  // map keeps its own contrast and only the overall tone drops.
+  const tint = fountainStoneMaterialParams(true, 'StoneDark').color;
+  assert.notEqual(tint, 0xffffff, 'the dark stone must not render as the light one');
+  assert.equal(tint, fountainStoneTint('StoneDark', true));
+  assert.equal(fountainStoneTint('Stone', true), 0xffffff);
+  assert.equal(fountainStoneTint('StoneDark', false), 0xffffff,
+    'without maps the flat colour already carries the difference');
+  const lum = (c) => 0.2126 * ((c >> 16) & 255) + 0.7152 * ((c >> 8) & 255) + 0.0722 * (c & 255);
+  assert.ok(lum(tint) < lum(0xffffff) * 0.85,
+    'the tint darkens the dark stone by a visible margin, not a rounding error');
+  assert.ok(lum(tint) > lum(0xffffff) * 0.65,
+    'the tint stays a tone shift, not a black wash over the map');
 });
 
 test('the gate piers and fountain stone project at the terrace tile size', () => {
@@ -702,4 +720,37 @@ test('the gate and fountain stone share the wall stone request', () => {
   assert.notEqual(gate.map, fountain.map, 'the fountain and gate do not share one');
   assert.equal(gate.roughnessMap, null, 'a missing map stays missing');
   assert.equal(fountain.roughnessMap, null);
+});
+
+test('every asset helper world.js calls is actually imported', () => {
+  // This exact bug shipped green: fountainStoneTint() was used in world.js but
+  // never added to its assets.js import list, so upgrading the fountain threw a
+  // ReferenceError. loadAssets() absorbed the rejection and left assetState at
+  // its initial 'flat', which looks precisely like "the textures did not load"
+  // -- so neither the unit suite (which imports assets.js directly) nor a browser
+  // check that only reads assetState could tell the difference. Reading the source
+  // is the only way to see it, and it is cheap.
+  const world = readFileSync(new URL('../src/world.js', import.meta.url), 'utf8');
+  const imported = new Set();
+  // The one import statement world.js takes from './assets.js'.
+  const block = world.match(/import\s*\{[^}]*\}\s*from\s*'\.\/assets\.js'/) || [];
+  const names = block[0] ? block[0].replace(/import\s*\{|\}\s*from[\s\S]*/g, '') : null;
+  assert.ok(names, 'world.js imports names from assets.js');
+  for (const raw of names.split(',')) {
+    const name = raw.trim().split(/\s+as\s+/).pop();
+    if (name) imported.add(name);
+  }
+
+  // Every helper this test file knows about as an asset rule, minus the ones
+  // world.js legitimately keeps for itself, must appear in that import list.
+  const helpers = [
+    'fountainStoneTint', 'fountainStoneMaterialParams', 'fountainStoneParts',
+    'boxProjectUvs', 'cloneTextureFamily', 'TERRACE_TEXTURE_TILE_METERS'
+  ];
+  for (const helper of helpers) {
+    if (!world.includes(`${helper}(`) && !world.includes(`${helper},`)) continue;
+    assert.ok(imported.has(helper),
+      `world.js calls ${helper}() but does not import it from assets.js -- ` +
+      'the dresser would throw and assetState would silently stay flat');
+  }
 });

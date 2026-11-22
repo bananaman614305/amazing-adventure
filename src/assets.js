@@ -480,7 +480,7 @@ export function fountainStoneMaterialParams(texturesLoaded, stone = 'Stone') {
   const dark = stone === 'StoneDark';
   if (texturesLoaded) {
     return {
-      color: 0xffffff,
+      color: fountainStoneTint(stone, true),
       roughness: 1,
       metalness: 0,
       useMaps: true
@@ -492,6 +492,32 @@ export function fountainStoneMaterialParams(texturesLoaded, stone = 'Stone') {
     metalness: 0,
     useMaps: false
   };
+}
+
+/**
+ * The tint a dressed stone material multiplies its map by.
+ *
+ * Three multiplies `material.color` into the sampled albedo, so white leaves the
+ * map untouched. The lighter `Stone` therefore stays white. `StoneDark` cannot:
+ * with maps it would render byte-identical to `Stone`, erasing the plinth, finial
+ * and corner blocks that give the fountain its base -- a 21% luma difference in
+ * the authored colours would be lost. Instead of tinting by the authored colour
+ * (which would darken the map twice, since the map is already a mid-grey stone)
+ * the dark stone is scaled by the *ratio* between the two authored stones, so the
+ * map's own detail survives at its original contrast and only the overall tone
+ * shifts. That ratio is near-neutral (it darkens blue the least), which keeps the
+ * warm-grey character of both stones.
+ */
+export function fountainStoneTint(stone, texturesLoaded) {
+  if (!texturesLoaded || stone !== 'StoneDark') return 0xffffff;
+  const light = FOUNTAIN_STONE_COLORS.Stone;
+  const dark = FOUNTAIN_STONE_COLORS.StoneDark;
+  const ratio = (shift) => {
+    const a = (light >> shift) & 0xff;
+    const b = (dark >> shift) & 0xff;
+    return Math.max(0, Math.min(255, Math.round((b / a) * 255)));
+  };
+  return (ratio(16) << 16) | (ratio(8) << 8) | ratio(0);
 }
 
 /**

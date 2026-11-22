@@ -12,104 +12,190 @@
 
 ## Current task
 
-**Round 62 — dress the north terrace in quarried stone (box projection).** The
-standing owner priority is graphics realism. Round 61 gave the plaza floor its
-own flagstone paving; that left the raised 1.2 m north terrace — slab, ramp
-deck, two ramp kerbs and four parapet walls — as the last large flat, untextured
-mass in the plaza, seen every time the player walks the ramp. This round dresses
-all of it in the border wall's quarried-stone family.
+**Round 65 — keep the fountain's two stones apart once the maps load.** Round
+64 dressed the gate piers and the fountain stone in the shared quarried-stone
+family, and reviewing my own diff afterwards caught a defect that had shipped
+green: in the *mapped* path both `Stone` and `StoneDark` were given
+`color: 0xffffff`, so the six dark meshes (plinth, finial, four corner blocks)
+rendered identical to the four light ones and the fountain lost the base that
+gives it weight. This round fixes the tint (`fountainStoneTint()` returns the
+*ratio* of the two authored tones, `0xc8cbc9`, so the map keeps its contrast),
+catches the missing `fountainStoneTint` import that had silently disabled two
+rounds of prop dressing, and replaces the "both stones are white" checks with
+checks that assert the two stones stay *different*. Details in the two Round 65
+sections below; evidence at the end of this section.
 
-- **One tile size, one projection, no per-surface repeats.** The older texture
-  path gave each surface its own `repeat`, which cannot work across a 12 m slab,
-  a 4.8 m ramp deck rotated ~14 degrees and a 0.18 m kerb face: either the slab
-  smears or the kerb tiles into noise. `upgradeTerrace()` instead rewrites the
-  `uv` attribute of every terrace mesh with `boxProjectUvs()` at a single
-  `TERRACE_TEXTURE_TILE_METERS = 1.6` m tile, and every mapped texture therefore
-  stays `repeat = (1,1)` — the projected UVs already carry the tiling.
-- **It replaces the UVs, it does not fill them in.** `BoxGeometry` ships with
-  0..1 per-face UVs, so a `!getAttribute('uv')` guard would have skipped the
-  projection and smeared one whole map across all six faces of a 12 m slab. The
-  projection is unconditional.
-- **Two materials, two texture families.** `terraceStoneParts()` splits the
-  meshes into `tread: ['terrace-tread','terrace-ramp']` and
-  `parapet: ['terrace-kerb','terrace-parapet']`. The tread shares one material so
-  the ramp deck cannot shear away from the slab; the upright band gets its own
-  material and its own `cloneTextureFamily()` clones, because sampler state
-  (wrap/repeat) lives on the texture object, and it must not re-wrap the tread.
-  Both are white (`0xffffff`) so the stone is not tinted twice.
-- **No new files, no new licence.** The terrace is dressed from the existing
-  `STONE_TEXTURE_FILES` family, so `REQUIRED_FILES` and `release-manifest.json`
-  are unchanged and there is no new attribution obligation.
-- **Evidence.** `scripts/evidence-round62.mjs` measures the loaded scene graph:
-  the terrace reports `textured` with all three maps; all eight named meshes
-  (1 tread, 1 ramp, 2 kerbs, 4 parapet) carry finite projected UVs; nothing is
-  still on the default 0..1 per-face UVs; **texel density is uniform to within
-  0.05 of `extent / 1.6 m` on all eight meshes**; every mapped texture is
-  `repeat (1,1)`; the tread and parapet draw different texture objects; the
-  border walls keep their own `[17,2]` repeats and share nothing; the walk checks
-  drive the real key path up the ramp and back down. Set `RECORD_ARTIFACTS=1` to
-  also write three screenshots plus `artifacts/round62-evidence.json`.
+**Round 64 — dress the gate piers and the fountain stone.** Rounds 61–63 gave
+the plaza floor, the north terrace, the roofs and the tree canopies their own
+mapped families. Two large stone masses were still bare flat colour in the
+plaza's main sight line, and both are objects the player walks right up to:
 
-Checks on the working tree: unit **585/585 PASS** (`/worker/state/logs/r62-unit.log`,
-`EXIT=0`); desktop browser **235/235 checks passed, 0 FAIL** plus a separate
-passing `no console errors` line (`/worker/state/logs/r62-browser2.log`, run at
-the committed head — note the harness prints `235/235` because the console-error
-line is not itself a collected check, so six new terrace checks took the suite
-from round 61's 229 to 235); mobile **184/184 checks passed, 0 FAIL** across four
-phone profiles (`/worker/state/logs/r62-mobile6.log`); the round-62 evidence
-script **20/20 checks pass** (worktree only:
-`scripts/evidence-round62.mjs`, evidence in `artifacts/round62-evidence.json`
-and three `artifacts/round62-*.png` frames). Note on the mobile suite: an
-earlier attempt against this tree timed out at hi-DPR swiftshader boot, so the
-same suite was also run against the pre-round-62 baseline commit `9fdb16f` in
-`/worker/state/wt62base`; the baseline timed out identically (0 PASS, 5
-`waitForBoot: still booting` lines), which rules out a Round 61/62 texture
-regression and pins it on host load. The rerun passed all 184.
+- **The north gate piers and lintel** (`pierMaterial`, `0x7b7163`) are two
+  0.7 x 4.1 x 1.4 m piers plus a 4.4 m lintel framing the only way out of the
+  plaza — the tallest untextured stone in the whole scene, standing directly
+  beside dressed ashlar walls.
+- **The modelled fountain's `Stone` and `StoneDark` meshes** (bowl, basin,
+  column, plinth, finial, four corner blocks — ten meshes; the two `Water`
+  meshes are deliberately excluded) ship with **no UVs at all**, only
+  POSITION+NORMAL, so they read as smooth sculpted plastic next to coursed
+  stonework.
 
-**Committed on `grunt/round62-terrace`** (three commits, because the preview
-build has to be tied to a clean tree):
+`upgradeGateStone()` and `upgradeFountainStone()` reuse the *one* existing
+quarried-stone request (`STONE_TEXTURE_FILES`, shared with the walls and the
+terrace — `loadStoneFamily()` is memoised, so no extra download), rewrite UVs
+metre-projected at `TERRACE_TEXTURE_TILE_METERS = 1.6` m via `boxProjectUvs()`,
+and clone their own sampler state so every mapped texture stays
+`repeat = (1,1)`. Shared helpers: `fountainStoneParts()`,
+`FOUNTAIN_STONE_COLORS`, `fountainStoneMaterialParams()`, `fountainStoneTint()`
+in `src/assets.js` keep `Stone` and `StoneDark` distinguishable with *and*
+without maps: the light stone's base is white so its albedo is never tinted
+twice, and the dark stone carries a **multiplier** (`0xc8cbc9`) instead of the
+authored colour, so the map keeps its own contrast and only the overall tone
+shifts. Both passes are gated in `assetState.gateStone` /
+`assetState.fountainStone` (`flat` | `textured` | `unavailable` | `stand-in`).
 
-- `3e4c5c7` — the round itself: assets, world wiring, tests, evidence script,
-  evidence artifacts, status notes.
-- `3887a5b` — a `.gitignore` fix. `.gitignore` had `node_modules/`, whose trailing
-  slash only matches a real directory; worktrees symlink `node_modules` from the
-  main checkout, so it appeared as an untracked file and
-  `scripts/build-preview.mjs` reported `workingTreeClean: false` for every
-  preview ever built in a worktree (rounds 59–61 shipped that way). Ignoring the
-  bare name as well lets a worktree preview honestly claim a clean tree.
-- `ec03bb7` — the rebuilt committed preview: 77 files, 4678 KB, digest
-  `414ab46f…`, now with `workingTreeClean: true`.
+### Round 65 — the dark stone was about to disappear
 
-**Not done, deliberately:** no release. The trusted release gate runs against the
-root checkout (`/home/alan/projects/amazing-adventure`), which does not contain
-this branch's work yet, and Round 57's release is still host-side blocked
-(`/worker/state/outbox/needs-supervision.json`). Nothing here is merged or
-deployed by me.
+Reviewing my own round-64 diff caught a real defect, not a style nit. In the
+mapped path both stones returned `color: 0xffffff, roughness: 1`, so once the
+maps loaded `StoneDark` rendered **identical** to `Stone`. The fountain would
+have lost the plinth, finial and corner blocks that give it a base — the exact
+contrast the GLB authors on purpose (authored luma 134 vs 106, a 21% drop).
+The unit test and the browser check both asserted "white" for both stones, so
+the suite was green *around* the bug: they pinned the tint, never the
+difference.
+
+The first fix that suggested itself — tint the dark stone with its authored
+colour — is wrong for the same reason tinting the light one is wrong: the map is
+already a mid-grey stone, so multiplying by `0x706a5e` darkens it twice and
+craters the contrast. `fountainStoneTint()` therefore returns the **ratio**
+between the two authored tones (`0xc8cbc9`) as the multiplier: the map's own
+detail and contrast survive intact, and only the overall tone moves. The tests
+now assert the difference rather than the whiteness — the light stone is white,
+the dark stone is not, it is a single consistent value across all six dark
+meshes, and its luma sits in a band (160–235) that is a visible tone shift and
+not a black wash.
+
+**This is why the round-64 evidence was not enough on its own.** 597 unit tests,
+244 desktop checks and 184 mobile checks all passed while the defect was live.
+A check that asserts a number is only worth its salt if the number is the one
+that matters; "both stones are white" was true and useless. The replacement
+checks fail if the two stones ever converge again.
+
+### The real bug underneath it: a missing import, swallowed
+
+Writing the tint exposed something worse. `fountainStoneTint()` was used in
+`src/world.js` but never added to its `./assets.js` import list, so
+`upgradeFountainStone()` threw a `ReferenceError` the moment it touched the
+tinted path. That rejection was absorbed by `loadAssets()`'s `Promise.all`, so:
+
+- `assetState.fountainStone` stayed at its **initial** `'flat'`, and
+- `upgradePropFamilies()` — the next `.then()` in the chain — **never ran at
+  all**, so round 63's prop wood dressing silently switched off too.
+
+The failure mode is nasty because `'flat'` is the *same value* the world
+reports when the textures genuinely fail to load. Every existing check that
+reads `assetState` passed, because "flat" is a legitimate state that is
+supposed to be reachable. The suite was not wrong about anything it measured;
+it simply never measured whether the code ran.
+
+Two fixes, because a code fix alone leaves the trap armed:
+
+1. `fountainStoneTint` is now imported. The new focused browser probe confirms
+   `fountainStone: "textured"`, 10 meshes (4 stone, 6 dark), all three maps,
+   `tileMeters: 1.6` — and `propWood: "textured"` again, which is the tell that
+   the whole `.then()` chain had been dead.
+2. A **source-level** test (`every asset helper world.js calls is actually
+   imported`) parses world.js's `./assets.js` import list and asserts that every
+   helper the file calls is in it. I removed the import again to prove the guard
+   fails, and restored it to prove it passes. A name-used-but-not-imported bug
+   cannot pass silently again.
+
+Lesson kept for the rest of this series: **a state value that is also the
+failure value cannot testify that the code ran.** Dressing checks need to read a
+positive product (maps, UVs, a mesh count) against the real scene, not only the
+summary enum.
+
+Also in this round: the market-stall stand-in dedup. The roof slab and both
+posts carried no `marketStallStandin` marker, so the modelled awning and posts
+were drawn *on top of* the flat stand-in slab and sticks, doubling them. The
+marker now covers the whole stand-in (4 → 6 hidden objects), and only the
+counters (`marketStallSize` set) spawn model instances, so a roof slab's height
+can never be used to scale a stall.
+
+**Round 65 evidence.** Unit suite **597/597 PASS**
+(`node --test tests/*.test.mjs`) — including the new source-level guard that
+fails when world.js calls an asset helper it forgot to import (verified by
+removing the import and watching it fail). Desktop browser suite **245/245
+checks PASS, 0 FAIL** and no console errors (`/tmp/r65-browser3.log`): the four
+light meshes report `color: "ffffff"`, and all six dark meshes report
+`"c8cbc9"` at `darkLuma 202.2` on separate materials and separate map objects.
+A focused asset probe independently reports `fountainStone: "textured"` (10
+meshes, 4 stone + 6 dark, map + normal + roughness, `tileMeters: 1.6`) **and**
+`propWood: "textured"` — the second being the tell that the whole `.then()`
+chain had been dead. Mobile suite **184/184 checks PASS, 0 FAIL**
+(`/tmp/r65-mobile.log`). Committed artifacts were restored before this run, so
+the evidence refresh left the tree clean.
+
+**Round 64 evidence.** Unit suite **597/597 PASS** (`node --test tests/*.test.mjs`),
+including 12 new asset tests pinning the family reuse, the ten-stone/two-water
+split, the two-stone distinguishability with and without maps, and the
+metre-projection arithmetic on a real basin disc. Desktop browser suite
+**244/244 checks PASS, 0 FAIL** with `RECORD_ARTIFACTS=1`
+(`/tmp/r64-final-browser.log`, 245 PASS lines, no console errors), adding gate
+and fountain dressing checks: all ten stone meshes report
+`state: "textured"` with map+normal+roughness, projected UV spans up to
++/-1.219 m on the plinth and 1.4 m up the finial (i.e. real metre tiling, not
+the default 0..1 face UVs), every mapped texture at `repeat [1,1]` and colour
+`ffffff` (no double tint), the two fountain stones on **separate materials and
+separate map objects**, the two `Water` meshes left with no UVs, no maps and
+`roughness 0.15` so they still read as water, the gate piers and lintel dressed
+from the same family but **not** borrowing the walls' whole-wall repeat, and
+the modelled fountain still solid (a walk-in test stops outside it). Mobile
+suite **184/184 checks PASS, 0 FAIL** across all four phone profiles
+(`/tmp/r64-mobile.log`; iPhone 13 portrait 12.4fps, Pixel 7 1.4fps, iPhone SE
+2.2fps, iPhone 13 landscape 1.4fps — the low numbers are swiftshader, and the
+same profiles measured the same on the pre-round-64 baseline).
+
+**Committed on `grunt/round62-terrace`** (the round-64 commits stack on the
+round-62 branch rather than opening a new branch per round):
+
+- `643af25` — the round itself: `src/assets.js`, `src/world.js`,
+  `tests/assets.test.mjs`, `scripts/test-round2.mjs`.
+- `895e637` — the round-63 evidence script and screenshots, which had been left
+  untracked and were keeping the tree dirty and blocking preview rebuilds.
+- `d2ee3f8` — the committed preview re-stamped at the round-64 sources. The
+  rebuild reproduced the same tree digest (`db8651f6…`), so only the commit
+  pointer and the two copied sources changed.
+
+**Not done, deliberately:** no release. Round 57's release is still host-side
+blocked (`/worker/state/outbox/needs-supervision.json`), and the trusted release
+gate runs against the root checkout, which does not carry these rounds.
+Nothing here is merged or deployed by me.
 
 ## Next steps
 
-1. **Dress the questing props in real materials, next.** With the plaza floor
-   (61) and the north terrace (62) done, the remaining large flat untextured
-   masses are the props the quest spine actually sends the player to: the notice
-   board, the job board, the ledger and the crates. They are the objects the
-   player stops and reads, so flat single-colour faces show up most there. Give
-   the wood props the existing `/Wood/i` dressing path's remaining materials
-   (or a small weathered-plank family) and the ledger's pages/board their own
-   low-key treatment, each with scene-graph evidence like this round's.
-2. **Certify and publish the graphics rounds** on their own `grunt/*` branches
-   once the graphics series settles: obtain the three trusted `planId: release`
-   receipts (`tests`, `browser`, `mobile`) on the exact committed head, then
-   hand it to `grunt_release_prepare`. This is host-side blocked for round 57
-   (`needs-supervision.json`) and the root checkout does not carry these rounds
-   yet, so nothing here is merged or deployed by me.
-3. **Fold in the sky-dome follow-up (Round 57b).** The horizon haze band, phase
+1. **Dress the props the quest spine sends the player to, next.** With the
+   plaza floor (61), the terrace (62), the roofs and canopies (63), and the gate
+   and fountain stone (64) done, the remaining flat untextured masses are the
+   objects the player stops and reads: the notice board, the job board, the
+   ledger, and the plaza crates. Give the wood props the remaining materials the
+   `/Wood/i` dressing path does not reach, and the ledger's pages/board their own
+   low-key treatment, each with scene-graph evidence like these rounds'.
+2. **Physical light on the dressed stone (round 66 candidate).** The new stone
+   has a `normalMap` but every one of these materials is a plain
+   `MeshStandardMaterial` with no light interacting strongly with it. Adding a
+   subtle contact/ambient occlusion pass or a low-cost baked lightmap on the
+   plaza floor would make the ashlar courses read at grazing angles, which is
+   where flat projection still looks flattest.
+3. **Certify and publish the graphics series.** Once the series settles, obtain
+   the three trusted `planId: release` receipts (`tests`, `browser`, `mobile`)
+   on the exact committed head and hand it to `grunt_release_prepare`. This is
+   host-side blocked for round 57 and the root checkout does not carry these
+   rounds yet, so nothing here is merged or deployed by me.
+4. **Fold in the sky-dome follow-up (Round 57b).** The horizon haze band, phase
    driven sun disc and 32x24 dome are finished and green at `c8dbb23` on
-   `grunt/round57b-sky` but were deliberately held out of the certified tree;
-   ship them so the sky is not just brighter but shaped.
-4. **Consider a lid on the plaza's remaining bare verticals.** The banner over
-   the terrace is still a plain `MeshStandardMaterial` plane, and the piers are
-   flat; both are cheap to dress with the plaster and stone families already
-   shipped.
+   `grunt/round57b-sky` but were deliberately held out of the certified tree.
 
 ---
 
