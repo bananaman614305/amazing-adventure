@@ -19,6 +19,8 @@ import {
   COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, PLAZA_FLOOR_TEXTURE_FILES, projectBoxGeometry,
   TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES, LAMP_TEXTURE_FILES,
   CLOTH_TEXTURE_FILES,
+  PLAZA_AO_MAP_CHANNEL, plazaAoMapIntensity, createPlazaAoTexture,
+  applyContactDarkeningGeometry,
   needsOwnMaterial,
   cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts,
   fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint,
@@ -1547,8 +1549,14 @@ export function buildWorld(renderer) {
           if (!mesh.geometry.getAttribute('uv')) {
             projectBoxGeometry({ THREE, geometry: mesh.geometry, tileMeters: 1.2 });
           }
+          // Tree trunks get the same near-ground darkening as dressed props:
+          // without it a bark-textured trunk meets the grass with a hard seam.
+          applyContactDarkeningGeometry({ THREE, geometry: mesh.geometry });
           const material = new THREE.MeshStandardMaterial({
-            color: 0xffffff, roughness: 0.85, metalness: 0
+            color: 0xffffff,
+            roughness: 0.85,
+            metalness: 0,
+            vertexColors: environment.quality !== 'low'
           });
           for (const [key, texture] of Object.entries(textures)) {
             if (!texture || key === 'anyLoaded') continue;
@@ -1992,6 +2000,11 @@ export function buildWorld(renderer) {
         projected += 1;
         if (split.seams > 0) seams += split.seams;
 
+        // Cheap contact darkening: darken vertices near the ground plane so
+        // dressed props read as grounded. Stays in the standard material
+        // pipeline (vertex colours) and degrades to nothing on the low tier.
+        applyContactDarkeningGeometry({ THREE, geometry: mesh.geometry });
+
         const material = new THREE.MeshStandardMaterial({
           // A family whose map has no colour of its own (cloth) must keep the
           // tint its source material authored, or a burlap sack and a painted
@@ -1999,7 +2012,11 @@ export function buildWorld(renderer) {
           // albedo, so white is the correct neutral multiplier there.
           color: family.keepTint && source.color ? source.color.getHex() : 0xffffff,
           roughness: family.roughness,
-          metalness: 0
+          metalness: 0,
+          // Dressing runs late, after several fetches, so it can finish after the
+          // adaptive loop has already dropped to the low tier. Reading the
+          // current tier here keeps the cue off instead of switching it back on.
+          vertexColors: environment.quality !== 'low'
         });
         for (const [key, texture] of Object.entries(textures)) {
           if (!texture || key === 'anyLoaded') continue;
@@ -2298,9 +2315,22 @@ export function buildWorld(renderer) {
       // The plaza is a 9 m radius disc; the flagstone tile is 3 x 3 m, so a
       // 6 x 6 repeat covers it with slabs a little under a metre across.
       applyTextureFamily(plazaMaterial, textures, 18, 18, 3);
+      // Cheap baked AO for grazing angles: a single channel-0 texture on the
+      // same UVs as the flagstone map. Only indirect light is multiplied, so
+      // this is a grounding cue, not a shadow.
+      const aoTexture = createPlazaAoTexture({ THREE });
+      if (aoTexture) {
+        plazaMaterial.aoMap = aoTexture;
+        // The plaza upgrade can land after the adaptive loop has already dropped
+        // to the low tier, so the intensity follows the tier that is current now
+        // rather than assuming full quality.
+        plazaMaterial.aoMapIntensity = plazaAoMapIntensity({ low: environment.quality === 'low' });
+        plazaMaterial.aoMap.channel = PLAZA_AO_MAP_CHANNEL;
+      }
       assetState.plazaFloor = 'textured';
       assetState.plazaFloorDetail = {
-        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k])
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        aoMap: Boolean(aoTexture)
       };
       return assetState;
     });
@@ -2397,6 +2427,27 @@ export function buildWorld(renderer) {
       // renderer's own shadowMap setting stays under main.js's control and a
       // manual override cannot be silently undone here.
       sun.castShadow = !low;
+      // Plaza AO only multiplies indirect light; drop it on the low tier so the
+      // grounding cue costs nothing when the budget is tight.
+      if (plazaMaterial) {
+        plazaMaterial.aoMapIntensity = low ? 0 : plazaAoMapIntensity({ low: false });
+      }
+      // Contact darkening rides on vertex colours; disable it on the low tier by
+      // turning the attribute off on every dressed prop mesh.
+      for (const { group } of propGroups) {
+        group.traverse((mesh) => {
+          // Only meshes that actually carry a `color` attribute are toggled.
+          // `propFamily` alone is not enough: the bark pass marks its meshes the
+          // same way but never writes vertex colours, and switching
+          // `vertexColors` on there would have the shader read a missing
+          // attribute (black or a warning depending on the driver).
+          if (!mesh.isMesh || !mesh.material) return;
+          if (!mesh.geometry?.attributes?.color) return;
+          mesh.material.vertexColors = !low;
+          mesh.material.needsUpdate = true;
+          mesh.geometry.attributes.color.needsUpdate = true;
+        });
+      }
       // Keep the map size and bias in step with the budget table rather than
       // leaving stale numbers behind when the tier flips back to full.
       const budget = shadowSettings(tier);
