@@ -213,6 +213,57 @@ quest spine still opens (9 quests) with no console errors. Screenshots:
 (`/worker/state/grunt-kaggle status`), cloth maps downloaded and inspected
 before use.
 
+**Round 67 review — a bug the split would have hidden.** An independent review
+of `projectBoxGeometry` (and my own adversarial probes on the pure core) turned
+up one real defect and cleared the rest:
+
+- **Fixed: morph targets were not expanded.** Every entry of
+  `geometry.attributes` followed the corner `remap`, but
+  `geometry.morphAttributes` was left at its original vertex count. A split mesh
+  whose `position` grew to 3 corners per triangle while a morph target stayed at
+  the old count makes the renderer read past the end of the smaller buffer and
+  blend the wrong target. No dressed prop uses morphs today — every dressed mesh
+  is a static GLB prop or cast cloth piece — but the split would have corrupted
+  one silently, so `projectBoxGeometry` now maps each target through the same
+  `expand()` helper it uses for attributes. Pinned by
+  `projectBoxGeometry splits morph targets with the corners`, which encodes the
+  source vertex in the target value so the mapping is checkable; I reverted the
+  fix and watched that test fail (49 pass / 1 fail), then restored it (50/50).
+- **Cleared: triangle winding.** The split writes corners in source order
+  (`dst = t * 3 + k` from `cornerIndex(t, k)`), so front faces cannot flip; a
+  direct check confirms the split `positions` equal `remap`-mapped source
+  positions element for element.
+- **Cleared: groups.** A group's `start`/`count` name index positions, and slot
+  `t * 3 + k` in the split buffer occupies the same position the triangle held in
+  the index buffer, so ranges stay correct without rewriting. Verified on a
+  two-material cylinder: groups `0+24, 24+24` still cover triangles 0–7 and 8–15
+  and the draw range ends exactly at the 48-corner buffer.
+- **Cleared: degenerate and bad input.** A collinear (zero-area) triangle
+  produces `seams=0` and finite UVs (the normal is zero, `boxAxis` returns a
+  deterministic axis, no divide by zero). `tileMeters` of `0`, negative, `NaN`,
+  `Infinity`, `undefined` or a string all fall back to 1 via the existing guard.
+  Non-finite *positions* propagate `NaN` into UVs, which is the caller's data
+  error and would already break rendering.
+- **Cleared: double expansion.** An already-unindexed mesh has no shared corners
+  to disagree about, so it reports `seams=0` and keeps its own buffer.
+
+**Round 67 mobile evidence: 183/184, one known-environment FAIL.**
+(`RECORD_ARTIFACTS=1 node scripts/test-mobile.mjs`, `/tmp/r67/mobile3.log`)
+across all four phone profiles: touch controls take over, the analog stick
+moves and stops, walking and looking work at the same time (0.82 m walked while
+turning 0.34 rad), the journal opens and closes, a dialogue choice advances the
+conversation, the build identifies itself, and all four profiles log no console
+errors. The single FAIL is the frame-rate floor on the largest viewport:
+`iPhone 13 (landscape): renders above 1fps — 0.6fps`. That check measures the
+software rasterizer (swiftshader) on a headless CPU profile, not phone GPU
+behaviour: the same profile measured 1.4fps on the round-64 baseline and 0.6fps
+here as the scene gained dressed surfaces, while iPhone 13 portrait reports
+11fps and the smaller iPhone SE 2fps in this same run. Round 67 adds no new
+geometry or draw calls — the cloth dressing reuses existing meshes with three
+more texture maps — so this is the known swiftshader ceiling on the heaviest
+profile, recorded as-is rather than papered over. Screenshots refreshed at
+`artifacts/mobile-*.png`.
+
 **Round 65 evidence.** Unit suite **597/597 PASS**
 (`node --test tests/*.test.mjs`) — including the new source-level guard that
 fails when world.js calls an asset helper it forgot to import (verified by
