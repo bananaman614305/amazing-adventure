@@ -28,9 +28,17 @@ bit-for-bit unchanged. Evidence (`scripts/evidence-round68.mjs`): all 376 shadow
 meshes inside the box in every phase with drift 0.0000 vs `PHASE_LOOKS`, lane far
 corner at NDC (0.344, -0.65), 24/24 checks passed, no console errors. The low
 tier still drops the shadow pass, so mobile keeps its zero-shadow path. Full
-suite 620 pass / 0 fail; dist rebuilt (digest
-59a51211d3302d28aac39539f784f7ddc2a32621d5bfdf6a6f7c567902e153b2) from clean
-tree d124044.
+suite 620 pass / 0 fail, desktop suite 245/245; dist rebuilt at clean tree
+26a99bd (digest d98e2e6092553f9cf8c85dc9c3a5f0fbcd52b1e062831dd541e0483940e64f3f,
+workingTreeClean true, sourceDigest == digest).
+
+The fix is not free and the cost is worth stating plainly: the same 2048 map now
+covers 58.8 m instead of 48 m, so shadow resolution falls from 42.7 to 34.8
+texels/m (81.6% of the old density, each texel 0.53 cm wider). That buys full
+coverage and it is invisible at the prop scale here, but it is a real trade and
+the obvious next tuning step is either trimming the box to the props that
+actually exist rather than the declared area bounds, or a 4096 map on the full
+tier only. I have measured it and not yet decided; the low tier is untouched.
 
 **Round 67 — dress the cloth and fix the UV seams the dressing exposed.** The
 one big flat mass left after rounds 61–66 was cloth: the three lane `SackCloth`
