@@ -265,8 +265,31 @@ here as the scene gained dressed surfaces, while iPhone 13 portrait reports
 11fps and the smaller iPhone SE 2fps in this same run. Round 67 adds no new
 geometry or draw calls — the cloth dressing reuses existing meshes with three
 more texture maps — so this is the known swiftshader ceiling on the heaviest
-profile, recorded as-is rather than papered over. Screenshots refreshed at
-`artifacts/mobile-*.png`.
+profile, recorded as-is rather than papered over. The run rewrote
+`artifacts/mobile-*.png`; those three changed PNGs were reverted to the
+committed images so the tree stayed clean for the preview stamp.
+
+**Round 67 desktop evidence on the review-fixed head.**
+(`node scripts/test-round2.mjs`, `/tmp/r67/desk5.log`) **245/245 checks passed,
+exit 0, no console errors** at `0181e56`, the same head the unit suite and the
+19/19 live evidence ran against. This re-confirms, after the morph-target fix,
+that the seam split did not disturb focus handling, keyboard choices, walking
+after a conversation, relative font sizing at 100%/200%, dialogue reachability
+at 200% text, coin/quest save clamping, or the six-quest spine.
+
+**Round 67 publication state, recorded honestly.** The trusted
+`planId: release` channel verifies the *root* checkout
+(`/home/alan/projects/amazing-adventure`), which is detached at round 59
+`895bb72` with 21 texture maps and no `cloth_*.webp`, so its receipts cannot
+certify this round: the `tests` receipt completed green against `895bb72`, and
+the `browser` receipt returned `failed / execution_failed (exitCode 1)` with
+`before.head: 895bb72` and a dist listing that contains no cloth maps. Both
+receipts are honest — they tested a tree 17 commits behind this candidate. The
+host release pipeline is also still stuck (`d7e3f3fc-…`:
+`phase=blocked, reason=operation_interrupted`), which is reported in
+`/worker/state/outbox/needs-supervision.json`. Round 67 is therefore offered
+through the PR-only fallback at `0181e56`: nothing here is merged or deployed
+by me.
 
 **Round 65 evidence.** Unit suite **597/597 PASS**
 (`node --test tests/*.test.mjs`) — including the new source-level guard that
@@ -320,12 +343,14 @@ Nothing here is merged or deployed by me.
 
 ## Next steps
 
-1. **Certify and publish the graphics series.** The cloth family plus the seam
-   fix closes the last large flat mass the live audits found. Obtain the three
-   trusted `planId: release` receipts (`tests`, `browser`, `mobile`) on the
-   exact committed head and hand it to `grunt_release_prepare`. This is
-   host-side blocked for round 57 and the root checkout does not carry these
-   rounds yet, so nothing here is merged or deployed by me.
+1. **Get the trusted channel onto this candidate, or take the PR-only path.**
+   Round 67 is complete and green at `0181e56` (613/613 unit, 245/245 desktop,
+   19/19 live evidence, mobile 183/184 with the documented swiftshader FAIL).
+   The three `planId: release` receipts certify the root checkout at round 59
+   `895bb72` instead, so they cannot sign this head; the host pipeline is also
+   still `blocked / operation_interrupted`. The tree-mismatch report is in
+   `/worker/state/outbox/needs-supervision.json` and the PR-only request is in
+   `/worker/state/outbox/publish.json`. Nothing is merged or deployed by me.
 2. **Physical light on the dressed surfaces.** The stone/wood/cloth maps all
    have `normalMap`s, but every material is a plain `MeshStandardMaterial` with
    no light interacting strongly with them. A subtle contact/ambient-occlusion
