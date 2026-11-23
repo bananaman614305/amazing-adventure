@@ -562,6 +562,53 @@ test('projectBoxGeometry expands every attribute with the split corners', () => 
   }
 });
 
+test('projectBoxGeometry splits morph targets with the corners', () => {
+  // Morph targets are indexed by the same vertex slots as `position`. If the
+  // split expands position but leaves a morph target at the old count, the
+  // renderer reads past the end of the smaller buffer and blends garbage -- so
+  // every target has to follow the remap. No dressed prop uses morphs today;
+  // this keeps the split from quietly corrupting one that does.
+  class Attr {
+    constructor(array, itemSize) { this.array = array; this.itemSize = itemSize; this.normalized = false; }
+  }
+  class Geo {
+    constructor(attrs, index) {
+      this.attributes = {};
+      for (const [k, v] of Object.entries(attrs)) this.attributes[k] = v;
+      this.index = index;
+      this.morphAttributes = {};
+      this.groups = [];
+    }
+    getAttribute(n) { return this.attributes[n]; }
+    setAttribute(n, a) { this.attributes[n] = a; }
+    getIndex() { return this.index; }
+    setIndex(a) { this.index = a; }
+  }
+  const positions = tubePositions();
+  const indices = [0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5];
+  const vertexCount = positions.length / 3;
+  // Target values encode their source vertex so the remap is checkable.
+  const target = [];
+  for (let i = 0; i < vertexCount; i += 1) target.push(i, i + 100, i + 200);
+  const geo = new Geo({
+    position: new Attr(Float32Array.from(positions), 3)
+  }, { array: Uint16Array.from(indices), count: indices.length });
+  geo.morphAttributes.position = [new Attr(Float32Array.from(target), 3)];
+
+  const report = projectBoxGeometry({ THREE: fakeTHREE, geometry: geo, tileMeters: 1 });
+  assert.ok(report.seams > 0, 'the fixture must split');
+  const split = geo.morphAttributes.position[0];
+  assert.equal(split.array.length, indices.length * 3,
+    'the target grows to one corner per triangle slot');
+  // Corner i in the split buffer came from source corner remap[i]; check the
+  // target followed that mapping rather than the old slot numbering.
+  for (let i = 0; i < indices.length; i += 1) {
+    const src = indices[i];
+    assert.equal(split.array[i * 3], src);
+    assert.equal(split.array[i * 3 + 1], src + 100);
+  }
+});
+
 // --- The painted-iron lamp maps (round 55) ---------------------------------
 
 test('the lamp texture family names the three iron maps and stays on disk', () => {

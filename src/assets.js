@@ -497,8 +497,7 @@ export function projectBoxGeometry({ THREE, geometry, tileMeters = 1 }) {
   geometry.setAttribute('uv', new THREE.BufferAttribute(result.uvs, 2));
   // Every other attribute follows its corner; a mesh whose attributes disagree
   // on count would render with garbage, so pad or trim to the corner count.
-  for (const [name, attr] of Object.entries(geometry.attributes)) {
-    if (name === 'position' || name === 'uv') continue;
+  const expand = (attr) => {
     const ArrayType = attr.array.constructor;
     const itemSize = attr.itemSize;
     const out = new ArrayType(remap.length * itemSize);
@@ -507,9 +506,23 @@ export function projectBoxGeometry({ THREE, geometry, tileMeters = 1 }) {
         out[i * itemSize + c] = attr.array[remap[i] * itemSize + c];
       }
     }
-    geometry.setAttribute(name, new THREE.BufferAttribute(out, itemSize,
-      attr.normalized));
+    return new THREE.BufferAttribute(out, itemSize, attr.normalized);
+  };
+  for (const [name, attr] of Object.entries(geometry.attributes)) {
+    if (name === 'position' || name === 'uv') continue;
+    geometry.setAttribute(name, expand(attr));
   }
+  // Morph targets are indexed by the same vertex slots, so they must follow the
+  // split too. Leaving them at the old count makes the renderer read past the
+  // end of the smaller buffer (or blend the wrong target).
+  for (const name of Object.keys(geometry.morphAttributes || {})) {
+    geometry.morphAttributes[name] = geometry.morphAttributes[name].map(expand);
+  }
+  // The index buffer is gone, but `groups` stay valid as they are: slot
+  // `t * 3 + k` in the split buffer occupies the same position the triangle held
+  // in the old index buffer, so a group's `start`/`count` still name the same
+  // triangles (counts were already three entries per triangle). This is why the
+  // split must keep triangle order, which the loop above does.
   geometry.setIndex(null);
   return { seams: result.seams, vertices: remap.length };
 }
