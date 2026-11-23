@@ -27,9 +27,25 @@ the same centre shift, so the authored day/dusk/night sun directions are
 bit-for-bit unchanged. Evidence (`scripts/evidence-round68.mjs`): all 376 shadow
 meshes inside the box in every phase with drift 0.0000 vs `PHASE_LOOKS`, lane far
 corner at NDC (0.344, -0.65), 24/24 checks passed, no console errors. The low
-tier still drops the shadow pass, so mobile keeps its zero-shadow path. Full
-suite 620 pass / 0 fail, desktop suite 245/245; dist rebuilt at clean tree
-26a99bd (digest d98e2e6092553f9cf8c85dc9c3a5f0fbcd52b1e062831dd541e0483940e64f3f,
+tier still drops the shadow pass, so mobile keeps its zero-shadow path.
+
+Reviewing my own fix caught a second, worse defect that the round's first
+evidence run had passed. The shadow camera's near plane was fixed at 1, which
+is only safe while every prop sits in front of the light. Dusk drops the sun to
+y 7 and looks almost along the ground, so tall geometry projects *behind* the
+light plane (measured view-space z up to +2.8 m); seven mesh corners - the gate
+wall, three tree canopies, three ground receivers - were clipped out of the
+depth map, exactly the grazing-angle case where contact shadow matters most.
+`near` is now `-slack`. The evidence script had missed it because it projected
+bounding-box *centres*, which cannot see a box straddling a plane; it now tests
+all eight corners. The negative control is real and I ran it: restoring `near 1`
+makes the stricter script report 23/24 and name those seven corners at NDC z
+around -1.05, while the centre-only version passed. The unit test that asserted
+`near >= 1` had encoded the bug and is replaced by one pinning the behind-light
+case.
+
+Full suite 621 pass / 0 fail, desktop suite 245/245; dist rebuilt at clean tree
+9460cc4 (digest b916047b080e6e45d9c91fcde04bdb194301394b36b3ce2436ef102a234efc65,
 workingTreeClean true, sourceDigest == digest).
 
 The fix is not free and the cost is worth stating plainly: the same 2048 map now
