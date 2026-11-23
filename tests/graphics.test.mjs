@@ -15,9 +15,10 @@ import {
   ambientRoomFor, shadowSettings, configureRenderer, applyPhaseLook,
   buildEnvironmentMap, skyBlend, skyHazeBlend, skyVertexColor,
   HAZE_HEIGHT, PHASE_SUN_DISK, sunDiskIntensity, SUN_DISTANCE,
-  SUN_CORE_RADIUS, SUN_GLOW_RADIUS, sunDiscPosition
+  SUN_CORE_RADIUS, SUN_GLOW_RADIUS, sunDiscPosition, shadowFrustumFor
 } from '../src/graphics.js';
 import { PHASE_LOOKS } from '../src/world.js';
+import { PLAZA, LANE } from '../src/areas.js';
 
 test('the tone curve is the filmic one, not the default linear pass-through', () => {
   assert.equal(TONE_MAPPING_NAME, 'ACESFilmic');
@@ -93,6 +94,87 @@ test('shadow settings are stable across calls so tier flips are idempotent', () 
   assert.deepEqual(shadowSettings('full'), shadowSettings('full'));
   assert.deepEqual(shadowSettings('low'), shadowSettings('low'));
   assert.deepEqual(shadowSettings(undefined), shadowSettings('full'));
+});
+
+// --- Shadow frustum coverage -------------------------------------------
+// The plaza's shadow box was hard-coded +-24 when the plaza was the whole
+// world. The market lane was later added north of it and the box was never
+// revisited, so lane props fell outside the depth pass and cast no shadow.
+// These tests pin the property that made the bug possible: every declared
+// point of every area must land inside the box.
+
+/** Projects a world point onto the shadow box, returning normalised coords. */
+function projectIntoBox(box, x, z) {
+  // The ortho box is square and centred on the world centre in the ground
+  // plane, so the mapping is a plain scale about that centre.
+  const half = (box.right - box.left) / 2;
+  return {
+    x: (x - box.centre.x) / half,
+    y: (z - box.centre.z) / half
+  };
+}
+
+const WORLD_AREAS = [PLAZA, LANE];
+
+test('the shadow box is square so the square shadow map spends every texel', () => {
+  const box = shadowFrustumFor(WORLD_AREAS);
+  assert.equal(box.right - box.left, box.top - box.bottom);
+  assert.equal(box.left, -box.right);
+  assert.equal(box.bottom, -box.top);
+});
+
+test('every corner of every area falls inside the shadow box', () => {
+  const box = shadowFrustumFor(WORLD_AREAS);
+  for (const area of WORLD_AREAS) {
+    for (const x of [area.minX, area.maxX]) {
+      for (const z of [area.minZ, area.maxZ]) {
+        const p = projectIntoBox(box, x, z);
+        assert.ok(Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1,
+          `${area.id} corner (${x}, ${z}) projects to ${p.x.toFixed(2)}, ${p.y.toFixed(2)} - outside the shadow box`);
+      }
+    }
+  }
+});
+
+test('the old +-24 box would have failed the lane coverage check', () => {
+  // A negative control: this is the bug, reproduced as arithmetic. If someone
+  // reintroduces a fixed small box, the coverage expectation above still holds
+  // but this test documents exactly why the box must be derived.
+  const old = { left: -24, right: 24, top: 24, bottom: -24, centre: { x: 0, z: 0 } };
+  const laneEnd = projectIntoBox(old, LANE.maxX, LANE.minZ);
+  assert.ok(Math.abs(laneEnd.x) > 1 || Math.abs(laneEnd.y) > 1,
+    'the lane end should fall outside the historical +-24 box');
+});
+
+test('the box is centred on the world rather than on the origin', () => {
+  const box = shadowFrustumFor(WORLD_AREAS);
+  const minZ = Math.min(PLAZA.minZ, LANE.minZ);
+  const maxZ = Math.max(PLAZA.maxZ, LANE.maxZ);
+  assert.equal(box.centre.z, (minZ + maxZ) / 2);
+});
+
+test('the shadow box grows when an area is added further out', () => {
+  const before = shadowFrustumFor(WORLD_AREAS);
+  const extended = shadowFrustumFor([...WORLD_AREAS, { id: 'far', minX: -40, maxX: -38, minZ: 30, maxZ: 32 }]);
+  assert.ok(extended.size > before.size, 'a new distant area must widen the frustum');
+  const p = projectIntoBox(extended, -40, 32);
+  assert.ok(Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1, 'the new area corner must be covered');
+});
+
+test('the shadow box is larger than the plane it covers, so edges are not clipped', () => {
+  const box = shadowFrustumFor(WORLD_AREAS);
+  assert.ok(box.size > 48, 'box must exceed the old +-24 extent');
+  assert.ok(box.near >= 1, 'near plane stays in front of the light');
+  assert.ok(box.far > box.size, 'far plane must clear the whole box');
+});
+
+test('an empty or malformed area list falls back to the historical box', () => {
+  for (const input of [[], undefined, null, [null], [{}]]) {
+    const box = shadowFrustumFor(input);
+    assert.equal(box.left, -24);
+    assert.equal(box.right, 24);
+    assert.ok(Number.isFinite(box.near) && Number.isFinite(box.far));
+  }
 });
 
 test('configureRenderer sets tone mapping, exposure and colour space together', () => {
