@@ -12,6 +12,62 @@
 
 ## Current task
 
+**Round 70 - one painted-iron read for props and fixtures.** The largest flat
+mass left after round 69 was ironwork: `BarrelIron`, `BenchIron`, `CrateIron`,
+`DoorIron`, `MarketIron`, `NoticeIron`, `StallIron` and the plaza lamp posts came
+to ~62 m2 of untextured grey across the prop GLBs, sitting between dressed timber
+and dressed stone. This round dresses them from the **lane lamp's own maps**
+(`LAMP_TEXTURE_FILES`, no second near-identical set) through a new `iron`
+`PROP_FAMILY` at a 0.6 m tile, with `metalness: 0.45` so painted metal catches
+the sky instead of reading as grey plastic (every other family stays fully
+dielectric - a unit test pins that, because adding the field to timber or cloth
+would make haystacks and walls look wet). The lane's own procedural post + sphere
+is replaced by the modelled lantern (`upgradeLaneLamp`), and its already-dressed
+`LampIronPainted` material is excluded by a negative lookahead so it is never
+projected or swapped twice. The three callers that must survive the swap are
+checked: `environment.postLamp` is reassigned to the modelled bulb so
+`applyPhase()` still writes `emissiveIntensity` (the round-54 honesty bug), every
+mesh gets its own material clone because `loadLampAsset()` caches one parse shared
+with the four plaza posts, and iron UVs are box-projected because the GLBs ship
+without UVs. Nine deliberately-flat surfaces were also given real names
+(`LanternHousing`, `LanternBulb`, `TerraceBanner`, `BoardFace`, `BoardPaper`,
+`NoticeFaceLane`, `BuntingRed`, `BuntingGold`, `NpcMarker`) because the materials
+audit was collapsing six unrelated materials into one 10.65 m2 `(unnamed)` row;
+the audit now keys by material identity, waits for `assetsReady()` instead of the
+`'flat'`-initialised `assetState`, and skips hidden materials.
+
+Evidence (`scripts/evidence-round70.mjs`, `RECORD_ARTIFACTS=1`): **35/35 checks
+PASS**, no console errors. 35 iron prop meshes dressed with map + box-projected
+UV, 0 iron left flat; the 4 `LampIronPainted` lane meshes all carry albedo +
+normal + roughness; the modelled bulb keeps `emissive ffb43a` and
+`environment.postLamp.name === 'LampBulb'`; aim is finite (`rotationY -2.8633`,
+lantern at 12.823 / -24.635 inside the lane corridor). Materials audit: 25 named
+flat rows totalling **51.10 m2** (was 51.22 m2 in six collapsed buckets), and the
+`(unnamed)` bucket is **gone**. Round 69's own evidence still passes on this tree
+(142 dressed props, was 83; 24 dark / 30 lit of 40 sampled). Unit suite
+**626/627** - the one failure is the expected stale-`dist/` preview check, which
+the follow-up dist commit restamps. Desktop browser suite **247/247** checks
+PASS with no console errors (the +2 are the re-pointed round-41/42 prop
+checks); the mobile profile suite is deferred this round because host mobile
+boots remain unreliable, and the iron dressing reuses the already-downloaded
+lamp maps, so no tier downloads anything new. Screenshots:
+`artifacts/round70-{lane-lamp,iron-props,plaza}.png`, JSON
+`artifacts/round70-evidence.json`, review notes `artifacts/r70-review.md`.
+
+The honest limitation: this reuses the lane lamp's paint rather than a new
+scanned/painted iron set, so the props and the fixture agree by construction but
+the whole iron family shares one 0.6 m tile and one chip pattern. A second set
+would drift, so I chose agreement; a future round could add a *variant* map (dirt
+or rust) on top of the same base if the repetition starts to show in motion.
+
+**Round 69 - bake plaza ambient occlusion and ground the props.** The
+now-correct shadows (round 68) made two grounding cues worth building: a baked
+`aoMap` on the plaza floor (three.js multiplies an `aoMap` into *indirect* light
+only and reads just the R channel, so it is a grazing-angle hint, not a shadow)
+and per-vertex contact darkening on dressed stone/wood props below a short ramp
+above the ground. Both are pinned to UV channel 0 (`CircleGeometry` has no
+`uv1`) and both vanish on the low tier so mobile keeps its zero-cost path.
+
 **Round 68 - give the market lane its sun shadows back.** Reviewing round 67's
 dressed plaza exposed a defect no earlier test could see: the sun's shadow box
 was hard-coded as +-24 around the origin, written when the plaza was the whole
@@ -387,35 +443,27 @@ Nothing here is merged or deployed by me.
 
 ## Next steps
 
-1. Round 69 candidate: use the now-correct shadows - a cheap contact-darkening
-   pass (AO-style vertex or rim darkening) on stone/wood props to strengthen the
-   grounded look the frustum fix enables, plus a low-cost baked lightmap on the
-   plaza floor for grazing angles.
-2. Publication is still blocked host-side: the root checkout
-   /home/alan/projects/amazing-adventure is detached at 895bb72 (round 59), and
-   the publisher checks the root tree, so it reports needs_attention / "Commit
-   the clean working tree before publication". Host-side repair, not game code.
-3. If a future area is added, `shadowFrustumFor` grows the box automatically;
-   the tests pin corner coverage, squareness and a negative control on the old
-   +-24 box.
-
-1. **Get the trusted channel onto this candidate, or take the PR-only path.**
-   Round 67 is complete and green at `0181e56` (613/613 unit, 245/245 desktop,
-   19/19 live evidence, mobile 183/184 with the documented swiftshader FAIL).
-   The three `planId: release` receipts certify the root checkout at round 59
-   `895bb72` instead, so they cannot sign this head; the host pipeline is also
-   still `blocked / operation_interrupted`. The tree-mismatch report is in
-   `/worker/state/outbox/needs-supervision.json` and the PR-only request is in
-   `/worker/state/outbox/publish.json`. Nothing is merged or deployed by me.
-2. **Physical light on the dressed surfaces.** The stone/wood/cloth maps all
-   have `normalMap`s, but every material is a plain `MeshStandardMaterial` with
-   no light interacting strongly with them. A subtle contact/ambient-occlusion
-   pass or a low-cost baked lightmap on the plaza floor would make the courses
-   and the weave read at grazing angles, which is where projection still looks
-   flattest.
-3. **Fold in the sky-dome follow-up (Round 57b).** The horizon haze band, phase
-   driven sun disc and 32x24 dome are finished and green at `c8dbb23` on
-   `grunt/round57b-sky` but were deliberately held out of the certified tree.
+1. **Round 71 candidate: the terrace banner's painted canvas.** After round 70
+   the largest flat surface left is the 5.28 m2 `TerraceBanner`, then `Water` at
+   16.36 m2 (which must stay flat and moving) and `HouseGlass` at 4.63 m2
+   (which must stay glass). A painted canvas family - dyed cloth with a
+   hand-painted device - would dress the banner without a weave tile, and the
+   same map could dress the lane's bunting flags if a 0.16 m flag can carry a
+   low-frequency variant instead of the 1.2 m weave.
+2. **Publication is blocked host-side, not by game code.** The root checkout is
+   detached at the round-59 root `895bb72`; the three `planId: release` receipts
+   certify that tree (21 texture maps, no `cloth_*.webp`), and the round-57c
+   request is stuck at `phase=blocked, reason=operation_interrupted`. The tree
+   mismatch is reported in `/worker/state/outbox/needs-supervision.json` and the
+   PR-only request for `grunt/round67-cloth` is in
+   `/worker/state/outbox/publish.json`. A candidate at this head needs fresh
+   `tests`, `browser` and `mobile` receipts against the exact committed tree
+   before any release call.
+3. **Iron variant maps, if repetition shows in motion.** Round 70 put the props
+   and the lane fixture on one 0.6 m painted-iron tile on purpose, so they agree
+   by construction. If playtesting shows the chip pattern repeating across the
+   barrel hoops, a cheap dirt or rust variant layered on the same base would
+   break it without adding a second family.
 
 ---
 
@@ -439,12 +487,13 @@ Nothing here is merged or deployed by me.
   the plaza floor's own flagstone PBR family, with its fallback colour, world
   wiring, manifest entries, tests and browser evidence.
 
-**Last checkpoint:** Round 61 on `grunt/round61-plaza-floor`: the plaza floor
-moved off the wall-stone maps onto a dedicated flagstone family, covered by 4
-new unit tests (unit 580/580), desktop 229/229, mobile 184/184, refreshed
-evidence screenshots, and the committed `dist/` preview rebuilt at digest
-`9e190fc7…`. See the "Current task" section at the top of this file and the
-Round 60 section below for the chores it builds on.
+**Last checkpoint:** Round 70 on `grunt/round67-cloth`: the iron prop family
+dressed from the lane lamp's own maps, the procedural lane lamp replaced by the
+modelled lantern, nine small flat materials named so the materials audit has no
+`(unnamed)` bucket, evidence 35/35 with three new screenshots, desktop suite
+247/247, unit 626/627 before the dist restamp (the one failure being exactly the
+stale-preview check the restamp fixes). See the "Current task" section at the
+top of this file and the Round 69 sections below for the AO work this builds on.
 
 ## Round 5 — playable phone preview (owner priority)
 

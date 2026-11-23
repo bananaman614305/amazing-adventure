@@ -392,6 +392,13 @@ export function buildWorld(renderer) {
   ropeMat.name = 'LaneRope';
   const buntingMat = new THREE.MeshStandardMaterial({ color: 0xc9553f, roughness: 0.85 });
   const buntingMatB = new THREE.MeshStandardMaterial({ color: 0xe0b552, roughness: 0.85 });
+  // Named, like the rope, so a live material audit attributes their area to the
+  // bunting instead of dumping the 45 pennants into one anonymous 15 m2 bucket.
+  // The names deliberately match no prop family: 0.16 x 0.22 m triangular flags
+  // are dyed felt, and projecting a 1.2 m weave onto one would smear a texture
+  // across a surface smaller than a single texel. They are meant to stay flat.
+  buntingMat.name = 'BuntingRed';
+  buntingMatB.name = 'BuntingGold';
   const flagGeometry = new THREE.ConeGeometry(0.09, 0.22, 3);
   for (const strand of LANE_BUNTING) {
     // The rope: a thin box spanning the lane, dipping in the middle.
@@ -468,6 +475,10 @@ export function buildWorld(renderer) {
   boardFace.position.set(NOTICE_BOARD.x - 0.14, 1.25, NOTICE_BOARD.z);
   boardFace.rotation.y = -Math.PI / 2;
   boardFace.userData = { noticeStandin: true };
+  // The lane notice board's face is 1.4 x 1.2 m of painted board -- big enough
+  // that leaving it anonymous merged it into a shared (unnamed) audit bucket
+  // and hid it behind smaller surfaces. Named, like the job board's face.
+  boardFace.material.name = 'NoticeFaceLane';
   scene.add(boardFace);
   colliders.push(boxCollider(
     NOTICE_BOARD.x - 0.3, NOTICE_BOARD.z - 0.9,
@@ -517,10 +528,15 @@ export function buildWorld(renderer) {
     drop.position.set(placed.x, (placed.anchorY + placed.topY) / 2, placed.z);
     fixture.add(drop);
 
+    // Named for the audit, not for a prop family: this housing is 0.24 m across,
+    // so a 0.6 m iron tile would smear three chips of paint over the whole thing.
+    // It is deliberately left flat like the bunting flags it hangs among, and
+    // `LanternHousing` matches no family test so that stays true by construction.
     const body = new THREE.Mesh(
       new THREE.CylinderGeometry(0.09, 0.12, LANTERN_HEIGHT, 8),
       new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.5, metalness: 0.35 })
     );
+    body.material.name = 'LanternHousing';
     body.position.set(placed.x, lanternY, placed.z);
     body.castShadow = true;
     fixture.add(body);
@@ -529,6 +545,10 @@ export function buildWorld(renderer) {
       new THREE.SphereGeometry(0.055, 10, 8),
       new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xffb43a, emissiveIntensity: 0 })
     );
+    // Not `LampBulb`: the plaza fixtures keep that name, and these three bulbs
+    // are the ones applyPhase() writes through laneLamps[].bulb. Same colour,
+    // different owner -- the audit must be able to tell them apart.
+    bulb.material.name = 'LanternBulb';
     bulb.position.set(placed.x, placed.topY - LANTERN_HEIGHT * 0.62, placed.z);
     bulb.userData = { laneLanternBulb: true };
     fixture.add(bulb);
@@ -645,6 +665,11 @@ export function buildWorld(renderer) {
     new THREE.PlaneGeometry(2.4, 1.1),
     new THREE.MeshStandardMaterial({ color: 0x2f5d8a, roughness: 0.8, side: THREE.DoubleSide })
   );
+  // 5.3 m2 of painted banner cloth: the largest flat surface left after the
+  // iron family. Named so the audit attributes it instead of folding it into a
+  // shared anonymous bucket, and worded so it matches no weave family -- a
+  // banner is sized and painted, not woven at a 1.2 m repeat.
+  banner.material.name = 'TerraceBanner';
   banner.position.set(0, TERRACE.height + 1.5, TERRACE.minZ + 0.08);
   scene.add(banner);
 
@@ -740,6 +765,7 @@ export function buildWorld(renderer) {
       new THREE.PlaneGeometry(1.2, 0.9),
       new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.95 })
     );
+    boardFace.material.name = 'BoardFace';
     boardFace.position.set(JOB_BOARD.x, 1.3, JOB_BOARD.z + 0.13);
     scene.add(boardFace);
     // Pinned slips of paper, so it reads as a job board from a distance.
@@ -748,6 +774,7 @@ export function buildWorld(renderer) {
         new THREE.PlaneGeometry(0.22, 0.3),
         new THREE.MeshStandardMaterial({ color: 0xf2ead6, roughness: 1 })
       );
+      slip.material.name = 'BoardPaper';
       slip.position.set(JOB_BOARD.x - 0.34 + i * 0.34, 1.26 + (i % 2) * 0.14, JOB_BOARD.z + 0.14);
       scene.add(slip);
     }
@@ -976,6 +1003,8 @@ export function buildWorld(renderer) {
     foliageDetail: null,
     cloth: 'flat',
     clothDetail: null,
+    iron: 'flat',
+    ironDetail: null,
     cobble: 'flat',
     grass: 'flat',
     walls: 'flat',
@@ -1602,6 +1631,7 @@ export function buildWorld(renderer) {
       assetState.roof = 'unavailable';
       assetState.foliage = 'unavailable';
       assetState.cloth = 'unavailable';
+      assetState.iron = 'unavailable';
       return Promise.resolve(assetState);
     }
     return Promise.all([
@@ -1623,9 +1653,17 @@ export function buildWorld(renderer) {
       // pass as the wood/brick/stone props. The cast's `Cloth` coats are NOT in
       // the prop registry (they live in npcs.js and must keep their authored
       // per-NPC tint), so they are dressed by their own pass there.
+      //
+      // Round 70: the painted-iron prop family needs the same lamp_* maps the
+      // lane lantern already uses. They are fetched here, once, and handed to
+      // upgradePropFamilies() through `familyTextures.iron`, so the plaza
+      // ironwork and the lane fixture end up with one shared look. `upgradeLaneLamp()`
+      // runs its own load for the head it dresses in code; the browser caches
+      // the three files, so this is a cache hit rather than a second download.
       return Promise.all([
-        loadMaterialTextures({ THREE, files: CLOTH_TEXTURE_FILES })
-      ]).then(([cloth]) => {
+        loadMaterialTextures({ THREE, files: CLOTH_TEXTURE_FILES }),
+        loadMaterialTextures({ THREE, files: LAMP_TEXTURE_FILES })
+      ]).then(([cloth, iron]) => {
         if (cloth.anyLoaded) {
           familyTextures.cloth = cloth;
           assetState.cloth = 'textured';
@@ -1634,6 +1672,15 @@ export function buildWorld(renderer) {
           };
         } else {
           assetState.cloth = 'flat';
+        }
+        if (iron.anyLoaded) {
+          familyTextures.iron = iron;
+          assetState.iron = 'textured';
+          assetState.ironDetail = {
+            maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => iron[k])
+          };
+        } else {
+          assetState.iron = 'flat';
         }
         return assetState;
       });
@@ -2012,7 +2059,12 @@ export function buildWorld(renderer) {
           // albedo, so white is the correct neutral multiplier there.
           color: family.keepTint && source.color ? source.color.getHex() : 0xffffff,
           roughness: family.roughness,
-          metalness: 0,
+          // Painted metal reads as metal: it needs to catch the sky. A family
+          // that leaves this unset stays fully dielectric, which is right for
+          // timber, brick and cloth. The iron family asks for 0.45 so its bands
+          // and hoops share the lane lantern's sheen; the roughness map still
+          // governs where the chips are dull.
+          metalness: family.metalness ?? 0,
           // Dressing runs late, after several fetches, so it can finish after the
           // adaptive loop has already dropped to the low tier. Reading the
           // current tier here keeps the cue off instead of switching it back on.

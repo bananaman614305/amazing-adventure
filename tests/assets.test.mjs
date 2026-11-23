@@ -709,20 +709,40 @@ test('propFamilyFor picks the family from the authored material name', () => {
   // families, dressed from the committed brick and stone wall maps.
   assert.equal(propFamilyFor('HouseBrick').id, 'brick');
   assert.equal(propFamilyFor('HouseStone').id, 'stone');
+  // Round 70: the painted-iron prop family. Every iron name the shipped GLBs
+  // carry, except the lane lantern (already dressed by upgradeLaneLamp()).
+  for (const name of ['BarrelIron', 'BenchIron', 'CrateIron', 'DoorIron',
+    'LampIron', 'MarketIron', 'NoticeIron', 'StallIron']) {
+    assert.equal(propFamilyFor(name).id, 'iron', `${name} is painted ironwork`);
+  }
+  // The lane lantern's own groups are renamed `LampIronPainted` by
+  // upgradeLaneLamp() after it dresses them. Re-matching here would project new
+  // UVs and swap in a second material on a mesh that is already textured.
+  assert.equal(propFamilyFor('LampIronPainted'), null,
+    'the already-dressed lane lantern must not be dressed twice');
 });
 
 test('material names that are not props stay flat', () => {
-  // Iron and glass trim are what make the props read as mixed materials;
-  // dressing them would flatten that contrast back out. StoneDark belongs to
-  // the fountain's own tinted pass, which is why the house's stone family is
-  // anchored to HouseStone instead of a broad /stone/.
+  // Glass, skin, paper and water are what make the props read as mixed
+  // materials; dressing them would flatten that contrast back out. The ironwork
+  // used to be on this list and is dressed as of round 70 (see the prop family
+  // test above) -- what stays flat is the glass, the bulb, the people and the
+  // water. StoneDark belongs to the fountain's own tinted pass, which is why the
+  // house's stone family is anchored to HouseStone instead of a broad /stone/.
   // These are the real material names the shipped GLBs carry.
   // 'Cloth' is now dressed (Round 67): the lane sacks carry `SackCloth` and the
   // cast coats carry `Cloth`, both of which match the cloth family. Cloth is
   // therefore no longer in the must-stay-flat list -- the flat list below
   // documents the materials that are still intentionally left alone.
-  for (const name of ['BarrelIron', 'LampIron', 'LampGlass', 'StoneDark',
-    'Skin', 'EyeIris', 'Paper', 'Steel', 'Water', 'HouseGlass', '',
+  for (const name of ['LampGlass', 'LampBulb', 'StoneDark',
+    'Skin', 'EyeIris', 'EyeWhite', 'Paper', 'Steel', 'Water', 'HouseGlass', '',
+    'Accent', 'Boot', 'SackTie', 'HairC', 'Mouth',
+    // Round 70 named the remaining anonymously-materialled surfaces so the
+    // materials audit can attribute their area (an unnamed material used to
+    // collapse six unrelated surfaces into one 10.65 m2 row). Naming them is
+    // also a claim that they are deliberately flat: each matches no family.
+    'LanternHousing', 'LanternBulb', 'TerraceBanner', 'BoardFace',
+    'BoardPaper', 'NoticeFaceLane', 'NpcMarker', 'BuntingRed', 'BuntingGold',
     // The bunting rope used to borrow `LaneWood`, which made three visible 2 cm
     // ropes report as planked wood while keeping their authored per-face UVs.
     // Its own name must never pick up a family.
@@ -804,6 +824,48 @@ test('the cloth maps are three distinct neutral WebP files that exist', () => {
     assert.match(url, /\.webp$/, `${url} ships as WebP like the other families`);
     assert.ok(existsSync(join(ROOT, url)), `${url} must exist on disk`);
     assert.ok(statSync(join(ROOT, url)).size > 4096, `${url} must be a real map, not a stub`);
+  }
+});
+
+// --- Round 70: the painted-iron prop family --------------------------------
+// The barrel hoops, crate bands, bench brackets, gate studs and notice frame
+// were ~62 m2 of the largest flat grey mass left in the plaza, plus the plaza
+// lamp posts themselves. They are all the same painted-iron read as the lane
+// lantern, so they reuse its maps instead of a second near-identical set.
+
+test('the iron family reuses the lamp maps rather than shipping a second set', () => {
+  const iron = PROP_FAMILIES.find((f) => f.id === 'iron');
+  assert.ok(iron, 'the iron family exists');
+  // The point of the round: one painted-iron look across props and fixtures. If
+  // someone adds assets/textures/iron_*.webp this fails and the decision is
+  // revisited rather than quietly shipping a near-duplicate family.
+  assert.deepEqual(iron.files, LAMP_TEXTURE_FILES);
+  for (const url of Object.values(iron.files)) {
+    assert.ok(existsSync(join(ROOT, url)), `${url} must exist on disk`);
+  }
+  // 0.6 m matches the tile upgradeLaneLamp() projects, so a barrel hoop and the
+  // lane lantern shaft show grain at the same physical size.
+  assert.equal(iron.tileMeters, 0.6);
+  // The lamp albedo already carries the blue-grey paint, so the family must not
+  // multiply the authored #848588 on top of it; that only belongs to the
+  // colourless cloth weave.
+  assert.equal(iron.keepTint, undefined,
+    'the lamp albedo is already coloured, so the tint must stay white');
+});
+
+test('the painted-iron family asks for a metal response the props can show', () => {
+  const iron = PROP_FAMILIES.find((f) => f.id === 'iron');
+  // A dressed prop is a MeshStandardMaterial with metalness 0 unless the family
+  // asks otherwise. Painted ironwork has to catch the sky or the hoops read as
+  // grey plastic next to the lane lantern, which dresses itself at 0.55.
+  assert.ok(iron.metalness > 0, 'painted iron needs a specular response');
+  assert.ok(iron.metalness < 0.6, 'the paint layer keeps it short of bare chrome');
+  // Everything else stays fully dielectric: adding this field to timber, brick
+  // or cloth would make haystacks and walls look wet.
+  for (const family of PROP_FAMILIES) {
+    if (family.id === 'iron') continue;
+    assert.equal(family.metalness, undefined,
+      `${family.id} is not metal and must keep the default metalness 0`);
   }
 });
 

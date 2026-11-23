@@ -17,15 +17,12 @@ await page.setViewport({ width: 800, height: 600 });
 try {
   await page.goto(server.base, { waitUntil: 'load' });
   await waitForBoot(page);
-  await page.waitForFunction(
-    () => {
-      if (!window.amazingAdventure || !window.amazingAdventure.assetState) return false;
-      const a = window.amazingAdventure.assetState();
-      // Wait for the asynchronous prop families to settle, not just the trees.
-      return a && a.propWood !== 'pending' && a.bark !== 'pending';
-    },
-    { timeout: 120000, polling: 250 }
-  ).catch(() => {});
+  // Wait for the real settle point rather than polling assetState: the state
+  // field initialises to 'flat' (never 'pending'), so the old check returned
+  // immediately and measured a half-loaded scene -- e.g. 271 m2 of flat Canopy
+  // while the canopy family was still in flight. assetsReady() resolves only
+  // after every upgrade pass (loadAssets) has finished.
+  await page.evaluate(() => window.amazingAdventure.assetsReady()).catch(() => {});
   const report = await page.evaluate(() => {
     const { scene } = window.amazingAdventure;
     const flat = [];
@@ -42,6 +39,10 @@ try {
       if (!visible(o)) return;
       const mat = Array.isArray(o.material) ? o.material[0] : o.material;
       if (!mat) return;
+      // A material can be hidden even when its mesh is still in the graph (the
+      // gate-door stand-in keeps a hidden material while its GLB model renders).
+      // Counting it inflated the unnamed bucket by ~20 m2 of phantom flat area.
+      if (mat.visible === false) return;
       // The sky dome is a gradient by design, and anything see-through is a glow
       // or a window, not a surface that wants a texture.
       if (mat.transparent || mat.opacity < 0.5) return;
@@ -60,7 +61,14 @@ try {
       const sy = (box.max.y - box.min.y) * Math.abs(wy);
       const sz = (box.max.z - box.min.z) * Math.abs(wz);
       const area = 2 * (sx * sy + sy * sz + sx * sz);
-      const shared = (o.material && o.material.name) || '(unnamed)';
+      // Key by the material's own identity, not by its name alone. Rounds 70
+      // found six visually unrelated materials (lantern housings, a terrace
+      // banner, two board faces, NPC markers) collapsed into one 10.65 m2
+      // "(unnamed)" row because they shared the empty name. Colouring the key
+      // stops that from hiding a real gap; meshes that share a genuine material
+      // still merge, which is the point of the audit.
+      const colour = mat.color ? mat.color.getHexString() : 'none';
+      const shared = (o.material && o.material.name) || `(unnamed) #${colour}`;
       if (!seen.has(shared)) {
         seen.set(shared, {
           name: shared, meshes: 0, area: 0,

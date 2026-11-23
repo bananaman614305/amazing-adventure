@@ -2573,14 +2573,20 @@ try {
                     hidden: house.hidden }));
 
   await capture(page, 'round41-house.png');
-  // --- 28h. Prop models wear the wood texture -------------------------------
-  // The prop GLBs ship without UVs; the game box-projects them and dresses only
-  // the wood-named materials. Iron, glass and stone must stay flat.
+  // --- 28h. Prop models wear their material families ------------------------
+  // The prop GLBs ship without UVs; the game box-projects them and dresses them
+  // by authored material name. Round 70 extended that from wood to painted
+  // iron, so "iron stays flat" is no longer true: what must stay flat is glass
+  // and the painted board faces, which have no family and would look wrong
+  // wearing a 0.6 m metal tile.
   const propWood = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
     const api = window.amazingAdventure;
     let woodTextured = 0;
     let woodNoUv = 0;
-    let flatNonWood = 0;
+    let ironDressed = 0;
+    let ironFlat = 0;
+    let flatNonFamily = 0;
+    const flatNames = [];
     const names = ['bench-model', 'notice-model', 'crate-model', 'gate-door-model', 'house-model'];
     api.scene.traverse((o) => {
       if (!o.isMesh) return;
@@ -2595,17 +2601,32 @@ try {
       if (/Wood/i.test(name)) {
         if (hasMap && hasUv) woodTextured += 1;
         else if (!hasUv) woodNoUv += 1;
+      } else if (/Iron/i.test(name)) {
+        // Round 70: ironwork is dressed from the lamp maps with the same
+        // box-projected UVs, so every iron mesh must carry map *and* UV.
+        if (hasMap && hasUv) ironDressed += 1;
+        else ironFlat += 1;
       } else if (!hasMap) {
-        flatNonWood += 1;
+        flatNonFamily += 1;
+        flatNames.push(name || '(unnamed)');
       }
     });
-    return { state: api.assetState(), woodTextured, woodNoUv, flatNonWood };
+    return { state: api.assetState(), woodTextured, woodNoUv, ironDressed, ironFlat,
+             flatNonFamily, flatNames };
   }));
-  checks.check('the wood texture reaches the prop models and not the iron or glass',
+  checks.check('the wood texture reaches the prop models while glass and board stay flat',
     propWood.state.propWood === 'textured' && propWood.woodTextured >= 8 &&
-    propWood.woodNoUv === 0 && propWood.flatNonWood >= 8,
+    propWood.woodNoUv === 0 && propWood.flatNonFamily >= 1,
     JSON.stringify({ state: propWood.state.propWood, woodTextured: propWood.woodTextured,
-                    woodNoUv: propWood.woodNoUv, flatNonWood: propWood.flatNonWood }));
+                    woodNoUv: propWood.woodNoUv, flatNonFamily: propWood.flatNonFamily }));
+  checks.check('the painted-iron props wear the lamp maps with real UVs',
+    propWood.state.iron === 'textured' && propWood.ironDressed >= 20 && propWood.ironFlat === 0,
+    JSON.stringify({ state: propWood.state.iron, ironDressed: propWood.ironDressed,
+                    ironFlat: propWood.ironFlat }));
+  checks.check('what stays flat on the props is glass and painted board, never wood or iron',
+    propWood.flatNames.every((n) => !/wood|iron/i.test(n)) &&
+    propWood.flatNames.some((n) => /glass/i.test(n)),
+    JSON.stringify(propWood.flatNames));
 
   await capture(page, 'round42-prop-uvs.png');
   // --- 28i. The low quality tier -------------------------------------------

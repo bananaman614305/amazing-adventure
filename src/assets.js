@@ -243,6 +243,34 @@ export const PROP_FAMILIES = [
     roughness: 0.9
   },
   {
+    // Round 70: painted ironwork. The barrel hoops, crate bands, bench
+    // brackets, gate studs/straps, notice-board frame and the plaza lamp posts
+    // (~62 m2 of flat grey) all share one painted-metal read. The lamp family
+    // is the closest match on disk: the same dark blue-grey chipped paint the
+    // lane lantern already uses, so the props and the fixtures finally look
+    // like one workshop made them. This reused LAMP_TEXTURE_FILES instead of a
+    // new Kaggle job, because a second near-identical iron set would drift.
+    //
+    // No `keepTint`: the lamp albedo already carries the paint colour (mean
+    // ~0.28 dark grey), so the material tint must stay white or the paint gets
+    // multiplied down to near-black. The authored #848588 would double-tint.
+    //
+    // The negative lookahead keeps the lane lamp's already-dressed
+    // `LampIronPainted` (upgradeLaneLamp) out of this family even if that group
+    // ever reaches the prop registry; `LampGlass` and `Steel` never match.
+    id: 'iron',
+    test: /iron(?!painted)/i,
+    files: LAMP_TEXTURE_FILES,
+    tileMeters: 0.6,
+    roughness: 0.6,
+    // Painted iron still catches the sky. The dressing loop's default is fully
+    // dielectric, which would leave these bands looking like matte grey paint;
+    // the lane lantern that shares this map set uses 0.55, so a matching-ish
+    // 0.45 keeps the props and the fixtures reading as the same metal without
+    // making 0.1 m barrel hoops look like chrome.
+    metalness: 0.45
+  },
+  {
     // Round 67: woven cloth. Two very different consumers share one map -- the
     // lane's `SackCloth` sacks (3 meshes, 3.58 m2 measured) and the cast's
     // `Cloth` coats/legs/sleeves (23 meshes, 13.68 m2 measured). The pattern
@@ -269,11 +297,13 @@ export const PROP_FAMILIES = [
  * Picks the dressing family for an authored material name.
  *
  * Pure so the browser pass and the unit tests agree on what gets dressed instead
- * of both re-deriving the regexes. Returns null for iron, glass and every other
- * material that should stay flat -- the props read as mixed materials precisely
- * because the iron bands and glass panes are left alone. HouseBrick and
- * HouseStone ARE dressed (round 66) from the committed wall maps, while the
- * fountain's two stones keep their own tinted dressing pass.
+ * of both re-deriving the regexes. Returns null for glass and every other
+ * material that should stay flat -- glass panes and the bulb stay clear so the
+ * props still read as mixed materials. The ironwork IS dressed (round 70) from
+ * the lamp family; the lane lamp's `LampIronPainted` is excluded so it is not
+ * dressed twice. HouseBrick and HouseStone ARE dressed (round 66) from the
+ * committed wall maps, while the fountain's two stones keep their own tinted
+ * dressing pass.
  *
  * `isLoaded` lets a caller prefer a family whose maps actually arrived. When a
  * material matches several families (a `BarkWood` trunk matches both bark and

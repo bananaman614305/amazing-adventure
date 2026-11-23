@@ -1,0 +1,247 @@
+{
+  "iron": {
+    "pure": true
+  },
+  "laneLamp": {
+    "groupPresent": true,
+    "meshCount": 6,
+    "meshNames": [
+      "LampPost",
+      "LampBase",
+      "LampArm",
+      "LampHousing",
+      "LampCap",
+      "LampBulb"
+    ],
+    "ironPainted": 4,
+    "ironPaintedWithMaps": 4,
+    "bulbEmissive": "ffb43a",
+    "postLampName": "LampBulb",
+    "aim": {
+      "rotationY": -2.8632929945846817,
+      "lanternX": 12.823085631415507,
+      "lanternZ": -24.635167323261573
+    }
+  },
+  "props": {
+    "ironDressed": 35,
+    "ironFlat": 0,
+    "flatNames": [
+      "NoticeFace",
+      "HouseGlass",
+      "HouseGlass"
+    ]
+  },
+  "audit": {
+    "flatBuckets": {
+      "SackTie": 9,
+      "LaneRope": 3,
+      "BuntingRed": 15,
+      "BuntingGold": 13,
+      "LanternHousing": 3,
+      "LanternBulb": 3,
+      "TerraceBanner": 1,
+      "Water": 2,
+      "BoardFace": 1,
+      "BoardPaper": 3,
+      "NpcMarker": 6,
+      "Skin": 36,
+      "WoodP": 4,
+      "Accent": 9,
+      "EyeWhite": 12,
+      "EyeIris": 12,
+      "Mouth": 6,
+      "HairC": 8,
+      "Boot": 18,
+      "Paper": 3,
+      "Steel": 5,
+      "LampGlass": 5,
+      "LampBulb": 5,
+      "NoticeFace": 1,
+      "HouseGlass": 2
+    },
+    "hasUnnamed": false
+  },
+  "shots": [
+    "/home/alan/projects/amazing-adventure/artifacts/round70-lane-lamp.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round70-iron-props.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round70-plaza.png"
+  ],
+  "checks": [
+    {
+      "name": "propFamilyFor('BarrelIron') is the iron family",
+      "ok": true,
+      "detail": "got iron"
+    },
+    {
+      "name": "propFamilyFor('BenchIron') is the iron family",
+      "ok": true,
+      "detail": "got iron"
+    },
+    {
+      "name": "propFamilyFor('CrateIron') is the iron family",
+      "ok": true,
+      "detail": "got iron"
+    },
+    {
+      "name": "propFamilyFor('DoorIron') is the iron family",
+      "ok": true,
+      "detail": "got iron"
+    },
+    {
+      "name": "propFamilyFor('LampIron') is the iron family",
+      "ok": true,
+      "detail": "got iron"
+    },
+    {
+      "name": "propFamilyFor('MarketIron') is the iron family",
+      "ok": true,
+      "detail": "got iron"
+    },
+    {
+      "name": "propFamilyFor('NoticeIron') is the iron family",
+      "ok": true,
+      "detail": "got iron"
+    },
+    {
+      "name": "propFamilyFor('StallIron') is the iron family",
+      "ok": true,
+      "detail": "got iron"
+    },
+    {
+      "name": "the already-dressed lane lantern is not dressed twice",
+      "ok": true,
+      "detail": "LampIronPainted excluded"
+    },
+    {
+      "name": "the iron family reuses the lamp maps rather than a second set",
+      "ok": true,
+      "detail": "{\"map\":\"assets/textures/lamp_albedo.webp\",\"normalMap\":\"assets/textures/lamp_normal.webp\",\"roughnessMap\":\"assets/textures/lamp_rough.webp\"}"
+    },
+    {
+      "name": "the iron family tiles at 0.6 m",
+      "ok": true,
+      "detail": "0.6"
+    },
+    {
+      "name": "the iron family carries metalness 0.45",
+      "ok": true,
+      "detail": "0.45"
+    },
+    {
+      "name": "the iron family keeps the authored tint white",
+      "ok": true,
+      "detail": "no keepTint"
+    },
+    {
+      "name": "leaf stays dielectric",
+      "ok": true,
+      "detail": "metalness undefined"
+    },
+    {
+      "name": "roof stays dielectric",
+      "ok": true,
+      "detail": "metalness undefined"
+    },
+    {
+      "name": "bark stays dielectric",
+      "ok": true,
+      "detail": "metalness undefined"
+    },
+    {
+      "name": "wood stays dielectric",
+      "ok": true,
+      "detail": "metalness undefined"
+    },
+    {
+      "name": "brick stays dielectric",
+      "ok": true,
+      "detail": "metalness undefined"
+    },
+    {
+      "name": "stone stays dielectric",
+      "ok": true,
+      "detail": "metalness undefined"
+    },
+    {
+      "name": "cloth stays dielectric",
+      "ok": true,
+      "detail": "metalness undefined"
+    },
+    {
+      "name": "assetState reports the lane lamp as a model",
+      "ok": true,
+      "detail": "laneLamp model"
+    },
+    {
+      "name": "assetState reports lamp metal textured",
+      "ok": true,
+      "detail": "lampMetal textured"
+    },
+    {
+      "name": "assetState reports the iron family textured",
+      "ok": true,
+      "detail": "iron textured"
+    },
+    {
+      "name": "the modelled lane-lamp group is in the scene",
+      "ok": true,
+      "detail": "group lane-lamp-model"
+    },
+    {
+      "name": "the lane lamp has at least one LampIronPainted mesh",
+      "ok": true,
+      "detail": "4"
+    },
+    {
+      "name": "every LampIronPainted mesh carries all three maps",
+      "ok": true,
+      "detail": "4/4"
+    },
+    {
+      "name": "the modelled bulb keeps the authored emissive colour",
+      "ok": true,
+      "detail": "ffb43a"
+    },
+    {
+      "name": "environment.postLamp points at the modelled bulb",
+      "ok": true,
+      "detail": "LampBulb"
+    },
+    {
+      "name": "the lane lamp aim is finite",
+      "ok": true,
+      "detail": "{\"rotationY\":-2.8632929945846817,\"lanternX\":12.823085631415507,\"lanternZ\":-24.635167323261573}"
+    },
+    {
+      "name": "painted-iron props are dressed with maps and UVs",
+      "ok": true,
+      "detail": "{\"ironDressed\":35,\"ironFlat\":0,\"flatNames\":[\"NoticeFace\",\"HouseGlass\",\"HouseGlass\"]}"
+    },
+    {
+      "name": "what stays flat on the props is glass/board, never iron",
+      "ok": true,
+      "detail": "[\"NoticeFace\",\"HouseGlass\",\"HouseGlass\"]"
+    },
+    {
+      "name": "the materials audit has no (unnamed) bucket",
+      "ok": true,
+      "detail": "SackTie, LaneRope, BuntingRed, BuntingGold, LanternHousing, LanternBulb, TerraceBanner, Water, BoardFace, BoardPaper, NpcMarker, Skin, WoodP, Accent, EyeWhite, EyeIris, Mouth, HairC, Boot, Paper, Steel, LampGlass, LampBulb, NoticeFace, HouseGlass"
+    },
+    {
+      "name": "the named round-70 materials exist in the audit",
+      "ok": true,
+      "detail": "SackTie, LaneRope, BuntingRed, BuntingGold, LanternHousing, LanternBulb, TerraceBanner, Water, BoardFace, BoardPaper, NpcMarker, Skin, WoodP, Accent, EyeWhite, EyeIris, Mouth, HairC, Boot, Paper, Steel, LampGlass, LampBulb, NoticeFace, HouseGlass"
+    },
+    {
+      "name": "the lane notice stand-in is hidden once the modelled board loads",
+      "ok": true,
+      "detail": "NoticeFace present, NoticeFaceLane absent: SackTie, LaneRope, BuntingRed, BuntingGold, LanternHousing, LanternBulb, TerraceBanner, Water, BoardFace, BoardPaper, NpcMarker, Skin, WoodP, Accent, EyeWhite, EyeIris, Mouth, HairC, Boot, Paper, Steel, LampGlass, LampBulb, NoticeFace, HouseGlass"
+    },
+    {
+      "name": "the run produced no console errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

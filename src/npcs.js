@@ -363,6 +363,11 @@ export function createNPCs(scene) {
       new THREE.MeshStandardMaterial({ color: 0xffd479, emissive: 0xffb43a, emissiveIntensity: 0.9 })
     );
     marker.name = 'Marker';
+    // The marker's own material is named so the materials audit attributes its
+    // area; `Marker` as a *material* matches no family test either, so this is a
+    // label and not a dressing trigger. (The mesh name is what npcs.js checks
+    // when it swaps in the GLB cast, so the two namespaces never collide.)
+    marker.material.name = 'NpcMarker';
     marker.position.y = 2.15;
     marker.rotation.x = Math.PI;
     group.add(marker);
