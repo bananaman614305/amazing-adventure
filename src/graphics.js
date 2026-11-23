@@ -216,6 +216,17 @@ export function shadowSettings(tier) {
  * plus generous slack for tall geometry, because both are measured along the
  * light direction, not vertically.
  *
+ * `near` is negative on purpose, and that is not a typo. A shadow camera's
+ * near plane clips in VIEW space, measured from the light along its own
+ * direction. The old box used near 1, which is correct only while every prop
+ * sits in front of the light. Dusk breaks that: the sun drops to y 7 and the
+ * phase then looks almost along the ground, so tall geometry - the gate wall,
+ * the tree canopies - projects BEHIND the light plane (measured: view-space z
+ * up to +2.8 m). With near 1 those corners are clipped out of the depth map and
+ * the props lose the part of their shadow that matters most at grazing angles.
+ * Pushing near back to -slack keeps every corner in range; the depth range only
+ * grows, which costs a little depth precision and no texels.
+ *
  * Returns plain numbers so a test can check the coverage arithmetic without a
  * Three.js OrthographicCamera.
  */
@@ -228,7 +239,7 @@ export function shadowFrustumFor(areas, { margin = SHADOW_FRUSTUM_MARGIN, slack 
     // No declared world: fall back to the historical plaza box rather than a
     // degenerate one, so a caller that forgets to pass areas still gets a sane
     // shadow pass instead of a single shadowed texel.
-    return { left: -24, right: 24, top: 24, bottom: -24, near: 1, far: 70, centre: { x: 0, z: 0 }, size: 48 };
+    return { left: -24, right: 24, top: 24, bottom: -24, near: -SHADOW_FRUSTUM_SLACK, far: 70, centre: { x: 0, z: 0 }, size: 48 };
   }
   let minX = Infinity;
   let maxX = -Infinity;
@@ -259,7 +270,7 @@ export function shadowFrustumFor(areas, { margin = SHADOW_FRUSTUM_MARGIN, slack 
     right: half,
     top: half,
     bottom: -half,
-    near: 1,
+    near: -slack,
     far: half * 2 + slack,
     centre: { x: centreX, z: centreZ },
     size: half * 2

@@ -164,8 +164,20 @@ test('the shadow box grows when an area is added further out', () => {
 test('the shadow box is larger than the plane it covers, so edges are not clipped', () => {
   const box = shadowFrustumFor(WORLD_AREAS);
   assert.ok(box.size > 48, 'box must exceed the old +-24 extent');
-  assert.ok(box.near >= 1, 'near plane stays in front of the light');
   assert.ok(box.far > box.size, 'far plane must clear the whole box');
+});
+
+test('the near plane sits behind the light, so grazing sun does not clip tall props', () => {
+  // Regression: the box shipped with near 1, which is only safe while every
+  // prop is in front of the light. At dusk the sun drops to y 7 and tall
+  // geometry (gate wall, tree canopies) projects behind the light plane, so
+  // measured view-space z reached +2.8 m and 7 mesh corners were near-clipped
+  // out of the depth map. A positive near plane cannot express that.
+  const box = shadowFrustumFor(WORLD_AREAS);
+  assert.ok(box.near < 0, 'near plane must be able to cover geometry behind the light');
+  assert.ok(box.near <= -2.8, 'near plane must clear the deepest measured behind-light corner');
+  assert.ok(box.far > box.size + 2.8, 'far plane still clears the whole box');
+  assert.ok(box.near < box.far, 'near stays in front of far');
 });
 
 test('an empty or malformed area list falls back to the historical box', () => {

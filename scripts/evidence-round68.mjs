@@ -33,6 +33,16 @@
 // them) -- a partial fix that a coarse "mostly covered" check would have
 // passed. The evidence therefore counts every mesh, not a sample.
 //
+// Two more defects were found by attacking this script rather than trusting it:
+//
+//   - It first projected each mesh's bounding-box CENTRE, so a box straddling a
+//     frustum plane passed. It now tests all eight corners and fails on any
+//     overflow, which is the property that actually matters.
+//   - The box shipped with near 1. Dusk drops the sun to y 7 and looks almost
+//     along the ground, so tall geometry projects BEHIND the light plane
+//     (measured view-space z up to +2.8 m) and seven corners were near-clipped
+//     out of the depth map. `near` is now -slack, so no corner is excluded.
+//
 // Run: node scripts/evidence-round68.mjs
 // Set RECORD_ARTIFACTS=1 to save screenshots and artifacts/round68-evidence.json.
 //
@@ -160,17 +170,35 @@ try {
         if (object.receiveShadow) receivers += 1;
         if (object.castShadow) casters += 1;
         // boundingBox is a LOCAL box; applyMatrix4 by matrixWorld is the only
-        // way to get its world centre for a child of a moved group. (Using
+        // way to get its world corners for a child of a moved group. (Using
         // localToWorld on the raw attributes reads stale matrices.)
-        const centre = object.geometry.boundingBox.getCenter(new THREE.Vector3())
-          .applyMatrix4(object.matrixWorld);
-        const ndc = centre.clone().project(camera);
-        const isInside = Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1 && Math.abs(ndc.z) <= 1;
+        //
+        // Test EVERY corner, not just the centre. A centre-only test cannot see
+        // a box that straddles a frustum plane: an earlier version of this
+        // script passed while seven dusk corners sat behind the near
+        // plane, because their centres were comfortably inside. The pass
+        // condition has to be "the whole box is inside".
+        const worldBox = object.geometry.boundingBox.clone().applyMatrix4(object.matrixWorld);
+        const centre = worldBox.getCenter(new THREE.Vector3());
+        let worst = null;
+        for (const cx of [worldBox.min.x, worldBox.max.x]) {
+          for (const cy of [worldBox.min.y, worldBox.max.y]) {
+            for (const cz of [worldBox.min.z, worldBox.max.z]) {
+              const ndc = new THREE.Vector3(cx, cy, cz).project(camera);
+              const overflow = Math.max(Math.abs(ndc.x), Math.abs(ndc.y), Math.abs(ndc.z));
+              if (!worst || overflow > worst.overflow) {
+                worst = { overflow, ndc: [+ndc.x.toFixed(2), +ndc.y.toFixed(2), +ndc.z.toFixed(2)] };
+              }
+            }
+          }
+        }
+        const isInside = worst.overflow <= 1;
         if (isInside) { inside += 1; return; }
         strays.push({
           name: object.name || '(unnamed)',
           world: [+centre.x.toFixed(2), +centre.y.toFixed(2), +centre.z.toFixed(2)],
-          ndc: [+ndc.x.toFixed(2), +ndc.y.toFixed(2), +ndc.z.toFixed(2)],
+          ndc: worst.ndc,
+          overflow: +worst.overflow.toFixed(3),
           receive: Boolean(object.receiveShadow),
           cast: Boolean(object.castShadow)
         });
