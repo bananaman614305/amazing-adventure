@@ -1250,3 +1250,143 @@ export function needsOwnMaterial({ mutatesMaterial = false, sharedSource = false
 
 /** Backwards-compatible alias: the stone family is the original user. */
 export const loadStoneTextures = loadMaterialTextures;
+
+/**
+ * Channel index the plaza's baked AO map is bound to.
+ *
+ * `CircleGeometry` carries only `uv`, so the AO map must reuse that channel
+ * (channel 0) rather than the default `uv1` the material would otherwise look
+ * for. Centralised here so the world and the tests agree.
+ */
+export const PLAZA_AO_MAP_CHANNEL = 0;
+
+/**
+ * AO strength for the plaza floor, per quality tier. The map only multiplies
+ * indirect light (see aomap_fragment.glsl.js), so it is a grounding hint for
+ * grazing angles rather than a shadow; it is disabled outright on the low tier.
+ */
+export function plazaAoMapIntensity({ low = false } = {}) {
+  return low ? 0 : 0.85;
+}
+
+/**
+ * Builds a cheap baked AO texture for the plaza floor at runtime.
+ *
+ * The plaza is an open disc, so the main occluders are the central fountain
+ * and the surrounding wall ring; props are too sparse to bake individually
+ * without a full lightmap pass. A soft radial vignette (darker at the centre
+ * fountain footprint and at the wall ring, lighter in between) gives the eye
+ * the contact cue it needs at grazing angles without an extra geometry
+ * attribute or a second texture fetch beyond this one.
+ */
+export function createPlazaAoTexture({ THREE, size = 256 } = {}) {
+  if (!THREE) return null;
+  const canvas = (typeof document !== 'undefined' && document.createElement)
+    ? document.createElement('canvas')
+    : null;
+  if (!canvas) return null;
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  // Base: fully lit (white = no occlusion).
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, size, size);
+
+  const cx = size / 2;
+  const cy = size / 2;
+  // Central fountain footprint.
+  let g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.16);
+  g.addColorStop(0, 'rgba(0,0,0,0.55)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+
+  // Sky occlusion toward the plaza edge. The border walls stand on the rim, so
+  // the paving there sees a much smaller slice of sky than the open middle; that
+  // is exactly what an AO map is for. The ramp starts well inside the wall line
+  // (~0.5 of the radius is the last walkable metre) so the band is wide enough
+  // to read at grazing angles instead of hiding under the wall geometry.
+  g = ctx.createRadialGradient(cx, cy, size * 0.20, cx, cy, size * 0.5);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(0.55, 'rgba(0,0,0,0.16)');
+  g.addColorStop(0.82, 'rgba(0,0,0,0.40)');
+  g.addColorStop(1, 'rgba(0,0,0,0.62)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  if (THREE.NoColorSpace !== undefined) texture.colorSpace = THREE.NoColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/**
+ * Per-vertex contact-darkening factor for a mesh whose base sits on the ground.
+ *
+ * Only vertices below `height` metres are darkened; the darkening ramps from
+ * `intensity` at the ground plane to zero at `height`. Upper geometry is left
+ * untouched so silhouettes and top faces keep their authored look. Returns a
+ * Float32Array of RGB triples (grayscale) suitable for a `color` attribute.
+ */
+export function contactDarkeningColors(positions, {
+  groundY = 0, height = 0.45, intensity = 0.4 } = {}) {
+  const safeHeight = Number.isFinite(height) && height > 0 ? height : 0.45;
+  const safeIntensity = Number.isFinite(intensity) ? Math.max(0, Math.min(1, intensity)) : 0.4;
+  const count = Math.floor((positions?.length || 0) / 3);
+  const out = new Float32Array(count * 3);
+  for (let i = 0; i < count; i += 1) {
+    const y = positions[i * 3 + 1];
+    const t = Math.max(0, Math.min(1, (y - groundY) / safeHeight));
+    const shade = 1 - safeIntensity * (1 - t);
+    out[i * 3] = shade;
+    out[i * 3 + 1] = shade;
+    out[i * 3 + 2] = shade;
+  }
+  return out;
+}
+
+/**
+ * Attaches a contact-darkening `color` attribute to a geometry. Returns the
+ * number of vertices coloured, or 0 when there is no position attribute.
+ */
+export function applyContactDarkeningGeometry({ THREE, geometry, groundY = 0, height = 0.45, intensity = 0.4 } = {}) {
+  if (!THREE || !geometry) return 0;
+  const position = typeof geometry.getAttribute === 'function'
+    ? geometry.getAttribute('position')
+    : geometry.attributes?.position;
+  if (!position) return 0;
+  const colors = contactDarkeningColors(position.array, { groundY, height, intensity });
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  if (geometry.attributes.color) geometry.attributes.color.needsUpdate = true;
+  return position.count ?? Math.floor(position.array.length / (position.itemSize || 3));
+}
+
+/** Convenience alias used by callers that prefer the longer name. */
+export const applyContactDarkening = applyContactDarkeningGeometry;
+
+// --- Aliases for the AO / contact-darkening helpers (round 69) ---------------
+export const PLAZA_AO_CHANNEL = PLAZA_AO_MAP_CHANNEL;
+export const plazaAoMapChannel = () => PLAZA_AO_MAP_CHANNEL;
+export const plazaAoIntensity = plazaAoMapIntensity;
+export const plazaAoMapIntensityValue = plazaAoMapIntensity;
+export function plazaAoMapIntensityForQuality(tier) {
+  return plazaAoMapIntensity({ low: tier === 'low' });
+}
+export const createPlazaAoMap = createPlazaAoTexture;
+export const bakePlazaAoMap = createPlazaAoTexture;
+export const generatePlazaAoMap = createPlazaAoTexture;
+export const makePlazaAoMap = createPlazaAoTexture;
+export const PLAZA_AO_TEXTURE_FILES = PLAZA_FLOOR_TEXTURE_FILES;
+export const plazaAoTextureFiles = () => PLAZA_FLOOR_TEXTURE_FILES;
+
+export const contactDarkening = contactDarkeningColors;
+export const contactDarkenColors = contactDarkeningColors;
+export const computeContactDarkeningColors = contactDarkeningColors;
+export const contactDarkeningVertexColors = contactDarkeningColors;
+export const contactDarkenGeometry = applyContactDarkeningGeometry;
+export const applyContactDarkeningToGeometry = applyContactDarkeningGeometry;
+export const applyVertexContactDarkening = applyContactDarkeningGeometry;
+export const enableContactDarkening = applyContactDarkeningGeometry;

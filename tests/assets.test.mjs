@@ -15,7 +15,9 @@ import {
   LAMP_TEXTURE_FILES, LAMP_ASSET, LAMP_MODEL_SIZE, loadMaterialTextures, needsOwnMaterial,
   ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor,
   fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint, FOUNTAIN_STONE_COLORS,
-  CLOTH_TEXTURE_FILES
+  CLOTH_TEXTURE_FILES,
+  PLAZA_AO_MAP_CHANNEL, plazaAoMapIntensity, plazaAoMapIntensityForQuality,
+  createPlazaAoTexture, contactDarkeningColors, applyContactDarkeningGeometry
 } from '../src/assets.js';
 
 // Minimal fake Three.js: only what these functions touch.
@@ -989,4 +991,56 @@ test('every asset helper world.js calls is actually imported', () => {
       `world.js calls ${helper}() but does not import it from assets.js -- ` +
       'the dresser would throw and assetState would silently stay flat');
   }
+});
+
+// --- Round 69: baked plaza AO + prop contact darkening -----------------------
+
+test('the plaza AO map binds to channel 0 and dims with the quality tier', () => {
+  // CircleGeometry only carries `uv`; an aoMap that expected uv1 would sample
+  // garbage (or fail to compile on some drivers). Channel 0 is the contract.
+  assert.equal(PLAZA_AO_MAP_CHANNEL, 0);
+  // The map multiplies indirect light only, so a modest intensity is enough of
+  // a grounding cue; zero on the low tier keeps the cost off tight budgets.
+  const full = plazaAoMapIntensity({ low: false });
+  assert.ok(full > 0 && full <= 1, `full-tier intensity out of range: ${full}`);
+  assert.equal(plazaAoMapIntensity({ low: true }), 0);
+  assert.equal(plazaAoMapIntensityForQuality('low'), 0);
+  assert.equal(plazaAoMapIntensityForQuality('full'), full);
+});
+
+test('createPlazaAoTexture paints a white base with dark occluder zones', () => {
+  if (typeof document === 'undefined') {
+    // Node has no DOM; the world degrades to no AO map rather than throwing.
+    assert.equal(createPlazaAoTexture({ THREE: fakeTHREE }), null);
+    return;
+  }
+  const texture = createPlazaAoTexture({ THREE: fakeTHREE, size: 64 });
+  assert.ok(texture, 'a canvas-capable context gets a texture');
+  assert.equal(texture.wrapS, fakeTHREE.RepeatWrapping);
+  texture.dispose?.();
+});
+
+test('contact darkening shades only near-ground vertices', () => {
+  // A 1 m tall post: base vertices darkened, top untouched.
+  const positions = new Float32Array([0, 0, 0, 0, 0.2, 0, 0, 1, 0]);
+  const colors = contactDarkeningColors(positions, { groundY: 0, height: 0.45, intensity: 0.4 });
+  assert.equal(colors.length, 9);
+  assert.ok(colors[0] < 1, 'the ground vertex is darkened');
+  assert.ok(colors[0] < colors[3], 'a vertex 0.2 m up is darkened less than the base');
+  assert.equal(colors[6], 1, 'a vertex above the ramp height keeps full light');
+  // Degenerate inputs must not throw or darken everything.
+  const fallback = contactDarkeningColors(positions, { height: -1, intensity: 5 });
+  assert.ok(fallback[6] <= 1, 'out-of-range inputs clamp instead of blowing out');
+  assert.equal(contactDarkeningColors(null).length, 0);
+});
+
+test('applyContactDarkeningGeometry writes a color attribute sized to the mesh', () => {
+  const geometry = new fakeTHREE.BufferGeometry();
+  geometry.setAttribute('position', new fakeTHREE.BufferAttribute(new Float32Array(15), 3));
+  const count = applyContactDarkeningGeometry({ THREE: fakeTHREE, geometry });
+  assert.equal(count, 5, 'one colour per vertex');
+  assert.equal(geometry.attributes.color.array.length, 15);
+  assert.equal(applyContactDarkeningGeometry({ THREE: fakeTHREE, geometry: null }), 0);
+  const empty = new fakeTHREE.BufferGeometry();
+  assert.equal(applyContactDarkeningGeometry({ THREE: fakeTHREE, geometry: empty }), 0);
 });

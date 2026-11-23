@@ -1,0 +1,198 @@
+{
+  "ao": {
+    "hasAoMap": true,
+    "aoMapIntensity": 0.85,
+    "aoMapChannel": 0,
+    "aoMapSamplerLinear": true,
+    "aoMapIsTexture": true
+  },
+  "props": {
+    "pure": {
+      "base": 0.6000000238418579,
+      "mid": 0.7777777910232544,
+      "top": 1
+    },
+    "live": {
+      "count": 83,
+      "withColor": 83,
+      "withVertexColors": 83,
+      "families": [
+        "wood",
+        "roof",
+        "cloth",
+        "bark",
+        "leaf",
+        "brick",
+        "stone"
+      ]
+    },
+    "variation": {
+      "sampled": 40,
+      "dark": 25,
+      "lit": 36
+    }
+  },
+  "lowTier": {
+    "tierTag": "low",
+    "aoMapIntensity": 0,
+    "props": 83,
+    "withVertexColors": 0,
+    "withColorAttr": 83
+  },
+  "shots": [
+    "/worker/state/wt66/artifacts/round69-plaza-grazing.png",
+    "/worker/state/wt66/artifacts/round69-plaza-look-down.png",
+    "/worker/state/wt66/artifacts/round69-props-grounded.png"
+  ],
+  "aoLuminance": {
+    "day": {
+      "on": 105.93,
+      "off": 108.83,
+      "delta": -2.9
+    },
+    "dusk": {
+      "on": 71.38,
+      "off": 74.34,
+      "delta": -2.96
+    },
+    "night": {
+      "on": 68.04,
+      "off": 68.26,
+      "delta": -0.22
+    },
+    "debug": {
+      "full": 0.85,
+      "channel": 0,
+      "name": "",
+      "type": "MeshStandardMaterial",
+      "uuid": "427cd8d2-e342-49f5-9b33-5a04d7c12f9d"
+    }
+  },
+  "restored": {
+    "aoMapIntensity": 0.85,
+    "props": 83,
+    "on": 83
+  },
+  "checks": [
+    {
+      "name": "the plaza AO map is bound to UV channel 0, not uv1",
+      "ok": true,
+      "detail": "channel 0"
+    },
+    {
+      "name": "the plaza AO intensity is a visible but modest fraction of indirect light",
+      "ok": true,
+      "detail": "0.85"
+    },
+    {
+      "name": "the low tier disables plaza AO entirely",
+      "ok": true,
+      "detail": "zero intensity, no extra sampling cost worth keeping"
+    },
+    {
+      "name": "contact darkening darkens the ground vertex",
+      "ok": true,
+      "detail": "r 0.600"
+    },
+    {
+      "name": "contact darkening fades with height",
+      "ok": true,
+      "detail": "0.60 < 0.78 <= 1.00"
+    },
+    {
+      "name": "contact darkening leaves the top of the prop at full light",
+      "ok": true,
+      "detail": "r 1"
+    },
+    {
+      "name": "the live plaza floor has an aoMap",
+      "ok": true,
+      "detail": "{\"hasAoMap\":true,\"aoMapIntensity\":0.85,\"aoMapChannel\":0,\"aoMapSamplerLinear\":true,\"aoMapIsTexture\":true}"
+    },
+    {
+      "name": "the live plaza aoMap is on channel 0",
+      "ok": true,
+      "detail": "channel 0"
+    },
+    {
+      "name": "the live plaza aoMap actually dims indirect light",
+      "ok": true,
+      "detail": "intensity 0.85"
+    },
+    {
+      "name": "the live plaza aoMap is built from a real decoded texture",
+      "ok": true,
+      "detail": "CanvasTexture present"
+    },
+    {
+      "name": "the asset report tells the truth about the AO map",
+      "ok": true,
+      "detail": "{\"maps\":[\"map\",\"normalMap\",\"roughnessMap\"],\"aoMap\":true}"
+    },
+    {
+      "name": "dressed props were found in the live scene",
+      "ok": true,
+      "detail": "83 meshes"
+    },
+    {
+      "name": "the generic prop pass wrote contact-darkening colour attributes",
+      "ok": true,
+      "detail": "83 of 83 dressed meshes"
+    },
+    {
+      "name": "exactly the meshes with a colour attribute read vertex colours",
+      "ok": true,
+      "detail": "83 reads / 83 written (of 83 dressed)"
+    },
+    {
+      "name": "contact darkening varies across the sampled props",
+      "ok": true,
+      "detail": "25 darkened / 36 full-lit of 40"
+    },
+    {
+      "name": "low tier sets the body quality tag",
+      "ok": true,
+      "detail": "dataset.quality=low"
+    },
+    {
+      "name": "low tier zeroes the plaza AO intensity",
+      "ok": true,
+      "detail": "intensity 0"
+    },
+    {
+      "name": "low tier turns prop vertex colours off",
+      "ok": true,
+      "detail": "0/83 still on"
+    },
+    {
+      "name": "returning to the full tier restores plaza AO",
+      "ok": true,
+      "detail": "intensity 0.85"
+    },
+    {
+      "name": "returning to the full tier restores prop vertex colours",
+      "ok": true,
+      "detail": "83/83"
+    },
+    {
+      "name": "the plaza AO map measurably darkens the paving in daylight",
+      "ok": true,
+      "detail": "with AO 105.93 vs without 108.83 (delta -2.9)"
+    },
+    {
+      "name": "the plaza AO map also darkens the paving at dusk",
+      "ok": true,
+      "detail": "with AO 71.38 vs without 74.34 (delta -2.96)"
+    },
+    {
+      "name": "plaza AO correctly does nothing once lamps, not sky, light the floor",
+      "ok": true,
+      "detail": "night delta -0.22"
+    },
+    {
+      "name": "the run produced no console errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}
