@@ -16,8 +16,9 @@ import {
   GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
   HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
-  COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, PLAZA_FLOOR_TEXTURE_FILES, boxProjectUvs,
+  COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, PLAZA_FLOOR_TEXTURE_FILES, projectBoxGeometry,
   TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES, LAMP_TEXTURE_FILES,
+  CLOTH_TEXTURE_FILES,
   needsOwnMaterial,
   cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts,
   fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint,
@@ -416,11 +417,11 @@ export function buildWorld(renderer) {
   // on the floor; laneDressingClear() proves each leaves 1.2 m of walkway.
   const sackMat = new THREE.MeshStandardMaterial({ color: 0xa89468, roughness: 0.95 });
   const sackTieMat = new THREE.MeshStandardMaterial({ color: 0x6f5f42, roughness: 0.9 });
-  // Named so the family pass can tell them apart: neither name matches a
-  // shipped family, so the sacks and their ties stay flat for now. A cloth
-  // family (burlap weave) is the next obvious gap -- a live audit put Cloth and
-  // SackCloth at 12 m2 -- but it needs its own maps before it can be dressed,
-  // and naming them here means that family can be added by name alone.
+  // Named so the family pass can tell them apart: the round-67 cloth family's
+  // test is /cloth/i, which matches `SackCloth` (woven sack body) and the cast's
+  // `Cloth` coats but deliberately NOT `SackTie` (the pinched neck and the
+  // lantern ties, 9 small meshes at ~0.02 m). A tie is knotted cord, not woven
+  // cloth worth 1.2 m of weave, so it stays its own flat dark leather colour.
   sackMat.name = 'SackCloth';
   sackTieMat.name = 'SackTie';
   for (const sack of LANE_SACKS) {
@@ -958,6 +959,8 @@ export function buildWorld(renderer) {
     roofDetail: null,
     foliage: 'flat',
     foliageDetail: null,
+    cloth: 'flat',
+    clothDetail: null,
     cobble: 'flat',
     grass: 'flat',
     walls: 'flat',
@@ -1376,15 +1379,16 @@ export function buildWorld(renderer) {
         // Ironwork only: the housing is glass and the bulb is the light itself.
         if (/iron/i.test(material.name || '') && textures.anyLoaded) {
           if (!geometry.getAttribute('uv')) {
-            const position = geometry.getAttribute('position');
-            const index = geometry.getIndex();
-            geometry.setAttribute('uv', new THREE.BufferAttribute(boxProjectUvs({
-              positions: position.array,
-              indices: index ? index.array : null,
+            // projectBoxGeometry splits any corner that triangles need to
+            // project on different planes; the wrought-iron brackets and rings
+            // are full of such corners.
+            projectBoxGeometry({
+              THREE,
+              geometry,
               // The maps are painted at roughly a 0.6 m tile, so grain and chips
               // stay the size a hand would paint them, not wallpaper.
               tileMeters: 0.6
-            }), 2));
+            });
           }
           const iron = new THREE.MeshStandardMaterial({
             color: 0xffffff,
@@ -1528,14 +1532,7 @@ export function buildWorld(renderer) {
           if (!mesh.isMesh || mesh.name !== 'TreeTrunk') return;
           const source = mesh.material;
           if (!mesh.geometry.getAttribute('uv')) {
-            const position = mesh.geometry.getAttribute('position');
-            const index = mesh.geometry.getIndex();
-            const uvs = boxProjectUvs({
-              positions: position.array,
-              indices: index ? index.array : null,
-              tileMeters: 1.2
-            });
-            mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+            projectBoxGeometry({ THREE, geometry: mesh.geometry, tileMeters: 1.2 });
           }
           const material = new THREE.MeshStandardMaterial({
             color: 0xffffff, roughness: 0.85, metalness: 0
@@ -1583,6 +1580,7 @@ export function buildWorld(renderer) {
     })) {
       assetState.roof = 'unavailable';
       assetState.foliage = 'unavailable';
+      assetState.cloth = 'unavailable';
       return Promise.resolve(assetState);
     }
     return Promise.all([
@@ -1599,7 +1597,25 @@ export function buildWorld(renderer) {
       assetState.foliageDetail = {
         maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => foliage[k])
       };
-      return assetState;
+      // Round 67: the cloth maps are fetched with the other prop families so
+      // upgradePropFamilies() can dress the lane `SackCloth` sacks in the same
+      // pass as the wood/brick/stone props. The cast's `Cloth` coats are NOT in
+      // the prop registry (they live in npcs.js and must keep their authored
+      // per-NPC tint), so they are dressed by their own pass there.
+      return Promise.all([
+        loadMaterialTextures({ THREE, files: CLOTH_TEXTURE_FILES })
+      ]).then(([cloth]) => {
+        if (cloth.anyLoaded) {
+          familyTextures.cloth = cloth;
+          assetState.cloth = 'textured';
+          assetState.clothDetail = {
+            maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => cloth[k])
+          };
+        } else {
+          assetState.cloth = 'flat';
+        }
+        return assetState;
+      });
     });
   }
 
@@ -1930,6 +1946,7 @@ export function buildWorld(renderer) {
 
     let dressed = 0;
     let projected = 0;
+    let seams = 0;
     const byFamily = {};
     for (const family of PROP_FAMILIES) byFamily[family.id] = 0;
 
@@ -1947,22 +1964,27 @@ export function buildWorld(renderer) {
         if (!textures || !textures.anyLoaded) return;
 
         // Unconditional: authored per-face UVs would smear the map across each
-        // face, so every dressed mesh gets metre-space box-projected UVs.
-        const position = mesh.geometry.getAttribute('position');
-        const index = mesh.geometry.getIndex();
-        const uvs = boxProjectUvs({
-          positions: position.array,
-          indices: index ? index.array : null,
+        // face, so every dressed mesh gets metre-space box-projected UVs. The
+        // projection also splits corners that straddle an axis change (a barrel
+        // rim, a sack shoulder); without that the last writer wins and those
+        // triangles shear.
+        const split = projectBoxGeometry({
+          THREE,
+          geometry: mesh.geometry,
           // The registry tile (per prop) stays the fallback, but a family with an
           // authored metre scale wins so one roof family tiles identically on a
           // 3 m stall awning and a 6 m house roof.
           tileMeters: family.tileMeters || tile
         });
-        mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
         projected += 1;
+        if (split.seams > 0) seams += split.seams;
 
         const material = new THREE.MeshStandardMaterial({
-          color: 0xffffff,
+          // A family whose map has no colour of its own (cloth) must keep the
+          // tint its source material authored, or a burlap sack and a painted
+          // coat both come out flat white. Every other family ships a coloured
+          // albedo, so white is the correct neutral multiplier there.
+          color: family.keepTint && source.color ? source.color.getHex() : 0xffffff,
           roughness: family.roughness,
           metalness: 0
         });
@@ -1992,6 +2014,7 @@ export function buildWorld(renderer) {
     assetState.propWoodDetail = {
       dressed,
       projected,
+      seams,
       groups: propGroups.length,
       byFamily
     };
@@ -2102,14 +2125,8 @@ export function buildWorld(renderer) {
       // whole map across every face. Replacing them with metre-space projection
       // is what keeps the ashlar courses at eye-level wall scale on the piers.
       for (const mesh of gateStoneMeshes) {
-        const position = mesh.geometry.getAttribute('position');
-        const index = mesh.geometry.getIndex();
-        if (!position) continue;
-        mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(boxProjectUvs({
-          positions: position.array,
-          indices: index ? index.array : null,
-          tileMeters: TERRACE_TEXTURE_TILE_METERS
-        }), 2));
+        projectBoxGeometry({ THREE, geometry: mesh.geometry,
+          tileMeters: TERRACE_TEXTURE_TILE_METERS });
       }
       // Box-projected UVs already carry the tiling, so repeat stays 1:1; the
       // clone keeps this sampler state off the walls' and terrace's copies.
@@ -2170,14 +2187,8 @@ export function buildWorld(renderer) {
         // The GLB ships POSITION+NORMAL only, so every stone mesh needs projected
         // UVs before a map can be attached at all -- there is no authored UV set
         // to preserve.
-        const position = mesh.geometry.getAttribute('position');
-        if (!position) return;
-        const index = mesh.geometry.getIndex();
-        mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(boxProjectUvs({
-          positions: position.array,
-          indices: index ? index.array : null,
-          tileMeters: TERRACE_TEXTURE_TILE_METERS
-        }), 2));
+        projectBoxGeometry({ THREE, geometry: mesh.geometry,
+          tileMeters: TERRACE_TEXTURE_TILE_METERS });
         // The same maps, cloned once per material, because the two stone colours
         // differ: a shared sampler would force one tint on both.
         mesh.material = fountainStoneMaterial(material, textures);
@@ -2231,18 +2242,11 @@ export function buildWorld(renderer) {
       // One clone per material: sampler state lives on the texture, so the tread and
       // the parapet cannot share an object and still wrap differently from the wall.
       for (const mesh of terraceStoneMeshes) {
-        const position = mesh.geometry.getAttribute('position');
-        const index = mesh.geometry.getIndex();
-        if (!position) continue;
         // BoxGeometry ships with 0..1 per-face UVs, which would smear one whole map
         // across every face. They have to be replaced, not merely filled in when
         // absent -- that is the difference between coursed ashlar and a stretched
         // blur on a 12 m slab.
-        mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(boxProjectUvs({
-          positions: position.array,
-          indices: index ? index.array : null,
-          tileMeters: tile
-        }), 2));
+        projectBoxGeometry({ THREE, geometry: mesh.geometry, tileMeters: tile });
       }
       // Box-projected UVs are already in tile units, so repeat stays 1:1 and the
       // clone only carries the sampler state that keeps it off the wall's copies.

@@ -1,7 +1,97 @@
 import { weightShift, glanceAngle } from './idle.js';
 import * as THREE from 'three';
 import { floorHeightAt } from './world.js';
-import { CAST_ASSETS, loadCast } from './assets.js';
+import { CAST_ASSETS, projectBoxGeometry, loadCast, loadMaterialTextures, CLOTH_TEXTURE_FILES } from './assets.js';
+
+// Round 67: the metre scale the cast coats are box-projected at. It is the
+// cloth PROP_FAMILY's tile (see assets.js), so a cast coat, a lane sack and any
+// future cloth prop show the same weave density; the projection is what carries
+// the tiling, so the texture repeat stays (1, 1).
+export const CAST_CLOTH_TILE_METERS = 1.2;
+
+/**
+ * Dresses the modelled cast's `Cloth` coats with the neutral cloth maps.
+ *
+ * Why the cast needs its own pass: the world's prop dressing loop builds fresh
+ * white materials (`color: 0xffffff`), which is exactly right for the props but
+ * would erase every NPC's authored coat colour. The coat tint is the whole
+ * point of the cast palette -- mara's blue coat, oswin's brown, sable's violet
+ * -- so this pass keeps each mesh's own material and only attaches maps to it.
+ *
+ * The cloth albedo is deliberately neutral (a mid-grey weave, see
+ * CLOTH_TEXTURE_FILES in assets.js), so `map x tint` reproduces the authored
+ * colour and adds only the weave, the normal relief and the roughness break-up.
+ *
+ * The cast GLBs carry no UVs (Blender only writes TEXCOORD_0 for a mesh with a
+ * UV layer), so metre-space box-projected UVs are generated here, exactly as the
+ * prop pass does. Returns a small summary so a test or the HUD can tell what
+ * actually happened instead of trusting a promise.
+ */
+export function dressCastCloth(npcs, clothTextures, {
+  tileMeters = CAST_CLOTH_TILE_METERS
+} = {}) {
+  const dressed = [];
+  let seams = 0;
+  if (!clothTextures || !clothTextures.anyLoaded) {
+    return { dressed: 0, meshes: dressed, seams: 0, anyLoaded: false };
+  }
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const name = material && material.name ? material.name : '';
+      // Only the authored `Cloth` material is a coat; Skin/Hair/Accent/Boot/
+      // Marker and the carried props keep their own materials untouched.
+      if (!/^cloth$/i.test(name)) return;
+      // A coat sleeve is a tube: its rim corners are shared by triangles whose
+      // dominant normal axis flips, so the projection has to be allowed to split
+      // them. Doing it per vertex instead sheared six sleeve/hem triangles.
+      const split = projectBoxGeometry({ THREE, geometry: mesh.geometry, tileMeters });
+      if (split.seams > 0) seams += split.seams;
+
+      // Attach the maps to the mesh's *own* material so the authored
+      // `material.color` (the per-NPC coat tint) survives as the multiplier.
+      // A new white material would throw that colour away.
+      for (const key of ['map', 'normalMap', 'roughnessMap']) {
+        const texture = clothTextures[key];
+        if (!texture) continue;
+        const copy = texture.clone();
+        copy.needsUpdate = true;
+        copy.wrapS = THREE.RepeatWrapping;
+        copy.wrapT = THREE.RepeatWrapping;
+        // UVs are already in metres; one repeat keeps the authored tile size.
+        copy.repeat.set(1, 1);
+        material[key] = copy;
+      }
+      // The cloth is a matte textile; keep the coat from reading polished.
+      material.roughness = 0.95;
+      material.metalness = 0;
+      material.needsUpdate = true;
+      mesh.userData.clothDressed = true;
+      dressed.push({ npc: npc.id, name: mesh.name, tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, anyLoaded: true };
+}
+
+/**
+ * Loads the neutral cloth maps and dresses every cast coat with them.
+ *
+ * Split out from upgradeNPCs() so the load and the dressing are testable in
+ * isolation and so a failed download degrades to flat painted coats instead of
+ * blocking the modelled rigs. Never throws.
+ */
+export async function upgradeCastCloth(npcs, { THREE, fetchImpl = fetch, tileMeters = CAST_CLOTH_TILE_METERS } = {}) {
+  if (!THREE || !npcs || !npcs.length) return { dressed: 0, meshes: [], anyLoaded: false };
+  let clothTextures = null;
+  try {
+    clothTextures = await loadMaterialTextures({ THREE, files: CLOTH_TEXTURE_FILES, fetchImpl });
+  } catch {
+    clothTextures = null;
+  }
+  return dressCastCloth(npcs, clothTextures, { tileMeters });
+}
 
 // Round 2 cast. Each NPC has a name, a role, a palette, a routine of spots for
 // each phase of the day, and dialogue in dialogue.js (keyed by the same id).
@@ -261,6 +351,11 @@ export function createNPCs(scene) {
     const group = built.group;
     group.position.set(data.routine.day.x, 0, data.routine.day.z);
     group.rotation.y = data.routine.day.facing;
+    // Which character this rig is, so a scene-graph pass (or a browser check)
+    // can attribute a mesh to its authored palette. The coats are dressed per
+    // rig and each rig must keep its own coat colour, so "whose coat is this"
+    // has to be answerable from the graph rather than from traversal order.
+    group.userData.npcId = data.id;
 
     // A soft marker so NPCs are easy to spot in a busy courtyard.
     const marker = new THREE.Mesh(

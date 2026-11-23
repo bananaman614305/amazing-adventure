@@ -213,3 +213,40 @@ its procedural stand-in or flat colour and stays fully playable.
   the source PNGs. This replaces the plaza floor's reuse of the wall-stone
   maps, so the plaza and the border walls are now visually distinct surfaces.
   Fully procedural; no outside images, datasets or models to license.
+
+### Round 67 additions
+
+- `assets/textures/cloth_*.webp` — `art/kaggle/cloth_textures.py`, run on the
+  private Kaggle notebook (Tesla T4, CuPy backend). Procedural plain-woven
+  burlap: two warp threads per unit cell with sin^2 thread crowns, per-thread
+  value-noise slack via a lattice-periodic domain warp, albedo from thread
+  shading plus fibre speckle, roughness from the same height field, tangent-space
+  normal from a Sobel derive of the height. 512x512 albedo/normal/roughness,
+  seam ratios albedo [0.058, 0.066], normal [0.164, 0.328], rough [0.012, 0.013]
+  (all far under 3 = no visible seam). Shipped as lossless WebP, pixel-identical
+  to the source PNGs. Dressed by the round's new `cloth` PROP_FAMILY
+  (`keepTint: true` — the map is a neutral grey weave, so the sacks keep their
+  burlap brown and the coats keep their authored palette colours) at a 1.2 m
+  tile: the three lane `SackCloth` sacks and the modelled cast's 23 `Cloth`
+  coat/leg/sleeve meshes, 17.26 m2 of modelled cloth that was flat colour
+  before. Fully procedural; no outside images, datasets or models to license.
+
+### Round 67 fixes
+
+- **Box-projection UV seams** — the first curved geometry the prop dresser met
+  (the sacks' rims, the coats' sleeves and hems) exposed a latent bug in
+  `boxProjectUvs`: it chose the projection plane per *vertex* with
+  last-triangle-wins, so a corner shared by triangles whose dominant normal axis
+  flips kept only one of the two planes, shearing the triangle on the other side
+  (6 of a sack's 36 triangles; worst 3.3x off — implied tile 1.02 m beside
+  2.19 m on a 0.56 m sack). The new `boxProjectMesh` core picks the axis per
+  *triangle* and splits shared corners into their own slots (returning an
+  expanded, unindexed corner list plus a `remap`); `projectBoxGeometry` rebuilds
+  the geometry from it, carrying `normal` and `color` along so silhouette and
+  shading are untouched, while seam-free meshes keep their original index buffer
+  byte for byte. `boxProjectUvs` stays as the seam-free fast path and now throws
+  on a seamed mesh instead of shearing it silently. Live scene after the fix:
+  0 sheared triangles of 2532 across all dressed families, every triangle rigid
+  to within 2% of its own projection plane, all four split meshes unindexed with
+  exactly one corner per triangle slot, and the lane sacks tiling uniformly at
+  1.2 m with zero spread (was 0.53).

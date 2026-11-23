@@ -3,19 +3,23 @@
 // with a fake fetch, so "assets unavailable" is a tested state rather than a hope.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import {
   FOUNTAIN_COLLIDER, FOUNTAIN_SPOT, FOUNTAIN_ASSET, STONE_TEXTURE_FILES,
   canLoadAssets, textureRepeat, stoneMaterialParams, plazaFloorMaterialParams,
   fountainFootprint, footprintFitsCollider, loadFountain, loadStoneTextures,
   boxProjectUvs, PLAZA_FLOOR_TEXTURE_FILES,
+  boxProjectMesh, projectBoxGeometry,
   terraceMaterialParams, terraceStoneParts, TERRACE_TEXTURE_TILE_METERS, cloneTextureFamily,
   LAMP_TEXTURE_FILES, LAMP_ASSET, LAMP_MODEL_SIZE, loadMaterialTextures, needsOwnMaterial,
   ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor,
-  fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint, FOUNTAIN_STONE_COLORS
+  fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint, FOUNTAIN_STONE_COLORS,
+  CLOTH_TEXTURE_FILES
 } from '../src/assets.js';
 
 // Minimal fake Three.js: only what these functions touch.
+const ROOT = resolve(import.meta.dirname, '..');
 const fakeTHREE = {
   Color: class {},
   MeshStandardMaterial: class { constructor(p) { Object.assign(this, p); } },
@@ -412,7 +416,8 @@ test('boxProjectUvs scales with the tile size instead of hard-coding it', () => 
 });
 
 test('boxProjectUvs honours an index buffer and writes per vertex', () => {
-  // Same quad, but indexed: four unique vertices, six indices.
+  // Same quad, but indexed: four unique vertices, six indices. No vertex here is
+  // shared across an axis change, so the per-vertex contract still holds.
   const positions = [-1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1];
   const indices = [0, 1, 2, 0, 2, 3];
   const uvs = boxProjectUvs({ positions, indices, tileMeters: 1 });
@@ -431,6 +436,130 @@ test('boxProjectUvs picks the dominant axis for a side face', () => {
   // Layout is [u0, v0, u1, v1, u2, v2]; v1 is at index 3, u2 at index 4.
   assert.ok(Math.abs(uvs[3] - 2) < 1e-6, `v uses y: ${uvs[3]}`);
   assert.ok(Math.abs(uvs[4] - 3) < 1e-6, `u uses z: ${uvs[4]}`);
+});
+
+// --- The box-projection seam (round 67) ------------------------------------
+//
+// The projection used to pick the plane per *vertex* and write last-triangle
+// -wins, so a vertex shared by triangles that face different ways kept only one
+// of the two projections and sheared the other triangle. Three visible lane
+// sacks shipped with 6 of 36 triangles sheared and one of them 3.3x off. These
+// tests pin the per-triangle contract and the rigidity it has to guarantee.
+
+/** A closed square-section tube (two rings, four sides). Its corners are shared
+ *  by a face projecting on (z, y) and one projecting on (x, y) -- the same
+ *  axis-flip a cylinder rim has, which is what sheared the lane sacks. */
+function tubePositions() {
+  const ring = [[1, 1], [1, -1], [-1, -1], [-1, 1]];
+  const positions = [];
+  for (const y of [0, 1]) for (const [x, z] of ring) positions.push(x, y, z);
+  return positions;
+}
+
+/** Area of a triangle in the xz plane (these test meshes are flat in y). */
+function uvArea(uvs, a, b, c) {
+  const ux = uvs[b * 2] - uvs[a * 2];
+  const uy = uvs[b * 2 + 1] - uvs[a * 2 + 1];
+  const vx = uvs[c * 2] - uvs[a * 2];
+  const vy = uvs[c * 2 + 1] - uvs[a * 2 + 1];
+  return Math.abs(ux * vy - uy * vx) / 2;
+}
+
+test('boxProjectMesh reports the seam a tube forces and splits it per triangle', () => {
+  const positions = tubePositions();
+  // Four side quads = 8 triangles, indexed so the ring corners are shared.
+  const indices = [];
+  for (let side = 0; side < 4; side += 1) {
+    const a = side;
+    const b = (side + 1) % 4;
+    indices.push(a, b, b + 4, a, b + 4, a + 4);
+  }
+  const split = boxProjectMesh({ positions, indices, tileMeters: 1 });
+  assert.ok(split.seams > 0, 'a tube rim shares vertices across axis changes');
+  assert.equal(split.indices, null, 'a split mesh cannot keep the old index buffer');
+  assert.equal(split.uvs.length, indices.length * 2, 'one UV pair per triangle corner');
+  assert.equal(split.positions.length, indices.length * 3, 'positions expand in step');
+  // The silhouette must not change: every corner keeps its own position.
+  for (let corner = 0; corner < indices.length; corner += 1) {
+    const src = indices[corner];
+    for (let axis = 0; axis < 3; axis += 1) {
+      assert.equal(split.positions[corner * 3 + axis], positions[src * 3 + axis],
+        `corner ${corner} keeps position axis ${axis}`);
+    }
+  }
+  // And the whole point: every triangle is now rigid. Each side quad is 2 m x
+  // 1 m, so a triangle covers exactly 1 m2 of texture, no matter which way it
+  // faces -- that is the guarantee the per-vertex version broke.
+  for (let t = 0; t < indices.length / 3; t += 1) {
+    const area = uvArea(split.uvs, t * 3, t * 3 + 1, t * 3 + 2);
+    assert.ok(Math.abs(area - 1) < 1e-6,
+      `triangle ${t} keeps a 1 m2 UV footprint, got ${area.toFixed(4)}`);
+  }
+});
+
+test('boxProjectMesh leaves seam-free geometry on its original index buffer', () => {
+  // The flat quad from the test above: both triangles are y-dominant, so there
+  // is no seam and the caller must not have to rebuild anything.
+  const positions = [-1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1];
+  const indices = [0, 1, 2, 0, 2, 3];
+  const result = boxProjectMesh({ positions, indices, tileMeters: 1 });
+  assert.equal(result.seams, 0);
+  assert.equal(result.indices, indices, 'the index buffer is passed straight through');
+  assert.equal(result.uvs.length, 8, 'one UV pair per vertex when nothing splits');
+});
+
+test('boxProjectUvs refuses a seamed mesh instead of shearing it', () => {
+  // The old signature cannot express the split, so it must fail loudly rather
+  // than write one vertex's UV twice and silently stretch a face.
+  const positions = tubePositions();
+  const indices = [0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5];
+  assert.throws(
+    () => boxProjectUvs({ positions, indices, tileMeters: 1 }),
+    /seam/i,
+    'a seamed mesh must be reported, not silently smeared'
+  );
+});
+
+test('projectBoxGeometry expands every attribute with the split corners', () => {
+  // A real BufferGeometry stand-in: the split has to carry normals and colours
+  // along with positions, or the expanded mesh renders with wrong shading.
+  class Attr {
+    constructor(array, itemSize) { this.array = array; this.itemSize = itemSize; this.normalized = false; }
+  }
+  class Geo {
+    constructor(attrs, index) {
+      this.attributes = {};
+      for (const [k, v] of Object.entries(attrs)) this.attributes[k] = v;
+      this.index = index;
+    }
+    getAttribute(n) { return this.attributes[n]; }
+    setAttribute(n, a) { this.attributes[n] = a; }
+    getIndex() { return this.index; }
+    setIndex(a) { this.index = a; }
+  }
+  const positions = tubePositions();
+  const indices = [0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5];
+  const normals = [];
+  for (let i = 0; i < positions.length / 3; i += 1) normals.push(0, 1, 0);
+  const colors = [];
+  for (let i = 0; i < positions.length / 3; i += 1) colors.push(0.25, 0.5, 0.75);
+  const geo = new Geo({
+    position: new Attr(Float32Array.from(positions), 3),
+    normal: new Attr(Float32Array.from(normals), 3),
+    color: new Attr(Float32Array.from(colors), 3)
+  }, { array: Uint16Array.from(indices), count: indices.length });
+
+  const report = projectBoxGeometry({ THREE: fakeTHREE, geometry: geo, tileMeters: 1 });
+  assert.ok(report.seams > 0);
+  assert.equal(geo.getAttribute('uv').array.length, indices.length * 2);
+  assert.equal(geo.getAttribute('normal').array.length, indices.length * 3);
+  assert.equal(geo.getAttribute('color').array.length, indices.length * 3);
+  assert.equal(geo.getIndex(), null, 'a split mesh renders unindexed');
+  // The duplicated corners carry the original attribute values, not zeros.
+  for (let i = 0; i < indices.length; i += 1) {
+    assert.equal(geo.getAttribute('color').array[i * 3], 0.25);
+    assert.equal(geo.getAttribute('normal').array[i * 3 + 1], 1);
+  }
 });
 
 // --- The painted-iron lamp maps (round 55) ---------------------------------
@@ -539,7 +668,11 @@ test('material names that are not props stay flat', () => {
   // the fountain's own tinted pass, which is why the house's stone family is
   // anchored to HouseStone instead of a broad /stone/.
   // These are the real material names the shipped GLBs carry.
-  for (const name of ['BarrelIron', 'LampIron', 'LampGlass', 'StoneDark', 'Cloth',
+  // 'Cloth' is now dressed (Round 67): the lane sacks carry `SackCloth` and the
+  // cast coats carry `Cloth`, both of which match the cloth family. Cloth is
+  // therefore no longer in the must-stay-flat list -- the flat list below
+  // documents the materials that are still intentionally left alone.
+  for (const name of ['BarrelIron', 'LampIron', 'LampGlass', 'StoneDark',
     'Skin', 'EyeIris', 'Paper', 'Steel', 'Water', 'HouseGlass', '',
     // The bunting rope used to borrow `LaneWood`, which made three visible 2 cm
     // ropes report as planked wood while keeping their authored per-face UVs.
@@ -576,6 +709,52 @@ test('every family declares a positive metre tile size for the box projection', 
       `${family.id} roughness must be a real value`);
     assert.ok(family.files.map.startsWith('assets/textures/'),
       `${family.id} maps must live in the served texture directory`);
+  }
+});
+
+// --- Round 67: the cloth family keeps its consumers' tints -------------------
+// The cloth albedo is a neutral grey weave, so the colour has to come from the
+// material. Two things follow, and both are easy to break silently: the family
+// must opt into keeping the source tint, and no other family may, because the
+// plank/brick/stone albedos are already coloured and a tint on top would
+// double-tint them.
+
+test('only the colourless cloth family opts into keeping the source tint', () => {
+  const keepers = PROP_FAMILIES.filter((f) => f.keepTint);
+  assert.deepEqual(keepers.map((f) => f.id), ['cloth'],
+    'cloth is the one family whose map has no hue of its own');
+  for (const family of PROP_FAMILIES) {
+    if (family.id === 'cloth') continue;
+    assert.equal(family.keepTint, undefined,
+      `${family.id} ships a coloured albedo and must not multiply a tint into it`);
+  }
+});
+
+test('the cloth family covers the sacks and the cast coats but not the sack tie', () => {
+  const cloth = PROP_FAMILIES.find((f) => f.id === 'cloth');
+  assert.ok(cloth, 'the cloth family exists');
+  // `SackCloth` (lane sacks) and `Cloth` (cast coats) are the two consumers.
+  assert.equal(cloth.test.test('SackCloth'), true);
+  assert.equal(cloth.test.test('Cloth'), true);
+  // The pinched neck is a 4 cm tie, not a woven bag; dressing it would smear a
+  // weave across a detail too small to read.
+  assert.equal(cloth.test.test('SackTie'), false);
+  // And it must not shadow the families that already own their materials.
+  for (const name of ['BarkWood', 'HouseWood', 'StallRoof', 'HouseBrick', 'HouseStone', 'LampIron']) {
+    assert.equal(cloth.test.test(name), false, `${name} belongs to an earlier family`);
+  }
+  // Order matters: the first matching loaded family wins, so cloth has to be
+  // last or a broad earlier pattern would never be reached.
+  assert.equal(PROP_FAMILIES[PROP_FAMILIES.length - 1].id, 'cloth');
+});
+
+test('the cloth maps are three distinct neutral WebP files that exist', () => {
+  const urls = [CLOTH_TEXTURE_FILES.map, CLOTH_TEXTURE_FILES.normalMap, CLOTH_TEXTURE_FILES.roughnessMap];
+  assert.equal(new Set(urls).size, 3, 'three distinct maps, not the same file three times');
+  for (const url of urls) {
+    assert.match(url, /\.webp$/, `${url} ships as WebP like the other families`);
+    assert.ok(existsSync(join(ROOT, url)), `${url} must exist on disk`);
+    assert.ok(statSync(join(ROOT, url)).size > 4096, `${url} must be a real map, not a stub`);
   }
 });
 
@@ -755,7 +934,7 @@ test('every asset helper world.js calls is actually imported', () => {
   // world.js legitimately keeps for itself, must appear in that import list.
   const helpers = [
     'fountainStoneTint', 'fountainStoneMaterialParams', 'fountainStoneParts',
-    'boxProjectUvs', 'cloneTextureFamily', 'TERRACE_TEXTURE_TILE_METERS'
+    'projectBoxGeometry', 'cloneTextureFamily', 'TERRACE_TEXTURE_TILE_METERS'
   ];
   for (const helper of helpers) {
     if (!world.includes(`${helper}(`) && !world.includes(`${helper},`)) continue;

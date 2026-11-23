@@ -1,0 +1,456 @@
+{
+ "state": {
+  "propWood": "textured",
+  "propWoodDetail": {
+   "dressed": 80,
+   "projected": 80,
+   "seams": 32,
+   "groups": 23,
+   "byFamily": {
+    "leaf": 12,
+    "roof": 7,
+    "bark": 0,
+    "wood": 49,
+    "brick": 3,
+    "stone": 6,
+    "cloth": 3
+   }
+  },
+  "cloth": "textured",
+  "clothDetail": {
+   "maps": [
+    "map",
+    "normalMap",
+    "roughnessMap"
+   ]
+  },
+  "castCloth": null
+ },
+ "audit": {
+  "meshes": 106,
+  "shearedMeshes": 0,
+  "shearedTriangles": 0,
+  "worstRigidity": 1,
+  "byFamily": {
+   "wood": {
+    "meshes": 49,
+    "triangles": 1032,
+    "shearedMeshes": 0,
+    "shearedTriangles": 0
+   },
+   "roof": {
+    "meshes": 7,
+    "triangles": 84,
+    "shearedMeshes": 0,
+    "shearedTriangles": 0
+   },
+   "cloth": {
+    "meshes": 3,
+    "triangles": 108,
+    "shearedMeshes": 0,
+    "shearedTriangles": 0
+   },
+   "bark": {
+    "meshes": 3,
+    "triangles": 48,
+    "shearedMeshes": 0,
+    "shearedTriangles": 0
+   },
+   "leaf": {
+    "meshes": 12,
+    "triangles": 768,
+    "shearedMeshes": 0,
+    "shearedTriangles": 0
+   },
+   "castCloth": {
+    "meshes": 23,
+    "triangles": 492,
+    "shearedMeshes": 0,
+    "shearedTriangles": 0
+   },
+   "brick": {
+    "meshes": 3,
+    "triangles": 28,
+    "shearedMeshes": 0,
+    "shearedTriangles": 0
+   },
+   "stone": {
+    "meshes": 6,
+    "triangles": 72,
+    "shearedMeshes": 0,
+    "shearedTriangles": 0
+   }
+  }
+ },
+ "seams": {
+  "seamedMeshes": 4,
+  "seamedNames": [
+   [
+    "LaneWood",
+    null,
+    120,
+    120
+   ],
+   [
+    "SackCloth",
+    null,
+    108,
+    108
+   ],
+   [
+    "SackCloth",
+    null,
+    108,
+    108
+   ],
+   [
+    "SackCloth",
+    null,
+    108,
+    108
+   ]
+  ],
+  "seamFree": 102
+ },
+ "sacks": [
+  {
+   "mesh": null,
+   "triangles": 36,
+   "vertices": 108,
+   "indexed": false,
+   "sheared": 0,
+   "tileMin": 1.2,
+   "tileMax": 1.2,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "mesh": null,
+   "triangles": 36,
+   "vertices": 108,
+   "indexed": false,
+   "sheared": 0,
+   "tileMin": 1.2,
+   "tileMax": 1.2,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "mesh": null,
+   "triangles": 36,
+   "vertices": 108,
+   "indexed": false,
+   "sheared": 0,
+   "tileMin": 1.2,
+   "tileMax": 1.2,
+   "hasMap": true,
+   "hasNormal": true,
+   "hasRoughness": true
+  }
+ ],
+ "core": {
+  "tube": {
+   "vertices": 8,
+   "triangles": 8,
+   "seams": 8,
+   "indexed": false,
+   "corners": 24,
+   "worstRigidity": 1,
+   "perTriangle": [
+    {
+     "triangle": 0,
+     "uvArea": 2,
+     "planeArea": 2
+    },
+    {
+     "triangle": 1,
+     "uvArea": 2,
+     "planeArea": 2
+    },
+    {
+     "triangle": 2,
+     "uvArea": 2,
+     "planeArea": 2
+    },
+    {
+     "triangle": 3,
+     "uvArea": 2,
+     "planeArea": 2
+    },
+    {
+     "triangle": 4,
+     "uvArea": 2,
+     "planeArea": 2
+    },
+    {
+     "triangle": 5,
+     "uvArea": 2,
+     "planeArea": 2
+    },
+    {
+     "triangle": 6,
+     "uvArea": 2,
+     "planeArea": 2
+    },
+    {
+     "triangle": 7,
+     "uvArea": 2,
+     "planeArea": 2
+    }
+   ]
+  },
+  "slab": {
+   "vertices": 8,
+   "seams": 0,
+   "keepsCallerIndex": true,
+   "uvPairs": 8
+  },
+  "refusal": "boxProjectUvs: mesh has 8 seam vertices; use projectBoxGeometry"
+ },
+ "play": {
+  "walked": true,
+  "z": -8.796,
+  "ground": 0.051,
+  "quests": 9
+ },
+ "shots": [
+  {
+   "label": "sack-row",
+   "file": "/worker/state/wt66/artifacts/round67-sack-row.png",
+   "bytes": 424470
+  },
+  {
+   "label": "sack-close",
+   "file": "/worker/state/wt66/artifacts/round67-sack-close.png",
+   "bytes": 485169
+  },
+  {
+   "label": "lane-view",
+   "file": "/worker/state/wt66/artifacts/round67-lane-view.png",
+   "bytes": 397919
+  },
+  {
+   "label": "test-stall",
+   "file": "/worker/state/wt66/artifacts/round67-test-stall.png",
+   "bytes": 293426
+  }
+ ],
+ "screenshots": [
+  "/worker/state/wt66/artifacts/round67-sack-row.png",
+  "/worker/state/wt66/artifacts/round67-sack-close.png",
+  "/worker/state/wt66/artifacts/round67-lane-view.png",
+  "/worker/state/wt66/artifacts/round67-test-stall.png"
+ ],
+ "attrs": [
+  {
+   "material": "SackCloth",
+   "mesh": null,
+   "positions": 108,
+   "normals": 108,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "SackCloth",
+   "mesh": null,
+   "positions": 108,
+   "normals": 108,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "SackCloth",
+   "mesh": null,
+   "positions": 108,
+   "normals": 108,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmL",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbLegL",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmR",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbLegR",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "Torso",
+   "positions": 60,
+   "normals": 60,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmL",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmR",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "Torso",
+   "positions": 60,
+   "normals": 60,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "HatCap",
+   "positions": 60,
+   "normals": 60,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmL",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmR",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "Torso",
+   "positions": 60,
+   "normals": 60,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmL",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmR",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "Torso",
+   "positions": 60,
+   "normals": 60,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmL",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmR",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "Torso",
+   "positions": 60,
+   "normals": 60,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "HatBrim",
+   "positions": 60,
+   "normals": 60,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "HatCrown",
+   "positions": 60,
+   "normals": 60,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmL",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "LimbArmR",
+   "positions": 24,
+   "normals": 24,
+   "colors": null,
+   "unitNormals": 0
+  },
+  {
+   "material": "Cloth",
+   "mesh": "Torso",
+   "positions": 60,
+   "normals": 60,
+   "colors": null,
+   "unitNormals": 0
+  }
+ ]
+}

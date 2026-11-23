@@ -144,6 +144,20 @@ export const ROOF_TEXTURE_FILES = {
 };
 
 /**
+ * Cloth family: a plain woven textile for the lane sacks (`SackCloth`) and the
+ * modelled cast's coats (`Cloth`). The albedo is deliberately **neutral**: it is
+ * a mid-grey weave with no hue of its own, because the cast coats multiply it by
+ * each NPC's authored coat colour (mara 0x2F5D8A, oswin 0x7A4B2A, ...). A warm
+ * tan albedo would drag all six coats toward tan, so the colour comes from the
+ * material and only the weave comes from the map.
+ */
+export const CLOTH_TEXTURE_FILES = {
+  map: 'assets/textures/cloth_albedo.webp',
+  normalMap: 'assets/textures/cloth_normal.webp',
+  roughnessMap: 'assets/textures/cloth_rough.webp'
+};
+
+/**
  * Foliage family for the tree canopies (about 271 m2 of flat green geometry).
  * A low-poly canopy has almost no silhouette detail, so the normal map carries
  * the read: dense leaf clusters with a strong vein crease.
@@ -227,6 +241,27 @@ export const PROP_FAMILIES = [
     files: STONE_TEXTURE_FILES,
     tileMeters: 1.6,
     roughness: 0.9
+  },
+  {
+    // Round 67: woven cloth. Two very different consumers share one map -- the
+    // lane's `SackCloth` sacks (3 meshes, 3.58 m2 measured) and the cast's
+    // `Cloth` coats/legs/sleeves (23 meshes, 13.68 m2 measured). The pattern
+    // stays tight ("cloth")
+    // so it cannot swallow a future `SackTie` (the pinched neck, still flat) or
+    // any other material. Last in the list: it must not pre-empt roof/bark/wood.
+    id: 'cloth',
+    test: /cloth/i,
+    files: CLOTH_TEXTURE_FILES,
+    // Unlike the plank/brick/stone families, the cloth albedo has no colour of
+    // its own -- it is a neutral mid-grey weave (see CLOTH_TEXTURE_FILES). So a
+    // family that keeps whatever tint its source material authored gets the
+    // right result by multiply: the lane sacks stay burlap brown, the cast
+    // coats stay their own palette colours. Without this flag the dressing loop
+    // would paint every consumer flat white and the weave would be the only
+    // thing left of them.
+    keepTint: true,
+    tileMeters: 1.2,
+    roughness: 0.95
   }
 ];
 
@@ -292,54 +327,191 @@ export function textureRepeat(widthMeters, heightMeters, tileMeters = 2) {
  * Box-projects UVs for a flat-shaded model whose GLB carried no TEXCOORD_0.
  *
  * Why this exists: the Blender prop models are authored from untextured box
- * primitives, so Blender writes no UVs for them. The wood texture can only
- * dress a mesh that has UVs, so the loader generates them here instead of
- * re-authoring every model with a UV unwrap.
+ * primitives, so Blender writes no UVs for them. A texture can only dress a mesh
+ * that has UVs, so the loader generates them here instead of re-authoring every
+ * model with a UV unwrap.
  *
  * Box projection puts each triangle in the plane of its dominant normal axis:
  * a face pointing mostly along x gets (z, y) as its UV pair, and so on. That is
  * exactly right for crate/slab geometry (no stretching on the flat faces) and
  * cheap enough to do once at load time.
  *
- * Pure: positions in, UVs out, no THREE. `indices` may be null for
- * already-expanded geometry. Returns UVs in the same order as `positions`.
+ * The axis choice has to be made per *triangle*, never per vertex, because one
+ * vertex can be shared by triangles that face different ways. A cylinder rim is
+ * the textbook case: a rim vertex belongs to one triangle that projects along x
+ * and to its neighbour that projects along z, so a per-vertex choice hands one of
+ * them a UV from the wrong plane and shears it. The three visible lane sacks
+ * shipped exactly that -- 8 shared rim vertices, 6 of 36 triangles sheared, the
+ * worst 3.3x off (implied tile 1.02 m next to 2.19 m in one 0.56 m sack).
+ *
+ * So the projection runs in two steps. `boxProjectMesh` is the pure core: it
+ * picks an axis per triangle and, when a corner belongs to triangles that
+ * disagree, writes that corner into its own slot and returns an expanded index
+ * buffer, so each triangle gets the projection plane it needs. `boxProjectUvs`
+ * keeps the original one-pair-per-vertex contract for seam-free geometry and
+ * refuses to shear silently: it throws if the mesh needs splitting, which is a
+ * programming error at a call site that forgot to use `projectBoxGeometry`.
  */
-export function boxProjectUvs({ positions, indices = null, tileMeters = 1 }) {
-  const tile = Number.isFinite(tileMeters) && tileMeters > 0 ? tileMeters : 1;
-  const uvs = new Float32Array((positions.length / 3) * 2);
-  const triangleCount = indices ? indices.length / 3 : positions.length / 9;
 
-  const projected = (i, nx, ny, nz) => {
+/** The plane pair a dominant normal axis implies: 0 -> (z, y), 1 -> (x, z), 2 -> (x, y). */
+function boxAxis(nx, ny, nz) {
+  const ax = Math.abs(nx);
+  const ay = Math.abs(ny);
+  const az = Math.abs(nz);
+  if (ax >= ay && ax >= az) return 0;
+  if (ay >= az) return 1;
+  return 2;
+}
+
+/**
+ * Pure box-projection core: positions (and optional indices) in, per-triangle
+ * projected UVs out.
+ *
+ * Returns `{ uvs, indices, positions, seams }`:
+ *   - `seams === 0`: nothing was duplicated. `indices` is the caller's index
+ *     buffer (or null for non-indexed input) and `uvs` has one pair per vertex.
+ *   - `seams > 0`: `uvs`/`positions` have three entries per triangle and
+ *     `indices` is null; the mesh must be rebuilt from those arrays.
+ */
+export function boxProjectMesh({ positions, indices = null, tileMeters = 1 }) {
+  const tile = Number.isFinite(tileMeters) && tileMeters > 0 ? tileMeters : 1;
+  const triangleCount = indices ? indices.length / 3 : positions.length / 9;
+  const cornerIndex = (t, k) => (indices ? indices[t * 3 + k] : t * 3 + k);
+
+  const uvOf = (i, axis) => {
     const x = positions[i * 3];
     const y = positions[i * 3 + 1];
     const z = positions[i * 3 + 2];
-    const ax = Math.abs(nx);
-    const ay = Math.abs(ny);
-    const az = Math.abs(nz);
-    if (ax >= ay && ax >= az) return [z / tile, y / tile];
-    if (ay >= az) return [x / tile, z / tile];
+    if (axis === 0) return [z / tile, y / tile];
+    if (axis === 1) return [x / tile, z / tile];
     return [x / tile, y / tile];
   };
 
+  const axes = new Int32Array(triangleCount);
   for (let t = 0; t < triangleCount; t += 1) {
-    const a = indices ? indices[t * 3] : t * 3;
-    const b = indices ? indices[t * 3 + 1] : t * 3 + 1;
-    const c = indices ? indices[t * 3 + 2] : t * 3 + 2;
+    const a = cornerIndex(t, 0);
+    const b = cornerIndex(t, 1);
+    const c = cornerIndex(t, 2);
     const ax = positions[a * 3], ay = positions[a * 3 + 1], az = positions[a * 3 + 2];
     const e1x = positions[b * 3] - ax, e1y = positions[b * 3 + 1] - ay,
       e1z = positions[b * 3 + 2] - az;
     const e2x = positions[c * 3] - ax, e2y = positions[c * 3 + 1] - ay,
       e2z = positions[c * 3 + 2] - az;
-    const nx = e1y * e2z - e1z * e2y;
-    const ny = e1z * e2x - e1x * e2z;
-    const nz = e1x * e2y - e1y * e2x;
-    for (const i of [a, b, c]) {
-      const [u, v] = projected(i, nx, ny, nz);
-      uvs[i * 2] = u;
-      uvs[i * 2 + 1] = v;
+    axes[t] = boxAxis(
+      e1y * e2z - e1z * e2y,
+      e1z * e2x - e1x * e2z,
+      e1x * e2y - e1y * e2x
+    );
+  }
+
+  // Group the triangles by axis so a vertex only conflicts when triangles that
+  // actually disagree touch it. Bit k set in seen[i] means "axis k used i".
+  const seen = new Int32Array(positions.length / 3);
+  for (let t = 0; t < triangleCount; t += 1) {
+    const bit = 1 << axes[t];
+    for (let k = 0; k < 3; k += 1) seen[cornerIndex(t, k)] |= bit;
+  }
+  let seams = 0;
+  for (let i = 0; i < seen.length; i += 1) {
+    const bits = seen[i];
+    if (bits && (bits & (bits - 1)) !== 0) seams += 1; // more than one axis
+  }
+
+  if (seams === 0) {
+    const uvs = new Float32Array((positions.length / 3) * 2);
+    for (let t = 0; t < triangleCount; t += 1) {
+      for (let k = 0; k < 3; k += 1) {
+        const i = cornerIndex(t, k);
+        const [u, v] = uvOf(i, axes[t]);
+        uvs[i * 2] = u;
+        uvs[i * 2 + 1] = v;
+      }
+    }
+    return { uvs, indices, positions: null, seams: 0 };
+  }
+
+  // Seam-carrying mesh: one corner per triangle slot, no index buffer. The
+  // duplicate corners keep identical positions, so the silhouette is unchanged;
+  // only the UV seam changes.
+  const outCount = triangleCount * 3;
+  const uvs = new Float32Array(outCount * 2);
+  const outPositions = new Float32Array(outCount * 3);
+  const remap = new Int32Array(outCount);
+  for (let t = 0; t < triangleCount; t += 1) {
+    for (let k = 0; k < 3; k += 1) {
+      const src = cornerIndex(t, k);
+      const dst = t * 3 + k;
+      remap[dst] = src;
+      outPositions[dst * 3] = positions[src * 3];
+      outPositions[dst * 3 + 1] = positions[src * 3 + 1];
+      outPositions[dst * 3 + 2] = positions[src * 3 + 2];
+      const [u, v] = uvOf(src, axes[t]);
+      uvs[dst * 2] = u;
+      uvs[dst * 2 + 1] = v;
     }
   }
-  return uvs;
+  return { uvs, indices: null, positions: outPositions, remap, seams };
+}
+
+/**
+ * Seam-free convenience wrapper: one UV pair per vertex, same order as
+ * `positions`. Throws when the mesh has a UV seam, because writing that mesh
+ * per vertex would silently shear the triangles on the other side of it.
+ * Mesh dressing should call `projectBoxGeometry` instead.
+ */
+export function boxProjectUvs({ positions, indices = null, tileMeters = 1 }) {
+  const result = boxProjectMesh({ positions, indices, tileMeters });
+  if (result.seams > 0) {
+    throw new Error(`boxProjectUvs: mesh has ${result.seams} seam vertices; use projectBoxGeometry`);
+  }
+  return result.uvs;
+}
+
+/**
+ * Dresses one geometry with metre-space box-projected UVs, splitting vertices
+ * where triangles need different projection planes.
+ *
+ * Keeps every other attribute (`normal`, `color`) in step with the duplicated
+ * corners, and swaps the index buffer for a sequential one so the caller's
+ * geometry stays valid. Returns `{ seams, vertices }` so a harness can report
+ * how much the mesh had to be split.
+ */
+export function projectBoxGeometry({ THREE, geometry, tileMeters = 1 }) {
+  const position = geometry.getAttribute('position');
+  if (!position) return { seams: 0, vertices: 0 };
+  const index = geometry.getIndex();
+  const result = boxProjectMesh({
+    positions: position.array,
+    indices: index ? index.array : null,
+    tileMeters
+  });
+
+  if (result.seams === 0) {
+    geometry.setAttribute('uv', new THREE.BufferAttribute(result.uvs, 2));
+    return { seams: 0, vertices: position.count };
+  }
+
+  const remap = result.remap;
+  geometry.setAttribute('position',
+    new THREE.BufferAttribute(result.positions, 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(result.uvs, 2));
+  // Every other attribute follows its corner; a mesh whose attributes disagree
+  // on count would render with garbage, so pad or trim to the corner count.
+  for (const [name, attr] of Object.entries(geometry.attributes)) {
+    if (name === 'position' || name === 'uv') continue;
+    const ArrayType = attr.array.constructor;
+    const itemSize = attr.itemSize;
+    const out = new ArrayType(remap.length * itemSize);
+    for (let i = 0; i < remap.length; i += 1) {
+      for (let c = 0; c < itemSize; c += 1) {
+        out[i * itemSize + c] = attr.array[remap[i] * itemSize + c];
+      }
+    }
+    geometry.setAttribute(name, new THREE.BufferAttribute(out, itemSize,
+      attr.normalized));
+  }
+  geometry.setIndex(null);
+  return { seams: result.seams, vertices: remap.length };
 }
 
 /**

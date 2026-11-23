@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildWorld, applyPhase, KEY_SPOT, KEY_PICKUP_RANGE, floorHeightAt, TERRACE, STEP_HEIGHT, BENCH } from './world.js';
 import { Player } from './player.js';
-import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, animateCast, TALK_RANGE } from './npcs.js';
+import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, animateCast, TALK_RANGE } from './npcs.js';
 import { welcome } from './onboard.js';
 import {
   createInitialState,
@@ -528,9 +528,23 @@ const npcs = createNPCs(scene);
 // Upgrade the cast from procedural figures to the modelled rigs in the
 // background, the same way the plaza props upgrade. Resolves to a count, so
 // tests can tell the truth about which mode actually rendered.
-const castReady = upgradeNPCs(npcs, { THREE, loadGlb }).catch((error) => {
-  return { loaded: 0, total: npcs.length, mode: 'boxes', reason: String(error) };
-});
+//
+// Round 67: the modelled coats are dressed with the neutral cloth maps right
+// after the rigs swap in. It is chained onto `castReady` (not awaited earlier)
+// because the cloth pass needs the modelled meshes to exist, and because
+// awaiting `castReady` is already the documented settle point for tests and
+// evidence scripts -- so a dress result is visible exactly where a caller
+// expects the cast to be final. A failed cloth download leaves the coats flat
+// painted, which is the same coat colour the cast shipped with before.
+const castReady = upgradeNPCs(npcs, { THREE, loadGlb })
+  .then((summary) => {
+    return upgradeCastCloth(npcs, { THREE })
+      .then((cloth) => Object.assign(summary, { cloth }))
+      .catch((error) => Object.assign(summary, { cloth: { dressed: 0, reason: String(error) } }));
+  })
+  .catch((error) => {
+    return { loaded: 0, total: npcs.length, mode: 'boxes', reason: String(error) };
+  });
 
 // Start the optional asset upgrade in the background. It is deliberately not
 // awaited: the plaza is fully playable with the procedural stand-ins, and making

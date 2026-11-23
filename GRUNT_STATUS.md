@@ -12,6 +12,23 @@
 
 ## Current task
 
+**Round 67 — dress the cloth and fix the UV seams the dressing exposed.** The
+one big flat mass left after rounds 61–66 was cloth: the three lane `SackCloth`
+sacks and the modelled cast's 23 `Cloth` coat/leg/sleeve meshes (17.26 m2
+measured in the browser). This round gives them their own woven-burlap family —
+`art/kaggle/cloth_textures.py` on the Kaggle T4, a `cloth` PROP_FAMILY with
+`keepTint: true` so the sacks stay burlap brown and the coats keep their palette
+colours, tiled at 1.2 m — and fixes the bug that dressing curved geometry
+exposed: `boxProjectUvs` picked the projection plane per *vertex* with
+last-triangle-wins, so every sack rim and sleeve seam sheared the triangle on
+the far side (worst 3.3x off). The new `boxProjectMesh`/`projectBoxGeometry` core
+picks the axis per triangle and splits shared corners into their own slots;
+seam-free meshes keep their original index buffer, and `boxProjectUvs` now
+throws instead of shearing silently. After the fix: 0 sheared triangles of 2532
+in the live scene, every triangle rigid within 2%, sacks tiling uniformly at
+1.2 m. Details in the Round 67 sections below; evidence at the end of this
+section.
+
 **Round 65 — keep the fountain's two stones apart once the maps load.** Round
 64 dressed the gate piers and the fountain stone in the shared quarried-stone
 family, and reviewing my own diff afterwards caught a defect that had shipped
@@ -53,6 +70,56 @@ twice, and the dark stone carries a **multiplier** (`0xc8cbc9`) instead of the
 authored colour, so the map keeps its own contrast and only the overall tone
 shifts. Both passes are gated in `assetState.gateStone` /
 `assetState.fountainStone` (`flat` | `textured` | `unavailable` | `stand-in`).
+
+### Round 67 — the dressing and its bug
+
+**The cloth family.** A live audit after round 66 found one large flat mass
+left: cloth. The three lane `SackCloth` sacks (3.58 m2) and the cast GLBs' 23
+`Cloth` coat/leg/sleeve meshes (13.68 m2) were still flat colour. New pieces:
+
+- `art/kaggle/cloth_textures.py` — procedural plain-woven burlap on the Kaggle
+  T4 (CuPy backend): two warp threads per unit cell with sin^2 thread crowns,
+  per-thread value-noise slack via a lattice-periodic domain warp, albedo from
+  thread shading plus fibre speckle, roughness from the same height field,
+  tangent-space normal from a Sobel derive. 512x512, seamless by construction;
+  shipped seam ratios albedo [0.058, 0.066], normal [0.164, 0.328], rough
+  [0.012, 0.013] (all far under 3). Lossless WebP, pixel-identical to source.
+- A `cloth` PROP_FAMILY (`/cloth/i`, last in the list so it cannot pre-empt
+  roof/bark/wood) with `keepTint: true`: the albedo is a neutral grey weave with
+  no colour of its own, so the dressed materials keep their authored tint by
+  multiply — sacks stay burlap brown, coats stay their palette colours.
+- `src/npcs.js` gains `upgradeCastCloth()`, chained onto `castReady` in
+  `src/main.js` so the coats dress right after the modelled rigs swap in. A
+  failed download leaves the coats flat painted, exactly as they shipped before.
+- Tiled at 1.2 m (sacks measured 0.56 m across, so the weave reads at sack
+  scale; `CAST_CLOTH_TILE_METERS = 1.2` for the coats).
+
+**The bug the curved geometry exposed.** The first cloth pass wrote UVs with
+`boxProjectUvs`, which chose the projection plane per *vertex* with
+last-triangle-wins. Any corner shared by triangles whose dominant normal axis
+flips kept only one of the two planes, shearing the triangle on the other side:
+6 of a lane sack's 36 triangles, worst 3.3x off (implied tile 1.02 m beside
+2.19 m on one 0.56 m sack). Flat crate/slab faces never hit it, which is why
+rounds 61–66 measured clean — the sacks and coats are the first curved geometry
+the dresser meets.
+
+**The fix.** `src/assets.js` gains a two-layer API:
+
+- `boxProjectMesh({positions, indices, tileMeters})` — the pure core. Picks the
+  axis per *triangle*, counts corners touched by triangles that disagree (a
+  per-corner axis bitmask), and when seams exist returns one corner per triangle
+  slot: expanded `positions`/`uvs`, `indices: null`, plus a `remap` array. When
+  the mesh is seam-free it passes the caller's index buffer straight through.
+- `projectBoxGeometry({THREE, geometry, tileMeters})` — rebuilds a Three
+  geometry from that result, expanding every other attribute (`normal`, `color`)
+  through `remap` so shading and tint ride along, and clears the index. Returns
+  `{seams, vertices}` so a harness can report the split.
+- `boxProjectUvs` stays as the seam-free fast path but now **throws** on a
+  seamed mesh instead of shearing it silently, so a call site that forgot
+  `projectBoxGeometry` fails loudly.
+
+`src/world.js` wood dressing routes through `projectBoxGeometry` and reports
+`assetState.propWoodDetail.seams`; `src/npcs.js` cloth dressing does the same.
 
 ### Round 65 — the dark stone was about to disappear
 
@@ -123,6 +190,29 @@ marker now covers the whole stand-in (4 → 6 hidden objects), and only the
 counters (`marketStallSize` set) spawn model instances, so a roof slab's height
 can never be used to scale a stall.
 
+**Round 67 evidence.** Unit suite **612/612 PASS**
+(`node --test tests/*.test.mjs`, 24 s) — including the new seam tests: the tube
+fixture forces 8 seam corners, the split tube is rigid (every triangle's UV
+area equals its 1 m2 plane area to 1e-6), a seam-free slab keeps the caller's
+index buffer byte for byte, `boxProjectUvs` throws `/seam/` on the tube, and the
+attribute-expansion test pins `normal`/`color` counts to the duplicated corner
+count. The round-65 source-level import guard extends to the new helpers.
+Round 67 browser evidence **19/19 checks PASS**
+(`scripts/evidence-round67.mjs`, RECORD_ARTIFACTS=1): live scene audits
+**0 sheared triangles of 2532** across every dressed family (wood 49 meshes,
+roof 7, cloth 3, cast cloth 23, leaf 12, brick 3, stone 6), worst triangle
+rigidity 1.0 within the 2% tolerance, all four split meshes (LaneWood 40 tris /
+120 corners, three SackCloth sacks 36 tris / 108 corners each) unindexed with
+exactly one corner per triangle slot, every other dressed mesh still indexed,
+split corners carry unit normals and their original colours, the three sacks
+tile uniformly at 1.2 m with zero implied-tile spread (round 66's pre-fix probe
+measured 0.53 spread, worst triangle 3.3x), the player still walks, and the
+quest spine still opens (9 quests) with no console errors. Screenshots:
+`artifacts/round67-{sack-row,sack-close,lane-view,test-stall}.png`; scene JSON:
+`artifacts/round67-evidence.json`. Kaggle run COMPLETE
+(`/worker/state/grunt-kaggle status`), cloth maps downloaded and inspected
+before use.
+
 **Round 65 evidence.** Unit suite **597/597 PASS**
 (`node --test tests/*.test.mjs`) — including the new source-level guard that
 fails when world.js calls an asset helper it forgot to import (verified by
@@ -175,25 +265,19 @@ Nothing here is merged or deployed by me.
 
 ## Next steps
 
-1. **Dress the props the quest spine sends the player to, next.** With the
-   plaza floor (61), the terrace (62), the roofs and canopies (63), and the gate
-   and fountain stone (64) done, the remaining flat untextured masses are the
-   objects the player stops and reads: the notice board, the job board, the
-   ledger, and the plaza crates. Give the wood props the remaining materials the
-   `/Wood/i` dressing path does not reach, and the ledger's pages/board their own
-   low-key treatment, each with scene-graph evidence like these rounds'.
-2. **Physical light on the dressed stone (round 66 candidate).** The new stone
-   has a `normalMap` but every one of these materials is a plain
-   `MeshStandardMaterial` with no light interacting strongly with it. Adding a
-   subtle contact/ambient occlusion pass or a low-cost baked lightmap on the
-   plaza floor would make the ashlar courses read at grazing angles, which is
-   where flat projection still looks flattest.
-3. **Certify and publish the graphics series.** Once the series settles, obtain
-   the three trusted `planId: release` receipts (`tests`, `browser`, `mobile`)
-   on the exact committed head and hand it to `grunt_release_prepare`. This is
+1. **Certify and publish the graphics series.** The cloth family plus the seam
+   fix closes the last large flat mass the live audits found. Obtain the three
+   trusted `planId: release` receipts (`tests`, `browser`, `mobile`) on the
+   exact committed head and hand it to `grunt_release_prepare`. This is
    host-side blocked for round 57 and the root checkout does not carry these
    rounds yet, so nothing here is merged or deployed by me.
-4. **Fold in the sky-dome follow-up (Round 57b).** The horizon haze band, phase
+2. **Physical light on the dressed surfaces.** The stone/wood/cloth maps all
+   have `normalMap`s, but every material is a plain `MeshStandardMaterial` with
+   no light interacting strongly with them. A subtle contact/ambient-occlusion
+   pass or a low-cost baked lightmap on the plaza floor would make the courses
+   and the weave read at grazing angles, which is where projection still looks
+   flattest.
+3. **Fold in the sky-dome follow-up (Round 57b).** The horizon haze band, phase
    driven sun disc and 32x24 dome are finished and green at `c8dbb23` on
    `grunt/round57b-sky` but were deliberately held out of the certified tree.
 
