@@ -170,8 +170,9 @@ export function sunDiscPosition(sunPosition, distance = SUN_DISTANCE) {
 }
 
 /**
- * Shadow budget per quality tier. The full tier keeps a 2048 map with a tight
- * frustum around the plaza; the low tier (weak phones) turns the shadow pass
+ * Shadow budget per quality tier. The full tier keeps a 2048 map whose
+ * orthographic box covers every declared area (`shadowFrustumFor`); the low
+ * tier (weak phones) turns the shadow pass
  * off entirely, which is the single largest per-frame saving and matches what
  * world.setQuality already does to sun.castShadow.
  */
