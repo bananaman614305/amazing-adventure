@@ -98,6 +98,22 @@ export const CRATE_MODEL_SIZE = { width: 1.2, depth: 1.2, height: 1.2 };
 
 export const TREE_ASSET = 'assets/tree.glb';
 
+/**
+ * The terrace banner: a hanging cloth panel on a rod, modelled in Blender
+ * (art/blender/make_banner.py). Round 71 replaced the old 2.4 x 1.1 plane
+ * (5.28 m2 of flat #2f5d8a) at the terrace lip, which was the largest flat
+ * surface left in the plaza. A plane has no thickness, no rod and no cast
+ * shadow, so at the terrace lip -- the first thing the player sees cresting the
+ * ramp -- it read as a sticker.
+ *
+ * Authored around the cloth centre with the front facing glTF +Z (the plaza), so
+ * world.js sets position only, no rotation.
+ */
+export const BANNER_ASSET = 'assets/banner.glb';
+
+/** Authored size of the banner model (cloth panel + rod overhang). */
+export const BANNER_MODEL_SIZE = { width: 2.4, height: 1.1, rodOverhang: 0.21 };
+
 /** Authored size of the tree model (trunk + canopy). */
 export const TREE_MODEL_SIZE = { trunkRadius: 0.22, trunkHeight: 2.6, canopyRadius: 1.35 };
 
@@ -166,6 +182,23 @@ export const LEAF_TEXTURE_FILES = {
   map: 'assets/textures/leaf_albedo.webp',
   normalMap: 'assets/textures/leaf_normal.webp',
   roughnessMap: 'assets/textures/leaf_rough.webp'
+};
+
+/**
+ * The painted-canvas banner design (round 71). Deliberately **non-tiling**: it
+ * is a single painted panel -- a blue ground, a gold border band, a shield and
+ * star -- and the BannerCanvas mesh carries authored 0..1 UVs covering the design
+ * exactly once. Any repeat would cut a seam through the middle of the emblem, so
+ * the banner is applied by its own path (see upgradeBanner) rather than through
+ * applyTextureFamily, which forces RepeatWrapping.
+ *
+ * The albedo carries its own paint colour (the materials audit measures it), so
+ * the material tint stays white or the paint would be multiplied down twice.
+ */
+export const BANNER_TEXTURE_FILES = {
+  map: 'assets/textures/banner_albedo.webp',
+  normalMap: 'assets/textures/banner_normal.webp',
+  roughnessMap: 'assets/textures/banner_rough.webp'
 };
 
 /**
@@ -1020,6 +1053,38 @@ export async function loadBench({ THREE, loadGlb, url = BENCH_ASSET, fetchImpl =
  * half-extent). The board is authored with its long side along x and rotated
  * 90 deg by the game, so the loader checks the wider extent against depth.
  */
+/**
+ * Loads the banner GLB. Same contract as the others: never throws, refuses a
+ * model whose cloth panel exceeds its authored box (2.4 x 1.1 plus rod overhang).
+ * The BannerCanvas mesh carries authored UVs; the rod/finial/strap meshes have
+ * none and are box-projected in world.js.
+ */
+export async function loadBanner({ THREE, loadGlb, url = BANNER_ASSET, fetchImpl = fetch }) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const canvasMeshes = meshes.filter((m) => m.name === 'BannerCanvas');
+    const check = canvasMeshes.length ? canvasMeshes : meshes;
+    const footprint = fountainFootprint(check);
+    const reachX = footprint
+      ? Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX))
+      : Infinity;
+    const reachY = footprint
+      ? Math.max(Math.abs(footprint.minY), Math.abs(footprint.maxY))
+      : Infinity;
+    if (reachX > 1.25 || reachY > 0.6) {
+      return { ok: false, reason: 'banner exceeds its box', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
 export async function loadNotice({ THREE, loadGlb, url = NOTICE_ASSET, fetchImpl = fetch }) {
   try {
     const response = await fetchImpl(url);
