@@ -15,7 +15,7 @@ Uncommitted diff on grunt/round67-cloth @ 4609067: src/assets.js (iron family), 
 - `environment.postLamp` reassignment is present and guarded by `if (bulb)`. Good; applyPhase() target preserved.
 
 ### Low
-- `LanternHousing`, `LanternBulb`, `TerraceBanner`, `BoardFace`, `BoardPaper`, `NoticeFaceLane`, `NpcMarker`, `BuntingRed`, `BuntingGold` are named but match no family, so they stay flat by construction. Good for audit attribution.
+- `LanternHousing`, `LanternBulb`, `BoardFace`, `BoardPaper`, `NoticeFaceLane`, `NpcMarker`, `BuntingRed`, `BuntingGold` are named but match no family, so they stay flat by construction. Good for audit attribution. (`TerraceBanner` retired in round 71 — replaced by the modelled banner.)
 - audit-materials: keying by name+colour means genuine shared materials still merge. Hidden-material skip and assetsReady() wait are present. Good.
 - test-round2 28h block now asserts iron dressed >= 20 with zero flat iron; flat list must contain glass. Verified against live probe (ironDressed count from probe ~59 in propWood byFamily, but prop group traversal in test counts differently; threshold 20 is conservative).
 

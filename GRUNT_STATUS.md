@@ -12,6 +12,45 @@
 
 ## Current task
 
+**Round 71 - the modelled terrace banner.** Round 70 left one large flat
+surface on the terrace: the 5.28 m2 `TerraceBanner` painted plane at the lip,
+which read as a sticker because a plane has no thickness, no rod and no cast
+shadow. This round replaces it with the modelled cloth+rod GLB
+(`assets/banner.glb`, 17608 bytes, 4 meshes: `BannerCanvas`, `BannerRod`,
+`BannerFinial`, `BannerStrap`) loaded through `loadBanner()` and dressed through
+`upgradeBanner()`. The cloth is a subdivided panel (384 tris) with a fold wave
+and a sagging hem, painted by its own non-tiling canvas maps
+(`banner_albedo/normal/rough.webp`, authored 0..1 UVs, `ClampToEdge`) so the
+shield emblem cannot seam; the rod reuses the lane lamp's painted-iron maps at a
+0.6 m tile. The flat stand-in stays in the scene for the no-assets fallback but
+renders nothing once the model arrives (`visible === false`).
+
+Footprint is measured off the cloth only (the 2.74 m rod span is finial
+overhang), matching `BANNER_MODEL_SIZE` ({width 2.4, height 1.1, rodOverhang
+0.21}) and the `reachX > 1.25 / reachY > 0.6` box check. The four banner parts
+opt out of `PROP_FAMILIES` (`propFamilyFor(...) === null`) so the banner's own
+path owns their dressing, and the collider is untouched.
+
+Evidence (`scripts/evidence-round71.mjs`, `RECORD_ARTIFACTS=1`): **30/30 checks
+PASS**, no console errors. `assetState().bannerDetail` = `{parts: 4, bytes:
+17608, instances: 1, canvasDressed: 1, ironDressed: 3, maps:
+['map','normalMap','roughnessMap']}`. Group `banner-model` at `[0, 2.7, -16.42]`;
+cloth world box minY 2.15 / maxY 3.25, Z -16.42..-16.40; rod rides above the
+cloth; every mesh casts a shadow. Unit suite **631/631 pass, 0 fail** after the
+manifest and dist rebuilds. Screenshots: `artifacts/round71-banner-{front,across,
+cloth}.png`, JSON `artifacts/round71-evidence.json`.
+
+Manifest: `assets/banner.glb` + three `banner_*.webp` added to `REQUIRED_FILES`
+and `release-manifest.json` (90 required files). `dist/` rebuilt at source digest
+`e478187700ac741b9353b3244d600eed6459542d5f59505e9933c38ddd0390d7`.
+
+The honest limitation: this is a painted-canvas panel, not a woven cloth weave -
+the same decision as round 70's painted iron - so the banner and the bunting
+stay distinct reads. The remaining large flat surfaces are now `Water`
+(16.36 m2, must stay flat and moving) and `HouseGlass` (4.63 m2, must stay
+glass); bunting (0.16 m flag) is the next candidate if a low-frequency painted
+variant can carry it.
+
 **Round 70 - one painted-iron read for props and fixtures.** The largest flat
 mass left after round 69 was ironwork: `BarrelIron`, `BenchIron`, `CrateIron`,
 `DoorIron`, `MarketIron`, `NoticeIron`, `StallIron` and the plaza lamp posts came
@@ -443,27 +482,23 @@ Nothing here is merged or deployed by me.
 
 ## Next steps
 
-1. **Round 71 candidate: the terrace banner's painted canvas.** After round 70
-   the largest flat surface left is the 5.28 m2 `TerraceBanner`, then `Water` at
-   16.36 m2 (which must stay flat and moving) and `HouseGlass` at 4.63 m2
-   (which must stay glass). A painted canvas family - dyed cloth with a
-   hand-painted device - would dress the banner without a weave tile, and the
-   same map could dress the lane's bunting flags if a 0.16 m flag can carry a
-   low-frequency variant instead of the 1.2 m weave.
-2. **Publication is blocked host-side, not by game code.** The root checkout is
-   detached at the round-59 root `895bb72`; the three `planId: release` receipts
-   certify that tree (21 texture maps, no `cloth_*.webp`), and the round-57c
-   request is stuck at `phase=blocked, reason=operation_interrupted`. The tree
-   mismatch is reported in `/worker/state/outbox/needs-supervision.json` and the
-   PR-only request for `grunt/round67-cloth` is in
-   `/worker/state/outbox/publish.json`. A candidate at this head needs fresh
-   `tests`, `browser` and `mobile` receipts against the exact committed tree
-   before any release call.
+1. **Publication remains host-side blocked, not by game code.** The root checkout
+   is detached at round-59 `895bb72`; the three `planId: release` receipts certify
+   that tree (21 texture maps, no `cloth_*.webp` or `banner_*.webp`), and the
+   round-57c request is stuck at `phase=blocked, reason=operation_interrupted`.
+   The tree mismatch is reported in `/worker/state/outbox/needs-supervision.json`
+   and the PR-only request for `grunt/round67-cloth` is in
+   `/worker/state/outbox/publish.json` (refreshed to this head). A candidate at
+   this head needs fresh `tests`, `browser` and `mobile` receipts against the
+   exact committed tree before any release call.
+2. **Round 72 candidate: bunting flags.** The 0.16 m flags cannot carry the 1.2 m
+   weave; a painted-canvas low-frequency variant (reusing the banner's panel
+   maps at a larger tile) is the candidate, and the same non-tiling clamp path
+   already exists. Evidence must prove no seam through the emblem.
 3. **Iron variant maps, if repetition shows in motion.** Round 70 put the props
-   and the lane fixture on one 0.6 m painted-iron tile on purpose, so they agree
-   by construction. If playtesting shows the chip pattern repeating across the
-   barrel hoops, a cheap dirt or rust variant layered on the same base would
-   break it without adding a second family.
+   and the lane fixture on one 0.6 m painted-iron tile on purpose. If playtesting
+   shows the chip pattern repeating across barrel hoops, a cheap dirt/rust variant
+   layered on the same base breaks it without a second family.
 
 ---
 

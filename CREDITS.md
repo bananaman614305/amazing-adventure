@@ -68,6 +68,7 @@ scripts are committed under `art/` so every asset is reproducible.
 | `assets/barrel.glb` | `art/blender/make_barrel.py` | 3 meshes (body + 2 hoops), 15.9 KB | Generated for this game; same licence as the game |
 | `assets/stall.glb` | `art/blender/make_stall.py` | 96 tris, 8 meshes, 3 materials, 9.8 KB | Generated for this game; same licence as the game |
 | `assets/lamp.glb` | `art/blender/make_lamp.py` | 96 tris, 6 meshes (post/base/arm/housing/cap/bulb), 8.9 KB | Generated for this game; same licence as the game |
+| `assets/banner.glb` | `art/blender/make_banner.py` | 4 meshes (BannerCanvas/BannerRod/BannerFinial/BannerStrap), 17.6 KB | Generated for this game; same licence as the game |
 
 Blender runs headless via `/worker/state/grunt-blender`. Meshes are built
 explicitly with `bmesh` (no boolean operations), flat-shaded, exported as GLB
@@ -213,6 +214,11 @@ its procedural stand-in or flat colour and stays fully playable.
   the source PNGs. This replaces the plaza floor's reuse of the wall-stone
   maps, so the plaza and the border walls are now visually distinct surfaces.
   Fully procedural; no outside images, datasets or models to license.
+
+### Round 71 additions
+
+- `assets/banner.glb` — `art/blender/make_banner.py`. 4 meshes, 17.6 KB: a subdivided cloth panel (BannerCanvas, 384 tris, fold wave + sagging hem), a painted-iron rod, finials, and hanging straps. Authored around the cloth centre with front facing glTF +Z, so the game sets position only. Footprint measured off the cloth only (rod span is finial overhang). Same licence as the game (generated, not downloaded).
+- `assets/textures/banner_{albedo,normal,rough}.webp` — `art/kaggle/banner_textures.py`, run on the private Kaggle notebook (Tesla T4, CuPy backend). Procedural painted canvas: blue ground, gold border band, shield and star device, authored 0..1 UVs, shipped as lossless WebP. Applied by `upgradeBanner()` with `ClampToEdgeWrapping` (deliberately non-tiling so the shield emblem cannot seam); albedo carries its own paint colour so the material tint stays white. Fully procedural; no outside images, datasets or models to license.
 
 ### Round 67 additions
 

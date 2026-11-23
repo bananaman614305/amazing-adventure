@@ -196,7 +196,7 @@ try {
   checks.check('the materials audit has no (unnamed) bucket',
     live.hasUnnamedBucket === false, Object.keys(live.flatBuckets).join(', '));
   checks.check('the named round-70 materials exist in the audit',
-    ['LanternHousing', 'TerraceBanner', 'BoardFace', 'BoardPaper', 'NpcMarker',
+    ['LanternHousing', 'BoardFace', 'BoardPaper', 'NpcMarker',
       'BuntingRed', 'BuntingGold'].every((n) => Object.prototype.hasOwnProperty.call(live.flatBuckets, n)),
     Object.keys(live.flatBuckets).join(', '));
   // The lane notice board's face is named `NoticeFaceLane` but only while its

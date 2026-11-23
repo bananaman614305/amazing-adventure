@@ -15,6 +15,7 @@ import {
   LAMP_TEXTURE_FILES, LAMP_ASSET, LAMP_MODEL_SIZE, loadMaterialTextures, needsOwnMaterial,
   ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor,
   fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint, FOUNTAIN_STONE_COLORS,
+  BANNER_ASSET, BANNER_MODEL_SIZE, BANNER_TEXTURE_FILES, loadBanner,
   CLOTH_TEXTURE_FILES,
   PLAZA_AO_MAP_CHANNEL, plazaAoMapIntensity, plazaAoMapIntensityForQuality,
   createPlazaAoTexture, contactDarkeningColors, applyContactDarkeningGeometry
@@ -319,6 +320,76 @@ test('a model larger than the collider is refused rather than clipping', async (
   });
   assert.equal(result.ok, false);
   assert.match(result.reason, /exceeds its collider/);
+});
+
+test('the banner loads, reports its bytes, and is sized to the old plane', async () => {
+  const canvas = {
+    name: 'BannerCanvas',
+    geometry: { boundingBox: { min: { x: -1.2, y: -0.55, z: 0 }, max: { x: 1.2, y: 0.55, z: 0.022 } } }
+  };
+  const rod = {
+    name: 'BannerRod',
+    geometry: { boundingBox: { min: { x: -1.37, y: 0.563, z: -0.018 }, max: { x: 1.37, y: 0.597, z: 0.018 } } }
+  };
+  const result = await loadBanner({
+    THREE: fakeTHREE,
+    loadGlb: () => [canvas, rod],
+    fetchImpl: async () => okResponse(new ArrayBuffer(17608))
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.bytes, 17608);
+  assert.equal(result.url, BANNER_ASSET);
+  // The footprint is measured off the cloth, not the rod: a 2.74 m rod span is
+  // an overhang, and rejecting it would make the banner fail for having finials.
+  assert.equal(Math.round(result.footprint.width * 100) / 100, BANNER_MODEL_SIZE.width);
+  assert.equal(Math.round(result.footprint.height * 100) / 100, BANNER_MODEL_SIZE.height);
+});
+
+test('a banner whose cloth outgrew the terrace lip is refused', async () => {
+  const huge = {
+    name: 'BannerCanvas',
+    geometry: { boundingBox: { min: { x: -3, y: -2, z: 0 }, max: { x: 3, y: 2, z: 0.02 } } }
+  };
+  const result = await loadBanner({
+    THREE: fakeTHREE,
+    loadGlb: () => [huge],
+    fetchImpl: async () => okResponse(new ArrayBuffer(16))
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /exceeds its box/);
+});
+
+test('a failed banner fetch reports why, and never throws', async () => {
+  const missing = await loadBanner({
+    THREE: fakeTHREE, loadGlb: () => [],
+    fetchImpl: async () => failResponse(404)
+  });
+  assert.equal(missing.ok, false);
+  assert.match(missing.reason, /404/);
+
+  const corrupt = await loadBanner({
+    THREE: fakeTHREE,
+    loadGlb: () => { throw new Error('not a GLB file'); },
+    fetchImpl: async () => okResponse(new ArrayBuffer(8))
+  });
+  assert.equal(corrupt.ok, false);
+  assert.match(corrupt.reason, /not a GLB/);
+});
+
+test('the banner maps are a single painted panel, not a tiling family', () => {
+  // A repeat over a painted shield would cut a seam through the emblem, so the
+  // banner is applied by its own ClampToEdge path. If someone folded these
+  // maps into PROP_FAMILIES this test is the tripwire.
+  assert.deepEqual(Object.keys(BANNER_TEXTURE_FILES).sort(), ['map', 'normalMap', 'roughnessMap']);
+  for (const file of Object.values(BANNER_TEXTURE_FILES)) {
+    assert.match(file, /^assets\/textures\/banner_(albedo|normal|rough)\.webp$/);
+  }
+  assert.equal(propFamilyFor('BannerCanvas'), null,
+    'BannerCanvas must not be swept up by a prop family');
+  for (const name of ['BannerRod', 'BannerFinial', 'BannerStrap']) {
+    assert.equal(propFamilyFor(name), null,
+      `${name} is dressed by upgradeBanner(), not by the prop registry`);
+  }
 });
 
 test('stone textures degrade to nulls instead of failing', async () => {
@@ -741,7 +812,7 @@ test('material names that are not props stay flat', () => {
     // materials audit can attribute their area (an unnamed material used to
     // collapse six unrelated surfaces into one 10.65 m2 row). Naming them is
     // also a claim that they are deliberately flat: each matches no family.
-    'LanternHousing', 'LanternBulb', 'TerraceBanner', 'BoardFace',
+    'LanternHousing', 'LanternBulb', 'BoardFace',
     'BoardPaper', 'NoticeFaceLane', 'NpcMarker', 'BuntingRed', 'BuntingGold',
     // The bunting rope used to borrow `LaneWood`, which made three visible 2 cm
     // ropes report as planked wood while keeping their authored per-face UVs.

@@ -12,6 +12,7 @@ import {
   LAMP_ASSET, LAMP_MODEL_SIZE, loadLamp, MARKET_STALL_ASSET, MARKET_STALL_MODEL_SIZE,
   loadMarketStall, BENCH_ASSET, BENCH_MODEL_SIZE, loadBench,
   NOTICE_ASSET, NOTICE_MODEL_SIZE, loadNotice,
+  BANNER_ASSET, BANNER_MODEL_SIZE, loadBanner, BANNER_TEXTURE_FILES,
   CRATE_ASSET, CRATE_MODEL_SIZE, loadCrate,
   GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
   HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
@@ -660,7 +661,9 @@ export function buildWorld(renderer) {
     terraceStoneMeshes.push(sideWall);
   }
 
-  // A painted banner over the terrace marks it as the north wall.
+  // A painted banner over the terrace marks it as the north wall. This is the
+  // stand-in that upgradeBanner() replaces with the modelled cloth+rod GLB when
+  // assets load; the collider stays untouched either way.
   const banner = new THREE.Mesh(
     new THREE.PlaneGeometry(2.4, 1.1),
     new THREE.MeshStandardMaterial({ color: 0x2f5d8a, roughness: 0.8, side: THREE.DoubleSide })
@@ -670,8 +673,11 @@ export function buildWorld(renderer) {
   // shared anonymous bucket, and worded so it matches no weave family -- a
   // banner is sized and painted, not woven at a 1.2 m repeat.
   banner.material.name = 'TerraceBanner';
+  banner.userData.bannerStandin = true;
   banner.position.set(0, TERRACE.height + 1.5, TERRACE.minZ + 0.08);
   scene.add(banner);
+  // Keep a handle so upgradeBanner() can hide it without a scene traversal.
+  const bannerStandin = banner;
 
   // --- Props --------------------------------------------------------------
   const stone = new THREE.MeshStandardMaterial({ color: 0x8f8577, roughness: 0.8 });
@@ -1005,6 +1011,8 @@ export function buildWorld(renderer) {
     clothDetail: null,
     iron: 'flat',
     ironDetail: null,
+    banner: 'plane',
+    bannerDetail: null,
     cobble: 'flat',
     grass: 'flat',
     walls: 'flat',
@@ -1484,6 +1492,105 @@ export function buildWorld(renderer) {
       assetState.lampMetalDetail = {
         dressed,
         maps: ['map', 'normalMap', 'roughnessMap'].filter((key) => textures[key])
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeBanner() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.banner = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return Promise.all([
+      loadBanner({ THREE, loadGlb }),
+      loadMaterialTextures({ THREE, files: BANNER_TEXTURE_FILES }),
+      loadMaterialTextures({ THREE, files: LAMP_TEXTURE_FILES })
+    ]).then(([result, canvasTextures, ironTextures]) => {
+      if (!result.ok) {
+        assetState.banner = 'plane';
+        assetState.bannerDetail = result.reason;
+        return assetState;
+      }
+      // Hide the stand-in (the old flat plane).
+      if (bannerStandin) bannerStandin.visible = false;
+      scene.traverse((c) => {
+        if (c.userData && c.userData.bannerStandin) c.visible = false;
+      });
+      const group = new THREE.Group();
+      group.name = 'banner-model';
+      // Authored around the cloth centre facing glTF +Z (the plaza); only position.
+      group.position.set(0, TERRACE.height + 1.5, TERRACE.minZ + 0.08);
+      let canvasDressed = 0;
+      let ironDressed = 0;
+      for (const { name, geometry, material } of result.meshes) {
+        const own = needsOwnMaterial({ mutatesMaterial: false, sharedSource: true });
+        const mesh = new THREE.Mesh(geometry, own ? material.clone() : material);
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        const isIron = name === 'BannerRod' || name === 'BannerFinial' || name === 'BannerStrap';
+        if (name === 'BannerCanvas') {
+          mesh.material = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.92,
+            metalness: 0,
+            side: THREE.DoubleSide,
+            name: 'BannerCanvas'
+          });
+          if (canvasTextures.anyLoaded) {
+            for (const [key, texture] of Object.entries(canvasTextures)) {
+              if (!texture || key === 'anyLoaded') continue;
+              const copy = texture.clone();
+              copy.needsUpdate = true;
+              copy.wrapS = THREE.ClampToEdgeWrapping;
+              copy.wrapT = THREE.ClampToEdgeWrapping;
+              copy.repeat.set(1, 1);
+              copy.anisotropy = Math.min(4, renderer.capabilities?.getMaxAnisotropy?.() || 1);
+              mesh.material[key] = copy;
+            }
+            canvasDressed = 1;
+          }
+        } else if (isIron) {
+          if (!geometry.getAttribute('uv')) {
+            projectBoxGeometry({ THREE, geometry, tileMeters: 0.6 });
+          }
+          const iron = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.55,
+            metalness: 0.45,
+            name: name
+          });
+          if (ironTextures && ironTextures.anyLoaded) {
+            for (const [key, texture] of Object.entries(ironTextures)) {
+              if (!texture || key === 'anyLoaded') continue;
+              const copy = texture.clone();
+              copy.needsUpdate = true;
+              copy.wrapS = THREE.RepeatWrapping;
+              copy.wrapT = THREE.RepeatWrapping;
+              copy.repeat.set(1, 1);
+              iron[key] = copy;
+            }
+            ironDressed += 1;
+          }
+          mesh.material = iron;
+        }
+        group.add(mesh);
+      }
+      scene.add(group);
+      propGroups.push({ group, tile: 1.5 });
+      assetState.banner = 'model';
+      assetState.bannerDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: 1,
+        canvasDressed,
+        ironDressed,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => canvasTextures[k])
       };
       return assetState;
     });
@@ -2535,7 +2642,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp()])
+      return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner()])
         .then(() => upgradePropFamilies()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
