@@ -12,6 +12,26 @@
 
 ## Current task
 
+**Round 68 - give the market lane its sun shadows back.** Reviewing round 67's
+dressed plaza exposed a defect no earlier test could see: the sun's shadow box
+was hard-coded as +-24 around the origin, written when the plaza was the whole
+world. The market lane (z -26..-17.5) sits outside it, so lane props were never
+rasterised into the depth map - measured on the live scene, 22 of the lane's 40
+shadow receivers and 46 of its 65 casters projected outside, and the lane's
+north-east lamp post sat at NDC x = 1.14. The box is now derived by
+`shadowFrustumFor()` (src/graphics.js) from the declared area bounds and aimed
+at the world centre, sized by the far-corner *distance* (29.4 m with margin)
+rather than the larger half-extent (21.5 m) - a half-extent box still clipped
+eight north-east props - and `applyPhase` offsets each phase's light position by
+the same centre shift, so the authored day/dusk/night sun directions are
+bit-for-bit unchanged. Evidence (`scripts/evidence-round68.mjs`): all 376 shadow
+meshes inside the box in every phase with drift 0.0000 vs `PHASE_LOOKS`, lane far
+corner at NDC (0.344, -0.65), 24/24 checks passed, no console errors. The low
+tier still drops the shadow pass, so mobile keeps its zero-shadow path. Full
+suite 620 pass / 0 fail; dist rebuilt (digest
+59a51211d3302d28aac39539f784f7ddc2a32621d5bfdf6a6f7c567902e153b2) from clean
+tree d124044.
+
 **Round 67 — dress the cloth and fix the UV seams the dressing exposed.** The
 one big flat mass left after rounds 61–66 was cloth: the three lane `SackCloth`
 sacks and the modelled cast's 23 `Cloth` coat/leg/sleeve meshes (17.26 m2
@@ -342,6 +362,18 @@ gate runs against the root checkout, which does not carry these rounds.
 Nothing here is merged or deployed by me.
 
 ## Next steps
+
+1. Round 69 candidate: use the now-correct shadows - a cheap contact-darkening
+   pass (AO-style vertex or rim darkening) on stone/wood props to strengthen the
+   grounded look the frustum fix enables, plus a low-cost baked lightmap on the
+   plaza floor for grazing angles.
+2. Publication is still blocked host-side: the root checkout
+   /home/alan/projects/amazing-adventure is detached at 895bb72 (round 59), and
+   the publisher checks the root tree, so it reports needs_attention / "Commit
+   the clean working tree before publication". Host-side repair, not game code.
+3. If a future area is added, `shadowFrustumFor` grows the box automatically;
+   the tests pin corner coverage, squareness and a negative control on the old
+   +-24 box.
 
 1. **Get the trusted channel onto this candidate, or take the PR-only path.**
    Round 67 is complete and green at `0181e56` (613/613 unit, 245/245 desktop,

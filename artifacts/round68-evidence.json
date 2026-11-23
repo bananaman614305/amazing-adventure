@@ -1,0 +1,227 @@
+{
+  "frustum": {
+    "left": -29.40894014733149,
+    "right": 29.40894014733149,
+    "top": 29.40894014733149,
+    "bottom": -29.40894014733149,
+    "near": 1,
+    "far": 98.81788029466298,
+    "size": 58.81788029466298,
+    "centre": {
+      "x": 0,
+      "z": -4.5
+    }
+  },
+  "coverage": {
+    "day": {
+      "receivers": 210,
+      "casters": 358,
+      "inside": 376,
+      "strays": 0,
+      "camera": {
+        "left": -29.40894014733149,
+        "right": 29.40894014733149,
+        "near": 1,
+        "far": 98.81788029466298
+      }
+    },
+    "dusk": {
+      "receivers": 210,
+      "casters": 358,
+      "inside": 376,
+      "strays": 0,
+      "camera": {
+        "left": -29.40894014733149,
+        "right": 29.40894014733149,
+        "near": 1,
+        "far": 98.81788029466298
+      }
+    },
+    "night": {
+      "receivers": 210,
+      "casters": 358,
+      "inside": 376,
+      "strays": 0,
+      "camera": {
+        "left": -29.40894014733149,
+        "right": 29.40894014733149,
+        "near": 1,
+        "far": 98.81788029466298
+      }
+    }
+  },
+  "direction": {
+    "day": {
+      "measured": [
+        -0.552,
+        -0.759,
+        -0.345
+      ],
+      "authored": [
+        -0.552,
+        -0.759,
+        -0.345
+      ],
+      "drift": 0
+    },
+    "dusk": {
+      "measured": [
+        0.89,
+        -0.346,
+        -0.297
+      ],
+      "authored": [
+        0.89,
+        -0.346,
+        -0.297
+      ],
+      "drift": 0
+    },
+    "night": {
+      "measured": [
+        -0.487,
+        -0.811,
+        0.324
+      ],
+      "authored": [
+        -0.487,
+        -0.811,
+        0.324
+      ],
+      "drift": 0
+    }
+  },
+  "before": {
+    "box": 24,
+    "laneEndNdc": {
+      "x": 0.5833333333333334,
+      "y": -1.0833333333333333
+    }
+  },
+  "shots": [
+    "/worker/state/wt66/artifacts/round68-lane.png",
+    "/worker/state/wt66/artifacts/round68-plaza.png"
+  ],
+  "checks": [
+    {
+      "name": "the shadow box is square, so a square shadow map spends every texel",
+      "ok": true,
+      "detail": "58.82 x 58.82 m"
+    },
+    {
+      "name": "the shadow box is larger than the historical +-24 m box",
+      "ok": true,
+      "detail": "58.82 m vs 48 m"
+    },
+    {
+      "name": "every corner of plaza is inside the shadow box",
+      "ok": true,
+      "detail": "worst |ndc| 0.731"
+    },
+    {
+      "name": "every corner of lane is inside the shadow box",
+      "ok": true,
+      "detail": "worst |ndc| 0.731"
+    },
+    {
+      "name": "the historical +-24 m box leaves the lane end outside (negative control)",
+      "ok": true,
+      "detail": "lane end (14, -26) -> ndc 0.58, -1.08"
+    },
+    {
+      "name": "sizing the box by half-extent would still clip the far corner",
+      "ok": true,
+      "detail": "half-extent 21.50 m < corner distance 30.41 m"
+    },
+    {
+      "name": "the low tier still drops the shadow pass entirely",
+      "ok": true,
+      "detail": "mobile keeps its zero-shadow path; this round adds no shadow cost there"
+    },
+    {
+      "name": "day: the clock reports the phase under test",
+      "ok": true,
+      "detail": "reported day"
+    },
+    {
+      "name": "day: every shadow mesh projects inside the shadow box",
+      "ok": true,
+      "detail": "376/568 inside"
+    },
+    {
+      "name": "day: the lane has shadow casters and receivers to cover",
+      "ok": true,
+      "detail": "210 receivers, 358 casters"
+    },
+    {
+      "name": "day: the sun keeps its authored direction",
+      "ok": true,
+      "detail": "measured [-0.552,-0.759,-0.345] vs authored [-0.552,-0.759,-0.345] (drift 0.0000)"
+    },
+    {
+      "name": "day: the light target sits at the shadow box centre",
+      "ok": true,
+      "detail": "target [0,0,-4.5] vs centre (0, -4.5)"
+    },
+    {
+      "name": "dusk: the clock reports the phase under test",
+      "ok": true,
+      "detail": "reported dusk"
+    },
+    {
+      "name": "dusk: every shadow mesh projects inside the shadow box",
+      "ok": true,
+      "detail": "376/568 inside"
+    },
+    {
+      "name": "dusk: the lane has shadow casters and receivers to cover",
+      "ok": true,
+      "detail": "210 receivers, 358 casters"
+    },
+    {
+      "name": "dusk: the sun keeps its authored direction",
+      "ok": true,
+      "detail": "measured [0.89,-0.346,-0.297] vs authored [0.89,-0.346,-0.297] (drift 0.0000)"
+    },
+    {
+      "name": "dusk: the light target sits at the shadow box centre",
+      "ok": true,
+      "detail": "target [0,0,-4.5] vs centre (0, -4.5)"
+    },
+    {
+      "name": "night: the clock reports the phase under test",
+      "ok": true,
+      "detail": "reported night"
+    },
+    {
+      "name": "night: every shadow mesh projects inside the shadow box",
+      "ok": true,
+      "detail": "376/568 inside"
+    },
+    {
+      "name": "night: the lane has shadow casters and receivers to cover",
+      "ok": true,
+      "detail": "210 receivers, 358 casters"
+    },
+    {
+      "name": "night: the sun keeps its authored direction",
+      "ok": true,
+      "detail": "measured [-0.487,-0.811,0.324] vs authored [-0.487,-0.811,0.324] (drift 0.0000)"
+    },
+    {
+      "name": "night: the light target sits at the shadow box centre",
+      "ok": true,
+      "detail": "target [0,0,-4.5] vs centre (0, -4.5)"
+    },
+    {
+      "name": "the lane far corner projects inside the shadow box",
+      "ok": true,
+      "detail": "ndc 0.344, -0.65"
+    },
+    {
+      "name": "the run produced no console errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}
