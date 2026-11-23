@@ -213,6 +213,10 @@ quest spine still opens (9 quests) with no console errors. Screenshots:
 (`/worker/state/grunt-kaggle status`), cloth maps downloaded and inspected
 before use.
 
+Re-running `scripts/evidence-round67.mjs` on the review-fixed head reproduced
+**19/19 PASS** with the artifacts rewritten byte-identical, so the morph fix
+changed nothing about what the scene renders while closing the latent trap.
+
 **Round 67 review — a bug the split would have hidden.** An independent review
 of `projectBoxGeometry` (and my own adversarial probes on the pure core) turned
 up one real defect and cleared the rest:
