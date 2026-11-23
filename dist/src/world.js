@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
-  GATE, LANE, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
+  GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
   LANE_BUNTING, LANE_SACKS, LANE_LANTERNS, LANTERN_HEIGHT, lanternPlacement,
   lampArmFacing, nearestLaneLantern
 } from './areas.js';
@@ -27,6 +27,7 @@ import {
 import { loadGlb } from './glb.js';
 import {
   shadowSettings,
+  shadowFrustumFor,
   skyVertexColor,
   sunDiskIntensity,
   sunDiscPosition,
@@ -853,12 +854,24 @@ export function buildWorld(renderer) {
   sun.position.set(16, 22, 10);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  sun.shadow.camera.left = -24;
-  sun.shadow.camera.right = 24;
-  sun.shadow.camera.top = 24;
-  sun.shadow.camera.bottom = -24;
-  sun.shadow.camera.near = 1;
-  sun.shadow.camera.far = 70;
+  // The ortho box is derived from the areas' declared bounds, not hard-coded.
+  // It used to be a fixed +-24 around the origin, which predated the market
+  // lane: every lane prop north of that box was silently dropped from the
+  // depth pass, so the lane's barrels, stalls and sacks cast and received no
+  // sun shadow at all. shadowFrustumFor also returns the box centre, so the
+  // light is aimed at the middle of the whole world rather than the origin.
+  const shadowBox = shadowFrustumFor(AREAS);
+  sun.shadow.camera.left = shadowBox.left;
+  sun.shadow.camera.right = shadowBox.right;
+  sun.shadow.camera.top = shadowBox.top;
+  sun.shadow.camera.bottom = shadowBox.bottom;
+  sun.shadow.camera.near = shadowBox.near;
+  sun.shadow.camera.far = shadowBox.far;
+  // Aim the light's target at the world centre the box is built around. The
+  // light itself keeps its authored direction, so the sun still comes from the
+  // same place in the sky; only where the shadow frustum is pointed changes.
+  sun.target.position.set(shadowBox.centre.x, 0, shadowBox.centre.z);
+  sun.shadow.camera.updateProjectionMatrix();
   // A small normal bias removes the acne that a pure depth bias leaves on the
   // sloped roof and octagonal fountain, which is why both are set: the depth
   // bias fixes flat faces, the normal bias fixes grazing angles.
@@ -2356,6 +2369,10 @@ export function buildWorld(renderer) {
     hemi,
     sun,
     fill,
+    // The centre the shadow box was built around. applyPhase offsets the sun's
+    // position by this so the light keeps its authored direction while the
+    // frustum stays pointed at the middle of the whole world, lane included.
+    shadowCentre: shadowBox.centre,
     lamps,
     laneLamps,
     postLamp,
@@ -2510,7 +2527,18 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   hemi.intensity = look.hemiIntensity;
   sun.color.setHex(look.sunColor);
   sun.intensity = look.sunIntensity;
-  sun.position.set(look.sunPosition[0], look.sunPosition[1], look.sunPosition[2]);
+  // The light is positioned relative to its target, so once the target sits at
+  // the world centre (for the shadow box) the light has to carry the same
+  // offset. PHASE_LOOKS.sunPosition is authored as a point around the origin;
+  // adding the target offset back keeps every phase's sun DIRECTION exactly as
+  // authored while the frustum follows the target. Without this the sun would
+  // visibly swing away from its authored azimuth at dusk and night.
+  const aim = environment.shadowCentre || { x: 0, z: 0 };
+  sun.position.set(
+    look.sunPosition[0] + aim.x,
+    look.sunPosition[1],
+    look.sunPosition[2] + aim.z
+  );
   fill.intensity = look.fillIntensity;
   for (const lamp of lamps) {
     lamp.light.intensity = look.lampIntensity;

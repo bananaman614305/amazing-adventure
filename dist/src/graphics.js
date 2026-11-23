@@ -183,6 +183,89 @@ export function shadowSettings(tier) {
 }
 
 /**
+ * Orthographic box for the sun's shadow camera, derived from the world's real
+ * extents instead of hand-tuned numbers.
+ *
+ * Why a function and not four constants. The plaza's box was written as +-24
+ * when the plaza was the whole world. The market lane was added north of it and
+ * nothing revisited the box, so every lane prop outside it silently lost both
+ * its cast shadow and its received shadow - the props were simply never
+ * rasterised into the depth map. Measured on the live scene, 22 of the lane's
+ * 40 shadow receivers and 46 of its 65 casters fell outside. Deriving the box
+ * from the areas' declared bounds means a future area cannot repeat that: add
+ * an area and the frustum grows with it, and a unit test can pin the coverage.
+ *
+ * The box is square on purpose. A shadow map is square, so a square box spends
+ * every texel: widening only what is needed keeps the texel density the old
+ * +-24 box gave the plaza (2048 texels over 48 m is ~42 texels/m). Fitting a
+ * tight non-square box would raise density but make the texel density change
+ * whenever an area moved, which is a bug waiting to happen.
+ *
+ * Size is the CORNER distance, not the larger half-extent. The plaza and lane
+ * together span 34 m east-west and 43 m north-south, so the larger half-extent
+ * is 21.5 - but the far corner of that box is 27.4 m from its centre. A square
+ * box sized by the half-extent leaves the corners 6 m short (measured: eight
+ * lane props on the north-east edge fell outside, so the lamp post there cast
+ * no shadow). Sizing by the corner distance and adding the margin covers every
+ * declared point of every area, which is the property the test pins.
+ *
+ * `margin` is padding beyond the outermost edge, so a prop standing exactly on
+ * an area boundary still casts into the map rather than being clipped in half.
+ * The height for `near`/`far` comes from the light's own distance to the scene
+ * plus generous slack for tall geometry, because both are measured along the
+ * light direction, not vertically.
+ *
+ * Returns plain numbers so a test can check the coverage arithmetic without a
+ * Three.js OrthographicCamera.
+ */
+export const SHADOW_FRUSTUM_MARGIN = 2;
+export const SHADOW_FRUSTUM_SLACK = 40;
+
+export function shadowFrustumFor(areas, { margin = SHADOW_FRUSTUM_MARGIN, slack = SHADOW_FRUSTUM_SLACK } = {}) {
+  const list = Array.isArray(areas) ? areas.filter((a) => a && Number.isFinite(a.minX)) : [];
+  if (list.length === 0) {
+    // No declared world: fall back to the historical plaza box rather than a
+    // degenerate one, so a caller that forgets to pass areas still gets a sane
+    // shadow pass instead of a single shadowed texel.
+    return { left: -24, right: 24, top: 24, bottom: -24, near: 1, far: 70, centre: { x: 0, z: 0 }, size: 48 };
+  }
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const area of list) {
+    const x0 = Math.min(area.minX, area.maxX);
+    const x1 = Math.max(area.minX, area.maxX);
+    const z0 = Math.min(area.minZ ?? area.minX, area.maxZ ?? area.maxX);
+    const z1 = Math.max(area.minZ ?? area.minX, area.maxZ ?? area.maxX);
+    if (x0 < minX) minX = x0;
+    if (x1 > maxX) maxX = x1;
+    if (z0 < minZ) minZ = z0;
+    if (z1 > maxZ) maxZ = z1;
+  }
+  // Centre the box on the middle of the declared world, not on the origin: the
+  // lane extends north of the plaza's middle, so a box centred on 0 would have
+  // to reach further south than anything actually stands.
+  const centreX = (minX + maxX) / 2;
+  const centreZ = (minZ + maxZ) / 2;
+  // Every declared corner has to land inside the square, so size by the
+  // farthest corner distance in the ground plane rather than by a half-extent.
+  const halfX = (maxX - minX) / 2;
+  const halfZ = (maxZ - minZ) / 2;
+  const half = Math.hypot(halfX, halfZ) + margin;
+  return {
+    left: -half,
+    right: half,
+    top: half,
+    bottom: -half,
+    near: 1,
+    far: half * 2 + slack,
+    centre: { x: centreX, z: centreZ },
+    size: half * 2
+  };
+}
+
+/**
  * Applies the camera pipeline to a renderer. Kept as one call so main.js cannot
  * set tone mapping in one place and forget the colour space in another.
  *
