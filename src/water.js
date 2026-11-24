@@ -27,8 +27,9 @@ export function shouldAnimateWater(tier) {
 
 /** One frame's UV delta. Zero when the tier is low or dt is not usable, so a
  *  paused or backgrounded frame cannot jump the surface. */
-export function waterOffsetStep(dt, { speed = WATER_FLOW_SPEED, low = false } = {}) {
-  if (low || !Number.isFinite(dt) || dt <= 0) return { x: 0, y: 0 };
+export function waterOffsetStep(dt, { speed = WATER_FLOW_SPEED, low = false, tier } = {}) {
+  const effectiveLow = low || tier === 'low';
+  if (effectiveLow || !Number.isFinite(dt) || dt <= 0) return { x: 0, y: 0 };
   return { x: dt * speed, y: dt * speed * 0.6 };
 }
 

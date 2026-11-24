@@ -36,6 +36,10 @@ import {
   glassCastsShadow
 } from './glass.js';
 import {
+  advanceWaterOffset,
+  WATER_FLOW_SPEED
+} from './water.js';
+import {
   shadowSettings,
   shadowFrustumFor,
   skyVertexColor,
@@ -2014,6 +2018,18 @@ export function buildWorld(renderer) {
         // Water never casts a hard shadow onto the basin floor (see upgradeFountain).
         disc.castShadow = false;
       }
+      // Round 75: the moving surface needs a per-frame hook. Keep the material
+      // and the shared offset on the environment so main.js can advance them
+      // without reaching into this closure, and start from a zero offset so the
+      // first frame is a no-op rather than a jump.
+      environment.waterMaterial = material;
+      environment.waterOffset = { x: 0, y: 0 };
+      // The normal map is the only map that should travel; the albedo is the
+      // water's colour and stays put, and the roughness map is the mirror
+      // pattern that should ride with the highlight.
+      for (const key of ['normalMap', 'roughnessMap']) {
+        if (material[key]) material[key].offset.set(0, 0);
+      }
       assetState.water = 'textured';
       assetState.waterDetail = {
         discs: discs.length,
@@ -2915,6 +2931,28 @@ export function buildWorld(renderer) {
     },
     fountainGroup,
     glassPanes,
+    waterMaterial: null,
+    waterOffset: { x: 0, y: 0 },
+    /**
+     * Advances the fountain's water surface by one frame.
+     *
+     * A pure accumulator (src/water.js) decides the UV step; this only writes
+     * it to the material's normal and roughness maps. Returns the new offset so
+     * tests can hold the movement to a number rather than a feeling. The low
+     * tier freezes the surface, so a struggling phone is not asked to chase a
+     * moving highlight.
+     */
+    updateWater(dt) {
+      if (!environment.waterMaterial) return environment.waterOffset;
+      const low = environment.quality === 'low';
+      const next = advanceWaterOffset(environment.waterOffset, dt, { low, tier: environment.quality });
+      environment.waterOffset = next;
+      const mat = environment.waterMaterial;
+      for (const key of ['normalMap', 'roughnessMap']) {
+        if (mat[key]) mat[key].offset.set(next.x, next.y);
+      }
+      return next;
+    },
     /**
      * Writes the current hour to every registered pane.
      *

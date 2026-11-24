@@ -3,10 +3,10 @@
   "version": "0.3.0",
   "build": "A living world",
   "entryPoint": "index.html",
-  "workingTreeClean": true,
-  "fileCount": 97,
-  "sourceDigest": "3f2ef936cf05578e4337cc7f7d0b4244c18ab585136dde4a97896d058720ae46",
-  "digest": "3f2ef936cf05578e4337cc7f7d0b4244c18ab585136dde4a97896d058720ae46",
+  "workingTreeClean": false,
+  "fileCount": 98,
+  "sourceDigest": "5ac4fe6f64106b6e520dab5d68f947a87a42e5294ff9e46de534cba572a4138c",
+  "digest": "5ac4fe6f64106b6e520dab5d68f947a87a42e5294ff9e46de534cba572a4138c",
   "files": [
     "assets/banner.glb",
     "assets/barrel.glb",
@@ -102,6 +102,7 @@
     "src/terrain.js",
     "src/touch.js",
     "src/version.js",
+    "src/water.js",
     "src/world.js",
     "vendor/THREE-LICENSE.txt",
     "vendor/three.module.min.js"
