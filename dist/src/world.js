@@ -14,6 +14,7 @@ import {
   NOTICE_ASSET, NOTICE_MODEL_SIZE, loadNotice,
   BANNER_ASSET, BANNER_MODEL_SIZE, loadBanner, BANNER_TEXTURE_FILES,
   FELT_TEXTURE_FILES, FELT_FAMILY, BUNTING_TILE_METERS,
+  WATER_TEXTURE_FILES, WATER_TILE_METERS,
   CRATE_ASSET, CRATE_MODEL_SIZE, loadCrate,
   GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
   HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
@@ -1044,7 +1045,9 @@ export function buildWorld(renderer) {
     barkDetail: null,
     terraceDetail: null,
     gateStoneDetail: null,
-    fountainStoneDetail: null
+    fountainStoneDetail: null,
+    water: 'flat',
+    waterDetail: null
   };
 
   function upgradeFountain() {
@@ -1879,6 +1882,96 @@ export function buildWorld(renderer) {
         seams,
         maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
         tileMeters: FELT_FAMILY.tileMeters
+      };
+      return assetState;
+    });
+  }
+
+  /**
+   * Dresses the fountain's two water discs with the procedural water family.
+   *
+   * The GLB ships `FountainWaterLower` / `FountainWaterUpper` as flat octagons
+   * (colour #97c8e3, roughness 0.15, metalness 0.1, no maps, no UVs). A uniform
+   * blue disc is the last obviously plastic surface in the plaza, so this gives
+   * each disc a metre-space box projection and the tileable water maps.
+   *
+   * `keepTint` is deliberately false here: unlike the bunting, whose authored
+   * dyes are the whole point, the fountain's authored #97c8e3 is a placeholder
+   * flat colour that this family is replacing. The map carries the water colour
+   * and the material projects white, the same rule as the stone pass.
+   *
+   * Water is reflective, so the maps request anisotropy 8 (the discs are seen at
+   * a grazing angle from across the plaza) but no per-mesh material copy: both
+   * discs share one material because they share one surface treatment.
+   */
+  function upgradeFountainWater() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.water = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: WATER_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.water = 'flat';
+        return assetState;
+      }
+      const model = fountainGroup.getObjectByName('fountain-model');
+      const discs = [];
+      model?.traverse?.((mesh) => {
+        if (mesh.isMesh && /water/i.test(mesh.material?.name || '')) discs.push(mesh);
+      });
+      if (!discs.length) {
+        // The stand-in fountain is still in place (or the model failed to load);
+        // there is nothing to dress, and the flat fallback is already showing.
+        assetState.water = 'stand-in';
+        return assetState;
+      }
+      let seams = 0;
+      for (const disc of discs) {
+        const split = projectBoxGeometry({
+          THREE,
+          geometry: disc.geometry,
+          tileMeters: WATER_TILE_METERS
+        });
+        seams += split.seams;
+      }
+      // roughness must be 1 when a roughnessMap is bound: Three multiplies
+      // `roughness` into the sampled green channel, so a low base here would
+      // square the map down to a near-perfect mirror and erase the crest
+      // variation (0.08 * 0.08 = 0.006). The map already encodes the mirror
+      // (0.02..0.16); the base is the ceiling, exactly as applyTextureFamily
+      // does for every other mapped family.
+      const material = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 1,
+        metalness: 0.1,
+        name: 'FountainWater'
+      });
+      for (const [key, texture] of Object.entries(textures)) {
+        if (!texture || key === 'anyLoaded') continue;
+        const copy = texture.clone();
+        copy.needsUpdate = true;
+        copy.wrapS = THREE.RepeatWrapping;
+        copy.wrapT = THREE.RepeatWrapping;
+        copy.repeat.set(1, 1);
+        copy.anisotropy = Math.min(8, renderer.capabilities?.getMaxAnisotropy?.() || 1);
+        material[key] = copy;
+      }
+      material.needsUpdate = true;
+      for (const disc of discs) {
+        disc.material = material;
+        // Water never casts a hard shadow onto the basin floor (see upgradeFountain).
+        disc.castShadow = false;
+      }
+      assetState.water = 'textured';
+      assetState.waterDetail = {
+        discs: discs.length,
+        seams,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: WATER_TILE_METERS
       };
       return assetState;
     });
@@ -2733,7 +2826,11 @@ export function buildWorld(renderer) {
      */
     loadAssets() {
       return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner()])
-        .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt()).then(() => ({ ...assetState }));
+        .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt())
+        // Water runs last and after the prop pass on purpose: the water discs
+        // must not pick up the stone/iron families, and it needs the modelled
+        // fountain to be in the scene before it has anything to dress.
+        .then(() => upgradeFountainWater()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {

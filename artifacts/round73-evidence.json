@@ -1,0 +1,439 @@
+{
+  "pure": null,
+  "live": {
+    "wrapRepeat": 1000,
+    "state": {
+      "fountain": "model",
+      "plazaFloor": "textured",
+      "barrels": "model",
+      "stalls": "model",
+      "lamps": "model",
+      "plaster": "textured",
+      "marketStalls": "model",
+      "bench": "model",
+      "notice": "model",
+      "crates": "model",
+      "gateDoor": "model",
+      "house": "model",
+      "propWood": "textured",
+      "propWoodDetail": {
+        "dressed": 139,
+        "projected": 139,
+        "seams": 32,
+        "groups": 24,
+        "byFamily": {
+          "leaf": 12,
+          "roof": 7,
+          "bark": 0,
+          "wood": 49,
+          "brick": 3,
+          "stone": 6,
+          "iron": 59,
+          "cloth": 3
+        }
+      },
+      "roof": "textured",
+      "roofDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "foliage": "textured",
+      "foliageDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "cloth": "textured",
+      "clothDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "bunting": "textured",
+      "buntingDetail": {
+        "flags": 28,
+        "materials": 2,
+        "seams": 3,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 0.18
+      },
+      "iron": "textured",
+      "ironDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "banner": "model",
+      "bannerDetail": {
+        "parts": 4,
+        "bytes": 17608,
+        "instances": 1,
+        "canvasDressed": 1,
+        "ironDressed": 3,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "cobble": "textured",
+      "grass": "textured",
+      "walls": "textured",
+      "gateStone": "textured",
+      "fountainStone": "textured",
+      "terrace": "textured",
+      "sky": "gradient",
+      "wood": "textured",
+      "brick": "textured",
+      "fountainDetail": {
+        "parts": 12,
+        "bytes": 22604,
+        "height": 2.24,
+        "width": 3.9
+      },
+      "plazaFloorDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "aoMap": true
+      },
+      "barrelDetail": {
+        "parts": 3,
+        "bytes": 15856,
+        "instances": 4
+      },
+      "laneLamp": "model",
+      "laneLampDetail": {
+        "parts": 6,
+        "rotationY": -2.8633,
+        "lanternX": 12.8231,
+        "lanternZ": -24.6352
+      },
+      "lampMetal": "textured",
+      "lampMetalDetail": {
+        "dressed": 4,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "trees": "model",
+      "bark": "textured",
+      "barkDetail": {
+        "dressed": 3
+      },
+      "terraceDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 1.6,
+        "projected": {
+          "tread": 2,
+          "parapet": 6
+        },
+        "parts": {
+          "tread": [
+            "terrace-tread",
+            "terrace-ramp"
+          ],
+          "parapet": [
+            "terrace-kerb",
+            "terrace-parapet"
+          ]
+        }
+      },
+      "gateStoneDetail": {
+        "meshes": 3,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 1.6
+      },
+      "fountainStoneDetail": {
+        "meshes": 10,
+        "stone": 4,
+        "dark": 6,
+        "parts": 10,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 1.6
+      },
+      "water": "textured",
+      "waterDetail": {
+        "discs": 2,
+        "seams": 0,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 1
+      },
+      "stallDetail": {
+        "parts": 8,
+        "bytes": 9796,
+        "instances": 1
+      },
+      "lampDetail": {
+        "parts": 6,
+        "bytes": 8940,
+        "instances": 4
+      },
+      "marketStallDetail": {
+        "parts": 6,
+        "bytes": 7536,
+        "instances": 2
+      },
+      "benchDetail": {
+        "parts": 8,
+        "bytes": 9592,
+        "instances": 1
+      },
+      "noticeDetail": {
+        "parts": 9,
+        "bytes": 10936,
+        "instances": 1
+      },
+      "cratesDetail": {
+        "parts": 10,
+        "bytes": 11888,
+        "instances": 3
+      },
+      "gateDoorDetail": {
+        "parts": 11,
+        "bytes": 13036,
+        "instances": 1
+      },
+      "houseDetail": {
+        "parts": 15,
+        "bytes": 18040,
+        "instances": 1
+      },
+      "treeDetail": {
+        "parts": 5,
+        "bytes": 19120,
+        "instances": 3
+      },
+      "cobbleDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "grassDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "wallsDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "woodDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "brickDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "plasterDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      }
+    },
+    "discs": [
+      {
+        "name": "FountainWaterLower",
+        "color": "#ffffff",
+        "roughness": 1,
+        "metalness": 0.1,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "baseRoughness": 1,
+        "mapColorSpace": "srgb",
+        "normalColorSpace": "",
+        "wrapS": 1000,
+        "repeatX": 1,
+        "anisotropy": 8,
+        "castShadow": false,
+        "uvSpan": [
+          -1.29,
+          1.29
+        ],
+        "triangles": 6,
+        "extentX": 2.586862802505493,
+        "extentZ": 2.586862802505493,
+        "unindexed": false
+      },
+      {
+        "name": "FountainWaterUpper",
+        "color": "#ffffff",
+        "roughness": 1,
+        "metalness": 0.1,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "baseRoughness": 1,
+        "mapColorSpace": "srgb",
+        "normalColorSpace": "",
+        "wrapS": 1000,
+        "repeatX": 1,
+        "anisotropy": 8,
+        "castShadow": false,
+        "uvSpan": [
+          -0.61,
+          0.61
+        ],
+        "triangles": 6,
+        "extentX": 1.219520926475525,
+        "extentZ": 1.219520926475525,
+        "unindexed": false
+      }
+    ],
+    "sharesWithStone": false,
+    "flatWaterMaterials": [],
+    "waterMaterials": {}
+  },
+  "shots": [
+    "/home/alan/projects/amazing-adventure/artifacts/round73-fountain-plaza.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round73-fountain-basin.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round73-fountain-north.png"
+  ],
+  "checks": [
+    {
+      "name": "the water set is three distinct WebP maps",
+      "ok": true,
+      "detail": "map,normalMap,roughnessMap"
+    },
+    {
+      "name": "every water map is a committed repository asset",
+      "ok": true,
+      "detail": "assets/textures/water_albedo.webp, assets/textures/water_normal.webp, assets/textures/water_rough.webp"
+    },
+    {
+      "name": "the water tile is a metre, so the 33 cm swell reads across the basin",
+      "ok": true,
+      "detail": "1 m"
+    },
+    {
+      "name": "water stays out of the prop registry",
+      "ok": true,
+      "detail": "undefined"
+    },
+    {
+      "name": "assetState reports the water as textured",
+      "ok": true,
+      "detail": "water textured"
+    },
+    {
+      "name": "assetState reports exactly the maps it applied",
+      "ok": true,
+      "detail": "{\"discs\":2,\"seams\":0,\"maps\":[\"map\",\"normalMap\",\"roughnessMap\"],\"tileMeters\":1}"
+    },
+    {
+      "name": "both fountain water discs are dressed (2)",
+      "ok": true,
+      "detail": "2 discs"
+    },
+    {
+      "name": "each disc carries albedo, normal and roughness maps",
+      "ok": true,
+      "detail": "[[true,true,true],[true,true,true]]"
+    },
+    {
+      "name": "the albedo is decoded sRGB and the data maps stay linear",
+      "ok": true,
+      "detail": "[[\"srgb\",\"\"],[\"srgb\",\"\"]]"
+    },
+    {
+      "name": "the maps tile (repeat wrapping) at one repeat",
+      "ok": true,
+      "detail": "[[1000,1],[1000,1]]"
+    },
+    {
+      "name": "water requests anisotropy 8 for the grazing view across the plaza",
+      "ok": true,
+      "detail": "8"
+    },
+    {
+      "name": "water is reflective: the roughness map carries the mirror",
+      "ok": true,
+      "detail": "[[1,0.1],[1,0.1]]"
+    },
+    {
+      "name": "the water material projects white so the map carries the colour",
+      "ok": true,
+      "detail": "[\"#ffffff\"]"
+    },
+    {
+      "name": "every disc keeps metre-space UVs from the box projection",
+      "ok": true,
+      "detail": "[{\"uv\":[-1.29,1.29],\"extentX\":2.586862802505493},{\"uv\":[-0.61,0.61],\"extentX\":1.219520926475525}]"
+    },
+    {
+      "name": "the projection did not change the octagon silhouette",
+      "ok": true,
+      "detail": "[6,6]"
+    },
+    {
+      "name": "water never casts a hard shadow onto the basin floor",
+      "ok": true,
+      "detail": "[false,false]"
+    },
+    {
+      "name": "the stone and the water do not share a map or a material",
+      "ok": true,
+      "detail": "sharesWithStone false"
+    },
+    {
+      "name": "no water material is left in the flat audit",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the run produced no console errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

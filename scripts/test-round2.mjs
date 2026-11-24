@@ -2323,9 +2323,12 @@ try {
     // stone pass must still never touch them (that would read as wet flagstone),
     // and the water material must stay reflective: a near-mirror roughness and
     // a normal map, never the stone albedo.
+    // The reflectivity lives in the roughness map (0.02..0.16); the material's
+    // base roughness is the ceiling at 1 so the map is not squared away. What
+    // this check can see at material level is the faint authored sheen.
     fountainStone.water.every((m) => m && m.map === true && m.normal === true &&
       m.rough === true && m.uv === true &&
-      m.roughness <= 0.2 && m.metalness > 0),
+      m.roughness === 1 && m.metalness > 0),
     JSON.stringify(fountainStone.water));
 
   checks.check('the two water discs share one water material and map set',

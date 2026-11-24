@@ -239,6 +239,37 @@ export const FELT_TEXTURE_FILES = {
 export const BUNTING_TILE_METERS = 0.18;
 
 /**
+ * Water family for the modelled fountain's two discs.
+ *
+ * `FountainWaterLower` (r = 1.40 m) and `FountainWaterUpper` (r = 0.66 m) were
+ * authored as flat `MeshStandardMaterial` octagons: #97c8e3, roughness 0.15,
+ * metalness 0.1, opaque, no maps and no UVs. In a plaza whose stone, wood, iron,
+ * cloth and felt are all mapped, a uniform blue disc is the last obviously
+ * plastic surface in the centre of the world.
+ *
+ * The albedo is a pale blue-green with faint depth variation rather than a
+ * saturated blue, so the surface still reads as water under a warm dusk sky as
+ * well as at noon. The roughness map is deliberately near-mirror (0.02..0.16):
+ * a still fountain reflects the sky and the surrounding stone through
+ * `scene.environment`, which is what actually makes it look wet.
+ */
+export const WATER_TEXTURE_FILES = {
+  map: 'assets/textures/water_albedo.webp',
+  normalMap: 'assets/textures/water_normal.webp',
+  roughnessMap: 'assets/textures/water_rough.webp'
+};
+
+/**
+ * Metres per water tile.
+ *
+ * The ripple wavelengths in `art/kaggle/water_textures.py` are authored in
+ * metres against a 1.0 m tile: 3 cycles per tile is a 33 cm swell, 21 cycles is
+ * a 4.8 cm chop. The lower disc is 2.8 m across, so a 1.0 m tile shows three
+ * swells across the basin -- the scale real fountain chop has at that size.
+ */
+export const WATER_TILE_METERS = 1.0;
+
+/**
  * Which loaded family dresses which authored material, and at what tile size.
  *
  * The prop GLBs are authored untextured and blend-named (`BenchWood`, `Canopy`,
