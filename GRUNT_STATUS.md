@@ -12,6 +12,55 @@
 
 ## Current task
 
+**Round 72 - flag-scale felt for the lane bunting.** Rounds 67-71 deliberately
+left the 28 lane pennants (`BuntingRed` / `BuntingGold`, 0.16 x 0.22 m
+`ConeGeometry` triangles) flat: a 1.2 m cloth weave projects to about a fifth of
+a texel across a face that small, so the flags would smear and lose their dye.
+This round gives them their own flag-scale felt set instead
+(`assets/textures/felt_{albedo,normal,rough}.webp`, 512 x 512 lossless WebP,
+albedo 64.4 KB / normal 424.4 KB / rough 56.4 KB, authored by
+`art/kaggle/felt_textures.py`): short matted fibres with no weave grid, a
+neutral-white albedo (mean 0.768) so the authored red/gold dyes survive tinting,
+and a near-flat roughness map (mean 0.810) so felt never catches a sun glint.
+
+The dressing lives outside `PROP_FAMILIES` (that table drives
+`upgradePropFamilies()` and assumes metre-space UVs; these are generated cones
+with authored 0..1 UVs), so `FELT_FAMILY` + `upgradeBuntingFelt()` own it. Each
+flag's geometry is box-projected at `BUNTING_TILE_METERS = 0.18` (one pennant
+face wide - the A/B proved a 0.5 m tile left high-frequency unmoved), one
+cloned material per dye (2, not 28), anisotropy 8. The rope stays its own flat
+`LaneRope` material.
+
+**Course correction this cycle:** the first commit (`97de94e`) carried an
+evidence file recorded from an *earlier* tuning pass (tile 0.5 m, anisotropy 4)
+while the source in the same commit used 0.18 m and 8. That is exactly the kind
+of stale artifact the brief warns about. I re-ran `scripts/evidence-round72.mjs`
+with `RECORD_ARTIFACTS=1` on the clean committed tree and re-committed the
+result (`b3f32f6`): **24/24 checks PASS**, no console errors,
+`assetState().buntingDetail` = `{flags: 28, materials: 2, seams: 3, maps:
+['map','normalMap','roughnessMap'], tileMeters: 0.18}`, every flag carries a
+normal + roughness map at anisotropy 8, dyes `#c9553f` / `#e0b552` preserved,
+9 tris per flag unindexed with the silhouette unchanged. Evidence script also
+checks the felt family never matches rope/cloth/bark/iron.
+
+Manifest: three `felt_*.webp` added to `REQUIRED_FILES` and
+`release-manifest.json` (93 required files). CREDITS.md `Round 72 additions`
+entry added (`d5ecde7`). `dist/` rebuilt and the preview stamp committed at
+`164fd67` (source digest `01441f455b8c...`). Unit suite **636/636 pass, 0 fail**
+on the clean tree.
+
+**Still to certify this round before any release call:** the desktop
+(`scripts/test-round2.mjs`) and mobile (`scripts/test-mobile.mjs`) browser
+suites have not produced a completion record yet - a background run was killed
+at a cycle boundary and a foreground run hit the harness call limit, both with
+high host load (load average ~13-17). Re-run them one at a time and record the
+result in this section before preparing a release.
+
+The honest limitation: felt is a procedural fibre mat, not a scanned textile,
+and the whole lane shares one 0.5 m-scale nap pattern across two dyes - the
+flags are visually correct at play distance but a future *variant* map could
+break repetition if it shows.
+
 **Round 71 - the modelled terrace banner.** Round 70 left one large flat
 surface on the terrace: the 5.28 m2 `TerraceBanner` painted plane at the lip,
 which read as a sticker because a plane has no thickness, no rod and no cast
