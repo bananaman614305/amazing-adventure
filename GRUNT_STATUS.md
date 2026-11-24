@@ -65,10 +65,26 @@ Note for future cycles: background shells do not survive a cycle boundary in
 this harness, and both browser suites together exhaust process limits when run
 in parallel under load. Run them one at a time in the foreground.
 
-**Release not yet attempted.** The trusted channel's root checkout is still
-stuck at round 59 (see `/worker/state/outbox/needs-supervision.json`), so an
-exact-head receipt against `c673ed1` needs the channel repaired first. Nothing
-here was merged or deployed by me.
+**Release in progress with the trusted channel.** The channel now binds to this
+root checkout, so it certifies the right tree (the round-59 mismatch in
+`needs-supervision.json` no longer blocks a receipt here). Release head is
+`0ba469a` (the checkpoint commit after the green suites; code identical to
+`c673ed1`).
+
+Queued `grunt-release verify release {tests,browser,mobile}` at head `0ba469a`:
+
+| check | verification id | state |
+| --- | --- | --- |
+| tests | `e06c7762-2f30-456b-ae12-67c1d47d9340` | **completed**, exit 0, unchanged, clean |
+| browser | `5ea28052-b125-4c21-b91c-4f8bbb8a5718` | queued |
+| mobile | `3c3328f3-63ce-4504-9c67-e406a66cc035` | queued |
+
+Next cycle: poll those two with `grunt-release verify-status`, and once all
+three are green run `grunt-release prepare --head 0ba469a --branch
+grunt/round72-bunting-felt --title ... --body-file /worker/state/publish-body-r72.md
+--verification-id <id> --verification-id <id> --verification-id <id>`, then
+`grunt-release status`/`advance`. Nothing here is merged or deployed by me; a
+blocked gate stays blocked until its cause is fixed.
 
 The honest limitation: felt is a procedural fibre mat, not a scanned textile,
 and the whole lane shares one nap pattern across two dyes - the
