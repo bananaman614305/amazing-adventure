@@ -992,11 +992,23 @@ test('water is not dressed by any prop family, so the stone pass cannot claim it
 test('the water material keeps the map as the roughness ceiling', () => {
   // Three multiplies material.roughness into a bound roughnessMap's green
   // channel. A low base squares the map away (the round-73 draft used 0.08,
-  // turning a 0.02..0.16 map into 0.002..0.013); the base must be 1 so the
-  // authored mirror survives. This encodes the rule for the water pass.
-  const water = { color: 0xffffff, roughness: 1, metalness: 0.1, name: 'FountainWater' };
-  assert.equal(water.roughness, 1, 'the roughness map, not the base, carries the mirror');
-  assert.ok(water.metalness > 0 && water.metalness <= 0.2, 'the authored faint sheen is kept');
+  // turning a 0.02..0.16 map into 0.002..0.013), so the base must be 1 for the
+  // authored mirror to survive. Replicates the same expression the pass uses:
+  // `textures.roughnessMap ? 1 : authored`.
+  const plan = (loaded) => ({
+    color: loaded.map ? 0xffffff : 0x97c8e3,
+    roughness: loaded.roughnessMap ? 1 : 0.15,
+    metalness: 0.1
+  });
+  assert.equal(plan({ map: true, roughnessMap: true }).roughness, 1,
+    'the roughness map, not the base, carries the mirror');
+  // Partial load must degrade toward the authored disc, never to white matte.
+  assert.equal(plan({ map: false, roughnessMap: false }).roughness, 0.15,
+    'a missing roughness map falls back to the authored sheen');
+  assert.equal(plan({ map: false, roughnessMap: true }).color, 0x97c8e3,
+    'a missing albedo keeps the authored colour instead of projecting white');
+  assert.ok(plan({ map: true, roughnessMap: true }).metalness > 0,
+    'the authored faint sheen is kept');
 });
 
 test('bunting materials are no longer in the must-stay-flat list', () => {

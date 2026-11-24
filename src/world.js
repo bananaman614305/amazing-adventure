@@ -1938,16 +1938,20 @@ export function buildWorld(renderer) {
         });
         seams += split.seams;
       }
-      // roughness must be 1 when a roughnessMap is bound: Three multiplies
-      // `roughness` into the sampled green channel, so a low base here would
-      // square the map down to a near-perfect mirror and erase the crest
-      // variation (0.08 * 0.08 = 0.006). The map already encodes the mirror
-      // (0.02..0.16); the base is the ceiling, exactly as applyTextureFamily
-      // does for every other mapped family.
+      // Partial loads degrade toward the authored look rather than to a worse
+      // one. With every map present the material projects white and a roughness
+      // ceiling of 1: Three multiplies `roughness` into the sampled green
+      // channel, so a low base would square the map down to a perfect mirror
+      // and erase the crest variation (0.08 * 0.08 = 0.006). If a map is missing
+      // (one file 404s, a decoder is gone) the authored GLB values are kept
+      // instead -- white matte water would be worse than the flat disc it
+      // replaced.
+      const authored = discs[0].material;
       const material = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        roughness: 1,
-        metalness: 0.1,
+        color: textures.map ? 0xffffff : (authored?.color?.getHex?.() ?? 0x97c8e3),
+        roughness: textures.roughnessMap ? 1 : (authored?.roughness ?? 0.15),
+        metalness: authored?.metalness ?? 0.1,
+        side: authored?.side,
         name: 'FountainWater'
       });
       for (const [key, texture] of Object.entries(textures)) {
