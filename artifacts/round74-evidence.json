@@ -1,0 +1,462 @@
+{
+  "checks": [
+    {
+      "detail": "window, lamp",
+      "name": "the glass set is two kinds: windows and lamp panes",
+      "ok": true
+    },
+    {
+      "detail": "null",
+      "name": "a name that is not a shipped glass material is left alone",
+      "ok": true
+    },
+    {
+      "detail": "day,dusk,night",
+      "name": "an unknown hour falls back to the daylight look",
+      "ok": true
+    },
+    {
+      "detail": "#616c76 #f9f1ce",
+      "name": "the authored fallback colour is what the audit named",
+      "ok": true
+    },
+    {
+      "detail": "#ffb45a",
+      "name": "the glow is one warm tint, kept apart from the diffuse tint",
+      "ok": true
+    },
+    {
+      "detail": "{\"color\":2764856,\"metalness\":0.35,\"roughness\":0.12,\"emissive\":16757850,\"emissiveIntensity\":0}",
+      "name": "a window is dark, reflective and unlit by day",
+      "ok": true
+    },
+    {
+      "detail": "2a3038 -> 4a3520",
+      "name": "the same window is warm and lit at night",
+      "ok": true
+    },
+    {
+      "detail": "0 / 2.6",
+      "name": "a lamp pane glows over its own bulb and not before",
+      "ok": true
+    },
+    {
+      "detail": "0.15",
+      "name": "a lamp pane keeps a faint authored reflection at every hour",
+      "ok": true
+    },
+    {
+      "detail": "0",
+      "name": "a dark lantern never glows through its glass",
+      "ok": true
+    },
+    {
+      "detail": "#ffdf9e",
+      "name": "but the dark pane still keeps the hour's diffuse tint",
+      "ok": true
+    },
+    {
+      "detail": "night window ignores laneLit",
+      "name": "a window ignores the lane round entirely",
+      "ok": true
+    },
+    {
+      "detail": "0.6",
+      "name": "the low tier dims a lit pane but keeps it lit",
+      "ok": true
+    },
+    {
+      "detail": "0",
+      "name": "the low tier is a no-op by daylight",
+      "ok": true
+    },
+    {
+      "detail": "true, false",
+      "name": "only a window pane casts a shadow",
+      "ok": true
+    },
+    {
+      "detail": "glass phase-lit",
+      "name": "assetState reports the glass as phase-lit",
+      "ok": true
+    },
+    {
+      "detail": "{\"panes\":7,\"windows\":2,\"lamps\":5,\"lanePanes\":1}",
+      "name": "assetState reports exactly the seven panes it applied",
+      "ok": true
+    },
+    {
+      "detail": "[\"LampGlass\",\"LampGlass\",\"LampGlass\",\"LampGlass\",\"HouseGlass\",\"HouseGlass\",\"LampGlass\"]",
+      "name": "two house windows and five lantern panes are registered",
+      "ok": true
+    },
+    {
+      "detail": "[[\"LampGlass\",0,0.15],[\"LampGlass\",0,0.15],[\"LampGlass\",0,0.15],[\"LampGlass\",0,0.15],[\"HouseGlass\",0,0.35],[\"HouseGlass\",0,0.35],[\"LampGlass\",0,0.15]]",
+      "name": "by day no pane glows and the windows are the reflective ones",
+      "ok": true
+    },
+    {
+      "detail": "[\"#f9f1ce\",\"#2a3038\"]",
+      "name": "by day every pane sits on its authored daylight colour",
+      "ok": true
+    },
+    {
+      "detail": "{\"phase\":\"dusk\",\"laneOn\":false,\"glows\":[[\"LampHousing\",1.4],[\"LampHousing\",1.4],[\"LampHousing\",1.4],[\"LampHousing\",1.4],[\"HouseWindowPane_-2.0\",1.1],[\"HouseWindowPane_2.0\",1.1],[\"LampHousing\",0]]}",
+      "name": "at dusk the windows glow while the lane is still unlit",
+      "ok": true
+    },
+    {
+      "detail": "[[\"LampHousing\",1.4],[\"LampHousing\",1.4],[\"LampHousing\",1.4],[\"LampHousing\",1.4],[\"HouseWindowPane_-2.0\",1.1],[\"HouseWindowPane_2.0\",1.1],[\"LampHousing\",0]]",
+      "name": "at dusk the lane pane is the one pane left dark",
+      "ok": true
+    },
+    {
+      "detail": "{\"phase\":\"night\",\"laneOn\":true,\"shouldGlow\":true}",
+      "name": "at night the plaza lamps are on and the lane lanterns are the player's",
+      "ok": true
+    },
+    {
+      "detail": "[[\"LampHousing\",2.6],[\"LampHousing\",2.6],[\"LampHousing\",2.6],[\"LampHousing\",2.6],[\"HouseWindowPane_-2.0\",2.2],[\"HouseWindowPane_2.0\",2.2],[\"LampHousing\",2.6]]",
+      "name": "a lit lane gives every pane a glow, windows and lantern alike",
+      "ok": true
+    },
+    {
+      "detail": "[[\"LampGlass\",2.6],[\"LampGlass\",2.6],[\"LampGlass\",2.6],[\"LampGlass\",2.6],[\"HouseGlass\",2.2],[\"HouseGlass\",2.2],[\"LampGlass\",2.6]]",
+      "name": "the lane pane and the plaza panes share the night glow",
+      "ok": true
+    },
+    {
+      "detail": "[[\"LampHousing\",2.6],[\"LampHousing\",2.6],[\"LampHousing\",2.6],[\"LampHousing\",2.6],[\"HouseWindowPane_-2.0\",2.2],[\"HouseWindowPane_2.0\",2.2],[\"LampHousing\",0]]",
+      "name": "darkening the lane puts out exactly one pane",
+      "ok": true
+    },
+    {
+      "detail": "[[\"LampHousing\",2.6],[\"LampHousing\",2.6],[\"LampHousing\",2.6],[\"LampHousing\",2.6],[\"HouseWindowPane_-2.0\",2.2],[\"HouseWindowPane_2.0\",2.2],[\"LampHousing\",0]]",
+      "name": "the four plaza panes stay lit when only the lane is dark",
+      "ok": true
+    },
+    {
+      "detail": "[\"LampGlass\"]",
+      "name": "the dark pane is a lantern pane, never a window",
+      "ok": true
+    },
+    {
+      "detail": "{\"full\":[2.6,2.6,2.6,2.6,2.2,2.2,2.6],\"low\":[0.6,0.6,0.6,0.6,0.6,0.6,0.6]}",
+      "name": "the low tier dims every pane and keeps it lit",
+      "ok": true
+    },
+    {
+      "detail": "{\"before\":\"night\",\"low\":\"night\",\"lane\":true}",
+      "name": "flipping the tier does not move the hour or the lane state",
+      "ok": true
+    },
+    {
+      "detail": "full",
+      "name": "the full tier is restored after the flip",
+      "ok": true
+    },
+    {
+      "detail": "[[\"LampGlass\",false],[\"LampGlass\",false],[\"LampGlass\",false],[\"LampGlass\",false],[\"HouseGlass\",true],[\"HouseGlass\",true],[\"LampGlass\",false]]",
+      "name": "no lamp pane casts a shadow, the window frame keeps its own",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "the run produced no console errors",
+      "ok": true
+    }
+  ],
+  "live": {
+    "state": {
+      "banner": "model",
+      "bannerDetail": {
+        "bytes": 17608,
+        "canvasDressed": 1,
+        "instances": 1,
+        "ironDressed": 3,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "parts": 4
+      },
+      "bark": "textured",
+      "barkDetail": {
+        "dressed": 3
+      },
+      "barrelDetail": {
+        "bytes": 15856,
+        "instances": 4,
+        "parts": 3
+      },
+      "barrels": "model",
+      "bench": "model",
+      "benchDetail": {
+        "bytes": 9592,
+        "instances": 1,
+        "parts": 8
+      },
+      "brick": "textured",
+      "brickDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "bunting": "textured",
+      "buntingDetail": {
+        "flags": 28,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "materials": 2,
+        "seams": 3,
+        "tileMeters": 0.18
+      },
+      "cloth": "textured",
+      "clothDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "cobble": "textured",
+      "cobbleDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "crates": "model",
+      "cratesDetail": {
+        "bytes": 11888,
+        "instances": 3,
+        "parts": 10
+      },
+      "foliage": "textured",
+      "foliageDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "fountain": "model",
+      "fountainDetail": {
+        "bytes": 22604,
+        "height": 2.24,
+        "parts": 12,
+        "width": 3.9
+      },
+      "fountainStone": "textured",
+      "fountainStoneDetail": {
+        "dark": 6,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "meshes": 10,
+        "parts": 10,
+        "stone": 4,
+        "tileMeters": 1.6
+      },
+      "gateDoor": "model",
+      "gateDoorDetail": {
+        "bytes": 13036,
+        "instances": 1,
+        "parts": 11
+      },
+      "gateStone": "textured",
+      "gateStoneDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "meshes": 3,
+        "tileMeters": 1.6
+      },
+      "glass": "phase-lit",
+      "glassDetail": {
+        "lamps": 5,
+        "lanePanes": 1,
+        "panes": 7,
+        "windows": 2
+      },
+      "grass": "textured",
+      "grassDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "house": "model",
+      "houseDetail": {
+        "bytes": 18040,
+        "instances": 1,
+        "parts": 15
+      },
+      "iron": "textured",
+      "ironDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "lampDetail": {
+        "bytes": 8940,
+        "instances": 4,
+        "parts": 6
+      },
+      "lampMetal": "textured",
+      "lampMetalDetail": {
+        "dressed": 4,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "lamps": "model",
+      "laneLamp": "model",
+      "laneLampDetail": {
+        "lanternX": 12.8231,
+        "lanternZ": -24.6352,
+        "parts": 6,
+        "rotationY": -2.8633
+      },
+      "marketStallDetail": {
+        "bytes": 7536,
+        "instances": 2,
+        "parts": 6
+      },
+      "marketStalls": "model",
+      "notice": "model",
+      "noticeDetail": {
+        "bytes": 10936,
+        "instances": 1,
+        "parts": 9
+      },
+      "plaster": "textured",
+      "plasterDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "plazaFloor": "textured",
+      "plazaFloorDetail": {
+        "aoMap": true,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "propWood": "textured",
+      "propWoodDetail": {
+        "byFamily": {
+          "bark": 0,
+          "brick": 3,
+          "cloth": 3,
+          "iron": 59,
+          "leaf": 12,
+          "roof": 7,
+          "stone": 6,
+          "wood": 49
+        },
+        "dressed": 139,
+        "groups": 24,
+        "projected": 139,
+        "seams": 32
+      },
+      "roof": "textured",
+      "roofDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "sky": "gradient",
+      "stallDetail": {
+        "bytes": 9796,
+        "instances": 1,
+        "parts": 8
+      },
+      "stalls": "model",
+      "terrace": "textured",
+      "terraceDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "parts": {
+          "parapet": [
+            "terrace-kerb",
+            "terrace-parapet"
+          ],
+          "tread": [
+            "terrace-tread",
+            "terrace-ramp"
+          ]
+        },
+        "projected": {
+          "parapet": 6,
+          "tread": 2
+        },
+        "tileMeters": 1.6
+      },
+      "treeDetail": {
+        "bytes": 19120,
+        "instances": 3,
+        "parts": 5
+      },
+      "trees": "model",
+      "walls": "textured",
+      "wallsDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "water": "textured",
+      "waterDetail": {
+        "discs": 2,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "seams": 0,
+        "tileMeters": 1
+      },
+      "wood": "textured",
+      "woodDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      }
+    }
+  },
+  "pure": 15,
+  "shots": [
+    "/home/alan/projects/amazing-adventure/artifacts/round74-plaza-night-lit.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round74-lantern-close.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round74-lane-post-dark.png"
+  ]
+}
