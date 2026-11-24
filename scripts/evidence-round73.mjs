@@ -88,7 +88,10 @@ try {
           name: o.name,
           color: `#${m.color.getHexString()}`,
           roughness: Number(m.roughness.toFixed(3)),
-          metalness: m.metalness,
+          // Rounded: Three stores the GLB factor in a Float32, so an authored
+          // 0.1 reads back as 0.10000000149011612. Rounding keeps the recorded
+          // artifact stable and honest about the authored value.
+          metalness: Number(Number(m.metalness).toFixed(3)),
           hasMap: Boolean(m.map),
           hasNormal: Boolean(m.normalMap),
           hasRoughness: Boolean(m.roughnessMap),
@@ -252,7 +255,20 @@ try {
 if (RECORD) {
   const dir = await screenshotDir();
   const path = join(dir, 'round73-evidence.json');
-  await writeFile(path, `${JSON.stringify({ ...report, checks: checks.results }, null, 2)}\n`);
+  // Sorted keys: the live assetState object is built by scene traversal whose
+  // insertion order varies run to run, and an unstable artifact makes every
+  // re-record look like a change. Sorting is a presentation fix only.
+  const sortKeys = (value) => {
+    if (Array.isArray(value)) return value.map(sortKeys);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([k, v]) => [k, sortKeys(v)]));
+    }
+    return value;
+  };
+  await writeFile(path,
+    `${JSON.stringify(sortKeys({ ...report, checks: checks.results }), null, 2)}\n`);
   console.log(`saved ${path}`);
 }
 
