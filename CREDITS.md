@@ -238,6 +238,28 @@ its procedural stand-in or flat colour and stays fully playable.
   unchanged), anisotropy 8, one cloned material per dye (2, not 28). Fully
   procedural; no outside images, datasets or models to license.
 
+### Round 73 additions
+
+- `assets/textures/water_{albedo,normal,rough}.webp` — `art/kaggle/water_textures.py`
+  (`artifacts/r73/water_report.json`, `artifacts/r73/water_preview.png`).
+  Procedural fountain water: five directional sine waves with integer cycles per
+  tile (a 33 cm swell down to a 4.8 cm chop on a 1.0 m tile) plus low-frequency
+  patchiness and a fine fbm ripple, wrapped Sobel normals and a near-mirror
+  roughness band (0.02–0.16). 512 x 512, lossless WebP (albedo 110.7 KB,
+  normal 319.2 KB, rough 53.8 KB), pixel-identical to the generated PNGs
+  (verified with a raw-frame comparison). Seam ratios are reported two ways:
+  the raw neighbour ratio, which for a long-wave map divides by the discrete
+  derivative of its own wavelength and reads as a false seam (14.4/19.7 albedo,
+  6.2/8.8 rough), and a same-wavelength ratio (albedo 0.56/1.12, normal
+  0.26/0.20, rough 0.54/1.07) — the latter is the gate, and all are under 3.
+  Contrast survives to mip 2 (albedo std 0.040, normal 0.081), which is where
+  the 2.8 m basin is actually sampled. Dressed by `upgradeFountainWater()` on
+  `FountainWaterLower` / `FountainWaterUpper` at a 1.0 m tile
+  (`WATER_TILE_METERS`), metre-space box-projected UVs (6-triangle octagon
+  silhouette unchanged, 0 seam splits), anisotropy 8, one shared material
+  (roughness base 1 so the map carries the mirror, metalness 0.1). Fully
+  procedural; no outside images, datasets or models to license.
+
 ### Round 67 additions
 
 - `assets/textures/cloth_*.webp` — `art/kaggle/cloth_textures.py`, run on the

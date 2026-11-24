@@ -2318,11 +2318,21 @@ try {
                      basinEqPlinth: fountainStone.basinMaterialEqPlinth,
                      sharesMap: fountainStone.sharesMap }));
 
-  checks.check('the fountain water is left undressed and reflective',
-    // A stone albedo over the water surface would read as a wet flagstone, so the
-    // dressing pass must skip it entirely -- no uv rewrite, no map.
-    fountainStone.water.every((m) => m && m.map === false && m.uv === false &&
-      m.roughness < 0.5 && m.metalness > 0),
+  checks.check('the fountain water is dressed with its own water family (round 73)',
+    // Round 73 gives the two water discs their own tileable water family. The
+    // stone pass must still never touch them (that would read as wet flagstone),
+    // and the water material must stay reflective: a near-mirror roughness and
+    // a normal map, never the stone albedo.
+    fountainStone.water.every((m) => m && m.map === true && m.normal === true &&
+      m.rough === true && m.uv === true &&
+      m.roughness <= 0.2 && m.metalness > 0),
+    JSON.stringify(fountainStone.water));
+
+  checks.check('the two water discs share one water material and map set',
+    // Both discs are the same surface treatment, so they share one material
+    // rather than cloning two samplers for a 2.8 m and a 1.3 m disc.
+    fountainStone.water.every((m) => m && m.color === fountainStone.water[0].color) &&
+    fountainStone.water.every((m) => m && m.repeat && m.repeat[0] === 1 && m.repeat[1] === 1),
     JSON.stringify(fountainStone.water));
 
   checks.check('projected fountain UVs carry the tiling, so repeat stays 1:1',

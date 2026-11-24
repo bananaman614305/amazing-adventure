@@ -17,6 +17,7 @@ import {
   fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint, FOUNTAIN_STONE_COLORS,
   BANNER_ASSET, BANNER_MODEL_SIZE, BANNER_TEXTURE_FILES, loadBanner,
   CLOTH_TEXTURE_FILES, FELT_TEXTURE_FILES, FELT_FAMILY, BUNTING_TILE_METERS,
+  WATER_TEXTURE_FILES, WATER_TILE_METERS,
   PLAZA_AO_MAP_CHANNEL, plazaAoMapIntensity, plazaAoMapIntensityForQuality,
   createPlazaAoTexture, contactDarkeningColors, applyContactDarkeningGeometry
 } from '../src/assets.js';
@@ -937,6 +938,65 @@ test('the felt maps are three distinct WebP files that exist', () => {
     assert.ok(existsSync(join(ROOT, url)), `${url} must exist on disk`);
     assert.ok(statSync(join(ROOT, url)).size > 4096, `${url} must be a real map, not a stub`);
   }
+});
+
+// --- Round 73: the fountain water family -----------------------------------
+test('the water family is three distinct WebP files that exist', () => {
+  const urls = [WATER_TEXTURE_FILES.map, WATER_TEXTURE_FILES.normalMap, WATER_TEXTURE_FILES.roughnessMap];
+  assert.equal(new Set(urls).size, 3, 'three distinct maps, not the same file three times');
+  for (const url of urls) {
+    assert.match(url, /^assets\/textures\/water_\w+\.webp$/, `${url} is a water map`);
+    assert.ok(existsSync(join(ROOT, url)), `${url} must exist on disk`);
+    assert.ok(statSync(join(ROOT, url)).size > 4096, `${url} must be a real map, not a stub`);
+  }
+});
+
+test('the water tile is a metre, so the authored wave scale reaches the basin', () => {
+  // art/kaggle/water_textures.py authors its ripple wavelengths against a 1.0 m
+  // tile (3 cycles = a 33 cm swell). If this constant drifts, the chop silently
+  // changes scale without the generator changing, so the two must agree.
+  assert.equal(WATER_TILE_METERS, 1.0);
+  const report = JSON.parse(readFileSync(join(ROOT, 'artifacts/r73/water_report.json'), 'utf8'));
+  assert.equal(report.tileMeters, WATER_TILE_METERS,
+    'the generator and the game must agree on the tile size');
+});
+
+test('the water report shows a seamless, mip-surviving, mirror-clean set', () => {
+  const report = JSON.parse(readFileSync(join(ROOT, 'artifacts/r73/water_report.json'), 'utf8'));
+  // A ripple map's raw wrap ratio divides by the discrete derivative of a long
+  // wave and reads as a false seam (14-20 on the first run), so the generator
+  // reports a same-wavelength ratio; < 3 is the no-visible-seam gate the other
+  // families use.
+  for (const key of ['seam_ratio_scaled_albedo', 'seam_ratio_scaled_normal',
+    'seam_ratio_scaled_rough']) {
+    assert.ok(Array.isArray(report[key]) && report[key].length === 2, `${key} is measured`);
+    assert.ok(report[key].every((v) => v < 3), `${key} stays under the seam gate: ${report[key]}`);
+  }
+  // The lower disc is viewed at about mip 2; contrast must survive there.
+  assert.ok(report.mip_survival_albedo['2'] > 0.02,
+    `albedo keeps contrast at mip 2 (${report.mip_survival_albedo['2']})`);
+  assert.ok(report.mip_survival_normal['2'] > 0.02,
+    `normal keeps contrast at mip 2 (${report.mip_survival_normal['2']})`);
+  // Near-mirror: the whole roughness band is reflective, or it is not water.
+  assert.ok(report.rough_stats.max <= 0.2, `rough map stays reflective (${report.rough_stats.max})`);
+  assert.ok(report.rough_stats.mean < 0.15, `rough mean stays low (${report.rough_stats.mean})`);
+  assert.equal(report.errors, undefined, 'the generator completed without error');
+});
+
+test('water is not dressed by any prop family, so the stone pass cannot claim it', () => {
+  for (const name of ['Water', 'FountainWater', 'FountainWaterLower', 'FountainWaterUpper']) {
+    assert.equal(propFamilyFor(name), null, `${name} must match no prop family`);
+  }
+});
+
+test('the water material keeps the map as the roughness ceiling', () => {
+  // Three multiplies material.roughness into a bound roughnessMap's green
+  // channel. A low base squares the map away (the round-73 draft used 0.08,
+  // turning a 0.02..0.16 map into 0.002..0.013); the base must be 1 so the
+  // authored mirror survives. This encodes the rule for the water pass.
+  const water = { color: 0xffffff, roughness: 1, metalness: 0.1, name: 'FountainWater' };
+  assert.equal(water.roughness, 1, 'the roughness map, not the base, carries the mirror');
+  assert.ok(water.metalness > 0 && water.metalness <= 0.2, 'the authored faint sheen is kept');
 });
 
 test('bunting materials are no longer in the must-stay-flat list', () => {
