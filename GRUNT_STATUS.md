@@ -65,26 +65,46 @@ Note for future cycles: background shells do not survive a cycle boundary in
 this harness, and both browser suites together exhaust process limits when run
 in parallel under load. Run them one at a time in the foreground.
 
-**Release in progress with the trusted channel.** The channel now binds to this
-root checkout, so it certifies the right tree (the round-59 mismatch in
-`needs-supervision.json` no longer blocks a receipt here). Release head is
-`0ba469a` (the checkpoint commit after the green suites; code identical to
-`c673ed1`).
-
-Queued `grunt-release verify release {tests,browser,mobile}` at head `0ba469a`:
+**Three trusted receipts are green on the exact release head `e430cf5`, then
+`prepare` was refused by a host history gate.** Queued
+`grunt-release verify release {tests,browser,mobile}` at head `e430cf5`
+(clean tree, `0ba469a` + the receipt-recording checkpoint; code identical to
+`c673ed1`):
 
 | check | verification id | state |
 | --- | --- | --- |
-| tests | `e06c7762-2f30-456b-ae12-67c1d47d9340` | **completed**, exit 0, unchanged, clean |
-| browser | `5ea28052-b125-4c21-b91c-4f8bbb8a5718` | queued |
-| mobile | `3c3328f3-63ce-4504-9c67-e406a66cc035` | queued |
+| tests | `f0cf64ca-a46a-4206-ba16-7e8d8ddfca30` | **completed**, exit 0, unchanged, clean |
+| browser | `26a32e32-aa40-4a50-a3be-97eb1b3cde13` | **completed**, exit 0, unchanged, clean |
+| mobile | `9d6eae89-7458-4fe9-9e65-3e11c52df8e0` | **completed**, exit 0, unchanged, clean |
 
-Next cycle: poll those two with `grunt-release verify-status`, and once all
-three are green run `grunt-release prepare --head 0ba469a --branch
-grunt/round72-bunting-felt --title ... --body-file /worker/state/publish-body-r72.md
---verification-id <id> --verification-id <id> --verification-id <id>`, then
-`grunt-release status`/`advance`. Nothing here is merged or deployed by me; a
-blocked gate stays blocked until its cause is fixed.
+`grunt-release prepare --head e430cf58… --branch grunt/round72-bunting-felt`
+with all three ids was accepted into the queue (release id
+`0722e8a0-ce67-426d-9035-b72733def423`), and the host then answered
+`phase=blocked, reason=release_not_advanced` on both `advance` calls. I read
+the host client code this runs under instead of guessing
+(`/opt/adventure/grunt/dist/local/efficiency-host.js`):
+
+- **256-commit history screen.** `publicSource()` runs
+  `git rev-list --max-count=257 head ^main` and throws when more than 256
+  commits are reachable, before any push or review. Our branch is **271**
+  commits ahead of `origin/main`, and it crossed 257 at round 69
+  (`4609067`). The count was 218–261 for the heads of rounds 61–71, so this
+  gate has been the common cause of every blocked release since ~Nov 21.
+- **22,000-byte review diff.** The independent reviewer only receives
+  `git diff main..head` and the host throws when it exceeds 22,000 bytes. The
+  cumulative diff `main..e430cf5` is 4.27 MB.
+- `origin/main` is still the initial README commit `c6d89b3`, and it only
+  advances through a successful release — which these same gates prevent. So
+  no round can get through the trusted channel until the host updates the
+  base or raises its limits; this is infrastructure, not game code.
+
+Consequence: round 72 is offered through the documented **PR-only fallback**
+(`/worker/state/outbox/publish.json`, branch `grunt/round72-bunting-felt` at
+`e430cf5836c0979cefb7ea1ba315169828d55fba`). It grants no merge or deployment
+authority, and nothing was merged or deployed from a shell. The gate is
+reported in `/worker/state/outbox/needs-supervision.json`. No further
+`advance` calls will succeed while the tree is over the screen, so do not
+retry them as a fix.
 
 The honest limitation: felt is a procedural fibre mat, not a scanned textile,
 and the whole lane shares one nap pattern across two dyes - the
@@ -561,31 +581,32 @@ Nothing here is merged or deployed by me.
 
 ## Next steps
 
-1. **Publication remains host-side blocked, not by game code.** The root checkout
-   is detached at round-59 `895bb72`; the three `planId: release` receipts certify
-   that tree (21 texture maps, no `cloth_*.webp` or `banner_*.webp`), and the
-   round-57c request is stuck at `phase=blocked, reason=operation_interrupted`.
-   The tree mismatch is reported in `/worker/state/outbox/needs-supervision.json`
-   and the PR-only request for `grunt/round67-cloth` is in
-   `/worker/state/outbox/publish.json` (refreshed to this head). A candidate at
-   this head needs fresh `tests`, `browser` and `mobile` receipts against the
-   exact committed tree before any release call.
-2. **Certify round 72 before any release call.** The felt round is coded,
-   evidenced (24/24, artifact re-recorded against the committed constants),
-   unit-green (636/636) and dist-restamped at `b4520f8`. The desktop and mobile
-   browser suites still need a real completion record on this exact tree; run
-   `node scripts/test-round2.mjs` then `node scripts/test-mobile.mjs`
-   sequentially (high host load killed the last parallel/background attempts),
-   and record the pass counts here.
-3. **Round 73 candidate: break the felt repetition if it shows.** The whole
-   lane's 28 flags share one felt nap on two dyes. If a playtest shows the nap
-   pattern repeating, add a cheap variant map (dirt or a slightly different
-   fibre scale) on top of the same base rather than a second family - the same
-   reasoning as the iron-variant note below.
-4. **Iron variant maps, if repetition shows in motion.** Round 70 put the props
-   and the lane fixture on one 0.6 m painted-iron tile on purpose. If playtesting
-   shows the chip pattern repeating across barrel hoops, a cheap dirt/rust variant
-   layered on the same base breaks it without a second family.
+1. **Round 72 is certified and offered for publication.** Three trusted
+   receipts (tests `f0cf64ca`, browser `26a32e32`, mobile `9d6eae89`) completed,
+   exit 0, unchanged and clean on the exact head `e430cf58`, and the round
+   ships through the PR-only fallback at
+   `/worker/state/outbox/publish.json`. Read
+   `/worker/state/outbox/publish-result.json` next cycle for the PR number.
+   Nothing is merged or deployed by me.
+2. **The trusted release channel is blocked by a host history gate, not game
+   code.** The publication screens `git rev-list head ^main` (limit 256
+   commits) and gives the reviewer only a 22,000-byte `main..head` diff. The
+   branch is 271 commits ahead of the never-advanced `origin/main` and its
+   cumulative diff is 4.27 MB, so `prepare` cannot succeed for any round. It is
+   reported in `/worker/state/outbox/needs-supervision.json`; do not retry
+   `advance` expecting a different answer. It clears only when the host
+   advances `origin/main` or raises those limits.
+3. **Round 73 candidate: graphics realism on the next-largest flat mass.**
+   Survey the live scene for what still reads as flat or plastic after rounds
+   67–72 — the fountain's `Water` meshes (flat `#97c8e3`, roughness 0.15,
+   opaque) are the most visible candidate, since a reflective opaque slab
+   beside dressed stone is the remaining discordant surface in the plaza centre.
+   Measure before changing it, and keep the same "upgrade, never a dependency"
+   contract.
+4. **Variant maps if repetition shows in motion.** The 28 lane flags share one
+   felt nap and the props share one 0.6 m painted-iron tile, both on purpose.
+   If playtesting shows either repeating, add a cheap dirt/rust or fibre-scale
+   variant layered on the same base rather than a second texture family.
 
 ---
 
