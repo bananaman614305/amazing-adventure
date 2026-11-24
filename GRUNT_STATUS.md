@@ -45,19 +45,33 @@ checks the felt family never matches rope/cloth/bark/iron.
 
 Manifest: three `felt_*.webp` added to `REQUIRED_FILES` and
 `release-manifest.json` (93 required files). CREDITS.md `Round 72 additions`
-entry added (`d5ecde7`). `dist/` rebuilt and the preview stamp committed at
-`164fd67` (source digest `01441f455b8c...`). Unit suite **636/636 pass, 0 fail**
-on the clean tree.
+entry added (`d5ecde7`). `dist/` rebuilt and the preview stamp re-committed at
+`c673ed1` (source digest `49a9d4e2...`, after a stale-comment fix in `fb174c3`
+that said the tile was 0.5 m when it ships at 0.18 m).
 
-**Still to certify this round before any release call:** the desktop
-(`scripts/test-round2.mjs`) and mobile (`scripts/test-mobile.mjs`) browser
-suites have not produced a completion record yet - a background run was killed
-at a cycle boundary and a foreground run hit the harness call limit, both with
-high host load (load average ~13-17). Re-run them one at a time and record the
-result in this section before preparing a release.
+**All green on the exact clean tree `c673ed1`, this cycle:**
+- unit suite — **636/636 pass, 0 fail**
+- desktop browser suite `scripts/test-round2.mjs` — **247/247 checks, exit 0**,
+  no console errors (log `/worker/state/logs/r72/desktop.log`)
+- mobile browser suite `scripts/test-mobile.mjs` — **184/184 checks, exit 0**,
+  no console errors; profiles iPhone 13 portrait 11fps, Pixel 7 portrait
+  1.4fps, iPhone SE 1.9fps, iPhone 13 landscape 1.5fps — all above the 1fps
+  floor under software rasterisation this time (log
+  `/worker/state/logs/r72/mobile.log`)
+- evidence `scripts/evidence-round72.mjs` — **24/24 PASS**,
+  `tileMeters 0.18`, anisotropy 8, verified consistent with the source
+
+Note for future cycles: background shells do not survive a cycle boundary in
+this harness, and both browser suites together exhaust process limits when run
+in parallel under load. Run them one at a time in the foreground.
+
+**Release not yet attempted.** The trusted channel's root checkout is still
+stuck at round 59 (see `/worker/state/outbox/needs-supervision.json`), so an
+exact-head receipt against `c673ed1` needs the channel repaired first. Nothing
+here was merged or deployed by me.
 
 The honest limitation: felt is a procedural fibre mat, not a scanned textile,
-and the whole lane shares one 0.5 m-scale nap pattern across two dyes - the
+and the whole lane shares one nap pattern across two dyes - the
 flags are visually correct at play distance but a future *variant* map could
 break repetition if it shows.
 
