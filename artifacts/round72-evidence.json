@@ -1,0 +1,1075 @@
+{
+  "pure": true,
+  "live": {
+    "wrapRepeat": 1000,
+    "state": {
+      "fountain": "model",
+      "plazaFloor": "textured",
+      "barrels": "model",
+      "stalls": "model",
+      "lamps": "model",
+      "plaster": "textured",
+      "marketStalls": "model",
+      "bench": "model",
+      "notice": "model",
+      "crates": "model",
+      "gateDoor": "model",
+      "house": "model",
+      "propWood": "textured",
+      "propWoodDetail": {
+        "dressed": 139,
+        "projected": 139,
+        "seams": 32,
+        "groups": 24,
+        "byFamily": {
+          "leaf": 12,
+          "roof": 7,
+          "bark": 0,
+          "wood": 49,
+          "brick": 3,
+          "stone": 6,
+          "iron": 59,
+          "cloth": 3
+        }
+      },
+      "roof": "textured",
+      "roofDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "foliage": "textured",
+      "foliageDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "cloth": "textured",
+      "clothDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "bunting": "textured",
+      "buntingDetail": {
+        "flags": 28,
+        "materials": 2,
+        "seams": 3,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 0.5
+      },
+      "iron": "textured",
+      "ironDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "banner": "model",
+      "bannerDetail": {
+        "parts": 4,
+        "bytes": 17608,
+        "instances": 1,
+        "canvasDressed": 1,
+        "ironDressed": 3,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "cobble": "textured",
+      "grass": "textured",
+      "walls": "textured",
+      "gateStone": "textured",
+      "fountainStone": "textured",
+      "terrace": "textured",
+      "sky": "gradient",
+      "wood": "textured",
+      "brick": "textured",
+      "fountainDetail": {
+        "parts": 12,
+        "bytes": 22604,
+        "height": 2.24,
+        "width": 3.9
+      },
+      "plazaFloorDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "aoMap": true
+      },
+      "barrelDetail": {
+        "parts": 3,
+        "bytes": 15856,
+        "instances": 4
+      },
+      "laneLamp": "model",
+      "laneLampDetail": {
+        "parts": 6,
+        "rotationY": -2.8633,
+        "lanternX": 12.8231,
+        "lanternZ": -24.6352
+      },
+      "lampMetal": "textured",
+      "lampMetalDetail": {
+        "dressed": 4,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "trees": "model",
+      "bark": "textured",
+      "barkDetail": {
+        "dressed": 3
+      },
+      "terraceDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 1.6,
+        "projected": {
+          "tread": 2,
+          "parapet": 6
+        },
+        "parts": {
+          "tread": [
+            "terrace-tread",
+            "terrace-ramp"
+          ],
+          "parapet": [
+            "terrace-kerb",
+            "terrace-parapet"
+          ]
+        }
+      },
+      "gateStoneDetail": {
+        "meshes": 3,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 1.6
+      },
+      "fountainStoneDetail": {
+        "meshes": 10,
+        "stone": 4,
+        "dark": 6,
+        "parts": 10,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 1.6
+      },
+      "stallDetail": {
+        "parts": 8,
+        "bytes": 9796,
+        "instances": 1
+      },
+      "lampDetail": {
+        "parts": 6,
+        "bytes": 8940,
+        "instances": 4
+      },
+      "marketStallDetail": {
+        "parts": 6,
+        "bytes": 7536,
+        "instances": 2
+      },
+      "benchDetail": {
+        "parts": 8,
+        "bytes": 9592,
+        "instances": 1
+      },
+      "noticeDetail": {
+        "parts": 9,
+        "bytes": 10936,
+        "instances": 1
+      },
+      "cratesDetail": {
+        "parts": 10,
+        "bytes": 11888,
+        "instances": 3
+      },
+      "gateDoorDetail": {
+        "parts": 11,
+        "bytes": 13036,
+        "instances": 1
+      },
+      "houseDetail": {
+        "parts": 15,
+        "bytes": 18040,
+        "instances": 1
+      },
+      "treeDetail": {
+        "parts": 5,
+        "bytes": 19120,
+        "instances": 3
+      },
+      "cobbleDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "grassDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "wallsDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "woodDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "brickDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "plasterDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      }
+    },
+    "flags": [
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          6.444444444444445,
+          2.5787433280199528,
+          -19.4
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          7.333333333333333,
+          2.5200000000000005,
+          -19.4
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          8.222222222222221,
+          2.4721120002385844,
+          -19.4
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          9.11111111111111,
+          2.440855328258537,
+          -19.4
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          10,
+          2.43,
+          -19.4
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          10.88888888888889,
+          2.440855328258537,
+          -19.4
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          11.777777777777779,
+          2.4721120002385844,
+          -19.4
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          12.666666666666668,
+          2.5200000000000005,
+          -19.4
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          13.555555555555555,
+          2.5787433280199528,
+          -19.4
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          6.4,
+          2.4955844176911492,
+          -21.6
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          7.2,
+          2.4301220900573,
+          -21.6
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          8,
+          2.37443650813896,
+          -21.6
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          8.8,
+          2.333978564678559,
+          -21.6
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          9.6,
+          2.31270856506907,
+          -21.6
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          10.4,
+          2.31270856506907,
+          -21.6
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          11.2,
+          2.333978564678559,
+          -21.6
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          12,
+          2.37443650813896,
+          -21.6
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          12.8,
+          2.4301220900572997,
+          -21.6
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          13.6,
+          2.4955844176911492,
+          -21.6
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          6.444444444444445,
+          2.6122162915732914,
+          -23.8
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          7.333333333333333,
+          2.56,
+          -23.8
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          8.222222222222221,
+          2.5174328891009634,
+          -23.8
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          9.11111111111111,
+          2.4896491806742547,
+          -23.8
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          10,
+          2.48,
+          -23.8
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          10.88888888888889,
+          2.4896491806742547,
+          -23.8
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          11.777777777777779,
+          2.5174328891009634,
+          -23.8
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingGold",
+        "position": [
+          12.666666666666668,
+          2.56,
+          -23.8
+        ],
+        "color": "#e0b552",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      },
+      {
+        "materialName": "BuntingRed",
+        "position": [
+          13.555555555555555,
+          2.6122162915732914,
+          -23.8
+        ],
+        "color": "#c9553f",
+        "roughness": 0.95,
+        "metalness": 0,
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "mapName": "(image)",
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "anisotropy": 4,
+        "hasUv": true,
+        "unindexed": true,
+        "uvCount": 27,
+        "triangles": 9
+      }
+    ],
+    "ropeFlat": {
+      "hasMap": false,
+      "hasNormal": false,
+      "roughness": 0.95
+    },
+    "flatBuckets": {
+      "SackTie": 9,
+      "LaneRope": 3,
+      "LanternHousing": 3,
+      "LanternBulb": 3,
+      "Water": 2,
+      "BoardFace": 1,
+      "BoardPaper": 3,
+      "NpcMarker": 6,
+      "Skin": 36,
+      "WoodP": 4,
+      "Accent": 9,
+      "EyeWhite": 12,
+      "EyeIris": 12,
+      "Mouth": 6,
+      "HairC": 8,
+      "Boot": 18,
+      "Paper": 3,
+      "Steel": 5,
+      "LampGlass": 5,
+      "LampBulb": 5,
+      "NoticeFace": 1,
+      "HouseGlass": 2
+    }
+  },
+  "shots": [
+    "/home/alan/projects/amazing-adventure/artifacts/round72-bunting-lane.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round72-bunting-close.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round72-bunting-strands.png"
+  ],
+  "checks": [
+    {
+      "name": "the felt family matches the bunting materials",
+      "ok": true,
+      "detail": "/bunting/i"
+    },
+    {
+      "name": "the felt family never matches the rope or another family",
+      "ok": true,
+      "detail": "rope/cloth/bark/iron stay in their own families"
+    },
+    {
+      "name": "bunting materials are not in the prop registry",
+      "ok": true,
+      "detail": "undefined"
+    },
+    {
+      "name": "the felt set is three distinct WebP maps",
+      "ok": true,
+      "detail": "map,normalMap,roughnessMap"
+    },
+    {
+      "name": "the felt tile is declared in metres beside the maps",
+      "ok": true,
+      "detail": "0.5 m"
+    },
+    {
+      "name": "felt is matte and keeps the authored dye",
+      "ok": true,
+      "detail": "roughness 0.95, keepTint true"
+    },
+    {
+      "name": "assetState reports the bunting as textured",
+      "ok": true,
+      "detail": "bunting textured"
+    },
+    {
+      "name": "assetState reports exactly the felt maps it applied",
+      "ok": true,
+      "detail": "{\"flags\":28,\"materials\":2,\"seams\":3,\"maps\":[\"map\",\"normalMap\",\"roughnessMap\"],\"tileMeters\":0.5}"
+    },
+    {
+      "name": "every lane flag is dressed (28 pennants)",
+      "ok": true,
+      "detail": "28 flags"
+    },
+    {
+      "name": "the felt pass reports no dropped flags",
+      "ok": true,
+      "detail": "{\"flags\":28,\"materials\":2,\"seams\":3,\"maps\":[\"map\",\"normalMap\",\"roughnessMap\"],\"tileMeters\":0.5}"
+    },
+    {
+      "name": "one cloned material per source dye (2, not 28)",
+      "ok": true,
+      "detail": "2"
+    },
+    {
+      "name": "every flag carries albedo, normal and roughness maps",
+      "ok": true,
+      "detail": "[[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true],[true,true,true]]"
+    },
+    {
+      "name": "the maps tile (repeat wrapping) for metre-space projection",
+      "ok": true,
+      "detail": "[1000]"
+    },
+    {
+      "name": "one repeat keeps the 0.5 m felt tile",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "name": "the maps request limited anisotropy (4), not the maximum",
+      "ok": true,
+      "detail": "4"
+    },
+    {
+      "name": "the authored red dye survives the material copy",
+      "ok": true,
+      "detail": "[\"#c9553f\"]"
+    },
+    {
+      "name": "the authored gold dye survives the material copy",
+      "ok": true,
+      "detail": "[\"#e0b552\"]"
+    },
+    {
+      "name": "felt is matte: roughness 0.95, metalness 0",
+      "ok": true,
+      "detail": "roughness 0.95, metalness 0"
+    },
+    {
+      "name": "every flag keeps metre-space UVs from the box projection",
+      "ok": true,
+      "detail": "uv true"
+    },
+    {
+      "name": "the projection did not change the flag silhouette",
+      "ok": true,
+      "detail": "9 tris, unindexed true"
+    },
+    {
+      "name": "the flags hang below the strands in the lane",
+      "ok": true,
+      "detail": "[6.444444444444445,2.5787433280199528,-19.4]"
+    },
+    {
+      "name": "the rope stays flat (its own material, no felt maps)",
+      "ok": true,
+      "detail": "{\"hasMap\":false,\"hasNormal\":false,\"roughness\":0.95}"
+    },
+    {
+      "name": "no bunting material is left in the flat audit",
+      "ok": true,
+      "detail": "SackTie, LaneRope, LanternHousing, LanternBulb, Water, BoardFace, BoardPaper, NpcMarker, Skin, WoodP, Accent, EyeWhite, EyeIris, Mouth, HairC, Boot, Paper, Steel, LampGlass, LampBulb, NoticeFace, HouseGlass"
+    },
+    {
+      "name": "the run produced no console errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

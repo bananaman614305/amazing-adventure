@@ -13,6 +13,7 @@ import {
   loadMarketStall, BENCH_ASSET, BENCH_MODEL_SIZE, loadBench,
   NOTICE_ASSET, NOTICE_MODEL_SIZE, loadNotice,
   BANNER_ASSET, BANNER_MODEL_SIZE, loadBanner, BANNER_TEXTURE_FILES,
+  FELT_TEXTURE_FILES, FELT_FAMILY, BUNTING_TILE_METERS,
   CRATE_ASSET, CRATE_MODEL_SIZE, loadCrate,
   GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
   HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
@@ -391,15 +392,20 @@ export function buildWorld(renderer) {
   // 20x across their own faces. A 2 cm rope should not be planked anyway.
   const ropeMat = new THREE.MeshStandardMaterial({ color: 0x6b5236, roughness: 0.95 });
   ropeMat.name = 'LaneRope';
-  const buntingMat = new THREE.MeshStandardMaterial({ color: 0xc9553f, roughness: 0.85 });
-  const buntingMatB = new THREE.MeshStandardMaterial({ color: 0xe0b552, roughness: 0.85 });
+  const buntingMat = new THREE.MeshStandardMaterial({ color: 0xc9553f, roughness: FELT_FAMILY.roughness });
+  const buntingMatB = new THREE.MeshStandardMaterial({ color: 0xe0b552, roughness: FELT_FAMILY.roughness });
   // Named, like the rope, so a live material audit attributes their area to the
-  // bunting instead of dumping the 45 pennants into one anonymous 15 m2 bucket.
-  // The names deliberately match no prop family: 0.16 x 0.22 m triangular flags
-  // are dyed felt, and projecting a 1.2 m weave onto one would smear a texture
-  // across a surface smaller than a single texel. They are meant to stay flat.
+  // bunting instead of dumping the pennants into one anonymous bucket, and so
+  // the felt pass has something to match on. Rounds 67-71 left them flat on
+  // purpose -- a 1.2 m cloth weave is a fraction of a texel across a 0.16 m flag.
+  // Round 72 fixes that with flag-scale felt: FELT_TEXTURE_FILES is matted fibre
+  // at a 0.5 m tile, and its neutral albedo is multiplied by these dyes, so the
+  // flags stay red and gold (see upgradeBuntingFelt).
   buntingMat.name = 'BuntingRed';
   buntingMatB.name = 'BuntingGold';
+  // The pennants are collected here so the felt pass can reach them without a
+  // scene-wide traverse that would also catch every other mesh in the lane.
+  const buntingFlags = [];
   const flagGeometry = new THREE.ConeGeometry(0.09, 0.22, 3);
   for (const strand of LANE_BUNTING) {
     // The rope: a thin box spanning the lane, dipping in the middle.
@@ -421,6 +427,7 @@ export function buildWorld(renderer) {
       flag.rotation.x = Math.PI;
       flag.castShadow = false;
       scene.add(flag);
+      buntingFlags.push(flag);
     }
   }
 
@@ -1009,6 +1016,8 @@ export function buildWorld(renderer) {
     foliageDetail: null,
     cloth: 'flat',
     clothDetail: null,
+    bunting: 'flat',
+    buntingDetail: null,
     iron: 'flat',
     ironDetail: null,
     banner: 'plane',
@@ -1791,6 +1800,86 @@ export function buildWorld(renderer) {
         }
         return assetState;
       });
+    });
+  }
+
+  function upgradeBuntingFelt() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.bunting = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: FELT_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.bunting = 'flat';
+        return assetState;
+      }
+      // The flags share one generated geometry and two materials, so a per-mesh
+      // copy of each texture would be 28 samplers for one fibre mat. One copy
+      // per material keeps the sampler state shared and the flags independent.
+      const dressed = new Map();
+      let flags = 0;
+      let seams = 0;
+      for (const flag of buntingFlags) {
+        const source = flag.material;
+        if (!source || !/bunting/i.test(source.name || '')) continue;
+        // Metre-space UVs, not the cone's authored 0..1 pair: a 0..1 map on a
+        // 0.16 m face is one texel of nap stretched over the whole flag. The
+        // projection also splits the three cone corners that straddle axes, so
+        // the diagonal seam of each pennant does not shear.
+        const split = projectBoxGeometry({
+          THREE,
+          geometry: flag.geometry,
+          tileMeters: FELT_FAMILY.tileMeters
+        });
+        seams += split.seams;
+        let material = dressed.get(source);
+        if (!material) {
+          material = new THREE.MeshStandardMaterial({
+            // keepTint: the felt albedo is neutral, so the authored red/gold dye
+            // is what the flags are coloured with. Forcing white here would turn
+            // the whole lane's bunting into unbleached felt.
+            color: source.color ? source.color.getHex() : 0xffffff,
+            roughness: FELT_FAMILY.roughness,
+            metalness: 0,
+            // The source name is what the material audit and the tests key on;
+            // losing it would merge 28 flags back into an anonymous bucket.
+            name: source.name,
+            side: source.side
+          });
+          for (const [key, texture] of Object.entries(textures)) {
+            if (!texture || key === 'anyLoaded') continue;
+            const copy = texture.clone();
+            copy.needsUpdate = true;
+            copy.wrapS = THREE.RepeatWrapping;
+            copy.wrapT = THREE.RepeatWrapping;
+            // UVs are already in metres; one repeat keeps the felt tile size
+            // (see BUNTING_TILE_METERS -- one pennant face wide).
+            copy.repeat.set(1, 1);
+            // Flags are seen edge-on along the whole lane, which is the worst
+            // case for a fibre map: at grazing angles a low anisotropy turns
+            // the nap into blur. 8 rather than 4 because the flags are small
+            // and few, so this is a cheap place to spend a sample.
+            copy.anisotropy = Math.min(8, renderer.capabilities?.getMaxAnisotropy?.() || 1);
+            material[key] = copy;
+          }
+          dressed.set(source, material);
+        }
+        flag.material = material;
+        flags += 1;
+      }
+      assetState.bunting = flags > 0 ? 'textured' : 'flat';
+      assetState.buntingDetail = {
+        flags,
+        materials: dressed.size,
+        seams,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: FELT_FAMILY.tileMeters
+      };
+      return assetState;
     });
   }
 
@@ -2643,7 +2732,7 @@ export function buildWorld(renderer) {
      */
     loadAssets() {
       return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner()])
-        .then(() => upgradePropFamilies()).then(() => ({ ...assetState }));
+        .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {

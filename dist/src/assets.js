@@ -202,6 +202,43 @@ export const BANNER_TEXTURE_FILES = {
 };
 
 /**
+ * Felt family for the lane bunting pennants (`BuntingRed` / `BuntingGold`).
+ *
+ * The 28 triangular flags (0.16 x 0.22 m, `ConeGeometry(0.09, 0.22, 3)` in
+ * world.js) were deliberately left flat in rounds 67-71: a 1.2 m cloth weave
+ * projects to about one fifth of a texel on a surface that small, so the flags
+ * would gain a faint smear and lose their dye colour for nothing. Felt -- short
+ * matted fibres, no grid -- has the right scale, so this set is generated at
+ * flag scale instead (art/kaggle/felt_textures.py, 512 x 512 lossless WebP).
+ *
+ * The albedo is neutral-white with only the nap shading the valleys, so the
+ * family multiplies by each material's authored dye (0xc9553f / 0xe0b552) and
+ * the flags stay red and gold rather than turning into one grey colour. The
+ * roughness map is almost flat (0.85-0.93): felt is matte, and this is what
+ * keeps a flag from catching a sun glint that cloth never would.
+ */
+export const FELT_TEXTURE_FILES = {
+  map: 'assets/textures/felt_albedo.webp',
+  normalMap: 'assets/textures/felt_normal.webp',
+  roughnessMap: 'assets/textures/felt_rough.webp'
+};
+
+/**
+ * Metres per felt tile, in UV space.
+ *
+ * Chosen against the thing that actually has to read as felt: a bunting pennant
+ * is a 0.18 m cone. A 0.5 m tile (the size the house/plaster families use) put
+ * the *whole flag inside one third of one tile*, so the nap was magnified past
+ * the point where mipmapping keeps it -- the A/B proved it, with albedo std
+ * raised to 0.115 the on-flag luminance still only moved 1.1/255 and high
+ * frequency did not move at all. At 0.18 m the tile is one flag face wide, so
+ * the nap is at the scale it was authored for and the fibre survives both the
+ * magnification and the trilinear filtering. 4x4 tiles fit in the cone's UV
+ * budget, so this is also the smallest tile that stays seam-cheap.
+ */
+export const BUNTING_TILE_METERS = 0.18;
+
+/**
  * Which loaded family dresses which authored material, and at what tile size.
  *
  * The prop GLBs are authored untextured and blend-named (`BenchWood`, `Canopy`,
@@ -325,6 +362,31 @@ export const PROP_FAMILIES = [
     roughness: 0.95
   }
 ];
+
+/**
+ * The bunting felt dressing rule.
+ *
+ * Kept out of PROP_FAMILIES because that table drives `upgradePropFamilies()`,
+ * which assumes metre-space UVs after `projectBoxGeometry()` and a per-registry
+ * fallback tile. The bunting flags get their own metre-scale projection in
+ * `upgradeBuntingFelt()`, so this object exists to describe the felt pass in one
+ * place (the tests and the dressing loop both read it) without pretending the
+ * lane flags are a prop registry family.
+ *
+ * `keepTint` is what preserves the red/gold dyes: the felt albedo carries no
+ * hue of its own.
+ */
+export const FELT_FAMILY = {
+  id: 'felt',
+  test: /bunting/i,
+  files: FELT_TEXTURE_FILES,
+  // Flags are 0.16 x 0.22 m; the tile is one flag face wide (see
+  // BUNTING_TILE_METERS for why the nap needs that scale to survive).
+  tileMeters: BUNTING_TILE_METERS,
+  keepTint: true,
+  // Felt has no weave grid and no specular sheen to speak of.
+  roughness: 0.95
+};
 
 /**
  * Picks the dressing family for an authored material name.

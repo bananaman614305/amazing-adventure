@@ -16,7 +16,7 @@ import {
   ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor,
   fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint, FOUNTAIN_STONE_COLORS,
   BANNER_ASSET, BANNER_MODEL_SIZE, BANNER_TEXTURE_FILES, loadBanner,
-  CLOTH_TEXTURE_FILES,
+  CLOTH_TEXTURE_FILES, FELT_TEXTURE_FILES, FELT_FAMILY, BUNTING_TILE_METERS,
   PLAZA_AO_MAP_CHANNEL, plazaAoMapIntensity, plazaAoMapIntensityForQuality,
   createPlazaAoTexture, contactDarkeningColors, applyContactDarkeningGeometry
 } from '../src/assets.js';
@@ -813,7 +813,7 @@ test('material names that are not props stay flat', () => {
     // collapse six unrelated surfaces into one 10.65 m2 row). Naming them is
     // also a claim that they are deliberately flat: each matches no family.
     'LanternHousing', 'LanternBulb', 'BoardFace',
-    'BoardPaper', 'NoticeFaceLane', 'NpcMarker', 'BuntingRed', 'BuntingGold',
+    'BoardPaper', 'NoticeFaceLane', 'NpcMarker',
     // The bunting rope used to borrow `LaneWood`, which made three visible 2 cm
     // ropes report as planked wood while keeping their authored per-face UVs.
     // Its own name must never pick up a family.
@@ -895,6 +895,56 @@ test('the cloth maps are three distinct neutral WebP files that exist', () => {
     assert.match(url, /\.webp$/, `${url} ships as WebP like the other families`);
     assert.ok(existsSync(join(ROOT, url)), `${url} must exist on disk`);
     assert.ok(statSync(join(ROOT, url)).size > 4096, `${url} must be a real map, not a stub`);
+  }
+});
+
+// --- Round 72: the felt family dresses the bunting pennants -----------------
+// The lane flags are dyed felt, not cloth: a 1.2 m weave is a fraction of a
+// texel across a 0.16 m face, so they get their own flag-scale fibre mat.
+
+test('only the colourless cloth and felt families opt into keeping the source tint', () => {
+  const keepers = PROP_FAMILIES.filter((f) => f.keepTint).map((f) => f.id);
+  // The felt family is deliberately outside PROP_FAMILIES, so it is not in
+  // PROP_FAMILIES' keepTint count. Check FELT_FAMILY separately.
+  assert.deepEqual(keepers, ['cloth'], 'cloth is the only PROP family that keeps tint');
+  assert.equal(FELT_FAMILY.keepTint, true, 'felt keeps the authored red/gold dye');
+});
+
+test('the felt family covers the bunting pennants but not the rope', () => {
+  assert.equal(FELT_FAMILY.test.test('BuntingRed'), true);
+  assert.equal(FELT_FAMILY.test.test('BuntingGold'), true);
+  // The rope is a separate flat material and must never pick up the felt maps.
+  assert.equal(FELT_FAMILY.test.test('LaneRope'), false);
+  for (const name of ['BarkWood', 'HouseWood', 'StallRoof', 'HouseBrick', 'HouseStone', 'LampIron', 'Cloth', 'SackCloth']) {
+    assert.equal(FELT_FAMILY.test.test(name), false, `${name} belongs to another family`);
+  }
+});
+
+test('the felt family declares a positive metre tile size for the box projection', () => {
+  assert.ok(FELT_FAMILY.tileMeters > 0, 'felt needs a positive tileMeters');
+  assert.ok(FELT_FAMILY.roughness >= 0 && FELT_FAMILY.roughness <= 1,
+    'felt roughness must be a real value');
+  for (const url of Object.values(FELT_FAMILY.files)) {
+    assert.match(url, /\.webp$/, `${url} ships as WebP like the other families`);
+  }
+});
+
+test('the felt maps are three distinct WebP files that exist', () => {
+  const urls = [FELT_TEXTURE_FILES.map, FELT_TEXTURE_FILES.normalMap, FELT_TEXTURE_FILES.roughnessMap];
+  assert.equal(new Set(urls).size, 3, 'three distinct maps, not the same file three times');
+  for (const url of urls) {
+    assert.match(url, /\.webp$/, `${url} ships as WebP like the other families`);
+    assert.ok(existsSync(join(ROOT, url)), `${url} must exist on disk`);
+    assert.ok(statSync(join(ROOT, url)).size > 4096, `${url} must be a real map, not a stub`);
+  }
+});
+
+test('bunting materials are no longer in the must-stay-flat list', () => {
+  // propFamilyFor must not resolve them to null via the PROP_FAMILIES table;
+  // the felt pass owns them outside that table.
+  for (const name of ['BuntingRed', 'BuntingGold']) {
+    const fam = propFamilyFor(name);
+    assert.ok(fam === null || fam.id === 'felt', `${name} must be either flat or felt, never another family`);
   }
 });
 
