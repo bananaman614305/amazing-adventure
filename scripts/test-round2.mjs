@@ -2416,14 +2416,15 @@ try {
   checks.check('each hour gives the panes its own colour and reflection',
     // Day is dark, reflective and unlit; night is warm and lit. Comparing whole
     // phase reads catches a pass that writes one number but forgets another.
-    // The lamp pane's metalness is deliberately constant (0.15) across phases --
-    // what changes for it is its diffuse tint and its glow -- so the metalness
-    // band is asserted on the windows, whose day mirror is the one that matters.
-    glass.day.every((p) => p.glow === 0 && p.metalness > 0.2)
+    // The window carries the day mirror (metalness 0.35) and the lamp pane a
+    // faint authored one (0.15, constant across hours -- what changes for it is
+    // its tint and its glow), so the "reflective by day" clause is asserted on
+    // the windows only.
+    glass.day.every((p) => p.glow === 0)
     && glass.day.filter((p) => p.material === 'HouseGlass').every((p) => p.metalness > 0.2)
+    && glass.day.filter((p) => p.material === 'LampGlass').every((p) => p.metalness > 0)
     && glass.nightDark.every((p) => p.metalness > 0 && p.metalness <= 0.35)
-    && glass.day.every((p) => p.color !== glass.nightLit.find((n) => n.mesh === p.mesh).color)
-    && glass.nightLit.every((p) => glass.day.find((n) => n.mesh === p.mesh).color !== p.color),
+    && glass.day.every((p) => p.color !== glass.nightLit.find((n) => n.mesh === p.mesh).color),
     JSON.stringify({ day: glass.day[0], night: glass.nightDark[0] }));
 
   // The window's own curve, read off the window panes only (the plaza lanterns
