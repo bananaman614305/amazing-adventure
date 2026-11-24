@@ -56,10 +56,10 @@ errors (profiles: iPhone 13 portrait 11.5fps, Pixel 7 1.3fps, iPhone SE 2fps,
 iPhone 13 landscape 1.4fps) — the per-frame hook caused no regression. (One
 mobile attempt died on a CDP `Input.dispatchTouchEvent` protocol timeout under
 the host's SwiftShader load; the clean rerun is the recorded result.)
-Pending release verifications on HEAD 80a69be: tests
-9f708d16-f996-4ba8-978e-993c167d6448, browser
-bcdc5c65-481c-4cfa-aab0-40d6f1420825, mobile
-503259c3-048a-4fd1-b814-bf0f90430a2f. Poll verify-result / verify-status
+Pending release verifications on HEAD 4c01d6f: tests
+11b79d55-b147-4db6-ba88-c83c79fabd02, browser
+10408282-3f4a-4224-850c-99102996f9ea, mobile
+f0a6fa73-b1a0-451a-92ac-df28d6f11d30. Poll verify-result / verify-status
 while preparing the release body. The trusted channel stays blocked by host
 history size (see /worker/state/outbox/needs-supervision.json), so publication
 goes through the PR-only fallback as with round 74.
