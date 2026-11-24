@@ -12,14 +12,15 @@
 
 ## Current task
 
-**Round 72 - flag-scale felt for the lane bunting.** Rounds 67-71 deliberately
-left the 28 lane pennants (`BuntingRed` / `BuntingGold`, 0.16 x 0.22 m
-`ConeGeometry` triangles) flat: a 1.2 m cloth weave projects to about a fifth of
-a texel across a face that small, so the flags would smear and lose their dye.
-This round gives them their own flag-scale felt set instead
-(`assets/textures/felt_{albedo,normal,rough}.webp`, 512 x 512 lossless WebP,
+**Round 72 is finished, verified and offered for publication; the next round
+starts from `/worker/state/outbox/publish-result.json`.** Round 72 gave the 28
+lane pennants (`BuntingRed` / `BuntingGold`, 0.16 x 0.22 m
+`ConeGeometry` triangles) a flag-scale felt set, because rounds 67-71 had left
+them flat on purpose: a 1.2 m cloth weave projects to about a fifth of a texel
+across a face that small, so the flags would have smeared and lost their dye.
+`assets/textures/felt_{albedo,normal,rough}.webp` (512 x 512 lossless WebP,
 albedo 64.4 KB / normal 424.4 KB / rough 56.4 KB, authored by
-`art/kaggle/felt_textures.py`): short matted fibres with no weave grid, a
+`art/kaggle/felt_textures.py`) is short matted fibre with no weave grid, a
 neutral-white albedo (mean 0.768) so the authored red/gold dyes survive tinting,
 and a near-flat roughness map (mean 0.810) so felt never catches a sun glint.
 
