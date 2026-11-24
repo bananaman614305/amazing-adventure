@@ -540,11 +540,19 @@ Nothing here is merged or deployed by me.
    `/worker/state/outbox/publish.json` (refreshed to this head). A candidate at
    this head needs fresh `tests`, `browser` and `mobile` receipts against the
    exact committed tree before any release call.
-2. **Round 72 candidate: bunting flags.** The 0.16 m flags cannot carry the 1.2 m
-   weave; a painted-canvas low-frequency variant (reusing the banner's panel
-   maps at a larger tile) is the candidate, and the same non-tiling clamp path
-   already exists. Evidence must prove no seam through the emblem.
-3. **Iron variant maps, if repetition shows in motion.** Round 70 put the props
+2. **Certify round 72 before any release call.** The felt round is coded,
+   evidenced (24/24, artifact re-recorded against the committed constants),
+   unit-green (636/636) and dist-restamped at `b4520f8`. The desktop and mobile
+   browser suites still need a real completion record on this exact tree; run
+   `node scripts/test-round2.mjs` then `node scripts/test-mobile.mjs`
+   sequentially (high host load killed the last parallel/background attempts),
+   and record the pass counts here.
+3. **Round 73 candidate: break the felt repetition if it shows.** The whole
+   lane's 28 flags share one felt nap on two dyes. If a playtest shows the nap
+   pattern repeating, add a cheap variant map (dirt or a slightly different
+   fibre scale) on top of the same base rather than a second family - the same
+   reasoning as the iron-variant note below.
+4. **Iron variant maps, if repetition shows in motion.** Round 70 put the props
    and the lane fixture on one 0.6 m painted-iron tile on purpose. If playtesting
    shows the chip pattern repeating across barrel hoops, a cheap dirt/rust variant
    layered on the same base breaks it without a second family.
