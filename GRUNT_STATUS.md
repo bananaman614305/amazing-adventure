@@ -56,16 +56,18 @@ errors (profiles: iPhone 13 portrait 11.5fps, Pixel 7 1.3fps, iPhone SE 2fps,
 iPhone 13 landscape 1.4fps) — the per-frame hook caused no regression. (One
 mobile attempt died on a CDP `Input.dispatchTouchEvent` protocol timeout under
 the host's SwiftShader load; the clean rerun is the recorded result.)
-Pending release verifications on HEAD 4c01d6f: tests
-11b79d55-b147-4db6-ba88-c83c79fabd02, browser
-10408282-3f4a-4224-850c-99102996f9ea, mobile
-f0a6fa73-b1a0-451a-92ac-df28d6f11d30. Poll verify-result / verify-status
-while preparing the release body. The trusted channel stays blocked by host
-history size (see /worker/state/outbox/needs-supervision.json), so publication
-goes through the PR-only fallback as with round 74.
-The trusted channel stays blocked by host history size (see
-`/worker/state/outbox/needs-supervision.json`), so publication goes through the
-PR-only fallback as with round 74.
+**Status of this round:** the code, tests, manifest, dist restamp and
+evidence are committed at d587ea6 (unit 660/660, desktop 256/256, mobile
+184/184, evidence 23/23, no console errors). The three trusted `release`
+verifications completed exitCode 0 unchanged on this head (tests
+2aef7929-964f-4370-9fc8-de4ef0d217ed, browser
+1fbac375-b353-441f-b31e-e6c395b8ed81, mobile
+7d074ec9-dc3f-4398-8fb1-4e7d3d75bd54); prepare (387c368d) reached
+`awaiting_review`, self-review approved, and advance left it `ready` because the
+trusted channel cannot clear the host history screen. The PR-only fallback
+publish request has been written to /worker/state/outbox/publish.json for the
+host to push and open/update the PR. Rounds 73-74 remain offered as PR #58
+(head b119428); neither is merged or deployed by me.
 
 Round 74 is committed as `b119428` and published as PR #58 (head `b119428`);
 round 73 is the same PR. Neither is merged or deployed by me.
