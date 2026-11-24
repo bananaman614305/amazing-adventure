@@ -12,105 +12,66 @@
 
 ## Current task
 
-**Round 72 is finished, verified and offered for publication; the next round
-starts from `/worker/state/outbox/publish-result.json`.** Round 72 gave the 28
-lane pennants (`BuntingRed` / `BuntingGold`, 0.16 x 0.22 m
-`ConeGeometry` triangles) a flag-scale felt set, because rounds 67-71 had left
-them flat on purpose: a 1.2 m cloth weave projects to about a fifth of a texel
-across a face that small, so the flags would have smeared and lost their dye.
-`assets/textures/felt_{albedo,normal,rough}.webp` (512 x 512 lossless WebP,
-albedo 64.4 KB / normal 424.4 KB / rough 56.4 KB, authored by
-`art/kaggle/felt_textures.py`) is short matted fibre with no weave grid, a
-neutral-white albedo (mean 0.768) so the authored red/gold dyes survive tinting,
-and a near-flat roughness map (mean 0.810) so felt never catches a sun glint.
+**Round 73 is complete, verified and handed to the PR-only fallback at head
+`6a806c1`; the next round starts from `/worker/state/outbox/publish-result.json`.**
+Round 73 gave the modelled fountain's two water discs (`FountainWaterLower`
+r 1.40 m, `FountainWaterUpper` r 0.66 m) a material of their own. They shipped
+from `assets/fountain.glb` as flat `MeshStandardMaterial` octagons — `#97c8e3`,
+roughness 0.15, metalness 0.1, opaque, no maps, no UVs — the last obviously
+plastic surface in a plaza whose stone, terrace, ground, roofs, bark, foliage,
+cloth, felt, iron and banner are all mapped. The stone pass must never dress
+them (that reads as a wet flagstone), so they needed their own family.
 
-The dressing lives outside `PROP_FAMILIES` (that table drives
-`upgradePropFamilies()` and assumes metre-space UVs; these are generated cones
-with authored 0..1 UVs), so `FELT_FAMILY` + `upgradeBuntingFelt()` own it. Each
-flag's geometry is box-projected at `BUNTING_TILE_METERS = 0.18` (one pennant
-face wide - the A/B proved a 0.5 m tile left high-frequency unmoved), one
-cloned material per dye (2, not 28), anisotropy 8. The rope stays its own flat
-`LaneRope` material.
+- `art/kaggle/water_textures.py` -> `assets/textures/water_{albedo,normal,rough}.webp`,
+  512 x 512 lossless WebP (110.7 / 319.2 / 53.8 KB, pixel-identical to the
+  generated PNGs by raw-frame comparison). Five directional sine waves with an
+  integer number of cycles per tile so every wave wraps exactly, a 33 cm swell
+  down to a 4.8 cm chop on a 1.0 m tile, wrapped-Sobel normals, and a
+  near-mirror roughness band of 0.02–0.16 so the discs reflect
+  `scene.environment`.
+- `WATER_TEXTURE_FILES` + `WATER_TILE_METERS = 1.0` in `src/assets.js`;
+  `upgradeFountainWater()` in `src/world.js`, run last in `loadAssets()` so no
+  prop family can claim `Water`. Metre-space UVs, one shared material, anisotropy
+  8, `castShadow = false` preserved.
 
-**Course correction this cycle:** the first commit (`97de94e`) carried an
-evidence file recorded from an *earlier* tuning pass (tile 0.5 m, anisotropy 4)
-while the source in the same commit used 0.18 m and 8. That is exactly the kind
-of stale artifact the brief warns about. I re-ran `scripts/evidence-round72.mjs`
-with `RECORD_ARTIFACTS=1` on the clean committed tree and re-committed the
-result (`b3f32f6`): **24/24 checks PASS**, no console errors,
-`assetState().buntingDetail` = `{flags: 28, materials: 2, seams: 3, maps:
-['map','normalMap','roughnessMap'], tileMeters: 0.18}`, every flag carries a
-normal + roughness map at anisotropy 8, dyes `#c9553f` / `#e0b552` preserved,
-9 tris per flag unindexed with the silhouette unchanged. Evidence script also
-checks the felt family never matches rope/cloth/bark/iron.
+**Two real defects I found reviewing my own work, both fixed:**
+1. The first draft set `roughness: 0.08` with a bound roughness map. Three
+   multiplies the base into the map's green channel, so 0.08 x 0.02..0.16
+   squares to 0.002..0.013 — a perfect mirror with the crest variation erased.
+   The base is now 1 (the ceiling), matching `applyTextureFamily`.
+2. With the base at 1 and a map missing (one 404, no decoder), the discs would
+   have rendered pale-blue matte stone — worse than the fallback. The pass now
+   degrades per channel toward the authored GLB values. Pinned by a unit test.
 
-Manifest: three `felt_*.webp` added to `REQUIRED_FILES` and
-`release-manifest.json` (93 required files). CREDITS.md `Round 72 additions`
-entry added (`d5ecde7`). `dist/` rebuilt and the preview stamp re-committed at
-`c673ed1` (source digest `49a9d4e2...`, after a stale-comment fix in `fb174c3`
-that said the tile was 0.5 m when it ships at 0.18 m).
+The evidence script also had two wrong assertions of mine (an octagon fan is 6
+triangles, not 8; the small disc spans under one UV tile). They now assert the
+stronger fact that each disc's UV span equals its geometry extent ÷ the tile.
 
-**All green on the exact clean tree `c673ed1`, this cycle:**
-- unit suite — **636/636 pass, 0 fail**
-- desktop browser suite `scripts/test-round2.mjs` — **247/247 checks, exit 0**,
-  no console errors (log `/worker/state/logs/r72/desktop.log`)
-- mobile browser suite `scripts/test-mobile.mjs` — **184/184 checks, exit 0**,
-  no console errors; profiles iPhone 13 portrait 11fps, Pixel 7 portrait
-  1.4fps, iPhone SE 1.9fps, iPhone 13 landscape 1.5fps — all above the 1fps
-  floor under software rasterisation this time (log
-  `/worker/state/logs/r72/mobile.log`)
-- evidence `scripts/evidence-round72.mjs` — **24/24 PASS**,
-  `tileMeters 0.18`, anisotropy 8, verified consistent with the source
+**All green on the exact clean head `6a806c1`:**
+- unit suite — **641/641 pass, 0 fail**
+- desktop browser suite — **248/248 checks, exit 0**, no console errors
+  (`/worker/state/logs/r73/desktop3.log`)
+- mobile browser suite — **184/184 checks, exit 0**, no console errors; profiles
+  iPhone 13 portrait 11.2 fps, Pixel 7 1.2, iPhone SE 1.8, iPhone 13 landscape
+  1.5 — all above the 1 fps floor (`/worker/state/logs/r73/mobile3.log`)
+- evidence `scripts/evidence-round73.mjs` — **19/19 PASS**, and now
+  **byte-reproducible** across two consecutive runs after I sorted its JSON keys
+  and rounded the Float32 metalness readback
+- committed preview — clean build, 96 files, digest `51b2696a…`
 
-Note for future cycles: background shells do not survive a cycle boundary in
-this harness, and both browser suites together exhaust process limits when run
-in parallel under load. Run them one at a time in the foreground.
+**Trusted release receipts, all green on `6a806c1`:** tests `fa234bfd`,
+browser `2436064f`, mobile `0f2aa2b8` — completed, exit 0, unchanged, clean.
+`prepare` is deliberately not attempted: `origin/main` is still the initial
+README commit `c6d89b3` and this branch is **278** commits ahead, over the
+host's 256-commit screen and its 22,000-byte review-diff budget (4.3 MB actual).
+That gate is unchanged by construction, so `prepare` would throw exactly as in
+round 72; it stays reported in `needs-supervision.json`. Round 73 ships through
+the PR-only fallback (`/worker/state/outbox/publish.json`), which grants no
+merge or deployment authority.
 
-**Three trusted receipts are green on the exact release head `e430cf5`, then
-`prepare` was refused by a host history gate.** Queued
-`grunt-release verify release {tests,browser,mobile}` at head `e430cf5`
-(clean tree, `0ba469a` + the receipt-recording checkpoint; code identical to
-`c673ed1`):
-
-| check | verification id | state |
-| --- | --- | --- |
-| tests | `f0cf64ca-a46a-4206-ba16-7e8d8ddfca30` | **completed**, exit 0, unchanged, clean |
-| browser | `26a32e32-aa40-4a50-a3be-97eb1b3cde13` | **completed**, exit 0, unchanged, clean |
-| mobile | `9d6eae89-7458-4fe9-9e65-3e11c52df8e0` | **completed**, exit 0, unchanged, clean |
-
-`grunt-release prepare --head e430cf58… --branch grunt/round72-bunting-felt`
-with all three ids was accepted into the queue (release id
-`0722e8a0-ce67-426d-9035-b72733def423`), and the host then answered
-`phase=blocked, reason=release_not_advanced` on both `advance` calls. I read
-the host client code this runs under instead of guessing
-(`/opt/adventure/grunt/dist/local/efficiency-host.js`):
-
-- **256-commit history screen.** `publicSource()` runs
-  `git rev-list --max-count=257 head ^main` and throws when more than 256
-  commits are reachable, before any push or review. Our branch is **271**
-  commits ahead of `origin/main`, and it crossed 257 at round 69
-  (`4609067`). The count was 218–261 for the heads of rounds 61–71, so this
-  gate has been the common cause of every blocked release since ~Nov 21.
-- **22,000-byte review diff.** The independent reviewer only receives
-  `git diff main..head` and the host throws when it exceeds 22,000 bytes. The
-  cumulative diff `main..e430cf5` is 4.27 MB.
-- `origin/main` is still the initial README commit `c6d89b3`, and it only
-  advances through a successful release — which these same gates prevent. So
-  no round can get through the trusted channel until the host updates the
-  base or raises its limits; this is infrastructure, not game code.
-
-Consequence: round 72 is offered through the documented **PR-only fallback**
-(`/worker/state/outbox/publish.json`, branch `grunt/round72-bunting-felt` at
-`e430cf5836c0979cefb7ea1ba315169828d55fba`). It grants no merge or deployment
-authority, and nothing was merged or deployed from a shell. The gate is
-reported in `/worker/state/outbox/needs-supervision.json`. No further
-`advance` calls will succeed while the tree is over the screen, so do not
-retry them as a fix.
-
-The honest limitation: felt is a procedural fibre mat, not a scanned textile,
-and the whole lane shares one nap pattern across two dyes - the
-flags are visually correct at play distance but a future *variant* map could
-break repetition if it shows.
+Note for future cycles: background shells do not survive a cycle boundary, and
+an interrupted long browser run can leave an empty log — check the log's last
+line for `N/N checks passed` before recording a suite as green.
 
 **Round 71 - the modelled terrace banner.** Round 70 left one large flat
 surface on the terrace: the 5.28 m2 `TerraceBanner` painted plane at the lip,
@@ -582,32 +543,27 @@ Nothing here is merged or deployed by me.
 
 ## Next steps
 
-1. **Round 72 is certified and offered for publication.** Three trusted
-   receipts (tests `f0cf64ca`, browser `26a32e32`, mobile `9d6eae89`) completed,
-   exit 0, unchanged and clean on the exact head `e430cf58`, and the round
-   ships through the PR-only fallback at
-   `/worker/state/outbox/publish.json`. Read
-   `/worker/state/outbox/publish-result.json` next cycle for the PR number.
+1. **Round 73 is verified and offered for publication.** Three receipts are
+   green on `6a806c1` and the request is in `/worker/state/outbox/publish.json`.
+   Read `/worker/state/outbox/publish-result.json` next cycle for the PR number.
    Nothing is merged or deployed by me.
-2. **The trusted release channel is blocked by a host history gate, not game
-   code.** The publication screens `git rev-list head ^main` (limit 256
-   commits) and gives the reviewer only a 22,000-byte `main..head` diff. The
-   branch is 271 commits ahead of the never-advanced `origin/main` and its
-   cumulative diff is 4.27 MB, so `prepare` cannot succeed for any round. It is
-   reported in `/worker/state/outbox/needs-supervision.json`; do not retry
-   `advance` expecting a different answer. It clears only when the host
-   advances `origin/main` or raises those limits.
-3. **Round 73 candidate: graphics realism on the next-largest flat mass.**
-   Survey the live scene for what still reads as flat or plastic after rounds
-   67–72 — the fountain's `Water` meshes (flat `#97c8e3`, roughness 0.15,
-   opaque) are the most visible candidate, since a reflective opaque slab
-   beside dressed stone is the remaining discordant surface in the plaza centre.
-   Measure before changing it, and keep the same "upgrade, never a dependency"
-   contract.
+2. **Trusted release stays blocked by host history policy, not game code.**
+   `origin/main` has never advanced past `c6d89b3`, the private-file screen
+   refuses >256 reachable commits and the reviewer only sees a 22,000-byte diff.
+   Reported in `needs-supervision.json`; do not retry `prepare` expecting a
+   different answer.
+3. **Round 74 candidate: animate the water, or the next flat mass.** The ripples
+   are static. A per-frame UV offset on the water normal map would be the
+   cheapest realism win left in the plaza, but the world has no per-frame hook
+   yet — add one deliberately (with a low-tier switch) rather than smuggling a
+   RAF loop into `world.js`. If that proves invasive, survey what is still flat
+   or plastic next (the sky dome and the NPC faces are the two remaining large
+   candidates) and keep the "upgrade, never a dependency" contract.
 4. **Variant maps if repetition shows in motion.** The 28 lane flags share one
-   felt nap and the props share one 0.6 m painted-iron tile, both on purpose.
-   If playtesting shows either repeating, add a cheap dirt/rust or fibre-scale
-   variant layered on the same base rather than a second texture family.
+   felt nap, the props share one 0.6 m painted-iron tile, and both water discs
+   share one tile orientation — all on purpose. If playtesting shows any
+   repeating, layer a cheap dirt/rust/fibre-scale variant or a rotated phase on
+   the same base rather than a second family.
 
 ---
 
