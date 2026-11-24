@@ -399,8 +399,9 @@ export function buildWorld(renderer) {
   // the felt pass has something to match on. Rounds 67-71 left them flat on
   // purpose -- a 1.2 m cloth weave is a fraction of a texel across a 0.16 m flag.
   // Round 72 fixes that with flag-scale felt: FELT_TEXTURE_FILES is matted fibre
-  // at a 0.5 m tile, and its neutral albedo is multiplied by these dyes, so the
-  // flags stay red and gold (see upgradeBuntingFelt).
+  // at a 0.18 m tile (one pennant face wide, see BUNTING_TILE_METERS), and its
+  // neutral albedo is multiplied by these dyes, so the flags stay red and gold
+  // (see upgradeBuntingFelt).
   buntingMat.name = 'BuntingRed';
   buntingMatB.name = 'BuntingGold';
   // The pennants are collected here so the felt pass can reach them without a
