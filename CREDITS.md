@@ -220,6 +220,24 @@ its procedural stand-in or flat colour and stays fully playable.
 - `assets/banner.glb` — `art/blender/make_banner.py`. 4 meshes, 17.6 KB: a subdivided cloth panel (BannerCanvas, 384 tris, fold wave + sagging hem), a painted-iron rod, finials, and hanging straps. Authored around the cloth centre with front facing glTF +Z, so the game sets position only. Footprint measured off the cloth only (rod span is finial overhang). Same licence as the game (generated, not downloaded).
 - `assets/textures/banner_{albedo,normal,rough}.webp` — `art/kaggle/banner_textures.py`, run on the private Kaggle notebook (Tesla T4, CuPy backend). Procedural painted canvas: blue ground, gold border band, shield and star device, authored 0..1 UVs, shipped as lossless WebP. Applied by `upgradeBanner()` with `ClampToEdgeWrapping` (deliberately non-tiling so the shield emblem cannot seam); albedo carries its own paint colour so the material tint stays white. Fully procedural; no outside images, datasets or models to license.
 
+### Round 72 additions
+
+- `assets/textures/felt_{albedo,normal,rough}.webp` — `art/kaggle/felt_textures.py`
+  (`artifacts/r72/felt_report.json`). Procedural flag-scale felt: short matted
+  fibres with no weave grid, generated at 512 x 512 and shipped as lossless WebP
+  (albedo 64.4 KB, normal 424.4 KB, rough 56.4 KB). Seam ratios albedo
+  [0.004, 0.005], normal [0.048, 0.137], rough [0.002, 0.003] — all far under
+  the 3x "no visible seam" threshold. The albedo is neutral-white (mean 0.768,
+  range 0.53–0.97) so the authored red/gold dyes survive tinting; the roughness
+  map is near-flat (mean 0.810, 0.68–0.95) so felt never catches a sun glint.
+  It survives minification to mip 5 (albedo std 0.060 vs 0.070 at mip 0) and only
+  collapses at mip 7, which is why the dressing tile is one pennant face wide
+  (`BUNTING_TILE_METERS = 0.18`). Dressed by `upgradeBuntingFelt()` on the lane's
+  28 `BuntingRed` / `BuntingGold` pennants (0.16 x 0.22 m cones) at a 0.18 m
+  tile, metre-space box-projected UVs (9 tris per flag, unindexed, silhouette
+  unchanged), anisotropy 8, one cloned material per dye (2, not 28). Fully
+  procedural; no outside images, datasets or models to license.
+
 ### Round 67 additions
 
 - `assets/textures/cloth_*.webp` — `art/kaggle/cloth_textures.py`, run on the
