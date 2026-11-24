@@ -43,16 +43,24 @@ committed — `2e4cf17` (pure module, world wiring, frame hook, tests, checkpoin
 and `af7f99a` (the tier-freeze fix: `waterOffsetStep` honoured a supplied
 `{tier: 'low'}` only after the unit run caught it, plus the regenerated
 `release-manifest.json` and restamped `dist/`; an interim `dist/src/water.js`
-left by a dirty-tree build was removed so the tree is clean). All three suites
-are green on the exact tree, in real headless Chrome: unit suite **660/660 pass,
-0 fail** (652 prior + 8 new in `tests/water.test.mjs`); desktop browser suite
-**256/256 checks, exit 0**, no console errors; mobile suite **184/184 checks,
-exit 0**, no console errors. Still to do: write `scripts/evidence-round75.mjs`
-with real screenshots of the fountain at two clock offsets so the UV travel is
-visible, then obtain the three `release` verifications, prepare with the exact
-head, self-review, and record the verdict. The trusted channel stays blocked by
-host history size (see `/worker/state/outbox/needs-supervision.json`), so
-publication goes through the PR-only fallback as with round 74.
+left by a dirty-tree build was removed so the tree is clean). The evidence
+script `scripts/evidence-round75.mjs` is written and green: **23/23 checks**,
+including a rendered-pixel proof that a different UV offset paints 10515
+different water pixels (max delta 32) while the same offset reproduces
+byte-for-byte, plus the low-tier freeze, the albedo staying put, and no console
+errors. Screenshots saved: `artifacts/round75-fountain-day.png` and
+`artifacts/round75-fountain-night.png`, plus `artifacts/round75-evidence.json`.
+Unit suite **660/660 pass, 0 fail**. Desktop browser suite **256/256 checks,
+exit 0**, no console errors; mobile suite **184/184 checks, exit 0**, no console
+errors (profiles: iPhone 13 portrait 11.5fps, Pixel 7 1.3fps, iPhone SE 2fps,
+iPhone 13 landscape 1.4fps) — the per-frame hook caused no regression. (One
+mobile attempt died on a CDP `Input.dispatchTouchEvent` protocol timeout under
+the host's SwiftShader load; the clean rerun is the recorded result.)
+Still to do: obtain the three `release` verifications, prepare with the exact
+head, self-review, and record the verdict.
+The trusted channel stays blocked by host history size (see
+`/worker/state/outbox/needs-supervision.json`), so publication goes through the
+PR-only fallback as with round 74.
 
 Round 74 is committed as `b119428` and published as PR #58 (head `b119428`);
 round 73 is the same PR. Neither is merged or deployed by me.
