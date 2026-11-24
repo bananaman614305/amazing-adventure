@@ -35,6 +35,7 @@ export const REQUIRED_FILES = [
   'src/atmosphere.js',
   'src/onboard.js',
   'src/glb.js',
+  'src/glass.js',
   'src/assets.js',
   'assets/fountain.glb',
   'assets/barrel.glb',

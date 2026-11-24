@@ -2344,6 +2344,168 @@ try {
     JSON.stringify([...fountainStone.stone, ...fountainStone.dark]
       .map((m) => ({ name: m.name, repeat: m.repeat }))));
 
+  // --- 28b2. Glass follows the hour (round 74) -----------------------------
+  // The two window panes and the five lantern housings were the last flat,
+  // unlit surfaces in the plaza. They stay unmapped on purpose (a 512 px map on
+  // a 0.8 m pane is finer than the pane), but their colour, reflection and
+  // glow now follow the hour and, for the lane post, the lantern round.
+  const glass = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    api.quality.set('full');
+    const read = () => {
+      const panes = [];
+      api.scene.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        const name = o.material.name || '';
+        if (name !== 'HouseGlass' && name !== 'LampGlass') return;
+        panes.push({
+          mesh: o.name,
+          material: name,
+          color: o.material.color.getHexString(),
+          emissive: o.material.emissive.getHexString(),
+          glow: Number(Number(o.material.emissiveIntensity).toFixed(3)),
+          metalness: Number(Number(o.material.metalness).toFixed(3)),
+          roughness: Number(Number(o.material.roughness).toFixed(3)),
+          castShadow: o.castShadow,
+          // Material identity: the four plaza lanterns were built from one cached
+          // parse and must keep one material; the lane post must be a clone.
+          matId: o.material.uuid,
+          lane: (() => {
+            for (let n = o; n; n = n.parent) if (n.name === 'lane-lamp-model') return true;
+            return false;
+          })()
+        });
+      });
+      return panes;
+    };
+    // The lane flag is the player's own state, so set it explicitly rather than
+    // relying on what earlier checks in this suite happened to leave behind.
+    const night = (lit) => {
+      api.getState().flags.laneLanternsLit = lit;
+      api.setClock(140);
+      return read();
+    };
+    const state = api.assetState();
+    const day = (() => { api.getState().flags.laneLanternsLit = false; api.setClock(20); return read(); })();
+    const duskDark = (() => { api.getState().flags.laneLanternsLit = false; api.setClock(85); return read(); })();
+    const duskLit = (() => { api.getState().flags.laneLanternsLit = true; api.setClock(85); return read(); })();
+    const nightDark = night(false);
+    const nightLit = night(true);
+    // The tier must re-write the glow without waiting for a phase change: the
+    // low tier turns the point lights off, so an un-dimmed bloom would glow
+    // with nothing behind it.
+    api.quality.set('low');
+    const nightLow = read();
+    api.quality.set('full');
+    const nightRestored = read();
+    // Leave the world where the suite found it: daylight, lane dark, full tier.
+    api.getState().flags.laneLanternsLit = false;
+    api.setClock(20);
+    return { state, day, duskDark, duskLit, nightDark, nightLit, nightLow, nightRestored };
+  });
+
+  checks.check('the glass pass finds two windows and five lantern panes (round 74)',
+    glass.state.glass === 'phase-lit' && glass.state.glassDetail
+    && glass.state.glassDetail.panes === 7
+    && glass.state.glassDetail.windows === 2
+    && glass.state.glassDetail.lamps === 5
+    && glass.state.glassDetail.lanePanes === 1,
+    JSON.stringify(glass.state.glassDetail));
+
+  checks.check('each hour gives the panes its own colour and reflection',
+    // Day is dark, reflective and unlit; night is warm and lit. Comparing whole
+    // phase reads catches a pass that writes one number but forgets another.
+    // The lamp pane's metalness is deliberately constant (0.15) across phases --
+    // what changes for it is its diffuse tint and its glow -- so the metalness
+    // band is asserted on the windows, whose day mirror is the one that matters.
+    glass.day.every((p) => p.glow === 0 && p.metalness > 0.2)
+    && glass.day.filter((p) => p.material === 'HouseGlass').every((p) => p.metalness > 0.2)
+    && glass.nightDark.every((p) => p.metalness > 0 && p.metalness <= 0.35)
+    && glass.day.every((p) => p.color !== glass.nightLit.find((n) => n.mesh === p.mesh).color)
+    && glass.nightLit.every((p) => glass.day.find((n) => n.mesh === p.mesh).color !== p.color),
+    JSON.stringify({ day: glass.day[0], night: glass.nightDark[0] }));
+
+  // The window's own curve, read off the window panes only (the plaza lanterns
+  // are phase-lit too, but at a different rate; mixing them would hide a window
+  // that failed to warm).
+  const windowCurve = {
+    day: glass.day.find((p) => p.material === 'HouseGlass'),
+    dusk: glass.duskLit.find((p) => p.material === 'HouseGlass'),
+    night: glass.nightLit.find((p) => p.material === 'HouseGlass')
+  };
+  checks.check('a lit window warms strictly from day through dusk to night',
+    windowCurve.day.glow === 0
+    && windowCurve.dusk.glow > 0
+    && windowCurve.night.glow > windowCurve.dusk.glow,
+    JSON.stringify({ day: windowCurve.day.glow, dusk: windowCurve.dusk.glow,
+                     night: windowCurve.night.glow }));
+
+  checks.check('the lane pane stays dark until the lantern round is walked',
+    // The lane post is the one fixture the player lights, so its pane must not
+    // glow over a dark bulb -- and must glow once the round is walked, over the
+    // same hour. The plaza panes are the control: they follow the hour alone.
+    glass.nightDark.filter((p) => p.lane).every((p) => p.glow === 0)
+    && glass.nightDark.filter((p) => !p.lane).every((p) => p.glow > 0)
+    && glass.nightLit.filter((p) => p.lane).every((p) => p.glow > 0)
+    && glass.nightLit.filter((p) => p.lane).every((p) =>
+      p.glow === glass.nightLit.find((n) => n.material === 'LampGlass' && !n.lane).glow),
+    JSON.stringify({ dark: glass.nightDark.map((p) => [p.mesh, p.glow, p.lane]),
+                     lit: glass.nightLit.map((p) => [p.mesh, p.glow, p.lane]) }));
+
+  checks.check('a dark lane leaves a window alone: the two are independent',
+    // A window has no bulb in the game's model of the lane. Both lane states must
+    // give the windows identical states at the same hour, pane for pane and
+    // field for field.
+    (() => {
+      const windows = (phase) => glass[phase]
+        .filter((p) => p.material === 'HouseGlass')
+        .map((p) => [p.mesh, p.color, p.emissive, p.glow, p.metalness, p.roughness]);
+      return JSON.stringify(windows('duskDark')) === JSON.stringify(windows('duskLit'))
+        && JSON.stringify(windows('nightDark')) === JSON.stringify(windows('nightLit'))
+        && windows('nightDark').length === 2;
+    })(),
+    JSON.stringify({
+      dusk: [glass.duskDark.filter((p) => p.material === 'HouseGlass')[0]?.glow,
+             glass.duskLit.filter((p) => p.material === 'HouseGlass')[0]?.glow],
+      night: [glass.nightDark.filter((p) => p.material === 'HouseGlass')[0]?.glow,
+              glass.nightLit.filter((p) => p.material === 'HouseGlass')[0]?.glow]
+    }));
+
+  checks.check('the low tier dims the glow and restoring full brings it back',
+    // No phase change between the two reads: setQuality itself must re-write the
+    // panes, or a tier flip would leave stale bloom behind for minutes.
+    glass.nightLow.every((p) => p.glow === 0.6)
+    && glass.nightRestored.every((p) => p.glow === glass.nightLit.find((n) => n.mesh === p.mesh).glow)
+    && glass.nightRestored.filter((p) => p.glow > 0).length === glass.nightRestored.length,
+    JSON.stringify({ low: glass.nightLow.map((p) => p.glow),
+                     restored: glass.nightRestored.map((p) => p.glow) }));
+
+  checks.check('the panes never cast a shadow and never vanish into black',
+    // A lamp pane is a thin shell; casting would give every lantern a hard
+    // quadrilateral shadow. A window keeps its frame's silhouette. Both keep a
+    // legible diffuse tint at every hour (a pure black tint reads as a hole).
+    ['day', 'duskLit', 'nightLit'].every((phase) =>
+      glass[phase].filter((p) => p.material === 'LampGlass').every((p) => p.castShadow === false)
+      && glass[phase].filter((p) => p.material === 'HouseGlass').every((p) => p.castShadow === true)
+      && glass[phase].every((p) => p.color !== '000000')),
+    JSON.stringify(glass.day.map((p) => [p.material, p.castShadow, p.color])));
+
+  checks.check('the plaza lamp housings share one material; the lane pane is its own',
+    // The four plaza lanterns were built from one cached parse; writing their
+    // pane four times is idempotent by construction. The lane post must have
+    // been cloned, or its dark/light state would drag the plaza down with it.
+    (() => {
+      const plaza = glass.nightLit.filter((p) => p.material === 'LampGlass' && !p.lane);
+      const lane = glass.nightLit.filter((p) => p.material === 'LampGlass' && p.lane);
+      const laneMat = lane.length === 1 ? lane[0].matId : null;
+      return plaza.length === 4
+        && new Set(plaza.map((p) => p.matId)).size === 1
+        && laneMat !== null && laneMat !== plaza[0].matId;
+    })(),
+    JSON.stringify(glass.nightLit.filter((p) => p.material === 'LampGlass')
+      .map((p) => [p.mesh, p.lane, p.matId.slice(0, 8)])));
+
   // Round 64: the north gate piers and lintel. They are the tallest untextured
   // stone in the plaza's main sight line, so they get the same family and the
   // same metre projection as the walls they stand in.
@@ -2636,7 +2798,11 @@ try {
     propWood.state.iron === 'textured' && propWood.ironDressed >= 20 && propWood.ironFlat === 0,
     JSON.stringify({ state: propWood.state.iron, ironDressed: propWood.ironDressed,
                     ironFlat: propWood.ironFlat }));
-  checks.check('what stays flat on the props is glass and painted board, never wood or iron',
+  // Round 74 makes the glass phase-lit (colour, reflection and glow follow the
+  // hour), but it stays unmapped on purpose: a 512 px map across a 0.8 m pane
+  // carries features finer than the pane, and the hour curve states the look
+  // exactly. "Flat" here means "carries no map", which is still true.
+  checks.check('what stays unmapped on the props is glass and painted board, never wood or iron',
     propWood.flatNames.every((n) => !/wood|iron/i.test(n)) &&
     propWood.flatNames.some((n) => /glass/i.test(n)),
     JSON.stringify(propWood.flatNames));

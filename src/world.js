@@ -31,6 +31,11 @@ import {
 } from './assets.js';
 import { loadGlb } from './glb.js';
 import {
+  glassKindFor,
+  glassStateFor,
+  glassCastsShadow
+} from './glass.js';
+import {
   shadowSettings,
   shadowFrustumFor,
   skyVertexColor,
@@ -991,6 +996,14 @@ export function buildWorld(renderer) {
   // shared by every mesh in the family; cloneTextureFamily() gives each mesh its
   // own sampler state.
   const familyTextures = {};
+  // Every glass pane the models contribute (house windows and lamp housings).
+  // Each entry is { mesh, kind, lane }, and applyGlass() writes the pane's
+  // colour, reflectivity and glow for the current hour. `lane` is captured at
+  // registration: it marks the one fixture whose bulb is the player's to light
+  // (the lane post), so its pane stays dark until the round is walked. Windows
+  // and the four plaza lamps ignore it. The bunting lanterns are procedural
+  // (LanternHousing/LanternBulb), carry no glass and register nothing.
+  const glassPanes = [];
   let lampAssetPromise = null;
   // One fetch of the quarried stone family, shared by the border walls and the
   // terrace. The materials stay separate (each gets cloned textures) because they
@@ -1047,7 +1060,11 @@ export function buildWorld(renderer) {
     gateStoneDetail: null,
     fountainStoneDetail: null,
     water: 'flat',
-    waterDetail: null
+    waterDetail: null,
+    // Round 74: window and lamp panes. Glass is dressed per phase, not per
+    // texture, so this reports the counts rather than a map list.
+    glass: 'flat',
+    glassDetail: null
   };
 
   function upgradeFountain() {
@@ -1329,6 +1346,15 @@ export function buildWorld(renderer) {
           mesh.receiveShadow = true;
           group.add(mesh);
           if (name === 'LampBulb') bulb = mesh;
+          // Round 74: a lamp pane follows the hour and its own bulb. Register
+          // every housing pane; the four plaza posts share one cached material
+          // object and all four should look the same, so writing it four times
+          // is idempotent by construction. A pane never casts (see glass.js).
+          const glassKind = glassKindFor(material.name || '');
+          if (glassKind) {
+            mesh.castShadow = glassCastsShadow(glassKind);
+            glassPanes.push({ mesh, kind: glassKind, lane: false });
+          }
         }
         // The model's arm reaches +0.6 m in local x and the lantern hangs at
         // 2.625 m, so the group sits on the post and the light moves under the
@@ -1477,6 +1503,24 @@ export function buildWorld(renderer) {
           bulb = mesh;
           mesh.material.emissive = new THREE.Color(0xffb43a);
           mesh.material.emissiveIntensity = 1.6;
+        }
+        // Round 74: the lane post's pane follows the lantern round, which the
+        // plaza panes do not. It shares the cached LampGlass material object
+        // with the four plaza lanterns, so it must be cloned before this pass
+        // writes a lane-only dark state -- the same trap round 55 hit with the
+        // bulb's emissive. A cloned pane keeps its own emissive for the hour.
+        const glassKind = glassKindFor(material.name || '');
+        if (glassKind) {
+          // Clone the mesh's *own* material rather than `material` (the shared
+          // cached source): the loop above may already have cloned it, and
+          // cloning the source again would throw away that copy's identity.
+          const paneMaterial = mesh.material && mesh.material !== material
+            ? mesh.material
+            : (needsOwnMaterial({ mutatesMaterial: true, sharedSource: true })
+              ? material.clone() : material);
+          mesh.material = paneMaterial;
+          mesh.castShadow = glassCastsShadow(glassKind);
+          glassPanes.push({ mesh, kind: glassKind, lane: true });
         }
         group.add(mesh);
       }
@@ -2254,6 +2298,15 @@ export function buildWorld(renderer) {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         group.add(mesh);
+        // Round 74: the two window panes follow the hour. They are not a lamp
+        // pane (no bulb sits behind them), so they glow from dusk even before
+        // the lane's lanterns are lit. Keeping castShadow is the window frame's
+        // silhouette; see glass.js.
+        const glassKind = glassKindFor(material.name || '');
+        if (glassKind) {
+          mesh.castShadow = glassCastsShadow(glassKind);
+          glassPanes.push({ mesh, kind: glassKind, lane: false });
+        }
       }
       // The model's front (+y in Blender) exports to +z, matching the house's
       // south-facing door at z = -6.35.
@@ -2268,6 +2321,35 @@ export function buildWorld(renderer) {
       };
       return assetState;
     });
+  }
+
+  /**
+   * Reports what the glass pass found.
+   *
+   * Glass has no maps, so there is no load to fail: the panes either came in
+   * with the models or they did not. This runs last so `glassPanes` is final,
+   * and it also applies the current hour once so the panes are never left at
+   * their authored flat colour between the asset load and the next phase pass
+   * (applyPhase has already run by the time the models finish downloading).
+   */
+  function reportGlass() {
+    const windows = glassPanes.filter((p) => p.kind === 'window').length;
+    const lamps = glassPanes.filter((p) => p.kind === 'lamp').length;
+    const lanes = glassPanes.filter((p) => p.lane).length;
+    assetState.glass = glassPanes.length ? 'phase-lit' : 'flat';
+    assetState.glassDetail = {
+      panes: glassPanes.length,
+      windows,
+      lamps,
+      lanePanes: lanes
+    };
+    if (glassPanes.length && environment.phase) {
+      environment.applyGlass(environment.phase, {
+        laneLit: environment.laneOn,
+        low: environment.quality === 'low'
+      });
+    }
+    return assetState;
   }
 
   /**
@@ -2803,6 +2885,15 @@ export function buildWorld(renderer) {
       // A changed map size needs the existing depth target rebuilt.
       sun.shadow.map?.dispose?.();
       sun.shadow.map = null;
+      // Round 74: the glass glow is tier-dependent (a full night bloom over the
+      // low tier's dark lamps reads as a bug), so re-write the panes now rather
+      // than waiting for the next phase change -- which could be many minutes.
+      // applyPhase() records the phase AND the lane state it last applied, so
+      // this reuses both rather than re-deriving them here.
+      if (environment.applyGlass && environment.glassPhase) {
+        environment.applyGlass(environment.glassPhase,
+          { laneLit: environment.laneOn, low });
+      }
       return environment.quality;
     },
     /** Opens or shuts the north gate: the door lifts and its collider goes. */
@@ -2823,6 +2914,45 @@ export function buildWorld(renderer) {
       ledgerGroup.visible = Boolean(visible);
     },
     fountainGroup,
+    glassPanes,
+    /**
+     * Writes the current hour to every registered pane.
+     *
+     * Called from applyPhase() (and from setQuality() when the tier flips) so
+     * the glass can never disagree with the lighting it is reflecting. The
+     * numbers come from `glass.js`, which is pure and unit-tested; this only
+     * writes them to the materials. `kind` decides the curve: a window follows
+     * the hour alone, a lamp pane follows its own bulb too, so the lane post
+     * stays dark until its round is walked.
+     *
+     * `low` dims the glow to a constant because the low tier turns the point
+     * lights off; a full night bloom over a dark lamp would read as a bug.
+     * Returns what it wrote, for the evidence scripts to hold to the curve.
+     */
+    applyGlass(phaseId, { laneLit = true, low = environment.quality === 'low' } = {}) {
+      const applied = { window: 0, lamp: 0, lit: 0, dark: 0 };
+      for (const pane of glassPanes) {
+        // Only a lane pane cares whether the lane's bulbs are lit; every other
+        // lamp pane sits under a plaza lamp that is on with the phase. A window
+        // has no bulb at all, so glassStateFor ignores the flag for it.
+        const effectiveLit = pane.kind === 'lamp' && pane.lane ? Boolean(laneLit) : true;
+        const state = glassStateFor(pane.kind, phaseId, { laneLit: effectiveLit, low });
+        const material = pane.mesh.material;
+        if (!material) continue;
+        if (material.color) material.color.setHex(state.color);
+        material.metalness = state.metalness;
+        material.roughness = state.roughness;
+        if (material.emissive) material.emissive.setHex(state.emissive);
+        material.emissiveIntensity = state.emissiveIntensity;
+        // The pane's glow must not be doubled by the lamp bulb sitting inside
+        // it: a bulb mesh keeps its own emissive (applyPhase writes it through
+        // environment.lamps). This pass never touches a bulb.
+        applied[pane.kind] += 1;
+        if (state.emissiveIntensity > 0) applied.lit += 1; else applied.dark += 1;
+      }
+      environment.glassPhase = phaseId;
+      return applied;
+    },
     /**
      * Starts the asset upgrade. Returns a promise that settles when both assets
      * have been attempted, so tests can await it and get a truthful report rather
@@ -2834,7 +2964,11 @@ export function buildWorld(renderer) {
         // Water runs last and after the prop pass on purpose: the water discs
         // must not pick up the stone/iron families, and it needs the modelled
         // fountain to be in the scene before it has anything to dress.
-        .then(() => upgradeFountainWater()).then(() => ({ ...assetState }));
+        .then(() => upgradeFountainWater())
+        // Glass has no fetch of its own -- it reports the panes the model passes
+        // registered and paints them for the current hour. It runs after the
+        // models so nothing can register a pane after the count is taken.
+        .then(() => reportGlass()).then(() => ({ ...assetState }));
     },
     /** What actually loaded: 'model' | 'stand-in' | 'unavailable', etc. */
     get assetState() {
@@ -2960,6 +3094,13 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   // state rather than glowing through a dark lane.
   if (environment.postLamp) {
     environment.postLamp.material.emissiveIntensity = laneOn ? look.lampGlow * 0.9 : 0;
+  }
+  // Round 74: the glass follows the same phase and the same lane state as the
+  // lights behind it, so a lit lamp always has a lit pane and a dark lane never
+  // glows. One call, after the lights are settled.
+  environment.laneOn = laneOn;
+  if (environment.applyGlass) {
+    environment.applyGlass(phaseId, { laneLit: laneOn, low: environment.quality === 'low' });
   }
   environment.phase = phaseId;
 }

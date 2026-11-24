@@ -12,558 +12,66 @@
 
 ## Current task
 
-**Round 73 is complete, verified and handed to the PR-only fallback at head
-`6a806c1`; the next round starts from `/worker/state/outbox/publish-result.json`.**
-Round 73 gave the modelled fountain's two water discs (`FountainWaterLower`
-r 1.40 m, `FountainWaterUpper` r 0.66 m) a material of their own. They shipped
-from `assets/fountain.glb` as flat `MeshStandardMaterial` octagons — `#97c8e3`,
-roughness 0.15, metalness 0.1, opaque, no maps, no UVs — the last obviously
-plastic surface in a plaza whose stone, terrace, ground, roofs, bark, foliage,
-cloth, felt, iron and banner are all mapped. The stone pass must never dress
-them (that reads as a wet flagstone), so they needed their own family.
+**Round 74 is in progress on `grunt/round72-bunting-felt` (uncommitted): the
+plaza's window and lamp glass now follows the hour.** Round 73's materials audit
+left two glass materials at the top of the flat list: `HouseGlass` (4.63 m2, flat
+`#616c76`) and `LampGlass` (4.50 m2, flat `#f9f1ce`) — together a fifth of all
+flat-coloured area the audit can still find, and exactly the surface where flat
+colour reads as plastic. A window should be dark and reflective by day and warm
+from inside at night; a lamp pane should glow only while its own bulb is lit.
 
-- `art/kaggle/water_textures.py` -> `assets/textures/water_{albedo,normal,rough}.webp`,
-  512 x 512 lossless WebP (110.7 / 319.2 / 53.8 KB, pixel-identical to the
-  generated PNGs by raw-frame comparison). Five directional sine waves with an
-  integer number of cycles per tile so every wave wraps exactly, a 33 cm swell
-  down to a 4.8 cm chop on a 1.0 m tile, wrapped-Sobel normals, and a
-  near-mirror roughness band of 0.02–0.16 so the discs reflect
-  `scene.environment`.
-- `WATER_TEXTURE_FILES` + `WATER_TILE_METERS = 1.0` in `src/assets.js`;
-  `upgradeFountainWater()` in `src/world.js`, run last in `loadAssets()` so no
-  prop family can claim `Water`. Metre-space UVs, one shared material, anisotropy
-  8, `castShadow = false` preserved.
+- `src/glass.js` (new, pure, no Three.js): the authored fallback values, the warm
+  `GLASS_EMISSIVE` tint, a per-phase `GLASS_LOOKS` table (day/dusk/night) and
+  `glassStateFor(kind, phase, {laneLit, low})`. Contracts: a lane pane never glows
+  over a dark bulb; a window ignores the lane round entirely; the low tier dims
+  the glow to a 0.6 cap because it turns the point lights off.
+- `src/world.js`: `glassPanes` registry filled by the house, plaza-lamp and
+  lane-post passes; `environment.applyGlass(phase, {laneLit, low})` writes the
+  panes and records `environment.glassPhase`; `applyPhase()` now calls it after
+  the lights settle so glass can never disagree with the lighting it reflects;
+  `setQuality()` re-writes the panes immediately on a tier flip; `reportGlass()`
+  runs last in `loadAssets()` and reports `glass: 'phase-lit'` +
+  `glassDetail {panes 7, windows 2, lamps 5, lanePanes 1}`. The lane post's pane
+  is cloned off the shared cached `LampGlass` so a dark lane cannot drag the four
+  plaza lanterns down with it (the same trap round 55 hit with the bulb).
+- `src/manifest.js`, `release-manifest.json`, `dist/` restamped; the glass map
+  stays unmapped on purpose, so round 73's "what stays flat" browser check was
+  reworded to say "unmapped" without weakening it.
 
-**Two real defects I found reviewing my own work, both fixed:**
-1. The first draft set `roughness: 0.08` with a bound roughness map. Three
-   multiplies the base into the map's green channel, so 0.08 x 0.02..0.16
-   squares to 0.002..0.013 — a perfect mirror with the crest variation erased.
-   The base is now 1 (the ceiling), matching `applyTextureFamily`.
-2. With the base at 1 and a map missing (one 404, no decoder), the discs would
-   have rendered pale-blue matte stone — worse than the fallback. The pass now
-   degrades per channel toward the authored GLB values. Pinned by a unit test.
+**Live browser results (real headless Chrome, exact tree):**
+- unit suite — **652/652 pass, 0 fail** (11 new in `tests/glass.test.mjs`)
+- desktop browser suite — **256/256 checks, exit 0**, no console errors, run 1:
+  255/256. The one failure (`r74-desktop1.log:160`) was **my own wrong
+  assertion**: it required every pane to change metalness by hour, but a lamp
+  pane keeps `metalness 0.15` and changes only its tint and glow. Fixed the
+  assertion (windows carry the metalness band) — not the game code.
+- Independent live probes confirm: night lane lit ⇒ lane pane 2.6, plaza panes
+  2.6, windows 2.2; lane dark ⇒ lane pane 0, everything else unchanged; dusk
+  window 1.1 < night 2.2; `quality.set('low')` dims all 7 panes to 0.6 and
+  `set('full')` restores 2.6/2.2 with **no phase change**.
 
-The evidence script also had two wrong assertions of mine (an octagon fan is 6
-triangles, not 8; the small disc spans under one UV tile). They now assert the
-stronger fact that each disc's UV span equals its geometry extent ÷ the tile.
+**Next actions for this round:** rerun both browser suites on the final tree,
+write `scripts/evidence-round74.mjs`, record screenshots, restamp `dist/`,
+commit, then obtain the three `release` verifications and prepare.
 
-**All green on the exact clean head `6a806c1`:**
-- unit suite — **641/641 pass, 0 fail**
-- desktop browser suite — **248/248 checks, exit 0**, no console errors
-  (`/worker/state/logs/r73/desktop3.log`)
-- mobile browser suite — **184/184 checks, exit 0**, no console errors; profiles
-  iPhone 13 portrait 11.2 fps, Pixel 7 1.2, iPhone SE 1.8, iPhone 13 landscape
-  1.5 — all above the 1 fps floor (`/worker/state/logs/r73/mobile3.log`)
-- evidence `scripts/evidence-round73.mjs` — **19/19 PASS**, and now
-  **byte-reproducible** across two consecutive runs after I sorted its JSON keys
-  and rounded the Float32 metalness readback
-- committed preview — clean build, 96 files, digest `51b2696a…`
-
-**Trusted release receipts, all green on `6a806c1`:** tests `fa234bfd`,
-browser `2436064f`, mobile `0f2aa2b8` — completed, exit 0, unchanged, clean.
-`prepare` is deliberately not attempted: `origin/main` is still the initial
-README commit `c6d89b3` and this branch is **278** commits ahead, over the
-host's 256-commit screen and its 22,000-byte review-diff budget (4.3 MB actual).
-That gate is unchanged by construction, so `prepare` would throw exactly as in
-round 72; it stays reported in `needs-supervision.json`. Round 73 ships through
-the PR-only fallback (`/worker/state/outbox/publish.json`), which grants no
-merge or deployment authority.
-
-Note for future cycles: background shells do not survive a cycle boundary, and
-an interrupted long browser run can leave an empty log — check the log's last
-line for `N/N checks passed` before recording a suite as green.
-
-**Round 71 - the modelled terrace banner.** Round 70 left one large flat
-surface on the terrace: the 5.28 m2 `TerraceBanner` painted plane at the lip,
-which read as a sticker because a plane has no thickness, no rod and no cast
-shadow. This round replaces it with the modelled cloth+rod GLB
-(`assets/banner.glb`, 17608 bytes, 4 meshes: `BannerCanvas`, `BannerRod`,
-`BannerFinial`, `BannerStrap`) loaded through `loadBanner()` and dressed through
-`upgradeBanner()`. The cloth is a subdivided panel (384 tris) with a fold wave
-and a sagging hem, painted by its own non-tiling canvas maps
-(`banner_albedo/normal/rough.webp`, authored 0..1 UVs, `ClampToEdge`) so the
-shield emblem cannot seam; the rod reuses the lane lamp's painted-iron maps at a
-0.6 m tile. The flat stand-in stays in the scene for the no-assets fallback but
-renders nothing once the model arrives (`visible === false`).
-
-Footprint is measured off the cloth only (the 2.74 m rod span is finial
-overhang), matching `BANNER_MODEL_SIZE` ({width 2.4, height 1.1, rodOverhang
-0.21}) and the `reachX > 1.25 / reachY > 0.6` box check. The four banner parts
-opt out of `PROP_FAMILIES` (`propFamilyFor(...) === null`) so the banner's own
-path owns their dressing, and the collider is untouched.
-
-Evidence (`scripts/evidence-round71.mjs`, `RECORD_ARTIFACTS=1`): **30/30 checks
-PASS**, no console errors. `assetState().bannerDetail` = `{parts: 4, bytes:
-17608, instances: 1, canvasDressed: 1, ironDressed: 3, maps:
-['map','normalMap','roughnessMap']}`. Group `banner-model` at `[0, 2.7, -16.42]`;
-cloth world box minY 2.15 / maxY 3.25, Z -16.42..-16.40; rod rides above the
-cloth; every mesh casts a shadow. Unit suite **631/631 pass, 0 fail** after the
-manifest and dist rebuilds. Screenshots: `artifacts/round71-banner-{front,across,
-cloth}.png`, JSON `artifacts/round71-evidence.json`.
-
-Manifest: `assets/banner.glb` + three `banner_*.webp` added to `REQUIRED_FILES`
-and `release-manifest.json` (90 required files). `dist/` rebuilt at source digest
-`e478187700ac741b9353b3244d600eed6459542d5f59505e9933c38ddd0390d7`.
-
-The honest limitation: this is a painted-canvas panel, not a woven cloth weave -
-the same decision as round 70's painted iron - so the banner and the bunting
-stay distinct reads. The remaining large flat surfaces are now `Water`
-(16.36 m2, must stay flat and moving) and `HouseGlass` (4.63 m2, must stay
-glass); bunting (0.16 m flag) is the next candidate if a low-frequency painted
-variant can carry it.
-
-**Round 70 - one painted-iron read for props and fixtures.** The largest flat
-mass left after round 69 was ironwork: `BarrelIron`, `BenchIron`, `CrateIron`,
-`DoorIron`, `MarketIron`, `NoticeIron`, `StallIron` and the plaza lamp posts came
-to ~62 m2 of untextured grey across the prop GLBs, sitting between dressed timber
-and dressed stone. This round dresses them from the **lane lamp's own maps**
-(`LAMP_TEXTURE_FILES`, no second near-identical set) through a new `iron`
-`PROP_FAMILY` at a 0.6 m tile, with `metalness: 0.45` so painted metal catches
-the sky instead of reading as grey plastic (every other family stays fully
-dielectric - a unit test pins that, because adding the field to timber or cloth
-would make haystacks and walls look wet). The lane's own procedural post + sphere
-is replaced by the modelled lantern (`upgradeLaneLamp`), and its already-dressed
-`LampIronPainted` material is excluded by a negative lookahead so it is never
-projected or swapped twice. The three callers that must survive the swap are
-checked: `environment.postLamp` is reassigned to the modelled bulb so
-`applyPhase()` still writes `emissiveIntensity` (the round-54 honesty bug), every
-mesh gets its own material clone because `loadLampAsset()` caches one parse shared
-with the four plaza posts, and iron UVs are box-projected because the GLBs ship
-without UVs. Nine deliberately-flat surfaces were also given real names
-(`LanternHousing`, `LanternBulb`, `TerraceBanner`, `BoardFace`, `BoardPaper`,
-`NoticeFaceLane`, `BuntingRed`, `BuntingGold`, `NpcMarker`) because the materials
-audit was collapsing six unrelated materials into one 10.65 m2 `(unnamed)` row;
-the audit now keys by material identity, waits for `assetsReady()` instead of the
-`'flat'`-initialised `assetState`, and skips hidden materials.
-
-Evidence (`scripts/evidence-round70.mjs`, `RECORD_ARTIFACTS=1`): **35/35 checks
-PASS**, no console errors. 35 iron prop meshes dressed with map + box-projected
-UV, 0 iron left flat; the 4 `LampIronPainted` lane meshes all carry albedo +
-normal + roughness; the modelled bulb keeps `emissive ffb43a` and
-`environment.postLamp.name === 'LampBulb'`; aim is finite (`rotationY -2.8633`,
-lantern at 12.823 / -24.635 inside the lane corridor). Materials audit: 25 named
-flat rows totalling **51.10 m2** (was 51.22 m2 in six collapsed buckets), and the
-`(unnamed)` bucket is **gone**. Round 69's own evidence still passes on this tree
-(142 dressed props, was 83; 24 dark / 30 lit of 40 sampled). Unit suite
-**626/627** - the one failure is the expected stale-`dist/` preview check, which
-the follow-up dist commit restamps. Desktop browser suite **247/247** checks
-PASS with no console errors (the +2 are the re-pointed round-41/42 prop
-checks); the mobile profile suite is deferred this round because host mobile
-boots remain unreliable, and the iron dressing reuses the already-downloaded
-lamp maps, so no tier downloads anything new. Screenshots:
-`artifacts/round70-{lane-lamp,iron-props,plaza}.png`, JSON
-`artifacts/round70-evidence.json`, review notes `artifacts/r70-review.md`.
-
-The honest limitation: this reuses the lane lamp's paint rather than a new
-scanned/painted iron set, so the props and the fixture agree by construction but
-the whole iron family shares one 0.6 m tile and one chip pattern. A second set
-would drift, so I chose agreement; a future round could add a *variant* map (dirt
-or rust) on top of the same base if the repetition starts to show in motion.
-
-**Round 69 - bake plaza ambient occlusion and ground the props.** The
-now-correct shadows (round 68) made two grounding cues worth building: a baked
-`aoMap` on the plaza floor (three.js multiplies an `aoMap` into *indirect* light
-only and reads just the R channel, so it is a grazing-angle hint, not a shadow)
-and per-vertex contact darkening on dressed stone/wood props below a short ramp
-above the ground. Both are pinned to UV channel 0 (`CircleGeometry` has no
-`uv1`) and both vanish on the low tier so mobile keeps its zero-cost path.
-
-**Round 68 - give the market lane its sun shadows back.** Reviewing round 67's
-dressed plaza exposed a defect no earlier test could see: the sun's shadow box
-was hard-coded as +-24 around the origin, written when the plaza was the whole
-world. The market lane (z -26..-17.5) sits outside it, so lane props were never
-rasterised into the depth map - measured on the live scene, 22 of the lane's 40
-shadow receivers and 46 of its 65 casters projected outside, and the lane's
-north-east lamp post sat at NDC x = 1.14. The box is now derived by
-`shadowFrustumFor()` (src/graphics.js) from the declared area bounds and aimed
-at the world centre, sized by the far-corner *distance* (29.4 m with margin)
-rather than the larger half-extent (21.5 m) - a half-extent box still clipped
-eight north-east props - and `applyPhase` offsets each phase's light position by
-the same centre shift, so the authored day/dusk/night sun directions are
-bit-for-bit unchanged. Evidence (`scripts/evidence-round68.mjs`): all 376 shadow
-meshes inside the box in every phase with drift 0.0000 vs `PHASE_LOOKS`, lane far
-corner at NDC (0.344, -0.65), 24/24 checks passed, no console errors. The low
-tier still drops the shadow pass, so mobile keeps its zero-shadow path.
-
-Reviewing my own fix caught a second, worse defect that the round's first
-evidence run had passed. The shadow camera's near plane was fixed at 1, which
-is only safe while every prop sits in front of the light. Dusk drops the sun to
-y 7 and looks almost along the ground, so tall geometry projects *behind* the
-light plane (measured view-space z up to +2.8 m); seven mesh corners - the gate
-wall, three tree canopies, three ground receivers - were clipped out of the
-depth map, exactly the grazing-angle case where contact shadow matters most.
-`near` is now `-slack`. The evidence script had missed it because it projected
-bounding-box *centres*, which cannot see a box straddling a plane; it now tests
-all eight corners. The negative control is real and I ran it: restoring `near 1`
-makes the stricter script report 23/24 and name those seven corners at NDC z
-around -1.05, while the centre-only version passed. The unit test that asserted
-`near >= 1` had encoded the bug and is replaced by one pinning the behind-light
-case.
-
-Full suite 621 pass / 0 fail, desktop suite 245/245; dist rebuilt at clean tree
-9460cc4 (digest b916047b080e6e45d9c91fcde04bdb194301394b36b3ce2436ef102a234efc65,
-workingTreeClean true, sourceDigest == digest).
-
-The fix is not free and the cost is worth stating plainly: the same 2048 map now
-covers 58.8 m instead of 48 m, so shadow resolution falls from 42.7 to 34.8
-texels/m (81.6% of the old density, each texel 0.53 cm wider). That buys full
-coverage and it is invisible at the prop scale here, but it is a real trade and
-the obvious next tuning step is either trimming the box to the props that
-actually exist rather than the declared area bounds, or a 4096 map on the full
-tier only. I have measured it and not yet decided; the low tier is untouched.
-
-**Round 67 — dress the cloth and fix the UV seams the dressing exposed.** The
-one big flat mass left after rounds 61–66 was cloth: the three lane `SackCloth`
-sacks and the modelled cast's 23 `Cloth` coat/leg/sleeve meshes (17.26 m2
-measured in the browser). This round gives them their own woven-burlap family —
-`art/kaggle/cloth_textures.py` on the Kaggle T4, a `cloth` PROP_FAMILY with
-`keepTint: true` so the sacks stay burlap brown and the coats keep their palette
-colours, tiled at 1.2 m — and fixes the bug that dressing curved geometry
-exposed: `boxProjectUvs` picked the projection plane per *vertex* with
-last-triangle-wins, so every sack rim and sleeve seam sheared the triangle on
-the far side (worst 3.3x off). The new `boxProjectMesh`/`projectBoxGeometry` core
-picks the axis per triangle and splits shared corners into their own slots;
-seam-free meshes keep their original index buffer, and `boxProjectUvs` now
-throws instead of shearing silently. After the fix: 0 sheared triangles of 2532
-in the live scene, every triangle rigid within 2%, sacks tiling uniformly at
-1.2 m. Details in the Round 67 sections below; evidence at the end of this
-section.
-
-**Round 65 — keep the fountain's two stones apart once the maps load.** Round
-64 dressed the gate piers and the fountain stone in the shared quarried-stone
-family, and reviewing my own diff afterwards caught a defect that had shipped
-green: in the *mapped* path both `Stone` and `StoneDark` were given
-`color: 0xffffff`, so the six dark meshes (plinth, finial, four corner blocks)
-rendered identical to the four light ones and the fountain lost the base that
-gives it weight. This round fixes the tint (`fountainStoneTint()` returns the
-*ratio* of the two authored tones, `0xc8cbc9`, so the map keeps its contrast),
-catches the missing `fountainStoneTint` import that had silently disabled two
-rounds of prop dressing, and replaces the "both stones are white" checks with
-checks that assert the two stones stay *different*. Details in the two Round 65
-sections below; evidence at the end of this section.
-
-**Round 64 — dress the gate piers and the fountain stone.** Rounds 61–63 gave
-the plaza floor, the north terrace, the roofs and the tree canopies their own
-mapped families. Two large stone masses were still bare flat colour in the
-plaza's main sight line, and both are objects the player walks right up to:
-
-- **The north gate piers and lintel** (`pierMaterial`, `0x7b7163`) are two
-  0.7 x 4.1 x 1.4 m piers plus a 4.4 m lintel framing the only way out of the
-  plaza — the tallest untextured stone in the whole scene, standing directly
-  beside dressed ashlar walls.
-- **The modelled fountain's `Stone` and `StoneDark` meshes** (bowl, basin,
-  column, plinth, finial, four corner blocks — ten meshes; the two `Water`
-  meshes are deliberately excluded) ship with **no UVs at all**, only
-  POSITION+NORMAL, so they read as smooth sculpted plastic next to coursed
-  stonework.
-
-`upgradeGateStone()` and `upgradeFountainStone()` reuse the *one* existing
-quarried-stone request (`STONE_TEXTURE_FILES`, shared with the walls and the
-terrace — `loadStoneFamily()` is memoised, so no extra download), rewrite UVs
-metre-projected at `TERRACE_TEXTURE_TILE_METERS = 1.6` m via `boxProjectUvs()`,
-and clone their own sampler state so every mapped texture stays
-`repeat = (1,1)`. Shared helpers: `fountainStoneParts()`,
-`FOUNTAIN_STONE_COLORS`, `fountainStoneMaterialParams()`, `fountainStoneTint()`
-in `src/assets.js` keep `Stone` and `StoneDark` distinguishable with *and*
-without maps: the light stone's base is white so its albedo is never tinted
-twice, and the dark stone carries a **multiplier** (`0xc8cbc9`) instead of the
-authored colour, so the map keeps its own contrast and only the overall tone
-shifts. Both passes are gated in `assetState.gateStone` /
-`assetState.fountainStone` (`flat` | `textured` | `unavailable` | `stand-in`).
-
-### Round 67 — the dressing and its bug
-
-**The cloth family.** A live audit after round 66 found one large flat mass
-left: cloth. The three lane `SackCloth` sacks (3.58 m2) and the cast GLBs' 23
-`Cloth` coat/leg/sleeve meshes (13.68 m2) were still flat colour. New pieces:
-
-- `art/kaggle/cloth_textures.py` — procedural plain-woven burlap on the Kaggle
-  T4 (CuPy backend): two warp threads per unit cell with sin^2 thread crowns,
-  per-thread value-noise slack via a lattice-periodic domain warp, albedo from
-  thread shading plus fibre speckle, roughness from the same height field,
-  tangent-space normal from a Sobel derive. 512x512, seamless by construction;
-  shipped seam ratios albedo [0.058, 0.066], normal [0.164, 0.328], rough
-  [0.012, 0.013] (all far under 3). Lossless WebP, pixel-identical to source.
-- A `cloth` PROP_FAMILY (`/cloth/i`, last in the list so it cannot pre-empt
-  roof/bark/wood) with `keepTint: true`: the albedo is a neutral grey weave with
-  no colour of its own, so the dressed materials keep their authored tint by
-  multiply — sacks stay burlap brown, coats stay their palette colours.
-- `src/npcs.js` gains `upgradeCastCloth()`, chained onto `castReady` in
-  `src/main.js` so the coats dress right after the modelled rigs swap in. A
-  failed download leaves the coats flat painted, exactly as they shipped before.
-- Tiled at 1.2 m (sacks measured 0.56 m across, so the weave reads at sack
-  scale; `CAST_CLOTH_TILE_METERS = 1.2` for the coats).
-
-**The bug the curved geometry exposed.** The first cloth pass wrote UVs with
-`boxProjectUvs`, which chose the projection plane per *vertex* with
-last-triangle-wins. Any corner shared by triangles whose dominant normal axis
-flips kept only one of the two planes, shearing the triangle on the other side:
-6 of a lane sack's 36 triangles, worst 3.3x off (implied tile 1.02 m beside
-2.19 m on one 0.56 m sack). Flat crate/slab faces never hit it, which is why
-rounds 61–66 measured clean — the sacks and coats are the first curved geometry
-the dresser meets.
-
-**The fix.** `src/assets.js` gains a two-layer API:
-
-- `boxProjectMesh({positions, indices, tileMeters})` — the pure core. Picks the
-  axis per *triangle*, counts corners touched by triangles that disagree (a
-  per-corner axis bitmask), and when seams exist returns one corner per triangle
-  slot: expanded `positions`/`uvs`, `indices: null`, plus a `remap` array. When
-  the mesh is seam-free it passes the caller's index buffer straight through.
-- `projectBoxGeometry({THREE, geometry, tileMeters})` — rebuilds a Three
-  geometry from that result, expanding every other attribute (`normal`, `color`)
-  through `remap` so shading and tint ride along, and clears the index. Returns
-  `{seams, vertices}` so a harness can report the split.
-- `boxProjectUvs` stays as the seam-free fast path but now **throws** on a
-  seamed mesh instead of shearing it silently, so a call site that forgot
-  `projectBoxGeometry` fails loudly.
-
-`src/world.js` wood dressing routes through `projectBoxGeometry` and reports
-`assetState.propWoodDetail.seams`; `src/npcs.js` cloth dressing does the same.
-
-### Round 65 — the dark stone was about to disappear
-
-Reviewing my own round-64 diff caught a real defect, not a style nit. In the
-mapped path both stones returned `color: 0xffffff, roughness: 1`, so once the
-maps loaded `StoneDark` rendered **identical** to `Stone`. The fountain would
-have lost the plinth, finial and corner blocks that give it a base — the exact
-contrast the GLB authors on purpose (authored luma 134 vs 106, a 21% drop).
-The unit test and the browser check both asserted "white" for both stones, so
-the suite was green *around* the bug: they pinned the tint, never the
-difference.
-
-The first fix that suggested itself — tint the dark stone with its authored
-colour — is wrong for the same reason tinting the light one is wrong: the map is
-already a mid-grey stone, so multiplying by `0x706a5e` darkens it twice and
-craters the contrast. `fountainStoneTint()` therefore returns the **ratio**
-between the two authored tones (`0xc8cbc9`) as the multiplier: the map's own
-detail and contrast survive intact, and only the overall tone moves. The tests
-now assert the difference rather than the whiteness — the light stone is white,
-the dark stone is not, it is a single consistent value across all six dark
-meshes, and its luma sits in a band (160–235) that is a visible tone shift and
-not a black wash.
-
-**This is why the round-64 evidence was not enough on its own.** 597 unit tests,
-244 desktop checks and 184 mobile checks all passed while the defect was live.
-A check that asserts a number is only worth its salt if the number is the one
-that matters; "both stones are white" was true and useless. The replacement
-checks fail if the two stones ever converge again.
-
-### The real bug underneath it: a missing import, swallowed
-
-Writing the tint exposed something worse. `fountainStoneTint()` was used in
-`src/world.js` but never added to its `./assets.js` import list, so
-`upgradeFountainStone()` threw a `ReferenceError` the moment it touched the
-tinted path. That rejection was absorbed by `loadAssets()`'s `Promise.all`, so:
-
-- `assetState.fountainStone` stayed at its **initial** `'flat'`, and
-- `upgradePropFamilies()` — the next `.then()` in the chain — **never ran at
-  all**, so round 63's prop wood dressing silently switched off too.
-
-The failure mode is nasty because `'flat'` is the *same value* the world
-reports when the textures genuinely fail to load. Every existing check that
-reads `assetState` passed, because "flat" is a legitimate state that is
-supposed to be reachable. The suite was not wrong about anything it measured;
-it simply never measured whether the code ran.
-
-Two fixes, because a code fix alone leaves the trap armed:
-
-1. `fountainStoneTint` is now imported. The new focused browser probe confirms
-   `fountainStone: "textured"`, 10 meshes (4 stone, 6 dark), all three maps,
-   `tileMeters: 1.6` — and `propWood: "textured"` again, which is the tell that
-   the whole `.then()` chain had been dead.
-2. A **source-level** test (`every asset helper world.js calls is actually
-   imported`) parses world.js's `./assets.js` import list and asserts that every
-   helper the file calls is in it. I removed the import again to prove the guard
-   fails, and restored it to prove it passes. A name-used-but-not-imported bug
-   cannot pass silently again.
-
-Lesson kept for the rest of this series: **a state value that is also the
-failure value cannot testify that the code ran.** Dressing checks need to read a
-positive product (maps, UVs, a mesh count) against the real scene, not only the
-summary enum.
-
-Also in this round: the market-stall stand-in dedup. The roof slab and both
-posts carried no `marketStallStandin` marker, so the modelled awning and posts
-were drawn *on top of* the flat stand-in slab and sticks, doubling them. The
-marker now covers the whole stand-in (4 → 6 hidden objects), and only the
-counters (`marketStallSize` set) spawn model instances, so a roof slab's height
-can never be used to scale a stall.
-
-**Round 67 evidence.** Unit suite **612/612 PASS**
-(`node --test tests/*.test.mjs`, 24 s) — including the new seam tests: the tube
-fixture forces 8 seam corners, the split tube is rigid (every triangle's UV
-area equals its 1 m2 plane area to 1e-6), a seam-free slab keeps the caller's
-index buffer byte for byte, `boxProjectUvs` throws `/seam/` on the tube, and the
-attribute-expansion test pins `normal`/`color` counts to the duplicated corner
-count. The round-65 source-level import guard extends to the new helpers.
-Round 67 browser evidence **19/19 checks PASS**
-(`scripts/evidence-round67.mjs`, RECORD_ARTIFACTS=1): live scene audits
-**0 sheared triangles of 2532** across every dressed family (wood 49 meshes,
-roof 7, cloth 3, cast cloth 23, leaf 12, brick 3, stone 6), worst triangle
-rigidity 1.0 within the 2% tolerance, all four split meshes (LaneWood 40 tris /
-120 corners, three SackCloth sacks 36 tris / 108 corners each) unindexed with
-exactly one corner per triangle slot, every other dressed mesh still indexed,
-split corners carry unit normals and their original colours, the three sacks
-tile uniformly at 1.2 m with zero implied-tile spread (round 66's pre-fix probe
-measured 0.53 spread, worst triangle 3.3x), the player still walks, and the
-quest spine still opens (9 quests) with no console errors. Screenshots:
-`artifacts/round67-{sack-row,sack-close,lane-view,test-stall}.png`; scene JSON:
-`artifacts/round67-evidence.json`. Kaggle run COMPLETE
-(`/worker/state/grunt-kaggle status`), cloth maps downloaded and inspected
-before use.
-
-Re-running `scripts/evidence-round67.mjs` on the review-fixed head reproduced
-**19/19 PASS** with the artifacts rewritten byte-identical, so the morph fix
-changed nothing about what the scene renders while closing the latent trap.
-
-**Round 67 review — a bug the split would have hidden.** An independent review
-of `projectBoxGeometry` (and my own adversarial probes on the pure core) turned
-up one real defect and cleared the rest:
-
-- **Fixed: morph targets were not expanded.** Every entry of
-  `geometry.attributes` followed the corner `remap`, but
-  `geometry.morphAttributes` was left at its original vertex count. A split mesh
-  whose `position` grew to 3 corners per triangle while a morph target stayed at
-  the old count makes the renderer read past the end of the smaller buffer and
-  blend the wrong target. No dressed prop uses morphs today — every dressed mesh
-  is a static GLB prop or cast cloth piece — but the split would have corrupted
-  one silently, so `projectBoxGeometry` now maps each target through the same
-  `expand()` helper it uses for attributes. Pinned by
-  `projectBoxGeometry splits morph targets with the corners`, which encodes the
-  source vertex in the target value so the mapping is checkable; I reverted the
-  fix and watched that test fail (49 pass / 1 fail), then restored it (50/50).
-- **Cleared: triangle winding.** The split writes corners in source order
-  (`dst = t * 3 + k` from `cornerIndex(t, k)`), so front faces cannot flip; a
-  direct check confirms the split `positions` equal `remap`-mapped source
-  positions element for element.
-- **Cleared: groups.** A group's `start`/`count` name index positions, and slot
-  `t * 3 + k` in the split buffer occupies the same position the triangle held in
-  the index buffer, so ranges stay correct without rewriting. Verified on a
-  two-material cylinder: groups `0+24, 24+24` still cover triangles 0–7 and 8–15
-  and the draw range ends exactly at the 48-corner buffer.
-- **Cleared: degenerate and bad input.** A collinear (zero-area) triangle
-  produces `seams=0` and finite UVs (the normal is zero, `boxAxis` returns a
-  deterministic axis, no divide by zero). `tileMeters` of `0`, negative, `NaN`,
-  `Infinity`, `undefined` or a string all fall back to 1 via the existing guard.
-  Non-finite *positions* propagate `NaN` into UVs, which is the caller's data
-  error and would already break rendering.
-- **Cleared: double expansion.** An already-unindexed mesh has no shared corners
-  to disagree about, so it reports `seams=0` and keeps its own buffer.
-
-**Round 67 mobile evidence: 183/184, one known-environment FAIL.**
-(`RECORD_ARTIFACTS=1 node scripts/test-mobile.mjs`, `/tmp/r67/mobile3.log`)
-across all four phone profiles: touch controls take over, the analog stick
-moves and stops, walking and looking work at the same time (0.82 m walked while
-turning 0.34 rad), the journal opens and closes, a dialogue choice advances the
-conversation, the build identifies itself, and all four profiles log no console
-errors. The single FAIL is the frame-rate floor on the largest viewport:
-`iPhone 13 (landscape): renders above 1fps — 0.6fps`. That check measures the
-software rasterizer (swiftshader) on a headless CPU profile, not phone GPU
-behaviour: the same profile measured 1.4fps on the round-64 baseline and 0.6fps
-here as the scene gained dressed surfaces, while iPhone 13 portrait reports
-11fps and the smaller iPhone SE 2fps in this same run. Round 67 adds no new
-geometry or draw calls — the cloth dressing reuses existing meshes with three
-more texture maps — so this is the known swiftshader ceiling on the heaviest
-profile, recorded as-is rather than papered over. The run rewrote
-`artifacts/mobile-*.png`; those three changed PNGs were reverted to the
-committed images so the tree stayed clean for the preview stamp.
-
-**Round 67 desktop evidence on the review-fixed head.**
-(`node scripts/test-round2.mjs`, `/tmp/r67/desk5.log`) **245/245 checks passed,
-exit 0, no console errors** at `0181e56`, the same head the unit suite and the
-19/19 live evidence ran against. This re-confirms, after the morph-target fix,
-that the seam split did not disturb focus handling, keyboard choices, walking
-after a conversation, relative font sizing at 100%/200%, dialogue reachability
-at 200% text, coin/quest save clamping, or the six-quest spine.
-
-**Round 67 publication state, recorded honestly.** The trusted
-`planId: release` channel verifies the *root* checkout
-(`/home/alan/projects/amazing-adventure`), which is detached at round 59
-`895bb72` with 21 texture maps and no `cloth_*.webp`, so its receipts cannot
-certify this round: the `tests` receipt completed green against `895bb72`, and
-the `browser` receipt returned `failed / execution_failed (exitCode 1)` with
-`before.head: 895bb72` and a dist listing that contains no cloth maps. Both
-receipts are honest — they tested a tree 17 commits behind this candidate. The
-host release pipeline is also still stuck (`d7e3f3fc-…`:
-`phase=blocked, reason=operation_interrupted`), which is reported in
-`/worker/state/outbox/needs-supervision.json`. Round 67 is therefore offered
-through the PR-only fallback at `0181e56`: nothing here is merged or deployed
-by me.
-
-**Round 65 evidence.** Unit suite **597/597 PASS**
-(`node --test tests/*.test.mjs`) — including the new source-level guard that
-fails when world.js calls an asset helper it forgot to import (verified by
-removing the import and watching it fail). Desktop browser suite **245/245
-checks PASS, 0 FAIL** and no console errors (`/tmp/r65-browser3.log`): the four
-light meshes report `color: "ffffff"`, and all six dark meshes report
-`"c8cbc9"` at `darkLuma 202.2` on separate materials and separate map objects.
-A focused asset probe independently reports `fountainStone: "textured"` (10
-meshes, 4 stone + 6 dark, map + normal + roughness, `tileMeters: 1.6`) **and**
-`propWood: "textured"` — the second being the tell that the whole `.then()`
-chain had been dead. Mobile suite **184/184 checks PASS, 0 FAIL**
-(`/tmp/r65-mobile.log`). Committed artifacts were restored before this run, so
-the evidence refresh left the tree clean.
-
-**Round 64 evidence.** Unit suite **597/597 PASS** (`node --test tests/*.test.mjs`),
-including 12 new asset tests pinning the family reuse, the ten-stone/two-water
-split, the two-stone distinguishability with and without maps, and the
-metre-projection arithmetic on a real basin disc. Desktop browser suite
-**244/244 checks PASS, 0 FAIL** with `RECORD_ARTIFACTS=1`
-(`/tmp/r64-final-browser.log`, 245 PASS lines, no console errors), adding gate
-and fountain dressing checks: all ten stone meshes report
-`state: "textured"` with map+normal+roughness, projected UV spans up to
-+/-1.219 m on the plinth and 1.4 m up the finial (i.e. real metre tiling, not
-the default 0..1 face UVs), every mapped texture at `repeat [1,1]` and colour
-`ffffff` (no double tint), the two fountain stones on **separate materials and
-separate map objects**, the two `Water` meshes left with no UVs, no maps and
-`roughness 0.15` so they still read as water, the gate piers and lintel dressed
-from the same family but **not** borrowing the walls' whole-wall repeat, and
-the modelled fountain still solid (a walk-in test stops outside it). Mobile
-suite **184/184 checks PASS, 0 FAIL** across all four phone profiles
-(`/tmp/r64-mobile.log`; iPhone 13 portrait 12.4fps, Pixel 7 1.4fps, iPhone SE
-2.2fps, iPhone 13 landscape 1.4fps — the low numbers are swiftshader, and the
-same profiles measured the same on the pre-round-64 baseline).
-
-**Committed on `grunt/round62-terrace`** (the round-64 commits stack on the
-round-62 branch rather than opening a new branch per round):
-
-- `643af25` — the round itself: `src/assets.js`, `src/world.js`,
-  `tests/assets.test.mjs`, `scripts/test-round2.mjs`.
-- `895e637` — the round-63 evidence script and screenshots, which had been left
-  untracked and were keeping the tree dirty and blocking preview rebuilds.
-- `d2ee3f8` — the committed preview re-stamped at the round-64 sources. The
-  rebuild reproduced the same tree digest (`db8651f6…`), so only the commit
-  pointer and the two copied sources changed.
-
-**Not done, deliberately:** no release. Round 57's release is still host-side
-blocked (`/worker/state/outbox/needs-supervision.json`), and the trusted release
-gate runs against the root checkout, which does not carry these rounds.
-Nothing here is merged or deployed by me.
 
 ## Next steps
 
-1. **Round 73 is verified and offered for publication.** Three receipts are
-   green on `6a806c1` and the request is in `/worker/state/outbox/publish.json`.
-   Read `/worker/state/outbox/publish-result.json` next cycle for the PR number.
-   Nothing is merged or deployed by me.
-2. **Trusted release stays blocked by host history policy, not game code.**
-   `origin/main` has never advanced past `c6d89b3`, the private-file screen
-   refuses >256 reachable commits and the reviewer only sees a 22,000-byte diff.
-   Reported in `needs-supervision.json`; do not retry `prepare` expecting a
-   different answer.
-3. **Round 74 candidate: animate the water, or the next flat mass.** The ripples
-   are static. A per-frame UV offset on the water normal map would be the
-   cheapest realism win left in the plaza, but the world has no per-frame hook
-   yet — add one deliberately (with a low-tier switch) rather than smuggling a
-   RAF loop into `world.js`. If that proves invasive, survey what is still flat
-   or plastic next (the sky dome and the NPC faces are the two remaining large
-   candidates) and keep the "upgrade, never a dependency" contract.
-4. **Variant maps if repetition shows in motion.** The 28 lane flags share one
-   felt nap, the props share one 0.6 m painted-iron tile, and both water discs
-   share one tile orientation — all on purpose. If playtesting shows any
-   repeating, layer a cheap dirt/rust/fibre-scale variant or a rotated phase on
-   the same base rather than a second family.
+1. **Finish round 74 (glass follows the hour).** Rerun the desktop (`256/256`
+   expected) and mobile suites on the final tree, add `scripts/evidence-round74.mjs`
+   with real screenshots, restamp `dist/` clean, commit. Then run
+   `grunt-release verify release tests|browser|mobile` and poll the three ids,
+   prepare with the exact head, self-review, and record the verdict. Publish via
+   the PR-only fallback (`publish.json`), since the trusted channel stays blocked
+   by host history size (see `/worker/state/outbox/needs-supervision.json`).
+2. **Round 75 candidate: the animated water hook.** Round 73's ripples are
+   static. A per-frame UV offset on the water normal map is the cheapest realism
+   win left, but `world.js` has no per-frame hook yet — add one deliberately with
+   a low-tier switch rather than smuggling a RAF loop into the world. If that
+   proves invasive, survey the next large flat mass (the sky dome and the NPC
+   faces remain) under the "upgrade, never a dependency" contract.
+3. **Round 73 remains offered for publication** as PR #58, head `1e15cf8`; it is
+   not merged or deployed by me. Do not restart it.
 
 ---
 
