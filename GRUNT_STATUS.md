@@ -12,66 +12,35 @@
 
 ## Current task
 
-**Round 75 is in progress on `grunt/round72-bunting-felt`: the fountain's water
-surface now moves.** Round 73 dressed the fountain's two discs with a tileable
-normal map, but the ripples stayed frozen — a normal map that never moves reads
-as a photograph of water rather than water. The cheapest realism win left is a
-per-frame UV offset on the normal (and roughness) map, and it is the first
-per-frame hook in `world.js`, so it is kept deliberate rather than smuggled in.
+**Round 75 is complete and committed** (publication pending via the PR-only
+fallback): the fountain's water surface now moves. Round 73 dressed the two
+discs with a tileable normal map, but the ripples stayed frozen; round 75
+adds the first per-frame hook in `world.js` — a per-frame UV offset on the
+normal and roughness maps (the albedo stays put). Pure module `src/water.js`,
+world wiring (`environment.waterMaterial` / `waterOffset` / `updateWater(dt)`),
+frame hook in `main.js`, manifest entry.
 
-- `src/water.js` (new, pure, no Three.js): `WATER_FLOW_SPEED` (0.04 UV/s, a
-  gentle swell), `shouldAnimateWater(tier)`, `waterOffsetStep(dt, {speed, low})`,
-  `advanceWaterOffset(current, dt, {speed, low, tier})`. Contracts: zero or
-  negative dt never moves the surface; the low tier freezes it (a moving
-  highlight over a dark scene draws the eye to water the player cannot see);
-  the y step lags the x step so ripples are not square; the offset wraps into
-  [0, 1) and the input is never mutated.
-- `src/world.js`: `upgradeFountainWater()` now records `environment.waterMaterial`
-  and `environment.waterOffset = {x:0, y:0}` and zeroes the normal/roughness map
-  offsets; `environment.updateWater(dt)` advances the shared offset and writes
-  it to both maps, returning the new offset. The albedo map is deliberately left
-  alone — it is the water's colour, which should stay put while the surface
-  moves over it.
-- `src/main.js`: `frame()` calls `environment.updateWater(dt)` once per frame,
-  after the phase has settled so a phase jump cannot leave the surface on the
-  wrong tick.
-- `src/manifest.js`: `src/water.js` added to `REQUIRED_FILES`.
-- `tests/water.test.mjs` (new): 8 pure checks on the contract above.
+Verification on this round: unit 660/660 pass (8 new in `tests/water.test.mjs`);
+desktop browser 256/256 exit 0; mobile 184/184 exit 0 (profiles: iPhone 13
+portrait 11.5fps, Pixel 7 1.3fps, iPhone SE 2fps, iPhone 13 landscape 1.4fps);
+evidence 23/23 with rendered-pixel proof (10515 changed water pixels, max
+delta 32; same offset byte-for-byte; low-tier freeze; albedo stays put; no
+console errors). Screenshots: `artifacts/round75-fountain-day.png`,
+`artifacts/round75-fountain-night.png`, `artifacts/round75-evidence.json`.
 
-**Status of this round:** the code, tests, manifest and dist restamp are
-committed — `2e4cf17` (pure module, world wiring, frame hook, tests, checkpoint)
-and `af7f99a` (the tier-freeze fix: `waterOffsetStep` honoured a supplied
-`{tier: 'low'}` only after the unit run caught it, plus the regenerated
-`release-manifest.json` and restamped `dist/`; an interim `dist/src/water.js`
-left by a dirty-tree build was removed so the tree is clean). The evidence
-script `scripts/evidence-round75.mjs` is written and green: **23/23 checks**,
-including a rendered-pixel proof that a different UV offset paints 10515
-different water pixels (max delta 32) while the same offset reproduces
-byte-for-byte, plus the low-tier freeze, the albedo staying put, and no console
-errors. Screenshots saved: `artifacts/round75-fountain-day.png` and
-`artifacts/round75-fountain-night.png`, plus `artifacts/round75-evidence.json`.
-Unit suite **660/660 pass, 0 fail**. Desktop browser suite **256/256 checks,
-exit 0**, no console errors; mobile suite **184/184 checks, exit 0**, no console
-errors (profiles: iPhone 13 portrait 11.5fps, Pixel 7 1.3fps, iPhone SE 2fps,
-iPhone 13 landscape 1.4fps) — the per-frame hook caused no regression. (One
-mobile attempt died on a CDP `Input.dispatchTouchEvent` protocol timeout under
-the host's SwiftShader load; the clean rerun is the recorded result.)
-**Status of this round:** the code, tests, manifest, dist restamp and
-evidence are committed at d587ea6 (unit 660/660, desktop 256/256, mobile
-184/184, evidence 23/23, no console errors). The three trusted `release`
-verifications completed exitCode 0 unchanged on this head (tests
+Trusted `release` verifications on d587ea6 (exitCode 0, unchanged): tests
 2aef7929-964f-4370-9fc8-de4ef0d217ed, browser
 1fbac375-b353-441f-b31e-e6c395b8ed81, mobile
-7d074ec9-dc3f-4398-8fb1-4e7d3d75bd54); prepare (387c368d) reached
-`awaiting_review`, self-review approved, and advance left it `ready` because the
-trusted channel cannot clear the host history screen. The PR-only fallback
-publish request has been written to /worker/state/outbox/publish.json for the
-host to push and open/update the PR. Rounds 73-74 remain offered as PR #58
-(head b119428); neither is merged or deployed by me.
+7d074ec9-dc3f-4398-8fb1-4e7d3d75bd54; prepare 387c368d reached
+`awaiting_review`, self-review approved; advance left it `ready` because the
+trusted channel cannot clear the host history screen (278 reachable commits
+vs 256 limit, 4.3 MB cumulative diff). Publication goes through the PR-only
+fallback, as with rounds 73-74 (PR #58). The final head is a
+GRUNT_STATUS.md-only commit on top of the verified d587ea6, mirroring the
+round 73 handoff.
 
-Round 74 is committed as `b119428` and published as PR #58 (head `b119428`);
-round 73 is the same PR. Neither is merged or deployed by me.
-
+Rounds 73-74 remain offered as PR #58 (head b119428); neither merged nor
+deployed by me.
 
 ## Next steps
 
@@ -119,6 +88,21 @@ modelled lantern, nine small flat materials named so the materials audit has no
 247/247, unit 626/627 before the dist restamp (the one failure being exactly the
 stale-preview check the restamp fixes). See the "Current task" section at the
 top of this file and the Round 69 sections below for the AO work this builds on.
+
+## Next steps
+
+1. **Round 76 candidate: survey the next large flat mass** under the "upgrade,
+   never a dependency" contract — the sky dome and the NPC faces remain the
+   biggest unmapped surfaces after the water and glass rounds. Prefer a small,
+   self-contained per-surface pass with a pure module and a browser check, as
+   with glass and water. Start with a survey of unmapped materials (names,
+   counts, where they live) before committing to a target.
+2. **Publication:** round 75 is offered through the PR-only fallback
+   (publish.json written for `grunt/round72-bunting-felt`); the trusted channel
+   stays blocked by host history size (needs-supervision.json). Rounds 73-74
+   remain PR #58.
+3. **Do not restart rounds 73-74** (open as PR #58, head b119428); neither is
+   merged or deployed by me.
 
 ## Round 5 — playable phone preview (owner priority)
 
