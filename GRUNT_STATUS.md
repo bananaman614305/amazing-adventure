@@ -12,66 +12,60 @@
 
 ## Current task
 
-**Round 74 is in progress on `grunt/round72-bunting-felt` (uncommitted): the
-plaza's window and lamp glass now follows the hour.** Round 73's materials audit
-left two glass materials at the top of the flat list: `HouseGlass` (4.63 m2, flat
-`#616c76`) and `LampGlass` (4.50 m2, flat `#f9f1ce`) — together a fifth of all
-flat-coloured area the audit can still find, and exactly the surface where flat
-colour reads as plastic. A window should be dark and reflective by day and warm
-from inside at night; a lamp pane should glow only while its own bulb is lit.
+**Round 75 is in progress on `grunt/round72-bunting-felt`: the fountain's water
+surface now moves.** Round 73 dressed the fountain's two discs with a tileable
+normal map, but the ripples stayed frozen — a normal map that never moves reads
+as a photograph of water rather than water. The cheapest realism win left is a
+per-frame UV offset on the normal (and roughness) map, and it is the first
+per-frame hook in `world.js`, so it is kept deliberate rather than smuggled in.
 
-- `src/glass.js` (new, pure, no Three.js): the authored fallback values, the warm
-  `GLASS_EMISSIVE` tint, a per-phase `GLASS_LOOKS` table (day/dusk/night) and
-  `glassStateFor(kind, phase, {laneLit, low})`. Contracts: a lane pane never glows
-  over a dark bulb; a window ignores the lane round entirely; the low tier dims
-  the glow to a 0.6 cap because it turns the point lights off.
-- `src/world.js`: `glassPanes` registry filled by the house, plaza-lamp and
-  lane-post passes; `environment.applyGlass(phase, {laneLit, low})` writes the
-  panes and records `environment.glassPhase`; `applyPhase()` now calls it after
-  the lights settle so glass can never disagree with the lighting it reflects;
-  `setQuality()` re-writes the panes immediately on a tier flip; `reportGlass()`
-  runs last in `loadAssets()` and reports `glass: 'phase-lit'` +
-  `glassDetail {panes 7, windows 2, lamps 5, lanePanes 1}`. The lane post's pane
-  is cloned off the shared cached `LampGlass` so a dark lane cannot drag the four
-  plaza lanterns down with it (the same trap round 55 hit with the bulb).
-- `src/manifest.js`, `release-manifest.json`, `dist/` restamped; the glass map
-  stays unmapped on purpose, so round 73's "what stays flat" browser check was
-  reworded to say "unmapped" without weakening it.
+- `src/water.js` (new, pure, no Three.js): `WATER_FLOW_SPEED` (0.04 UV/s, a
+  gentle swell), `shouldAnimateWater(tier)`, `waterOffsetStep(dt, {speed, low})`,
+  `advanceWaterOffset(current, dt, {speed, low, tier})`. Contracts: zero or
+  negative dt never moves the surface; the low tier freezes it (a moving
+  highlight over a dark scene draws the eye to water the player cannot see);
+  the y step lags the x step so ripples are not square; the offset wraps into
+  [0, 1) and the input is never mutated.
+- `src/world.js`: `upgradeFountainWater()` now records `environment.waterMaterial`
+  and `environment.waterOffset = {x:0, y:0}` and zeroes the normal/roughness map
+  offsets; `environment.updateWater(dt)` advances the shared offset and writes
+  it to both maps, returning the new offset. The albedo map is deliberately left
+  alone — it is the water's colour, which should stay put while the surface
+  moves over it.
+- `src/main.js`: `frame()` calls `environment.updateWater(dt)` once per frame,
+  after the phase has settled so a phase jump cannot leave the surface on the
+  wrong tick.
+- `src/manifest.js`: `src/water.js` added to `REQUIRED_FILES`.
+- `tests/water.test.mjs` (new): 8 pure checks on the contract above.
 
-**Live browser results (real headless Chrome, exact tree):**
-- unit suite — **652/652 pass, 0 fail** (11 new in `tests/glass.test.mjs`)
-- desktop browser suite — **256/256 checks, exit 0**, no console errors, run 1:
-  255/256. The one failure (`r74-desktop1.log:160`) was **my own wrong
-  assertion**: it required every pane to change metalness by hour, but a lamp
-  pane keeps `metalness 0.15` and changes only its tint and glow. Fixed the
-  assertion (windows carry the metalness band) — not the game code.
-- Independent live probes confirm: night lane lit ⇒ lane pane 2.6, plaza panes
-  2.6, windows 2.2; lane dark ⇒ lane pane 0, everything else unchanged; dusk
-  window 1.1 < night 2.2; `quality.set('low')` dims all 7 panes to 0.6 and
-  `set('full')` restores 2.6/2.2 with **no phase change**.
+**Status of this round:** pure module, world wiring, frame hook, manifest entry and
+tests are written on disk but not yet committed. Still to do: run `npm test` and
+the desktop/mobile browser suites on the final tree, add
+`scripts/evidence-round75.mjs` with real screenshots, restamp `dist/`, commit,
+then obtain the three `release` verifications and prepare. The trusted channel
+stays blocked by host history size (see `/worker/state/outbox/needs-supervision.json`),
+so publication goes through the PR-only fallback as with round 74.
 
-**Next actions for this round:** rerun both browser suites on the final tree,
-write `scripts/evidence-round74.mjs`, record screenshots, restamp `dist/`,
-commit, then obtain the three `release` verifications and prepare.
+Round 74 is committed as `b119428` and published as PR #58 (head `b119428`);
+round 73 is the same PR. Neither is merged or deployed by me.
 
 
 ## Next steps
 
-1. **Finish round 74 (glass follows the hour).** Rerun the desktop (`256/256`
-   expected) and mobile suites on the final tree, add `scripts/evidence-round74.mjs`
-   with real screenshots, restamp `dist/` clean, commit. Then run
-   `grunt-release verify release tests|browser|mobile` and poll the three ids,
-   prepare with the exact head, self-review, and record the verdict. Publish via
-   the PR-only fallback (`publish.json`), since the trusted channel stays blocked
-   by host history size (see `/worker/state/outbox/needs-supervision.json`).
-2. **Round 75 candidate: the animated water hook.** Round 73's ripples are
-   static. A per-frame UV offset on the water normal map is the cheapest realism
-   win left, but `world.js` has no per-frame hook yet — add one deliberately with
-   a low-tier switch rather than smuggling a RAF loop into the world. If that
-   proves invasive, survey the next large flat mass (the sky dome and the NPC
-   faces remain) under the "upgrade, never a dependency" contract.
-3. **Round 73 remains offered for publication** as PR #58, head `1e15cf8`; it is
-   not merged or deployed by me. Do not restart it.
+1. **Finish round 75 (animated water).** Run `npm test` (660 expected: 652 + 8
+   new in `tests/water.test.mjs`), rerun the desktop and mobile browser suites on
+   the final tree, add `scripts/evidence-round75.mjs` with real screenshots of
+   the fountain at two clock offsets so the UV travel is visible, restamp
+   `dist/` clean, commit. Then obtain the three `release` verifications, prepare
+   with the exact head, self-review, and record the verdict. Publish via the
+   PR-only fallback, since the trusted channel stays blocked by host history size.
+2. **Round 76 candidate: survey the next large flat mass** under the "upgrade,
+   never a dependency" contract — the sky dome and the NPC faces remain the
+   biggest unmapped surfaces after the water and glass rounds. Prefer a small,
+   self-contained per-surface pass with a pure module and a browser check, as
+   with glass and water.
+3. **Rounds 73–74 remain offered for publication** as PR #58 (head `b119428`);
+   neither is merged or deployed by me. Do not restart them.
 
 ---
 

@@ -1836,6 +1836,9 @@ function frame() {
   // phase boundary. applyPhase() still sets the baseline (so a single forced
   // phase looks right immediately); this keeps it breathing between keyframes.
   applyAtmosphere(environment, clockSeconds);
+  // Round 75: the fountain's ripples travel. One call, after the phase has
+  // settled so a phase jump cannot leave the surface on the wrong tick.
+  if (environment.updateWater) environment.updateWater(dt);
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
   maybeStartAmbient(dt);
