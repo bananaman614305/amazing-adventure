@@ -38,13 +38,21 @@ per-frame hook in `world.js`, so it is kept deliberate rather than smuggled in.
 - `src/manifest.js`: `src/water.js` added to `REQUIRED_FILES`.
 - `tests/water.test.mjs` (new): 8 pure checks on the contract above.
 
-**Status of this round:** pure module, world wiring, frame hook, manifest entry and
-tests are written on disk but not yet committed. Still to do: run `npm test` and
-the desktop/mobile browser suites on the final tree, add
-`scripts/evidence-round75.mjs` with real screenshots, restamp `dist/`, commit,
-then obtain the three `release` verifications and prepare. The trusted channel
-stays blocked by host history size (see `/worker/state/outbox/needs-supervision.json`),
-so publication goes through the PR-only fallback as with round 74.
+**Status of this round:** the code, tests, manifest and dist restamp are
+committed — `2e4cf17` (pure module, world wiring, frame hook, tests, checkpoint)
+and `af7f99a` (the tier-freeze fix: `waterOffsetStep` honoured a supplied
+`{tier: 'low'}` only after the unit run caught it, plus the regenerated
+`release-manifest.json` and restamped `dist/`; an interim `dist/src/water.js`
+left by a dirty-tree build was removed so the tree is clean). All three suites
+are green on the exact tree, in real headless Chrome: unit suite **660/660 pass,
+0 fail** (652 prior + 8 new in `tests/water.test.mjs`); desktop browser suite
+**256/256 checks, exit 0**, no console errors; mobile suite **184/184 checks,
+exit 0**, no console errors. Still to do: write `scripts/evidence-round75.mjs`
+with real screenshots of the fountain at two clock offsets so the UV travel is
+visible, then obtain the three `release` verifications, prepare with the exact
+head, self-review, and record the verdict. The trusted channel stays blocked by
+host history size (see `/worker/state/outbox/needs-supervision.json`), so
+publication goes through the PR-only fallback as with round 74.
 
 Round 74 is committed as `b119428` and published as PR #58 (head `b119428`);
 round 73 is the same PR. Neither is merged or deployed by me.
