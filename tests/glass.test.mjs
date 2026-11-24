@@ -120,8 +120,10 @@ test('a window casts its frame shadow; a lamp pane does not', () => {
 });
 
 test('the authored fallback values match the shipped GLB materials', () => {
-  // These are the values the panes ship with; the world reads them so an
-  // undressed pane degrades toward what Blender authored rather than to black.
+  // These are the values the GLBs author, kept here so the record says what the
+  // pass replaces. Nothing in src/ reads them at runtime: a pane picks them up
+  // from the model itself, and if the model never loads no pane registers at
+  // all (glass then stays 'flat').
   assert.deepEqual(GLASS_AUTHORED.window, { color: 0x616c76, roughness: 0.25, metalness: 0.2 });
   assert.deepEqual(GLASS_AUTHORED.lamp, { color: 0xf9f1ce, roughness: 0.15, metalness: 0 });
 });
