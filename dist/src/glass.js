@@ -20,8 +20,12 @@
 // fetch for something a per-phase value states exactly.
 
 /**
- * The authored colour each glass material ships with, so a pane that never gets
- * dressed still has a sensible fallback and the audit can name what it replaced.
+ * The authored colour each glass material ships with.
+ *
+ * Recorded, not applied: a pane reads its own material from the model, so the
+ * fallback a player ever sees is whatever Blender exported. These values are
+ * here so the audit and the tests can name exactly what the per-hour pass
+ * replaces, and so a future re-authoring can be checked against them.
  */
 export const GLASS_AUTHORED = {
   window: { color: 0x616c76, roughness: 0.25, metalness: 0.2 },
