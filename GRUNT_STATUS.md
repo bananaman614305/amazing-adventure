@@ -12,7 +12,43 @@
 
 ## Current task
 
-**Round 84 complete: dress the cast's paper props.**
+**Round 85: the night sky's star field.**
+
+The night sky is the biggest free realism win left: the dome is a gradient, the
+sun a disc, and after dark the sky itself was featureless navy. `src/stars.js`
+(now registered in the manifest) is the pure half — a deterministic seeded field
+of 260 points on a 116 m radius inside the 120 m dome, all above the horizon
+haze band, with per-phase visibility (day 0 / dusk 0.22 / night 1), a bounded
+twinkle, white-with-warm-and-cool-tints colours, and slight size variation. No
+`Math.random` anywhere in the sim; a screenshot taken twice looks the same. The
+world half builds one `THREE.Points` mesh (one draw call, additive, fog and
+depth-write off, renderOrder -1 with the sun) from `buildStarField()`; the
+phase opacity lives in `applyPhase()` and a per-frame `updateStars(dt)` breathes
+the size via `starTwinkle`. main.js calls it beside `updateWater(dt)`.
+
+Evidence so far: unit suite 743/743 (stars 10/10, preview/manifest/digest
+green, dist restamped 9e836e9 at digest 5aa80a5e). Desktop browser suite
+running in the background (3 new star checks + `round85-stars.png` capture);
+mobile suite to follow.
+
+## Next steps
+
+1. Browser suite result: expect 288/288 (285 + 3 star checks) and
+   `round85-stars.png` captured; then run the mobile suite (expect 184/184, no
+   console errors).
+2. Record the browser and mobile evidence in GRUNT_STATUS.md, commit, and
+   publish via the PR-only fallback: overwrite
+   /worker/state/outbox/publish.json with branch grunt/round72-bunting-felt,
+   base main, title "Round 85: night-sky star field", exact HEAD; refresh
+   needs-supervision.json to the same head. Do not merge or deploy from a shell.
+3. Choose the next useful milestone: the audit flat list is HouseGlass 4.63,
+   LampGlass 4.5, LaneRope 1.92, NpcMarker 1.77, LanternHousing 1.32, SackTie
+   1.04, LampBulb 0.58, WoodP 0.34 (all by design or already documented
+   stay-flat); the next largest genuinely dressable surface family is the next
+   candidate. Continue the economy rule (hasItem-guarded, one-time, no restock,
+   no dawn reset) for any new sink.
+
+## Round 84 complete: dress the cast's paper props.
 
 Round 84 dresses the cast's three `Paper` meshes -- oswin's Apron, sable's
 PropMap and wren's PropLedgerPages (0.31 m2 of flat colour before; GLB JSON
