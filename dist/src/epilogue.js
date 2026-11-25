@@ -1,9 +1,9 @@
-// The ending. Six quests currently just... stop. A player who finishes everything
+// The ending. Seven quests currently just... stop. A player who finishes everything
 // gets silence, which makes the whole thing feel unfinished rather than complete.
 //
 // The epilogue is deliberately composed from what the player actually did, using
 // the same `outcomes` record the journal uses, plus their standing. There is no
-// single "you win" text: two players who finish the same six quests can read
+// single "you win" text: two players who finish the same seven quests can read
 // materially different endings, and the ending never claims something that did
 // not happen.
 
@@ -121,7 +121,7 @@ export function buildEpilogue(state) {
   const closers = factionClosers(state);
   return {
     title: 'The plaza at closing',
-    opening: 'Six errands, and none of them were only errands. The lanterns are lit, the gate is open, and the lane’s books are as straight as they have been in a month.',
+    opening: 'Seven errands, and none of them were only errands. The lanterns are lit, the gate is open, and the lane’s books are as straight as they have been in a month.',
     branches,
     // A save finished before branches were recorded (or a hand-edited one) has no
     // outcomes. Saying nothing about what the player chose would be a quiet lie,

@@ -98,7 +98,7 @@ export const QUESTS = {
   // --- Late faction chores (round 60) --------------------------------------
   // Two short errands that only become reachable in the last third of the game,
   // so the ending is not one faction’s story. They deliberately live outside
-  // QUEST_ORDER: the six-quest spine stays six quests, while a player who did
+  // QUEST_ORDER: the seven-quest spine stays seven quests, while a player who did
   // the side work still gets the recognition for it.
   wicks: {
     title: 'The Wick Round', giver: 'mara',
