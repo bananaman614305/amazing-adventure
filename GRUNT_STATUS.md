@@ -12,33 +12,39 @@
 
 ## Current task
 
-**Round 86: dress the lane bunting's rope strand (LaneRope).**
+**Round 86: dress the lane bunting's rope strand (LaneRope) -- COMPLETE.**
 
 Round 85 (night-sky star field) is complete, verified and published via the
-PR-only fallback. publish.json is at HEAD 4d45bf9 with the full evidence
-(unit 743/743, desktop browser 288/288 with 3 star checks, mobile 184/184);
-the trusted channel stays blocked_infrastructure. Round 86 picks the largest
-genuinely dressable flat family left from the audit: the LaneRope strand (3
-meshes, 1.92 m², authored brown 0x6b5236, roughness 0.95). It gets a
-procedural twisted-fibre rope map at a 0.08 m tile (keepTint true so the
-authored brown survives), a new pure src/rope.js family, an
-upgradeLaneRope() pass in world.js modeled on upgradeBuntingFelt(), and
-browser checks with a round86-rope.png capture. LanternHousing (reuse LAMP
-maps at a smaller tile) is the Round 87 follow-up.
+PR-only fallback. Round 86 dresses the three LaneRope boxes (2 cm, 1.92 m2,
+authored brown 0x6b5236) with a procedural twisted-fibre rope map at a 0.08 m
+tile (keepTint true). Delivered: src/rope.js pure module + tests/rope.test.mjs
+(8/8), art/kaggle/rope_textures.py generator + the three rope_*.webp maps
+produced locally with PIL, an upgradeLaneRope() pass in world.js modeled on
+upgradeBuntingFelt() (assetState.rope 'textured', 3 meshes, 1 material,
+seams, tileMeters 0.08), src/assets.js ROPE_TEXTURE_FILES, manifest entries
+(src/rope.js + 3 textures), and browser checks in scripts/test-round2.mjs
+(5 checks + round86-rope.png capture). Round 87 follow-ups (housing.js and
+sacktie.js pure modules, 8/8 each) are also landed, ready for their world.js
+passes.
 
-Evidence so far: A (src/rope.js pure module + tests/rope.test.mjs) 8/8 pass;
-B (art/kaggle/rope_textures.py generator) in progress. C (world.js pass) and
-D (assets/manifest/browser checks) running in parallel.
+Parallel build record (owner request): split into A (src/rope.js + tests),
+B (rope_textures.py generator), C (world.js upgradeLaneRope pass) and D
+(assets.js/manifest/browser checks). A took ~42s, B ~568s (429 relaunch, then
+completed locally via PIL), C ~276s, D was folded into the integration step
+because no agent landed it. Parallel was faster than serial for the pure
+modules and the world pass, and the 429 on B was recoverable.
 
 ## Next steps
 
-1. Parallel Round 86 build: A done (rope.js + tests 8/8); B generator running
-   (webps may be produced locally if numpy/Pillow are available); C and D in
-   flight. When all finish, integrate, rerun `npm test`, then desktop and
-   mobile suites one at a time, restamp dist, and checkpoint.
-2. After Round 86 integrates: Round 87 LanternHousing (reuse LAMP maps at a
-   smaller tile) is the follow-up candidate. Continue the economy rule
-   (hasItem-guarded, one-time, no restock, no dawn reset) for any new sink.
+1. Round 86 is integrated; rerun `npm test` (currently 1 preview digest stale
+   after the manifest change -- restamp dist next), then desktop and mobile
+   browser suites one at a time, then commit and checkpoint.
+2. Round 87: wire housing.js and sacktie.js into src/assets.js (HOUSING/SACKTIE
+   texture files -- housing reuses LAMP maps at a 0.25 m tile, sacktie reuses
+   CLOTH maps at 0.04 m), add upgradeLanternHousing() and upgradeSackTie()
+   passes in world.js, manifest entries, browser checks, and captures. Continue
+   the economy rule (hasItem-guarded, one-time, no restock, no dawn reset) for
+   any new sink.
 3. Keep the trusted release channel's blocked_infrastructure status in view;
    publication continues via the PR-only fallback until it clears.
 

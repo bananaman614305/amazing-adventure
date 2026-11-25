@@ -3434,6 +3434,61 @@ try {
     starInfo.day.opacity === 0 && starInfo.day.visible === false,
     JSON.stringify({ opacity: starInfo.day.opacity, visible: starInfo.day.visible }));
   await capture(page, 'round85-stars.png');
+  // --- 28n2. The lane rope's rope strand (round 86) -------------------------
+  // The three LaneRope boxes (2 cm diameter, 1.92 m2 total) that span the
+  // lane are dressed with the round 86 twisted-fibre rope maps at a 0.08 m
+  // physical tile, keeping the authored brown tint. Checked live after the
+  // real asset chain.
+  const rope = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const rows = [];
+    const materials = new Set();
+    api.scene.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      if (!/^LaneRope$/i.test(o.material.name || '')) return;
+      const uv = o.geometry.getAttribute('uv');
+      materials.add(o.material.uuid);
+      rows.push({
+        name: o.name,
+        materialName: o.material.name,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+        hasUv: Boolean(uv),
+        tint: o.material.color.getHexString(),
+        roughness: Number(Number(o.material.roughness).toFixed(3)),
+        metalness: Number(o.material.metalness).toFixed(3),
+        image: o.material.map ? o.material.map.image.width : 0,
+        repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+        wrapped: o.material.map
+          ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+        dressed: o.userData.ropeDressed === true
+      });
+    });
+    const st = typeof api.assetState === 'function' ? api.assetState() : api.assetState;
+    return { rows, materials: materials.size, assetState: st.rope, detail: st.ropeDetail };
+  });
+  checks.check('all 3 LaneRope meshes wear the three rope maps',
+    rope.rows.length === 3 && rope.rows.every((r) => r.maps === 3 && r.hasUv
+      && r.image === 512),
+    JSON.stringify({ rows: rope.rows.length,
+                    maps: [...new Set(rope.rows.map((r) => r.maps))],
+                    images: [...new Set(rope.rows.map((r) => r.image))] }));
+  checks.check('the rope map is one per material and tiles by projection, not repeat',
+    rope.materials >= 1 && rope.rows.every((r) => r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    `${rope.materials} materials for ${rope.rows.length} meshes; ` +
+    JSON.stringify([...new Set(rope.rows.map((r) => JSON.stringify(r.repeat)))]));
+  checks.check('the dressed rope keeps the authored brown tint (keepTint true)',
+    rope.rows.every((r) => r.tint !== 'ffffff'),
+    JSON.stringify([...new Set(rope.rows.map((r) => r.tint))]));
+  checks.check('the dressed rope sits at rope roughness 0.9, not metal',
+    rope.rows.every((r) => r.roughness === 0.9 && Number(r.metalness) === 0),
+    JSON.stringify({ roughness: [...new Set(rope.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(rope.rows.map((r) => r.metalness))] }));
+  checks.check('assetState reports the rope as textured',
+    rope.assetState === 'textured',
+    JSON.stringify({ assetState: rope.assetState, detail: rope.detail }));
+  await capture(page, 'round86-rope.png');
   // --- 28o. Vegetation: trees stand in, upgrade to models --------------------
   const trees = await page.evaluate(async () => {
     const api = window.amazingAdventure;

@@ -29,11 +29,12 @@ import {
   cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts,
   fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint,
   ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor,
-  PAPER_TEXTURE_FILES
+  PAPER_TEXTURE_FILES, ROPE_TEXTURE_FILES
 } from './assets.js';
 import {
   boardPaperFamilyFor, boardPaperParams, shouldDressBoardPaper, CAST_PAPER_TILE_METERS
 } from './paper.js';
+import { ROPE_TILE_METERS, ROPE_FAMILY } from './rope.js';
 import { loadGlb } from './glb.js';
 import {
   glassKindFor,
@@ -449,6 +450,9 @@ export function buildWorld(renderer) {
   // The pennants are collected here so the felt pass can reach them without a
   // scene-wide traverse that would also catch every other mesh in the lane.
   const buntingFlags = [];
+  // Round 86: the three rope strands are collected the same way, so
+  // upgradeLaneRope() dresses exactly the `LaneRope` meshes and nothing else.
+  const buntingRopes = [];
   const flagGeometry = new THREE.ConeGeometry(0.09, 0.22, 3);
   for (const strand of LANE_BUNTING) {
     // The rope: a thin box spanning the lane, dipping in the middle.
@@ -459,6 +463,7 @@ export function buildWorld(renderer) {
     // Approximate the sag with two angled halves so the rope visually dips.
     rope.position.set((LANE.minX + LANE.maxX) / 2, strand.y - strand.sag / 2, strand.z);
     scene.add(rope);
+    buntingRopes.push(rope);
     const span = LANE.maxX - LANE.minX;
     for (let i = 0; i < strand.flags; i += 1) {
       const t = (i + 0.5) / strand.flags;
@@ -1071,6 +1076,10 @@ export function buildWorld(renderer) {
     clothDetail: null,
     bunting: 'flat',
     buntingDetail: null,
+    // Round 86: the lane bunting's rope strands (LaneRope), dressed separately
+    // from the felt flags because a 2 cm rope wants a fibre map, not a weave.
+    rope: 'flat',
+    ropeDetail: null,
     iron: 'flat',
     ironDetail: null,
     banner: 'plane',
@@ -1964,6 +1973,98 @@ export function buildWorld(renderer) {
         seams,
         maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
         tileMeters: FELT_FAMILY.tileMeters
+      };
+      return assetState;
+    });
+  }
+
+  /**
+   * Dresses the lane bunting's rope strands (Round 86).
+   *
+   * The three `LaneRope` boxes are 2 cm square and 20+ m long, so the authored
+   * 0..1 box UVs would smear one texel along the whole span. A metre-space box
+   * projection at ROPE_TILE_METERS (0.08 m) puts a few tiles across the width
+   * and hundreds along the length, which is what makes the twisted-fibre map
+   * read as lay rather than as a flat brown stripe.
+   *
+   * All three strands share one source material, so one dressed material is
+   * made and handed to all three; the geometries are separate, so each gets its
+   * own projection and its own seam count. `keepTint` is true (see rope.js):
+   * the rope albedo is near-neutral, so the authored 0x6b5236 brown must stay
+   * as the tint over the map.
+   */
+  function upgradeLaneRope() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.rope = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: ROPE_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.rope = 'flat';
+        return assetState;
+      }
+      const dressed = new Map();
+      let ropes = 0;
+      let seams = 0;
+      for (const rope of buntingRopes) {
+        const source = rope.material;
+        if (!source || !/lanerope/i.test(source.name || '')) continue;
+        // Metre-space UVs, not the box's authored 0..1 pair: the rope is the
+        // longest thin surface in the lane, so a 0..1 map is the worst case in
+        // the scene. The projection also splits the box corners that straddle
+        // axes so the fibre does not shear along an edge.
+        const split = projectBoxGeometry({
+          THREE,
+          geometry: rope.geometry,
+          tileMeters: ROPE_TILE_METERS
+        });
+        seams += split.seams;
+        let material = dressed.get(source);
+        if (!material) {
+          material = new THREE.MeshStandardMaterial({
+            // keepTint: the rope albedo carries no strong hue, so the authored
+            // 0x6b5236 brown is what colours the strand. Forcing white would
+            // turn the bunting's rope into pale unbleached cord.
+            color: source.color ? source.color.getHex() : 0xffffff,
+            roughness: ROPE_FAMILY.roughness,
+            metalness: ROPE_FAMILY.metalness,
+            // The source name is what the material audit and the tests key on;
+            // losing it would drop the ropes back into an anonymous bucket.
+            name: source.name,
+            side: source.side
+          });
+          for (const [key, texture] of Object.entries(textures)) {
+            if (!texture || key === 'anyLoaded') continue;
+            const copy = texture.clone();
+            copy.needsUpdate = true;
+            copy.wrapS = THREE.RepeatWrapping;
+            copy.wrapT = THREE.RepeatWrapping;
+            // UVs are already in metres; one repeat keeps the rope tile size
+            // (see ROPE_TILE_METERS -- 0.08 m of lay fibre).
+            copy.repeat.set(1, 1);
+            // The strands are seen edge-on down the whole lane, the worst case
+            // for a fibre map, so spend the full anisotropy the renderer offers
+            // (capped at 8): there are only three ropes, so this is cheap.
+            copy.anisotropy = Math.min(8, renderer.capabilities?.getMaxAnisotropy?.() || 1);
+            material[key] = copy;
+          }
+          dressed.set(source, material);
+        }
+        rope.material = material;
+        rope.userData.ropeDressed = true;
+        ropes += 1;
+      }
+      assetState.rope = ropes > 0 ? 'textured' : 'flat';
+      assetState.ropeDetail = {
+        ropes,
+        materials: dressed.size,
+        seams,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: ROPE_TILE_METERS
       };
       return assetState;
     });
@@ -3066,7 +3167,7 @@ export function buildWorld(renderer) {
      */
     loadAssets() {
       return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner()])
-        .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt()).then(() => upgradeBoardPaper())
+        .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt()).then(() => upgradeLaneRope()).then(() => upgradeBoardPaper())
         // Water runs last and after the prop pass on purpose: the water discs
         // must not pick up the stone/iron families, and it needs the modelled
         // fountain to be in the scene before it has anything to dress.

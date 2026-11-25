@@ -288,6 +288,21 @@ export const PAPER_TEXTURE_FILES = {
 };
 
 /**
+ * Rope family for the lane bunting's rope strand (`LaneRope`).
+ *
+ * The 3 thin boxes (2 cm diameter, 1.92 m2 total) that span the lane were
+ * authored as flat brown (#6b5236) with no maps and no UVs. A 2 cm rope should
+ * read as laid fibre, so it gets a procedural twisted-fibre map at a 0.08 m
+ * tile (see ROPE_TILE_METERS / src/rope.js). The albedo is neutral grey-brown
+ * so the authored brown survives tinting (keepTint true).
+ */
+export const ROPE_TEXTURE_FILES = {
+  map: 'assets/textures/rope_albedo.webp',
+  normalMap: 'assets/textures/rope_normal.webp',
+  roughnessMap: 'assets/textures/rope_rough.webp'
+};
+
+/**
  * Metres per felt tile, in UV space.
  *
  * Chosen against the thing that actually has to read as felt: a bunting pennant
