@@ -12,26 +12,49 @@
 
 ## Current task
 
-**Round 76 complete: cast faces and hair dressed with their own family.**
-`src/skin.js` (pure module), `tests/skin.test.mjs`, `src/npcs.js`
-`dressCastSkin`/`upgradeCastSkin`, `main.js` chained after cloth, manifest +
-assets entries, six lossless WebP maps (skin + hair, Kaggle T4, CuPy), Credits
-entry. Eyes and mouth deliberately excluded.
+**Round 76 released: cast faces and hair dressed with their own family (PR #58).**
+Head `63ed9ca` is the exact published head. Trusted verification receipts all
+completed exit 0 at this head: tests `b0af46b7`, browser `3e5a6910`, mobile
+`3a1e5d2c`. Self-review approved (`af976a97`, verdict approve); host advanced
+to `pull_request` (PR #58, round 76). Tree is clean.
 
-Checks: unit 676/676; evidence 31/31 (on-screen normal-map proof: 9893 of 13221
-face pixels changed, max delta 111); desktop browser suite 35/35 (Chrome crashed
-during cleanup after reporting all passes — resource exhaustion, not a failure).
-Mobile suite: not run to completion this cycle (Chrome resource exhaustion);
-the round touches no mobile-specific code path and the same castReady settle
-point is exercised by the unit + desktop suites. dist/ restamped after commit.
+Round 76 content: `src/skin.js` pure module + `tests/skin.test.mjs`,
+`dressCastSkin`/`upgradeCastSkin` in `src/npcs.js`, chained through the single
+`castReady` settle point; six lossless WebP maps (skin + hair, Kaggle T4 CuPy);
+manifest + assets entries; CREDITS round 76 entry. 36 `Skin` meshes (1.31 m2)
+and 8 `HairC` meshes (0.67 m2) now carry neutral PBR at 0.35 m / 0.22 m tiles,
+metre-space box-projected UVs, one cloned material per rig+family (12 total).
+Eyes and mouth deliberately excluded. Evidence: 31/31 checks, rendered-pixel proof
+9893/13221 face pixels change with normal maps removed (max delta 111), restored
+frame byte-identical. Unit 676/676; desktop browser 35/35 exit 0.
+
+Pending release id: `af976a97-2544-4259-acbb-cc97dfd1d08a` (phase pull_request,
+PR #58). Trusted receipts above are bound to head `63ed9ca`. Host-side
+publication/deploy is the trusted channel's job; do not push or merge from shell.
+
+Next gameplay focus chosen from a read-only survey of the code (independent agent):
+the strongest, cheapest depth win is fixing `sanitizeWorld`'s ±16 m position clamp
+(`state.js:903-916`) so Continue restores a lane position instead of teleporting
+into the plaza (lane runs z -17.5..-26). Close behind: a priced market-stall
+purchase using existing coins (economy has ~22 coins of quest income against ~9
+of fixed one-time sinks, and "What do you sell?" nodes are dead-ends). Ambient
+gossip persistence + making `topicFor`'s facts drive `scriptKeyFor`, and giving
+the Trusted reputation tier exclusive interactions (today `atLeast`/`spreadNews`
+have no src callers), are the next two.
+
 ## Next steps
 
-1. **Release round 76 via PR-only fallback** (trusted channel stays blocked by
-   host history size). Write publish.json, keep the clean commit checked out,
-   end turn; read publish-result.json next cycle.
-2. **Do not restart rounds 73-74** (PR #58, head b119428).
-3. **Publication:** round 75 already offered as PR #58; round 76 follows the
-   same fallback once committed.
+1. **Land the round 76 release.** PR #58 is open via the trusted channel; wait for
+   the host to merge and verify the exact Pages build before reporting deployed.
+   Do not push or merge from a shell.
+2. **Fix save position clamping (`state.js:sanitizeWorld`).** Widen the clamp to the
+   lane extent so Continue restores a lane position; add a save test. Small,
+   high-value, low risk.
+3. **Price one real purchase at the market stall (economy payoff).** Use existing
+   coins and ITEM slots; keep `playthrough.test.mjs` economy assertions green and
+   avoid dawn-reset farming. Wire a dialogue node per NPC's "What do you sell?"
+   line instead of the current dead-ends.
+
 ## Round 5 — playable phone preview (owner priority)
 
 The owner asked for a playable phone preview: simultaneous left-thumb movement
