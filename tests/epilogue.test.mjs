@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { createInitialState, QUEST_ORDER, QUESTS } from '../src/state.js';
 import {
   buildEpilogue, storyComplete, storyProgress, branchLines,
-  standingSummary, factionClosers, hasAllOutcomes
+  standingSummary, factionClosers, hasAllOutcomes, sideWorkLines
 } from '../src/epilogue.js';
 import { FACTIONS } from '../src/factions.js';
 
@@ -139,11 +139,49 @@ test('the ending is honest about hostility rather than congratulating everyone',
   }
 });
 
+test('the ending names the late chores only when they were actually walked', () => {
+  // The wick round and the gate tally live outside QUEST_ORDER. They exist so the
+  // Keepers and the Watch still matter at the end of the game, which only lands if
+  // the ending says so -- but only for a player who did the work.
+  assert.deepEqual(sideWorkLines(finished()), [], 'a spine-only ending claims no side work');
+
+  const halfWalked = finished();
+  halfWalked.quests.wicks = 'trimmed'; // walked but not yet closed with Mara
+  halfWalked.quests.tally = 'started';
+  assert.deepEqual(sideWorkLines(halfWalked), [],
+    'an unfinished chore is not congratulated as if it were done');
+
+  const both = finished();
+  both.quests.wicks = 'done';
+  both.quests.tally = 'done';
+  const lines = sideWorkLines(both);
+  assert.deepEqual(lines.map((l) => l.choreId), ['wicks', 'tally'], 'chores keep a stable order');
+  assert.match(lines[0].text, /wick round/i);
+  assert.match(lines[1].text, /gate count/i);
+  for (const line of lines) assert.ok(line.text.length > 30, 'each chore gets a real sentence');
+
+  assert.deepEqual(buildEpilogue(both).sidework.map((l) => l.choreId), ['wicks', 'tally']);
+  assert.deepEqual(buildEpilogue(finished()).sidework, []);
+});
+
+test('side work is not counted as part of the main quests', () => {
+  // Story progress drives the ending trigger and the "N errands" line. A chore
+  // must never make the spine look finished early or inflate the count.
+  const state = createInitialState();
+  for (const questId of QUEST_ORDER) state.quests[questId] = 'done';
+  state.quests.wicks = 'done';
+  state.quests.tally = 'done';
+  const progress = storyProgress(state);
+  assert.equal(progress.total, QUEST_ORDER.length);
+  assert.equal(progress.done, QUEST_ORDER.length);
+});
+
 test('the epilogue never describes a quest as unfinished', () => {
   const epilogue = buildEpilogue(finished());
   const text = [
     epilogue.opening, epilogue.closing,
     ...epilogue.branches.map((b) => b.text),
+    ...epilogue.sidework.map((s) => s.text),
     ...epilogue.closers.map((c) => c.text)
   ].join(' ');
   assert.equal(/need to|still waiting|not yet|find the|go and/i.test(text), false,

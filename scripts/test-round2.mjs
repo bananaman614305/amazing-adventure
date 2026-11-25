@@ -1419,16 +1419,29 @@ try {
   });
   await new Promise((r) => setTimeout(r, 400));
 
-  const epilogueShot = await page.evaluate(() => ({
-    overlay: !document.getElementById('epilogue').hidden,
-    section: !document.getElementById('ending-section').hidden,
-    title: document.getElementById('epilogue-title').textContent,
-    branches: [...document.querySelectorAll('#epilogue-branches .epilogue-line')].map((e) => e.textContent),
-    closers: [...document.querySelectorAll('#epilogue-closers .epilogue-standing')].map((e) => e.textContent)
-  }));
+  const epilogueShot = await page.evaluate(async () => {
+    const s = await import('./src/state.js');
+    return {
+      overlay: !document.getElementById('epilogue').hidden,
+      section: !document.getElementById('ending-section').hidden,
+      title: document.getElementById('epilogue-title').textContent,
+      opening: document.getElementById('epilogue-opening').textContent,
+      questTotal: s.QUEST_ORDER.length,
+      branches: [...document.querySelectorAll('#epilogue-branches .epilogue-line')].map((e) => e.textContent),
+      closers: [...document.querySelectorAll('#epilogue-closers .epilogue-standing')].map((e) => e.textContent)
+    };
+  });
   checks.check('finishing the story shows the epilogue',
     epilogueShot.overlay === true && epilogueShot.section === true && epilogueShot.title.length > 0 && epilogueShot.branches.length === 3,
     JSON.stringify({ overlay: epilogueShot.overlay, branches: epilogueShot.branches.length }));
+
+  // The rendered opening used to say "Six errands" while the game had seven
+  // quests. Check the page's own text against the live QUEST_ORDER length, so a
+  // stale count cannot ship even if the pure test is skipped.
+  const numberWords = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+  checks.check('the rendered ending counts the quests the game has',
+    epilogueShot.opening.startsWith(`${numberWords[epilogueShot.questTotal - 1]} errands,`),
+    `opening "${epilogueShot.opening.slice(0, 22)}" vs ${epilogueShot.questTotal} quests`);
 
   checks.check('the epilogue reports the branches actually taken, not the others',
     epilogueShot.branches.some((b) => /kept the trader’s name out/i.test(b)) &&
@@ -1442,6 +1455,41 @@ try {
     JSON.stringify(epilogueShot.closers.map((c) => c.slice(0, 45))));
 
   await capture(page, 'round12-ending.png');
+
+  // The late chores (wicks, tally) are outside QUEST_ORDER, so the ending only
+  // mentions them when they were walked. Check both halves in the real overlay:
+  // silent when not taken, one honest line when done, and the main branch list
+  // unchanged either way.
+  const sideworkEmpty = await page.evaluate(() =>
+    document.querySelectorAll('#epilogue-sidework .epilogue-line').length);
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const s = await import('./src/state.js');
+    api.getState().quests.wicks = 'done';
+    // Re-render the overlay from the journal button, since endingSeen is sticky.
+    document.getElementById('epilogue').hidden = true;
+    document.getElementById('ending-open').click();
+    return s.CHORE_ORDER;
+  });
+  await new Promise((r) => setTimeout(r, 300));
+  const sideworkWalked = await page.evaluate(() => ({
+    lines: [...document.querySelectorAll('#epilogue-sidework .epilogue-line')].map((e) => e.textContent),
+    branches: document.querySelectorAll('#epilogue-branches .epilogue-line').length
+  }));
+  checks.check('the ending stays quiet about side work that was never walked',
+    sideworkEmpty === 0, `${sideworkEmpty} lines`);
+  checks.check('the ending remembers a walked wick round without disturbing the branches',
+    sideworkWalked.lines.length === 1 && /wick round/i.test(sideworkWalked.lines[0]) &&
+    sideworkWalked.branches === 3,
+    JSON.stringify({ lines: sideworkWalked.lines.length, branches: sideworkWalked.branches }));
+  await capture(page, 'round80-ending-sidework.png');
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    api.getState().quests.wicks = 'none';
+    document.getElementById('epilogue').hidden = true;
+    document.getElementById('ending-open').click();
+  });
+  await new Promise((r) => setTimeout(r, 250));
 
   // The ending can be dismissed and reopened from the journal.
   await page.evaluate(() => document.getElementById('epilogue-close').click());
