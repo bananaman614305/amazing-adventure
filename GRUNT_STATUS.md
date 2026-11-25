@@ -12,45 +12,40 @@
 
 ## Current task
 
-**Round 81 in progress: dressing the cast's accent bands with felt.**
+**Round 81 complete at head d30cab4: the cast's accent bands wear felt.**
 
-Source work complete and unit-tested (npm test 702/703, the single failure
-being the stale committed preview which clears on the source-then-dist restamp):
-- src/accent.js (new): pure rules mirroring src/skin.js. CAST_ACCENT_TILE_METERS
-  = 0.18; CAST_ACCENT_FAMILIES (one family, exact /^accent$/i match, roughness
-  0.9 / metalness 0 / keepTint true); castAccentFamilyFor, castAccentParams,
-  shouldDressCastAccent. Felt is reused (no new asset or licence work).
-- src/npcs.js: re-exports CAST_ACCENT_TILE_METERS, adds CAST_ACCENT_TEXTURE_FILES
-  (= FELT_TEXTURE_FILES), dressCastAccent (per-material cloned felt maps, RepeatWrapping,
-  repeat(1,1), projectBoxGeometry at fam.tileMeters / accumulatedScale, sets
-  roughness 0.9 / metalness 0, marks userData.accentDressed), upgradeCastAccent
-  (never throws).
-- src/main.js: castReady chain extended after upgradeCastSkin with upgradeCastAccent
-  (each failure leaves that family flat, others dressed).
-- tests/accent.test.mjs (new, 12 tests): pure rules + real-GLB pass; 9 Accent
-  meshes, projected UVs, tints preserved (6 distinct dyes), no other material
-  touched, failed download leaves authored roughness 0.6 untouched.
-- src/manifest.js + release-manifest.json: added 'src/accent.js'.
-- CREDITS.md: Round 81 entry (no new outside assets; felt reused, credited).
-- scripts/test-round2.mjs: 4 new desktop checks (9 maps, 6 materials, 6 dyes, felt
-  roughness); idle lean-break fix so the weight-shift sample stops only once both
-  motions were seen.
-- scripts/audit-materials.mjs: now also awaits castReady before measuring, so the
-  audit reports dressed cast surfaces instead of pre-dress flat colours.
+The accent material was the largest still-flat cast surface the materials audit
+found (2.38 m2 over 9 meshes: sashes, scarves, tabard, cloak band, collar, leg
+wraps). It is felted fabric at 0.1-0.2 m, so it reuses the round 72 neutral
+felt maps rather than a new set, keeping one fibre read across the scene and
+six distinct per-NPC dyes.
 
-Desktop browser suite rerunning at this head after the idle fix; accent checks
-passed on the prior run (9/9 meshes, 6 materials, 6 dyes, roughness 0.9). Mobile
-suite not yet run at this head. dist not yet restamped. No commit yet this round.
+Commits: 8d66cd4 (source, tests, scripts, manifest), d30cab4 (dist restamp).
+
+Evidence actually run at d30cab4: npm test 703/703 pass exit 0; desktop browser
+suite 272/272 checks, no console errors, exit 0 (4 new accent checks: 9/9
+meshes wear all 3 felt maps, 6 materials for 9 meshes, 6 distinct dyes, felt
+roughness 0.9); mobile suite 184/184 checks, no console errors, exit 0;
+materials audit run at this head: Accent no longer in the flat list (top
+remaining: HouseGlass, LampGlass, BoardFace, LaneRope, NpcMarker, Boot,
+LanternHousing, SackTie, ...). Unit layer: tests/accent.test.mjs 12/12.
+
+Receipts: Round 80 receipts all completed exit 0 unchanged True at
+001b48c...324ef (tests db0e2d70, browser 9fba3827, mobile 4c984001). Trusted
+release channel still blocked_infrastructure (256-commit / 22000-byte host
+screen); PR #59 published via the PR-only fallback.
 
 ## Next steps
 
-1. Finish the desktop browser rerun (idle lean fix) and run the mobile suite at
-   this head; record real exit codes. If any fails, fix and rerun.
-2. Run scripts/audit-materials.mjs to confirm Accent leaves the flat list, then
-   commit source + tests, restamp dist (build-preview.mjs refuses a dirty tree),
-   commit dist, rerun npm test for 703/703.
-3. Update this checkpoint, request trusted receipts at the exact committed head,
-   poll to terminal, then submit via /worker/state/outbox/publish.json.
+1. Request fresh trusted receipts at exact head d30cab4: `grunt-release verify
+   release tests`, `... browser`, `... mobile` (plan id `release`, clean tree),
+   poll each to terminal with verify-status/verify-result, record real exit codes.
+2. Re-stamp /worker/state/outbox/needs-supervision.json with the new head and
+   receipt ids; submit via /worker/state/outbox/publish.json at d30cab4 (branch
+   grunt/round72-bunting-felt, base main) with only checks that actually ran.
+3. Round 82 candidate: next largest still-flat cast surface is Boot (1.49 m2,
+   18 meshes) or LanternHousing (1.32 m2); or a new quest beat. Keep the economy
+   rule: any new sink is hasItem-guarded, one-time, no restock, no dawn reset.
 
 
 ## Round 5 — playable phone preview (owner priority)
