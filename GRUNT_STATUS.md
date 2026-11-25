@@ -12,42 +12,48 @@
 
 ## Current task
 
-**Round 78 built and verified at head `7954500`; release prep still pending.**
+**Round 78 complete and verified at head `3f479fd`; PR-only fallback submitted (trusted channel blocked on host base/history).**
 
 Round 78 priced Oswin's market stall. `src/state.js` gained the `rope` item plus
 `OSWIN_WARES` and `buyOswinWare` (3 coins, one-time, `hasItem`-guarded — no
-restock, no dawn reset, so it cannot be farmed). `src/dialogue.js` replaced all
-four dead-end "What do you sell?" branches and the default stall node with a
-priced wares node (labels show owned/affordable/short-purse states; debt choices
-kept). Tests added in `tests/state.test.mjs` and `tests/dialogue.test.mjs`.
-Evidence: unit 682/682; playthrough 7/7 quests, 15 coins, story complete, exit 0;
-reachability 33184/33184 winnable states, 0 dead ends, no truncation. Commits:
-`3b50519` (source + tests), `7954500` (dist restamp).
+restock, no dawn reset, cannot be farmed). `src/dialogue.js` replaced all four
+dead-end "What do you sell?" branches and the default stall node with a priced
+wares node (labels show owned/affordable/short-purse states; debt choices kept).
+Tests added in `tests/state.test.mjs` and `tests/dialogue.test.mjs`; desktop
+browser harness gained section 29d (real page: walk up, open stall, buy rope,
+coins −3, rope owned; reopen shows "already yours", no second buy; state
+restored). Commits: `3b50519` (source + tests), `7954500` (dist restamp),
+`b1f51ef` (checkpoint), `3f479fd` (desktop rope-sale harness check).
+
+Evidence: unit 682/682; playthrough 7/7 quests, 15 coins, 3 items, story
+complete, exit 0; reachability 33184/33184 winnable states, 0 dead ends, no
+truncation; desktop browser 265/265 checks, no console errors; mobile 184/184
+checks, no console errors.
 
 Trusted verification receipts all completed exit 0, unchanged, clean, bound to
-head `7954500ebdc07db6a211de5d79e003b083ddd43d`: tests
-`c22ddde0-e14f-4914-a77c-826f09eec5ae`, browser
-`4fd2ca8f-33b0-4aec-a509-cbfe33bc20cc`, mobile
-`ef7d0485-337e-4718-b1ab-d74bf08f04ce` (the mobile receipt was confirmed
-completed this cycle).
+head `3f479fd327480f9e1c5435ca1724977835b4a0db`: tests
+`2e2138f8-4ea0-44a2-80ef-8151375c604a`, browser
+`bf54e2fc-fca5-4b3c-bf3e-c677ec7dd2ae`, mobile
+`da5d91dd-ec59-4998-902f-65a2633fb3ba`.
 
-Still pending: the local desktop rerun of `scripts/test-round2.mjs` with the new
-uncommitted browser rope-sale check (section 29d) was stopped by background time
-limits twice and has no completed pass/fail on record; `scripts/test-mobile.mjs`
-also has no completed rerun this round. The `scripts/test-round2.mjs` harness
-change is uncommitted. No `grunt-release prepare` yet.
+Trusted `grunt-release prepare` (request `44094cbb-113e-4c61-aea1-f4cffbb5e143`)
+was blocked: "Publication requires a clean, fully committed project containing
+the current base." — the host's 256-commit / 22000-byte review-diff screen
+(origin/main is still the initial README commit, this branch is 303 commits
+ahead). PR-only fallback written to `/worker/state/outbox/publish.json` at head
+`3f479fd327480f9e1c5435ca1724977835b4a0db`. No merge or deploy authority
+granted. Awaiting `/worker/state/outbox/publish-result.json`.
 
 ## Next steps
 
-1. Rerun `node scripts/test-round2.mjs` and `node scripts/test-mobile.mjs` to
-   completion; confirm the section 29d rope-sale checks pass, then commit the
-   `scripts/test-round2.mjs` harness change.
-2. Run `grunt-release prepare` at head `7954500ebdc07db6a211de5d79e003b083ddd43d`
-   on branch `grunt/round72-bunting-felt` with the three verification ids above,
-   then self-review, `grunt-release advance`, and check the exact Pages build
-   before reporting the release deployed. Do not push or merge from a shell.
-3. Refresh or clear the stale `needs-supervision.json` note (it still describes a
-   Round 73 history-size block; later rounds have verified green).
+1. Read `/worker/state/outbox/publish-result.json` next cycle; if published,
+   record the PR number/URL in GRUNT_STATUS and continue. Do not push or merge
+   from a shell.
+2. Pick the next round's scope (round 79) from the game's weakest remaining
+   surface; keep the economy and save/load assertions green; do not wait idle on
+   the open PR.
+3. The stale `needs-supervision.json` note has been refreshed to describe the
+   current host history-size block and the fallback submission.
 
 ## Round 5 — playable phone preview (owner priority)
 
