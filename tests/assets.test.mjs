@@ -813,8 +813,10 @@ test('material names that are not props stay flat', () => {
     // materials audit can attribute their area (an unnamed material used to
     // collapse six unrelated surfaces into one 10.65 m2 row). Naming them is
     // also a claim that they are deliberately flat: each matches no family.
-    'LanternHousing', 'LanternBulb', 'BoardFace',
-    'BoardPaper', 'NoticeFaceLane', 'NpcMarker',
+    'LanternHousing', 'LanternBulb',
+    // Round 83 dresses the job board's BoardFace and BoardPaper with the paper
+    // family (src/paper.js), so they are no longer in the must-stay-flat list.
+    'NoticeFaceLane', 'NpcMarker',
     // The bunting rope used to borrow `LaneWood`, which made three visible 2 cm
     // ropes report as planked wood while keeping their authored per-face UVs.
     // Its own name must never pick up a family.

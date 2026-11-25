@@ -3264,6 +3264,62 @@ try {
                      metalness: [...new Set(boots.rows.map((r) => r.metalness))] }));
 
   await capture(page, 'round82-cast-boot.png');
+  // --- 28m2d. The job board's paper (round 83) -----------------------------
+  // The job board's face (BoardFace, 1 mesh, 2.16 m2) and its three pinned
+  // slips (BoardPaper, 3 meshes, 0.4 m2) are dressed with the round 83 paper
+  // maps at a 0.3 m physical tile; the cream albedo stands alone (white tint).
+  // Checked on the live scene, after the real asset chain.
+  const paper = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const rows = [];
+    const materials = new Set();
+    api.scene.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      if (!/^(BoardFace|BoardPaper)$/i.test(o.material.name || '')) return;
+      const uv = o.geometry.getAttribute('uv');
+      materials.add(o.material.uuid);
+      rows.push({
+        name: o.name,
+        materialName: o.material.name,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+        hasUv: Boolean(uv),
+        tint: o.material.color.getHexString(),
+        roughness: Number(Number(o.material.roughness).toFixed(3)),
+        metalness: Number(o.material.metalness).toFixed(3),
+        image: o.material.map ? o.material.map.image.width : 0,
+        repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+        wrapped: o.material.map
+          ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+        dressed: o.userData.boardPaperDressed === true
+      });
+    });
+    const st = typeof api.assetState === 'function' ? api.assetState() : api.assetState;
+    return { rows, materials: materials.size, assetState: st.boardPaper, detail: st.boardPaperDetail };
+  });
+  checks.check('all 4 job-board meshes wear the three paper maps',
+    paper.rows.length === 4 && paper.rows.every((r) => r.maps === 3 && r.hasUv
+      && r.image === 512 && r.dressed),
+    JSON.stringify({ rows: paper.rows.length,
+                    maps: [...new Set(paper.rows.map((r) => r.maps))],
+                    images: [...new Set(paper.rows.map((r) => r.image))] }));
+  checks.check('the paper map is one per mesh group and tiles by projection, not repeat',
+    paper.materials >= 1 && paper.rows.every((r) => r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    `${paper.materials} materials for ${paper.rows.length} meshes; ` +
+    JSON.stringify([...new Set(paper.rows.map((r) => JSON.stringify(r.repeat)))]));
+  checks.check('the paper face keeps a white tint (cream albedo stands alone)',
+    paper.rows.every((r) => r.tint === 'ffffff'),
+    JSON.stringify([...new Set(paper.rows.map((r) => r.tint))]));
+  checks.check('the dressed paper sits at paper roughness 0.9, not metal',
+    paper.rows.every((r) => r.roughness === 0.9 && Number(r.metalness) === 0),
+    JSON.stringify({ roughness: [...new Set(paper.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(paper.rows.map((r) => r.metalness))] }));
+  checks.check('assetState reports the board paper as textured',
+    paper.assetState === 'textured',
+    JSON.stringify({ assetState: paper.assetState, detail: paper.detail }));
+
+  await capture(page, 'round83-job-board-paper.png');
   // --- 28n. Vegetation: trees stand in, upgrade to models --------------------
   const trees = await page.evaluate(async () => {
     const api = window.amazingAdventure;

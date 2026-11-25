@@ -27,8 +27,12 @@ import {
   needsOwnMaterial,
   cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts,
   fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint,
-  ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor
+  ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor,
+  PAPER_TEXTURE_FILES
 } from './assets.js';
+import {
+  boardPaperFamilyFor, boardPaperParams, shouldDressBoardPaper, CAST_PAPER_TILE_METERS
+} from './paper.js';
 import { loadGlb } from './glb.js';
 import {
   glassKindFor,
@@ -314,6 +318,12 @@ export function buildWorld(renderer) {
   const lanePropsGroup = new THREE.Group();
   lanePropsGroup.name = 'lane-props-standin';
   scene.add(lanePropsGroup);
+  // The job board's paper surfaces live outside the prop registry (they are
+  // added to the scene directly, not lanePropsGroup), so the paper family pass
+  // collects them here. See upgradeBoardPaper().
+  const boardMeshGroup = new THREE.Group();
+  boardMeshGroup.name = 'job-board-paper';
+  scene.add(boardMeshGroup);
   const lanePropMeshes = [];
 
   for (const prop of LANE_PROPS) {
@@ -792,6 +802,7 @@ export function buildWorld(renderer) {
     boardFace.material.name = 'BoardFace';
     boardFace.position.set(JOB_BOARD.x, 1.3, JOB_BOARD.z + 0.13);
     scene.add(boardFace);
+    boardMeshGroup.add(boardFace);
     // Pinned slips of paper, so it reads as a job board from a distance.
     for (let i = 0; i < 3; i += 1) {
       const slip = new THREE.Mesh(
@@ -801,6 +812,7 @@ export function buildWorld(renderer) {
       slip.material.name = 'BoardPaper';
       slip.position.set(JOB_BOARD.x - 0.34 + i * 0.34, 1.26 + (i % 2) * 0.14, JOB_BOARD.z + 0.14);
       scene.add(slip);
+      boardMeshGroup.add(slip);
     }
   }
 
@@ -2495,6 +2507,32 @@ export function buildWorld(renderer) {
     return Promise.resolve(assetState);
   }
 
+  function upgradeBoardPaper() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.boardPaper = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: PAPER_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.boardPaper = 'flat';
+        return assetState;
+      }
+      const result = dressBoardPaper(boardMeshGroup, textures, { THREE });
+      assetState.boardPaper = result.dressed > 0 ? 'textured' : 'flat';
+      assetState.boardPaperDetail = {
+        dressed: result.dressed,
+        seams: result.seams,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: CAST_PAPER_TILE_METERS
+      };
+      return assetState;
+    });
+  }
+
   function upgradeGrass() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -2998,7 +3036,7 @@ export function buildWorld(renderer) {
      */
     loadAssets() {
       return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner()])
-        .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt())
+        .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt()).then(() => upgradeBoardPaper())
         // Water runs last and after the prop pass on purpose: the water discs
         // must not pick up the stone/iron families, and it needs the modelled
         // fountain to be in the scene before it has anything to dress.
@@ -3015,6 +3053,62 @@ export function buildWorld(renderer) {
   };
 
   return { scene, colliders, environment, floorHeight: floorHeightAt, terrace: TERRACE };
+}
+
+/**
+ * Dress the job board's paper surfaces (Round 83).
+ *
+ * The board face (BoardFace) and its pinned slips (BoardPaper) are plain
+ * meshes that live outside the prop registry, so they get their own pass.
+ * This is the exported core: `upgradeBoardPaper()` inside buildWorld loads the
+ * maps and calls this on the collected `boardMeshGroup`, and the unit tests
+ * call it directly on a hand-built group to check the real geometry pass.
+ */
+export function dressBoardPaper(group, textures, { THREE } = {}) {
+  let dressed = 0;
+  let seams = 0;
+  group.traverse((mesh) => {
+    if (!mesh.isMesh) return;
+    const source = mesh.material;
+    const name = source && source.name ? source.name : '';
+    const family = boardPaperFamilyFor(name);
+    if (!family || !shouldDressBoardPaper(family, textures)) return;
+    // The board face is 1.2 x 0.9 m and the slips 0.22 x 0.3 m: a 0.3 m tile
+    // puts roughly four tiles across the face so the fibre tooth reads as
+    // paper rather than one smeared sheet. The face is a plane, but projecting
+    // keeps the metre-space UVs consistent with the other families' pass and
+    // splits any corner cleanly.
+    const split = projectBoxGeometry({
+      THREE,
+      geometry: mesh.geometry,
+      tileMeters: family.tileMeters || CAST_PAPER_TILE_METERS
+    });
+    seams += split.seams;
+    const params = boardPaperParams(family);
+    const material = new THREE.MeshStandardMaterial({
+      // keepTint is false: the paper albedo is already cream, so the material
+      // tint stays white or the cream would multiply down to brown.
+      color: params.keepTint && source.color ? source.color.getHex() : 0xffffff,
+      roughness: params.roughness,
+      metalness: params.metalness,
+      name,
+      side: source.side
+    });
+    for (const [key, texture] of Object.entries(textures)) {
+      if (!texture || key === 'anyLoaded') continue;
+      const copy = texture.clone();
+      copy.needsUpdate = true;
+      copy.wrapS = THREE.RepeatWrapping;
+      copy.wrapT = THREE.RepeatWrapping;
+      // UVs are already in metres; one repeat keeps the authored tile size.
+      copy.repeat.set(1, 1);
+      material[key] = copy;
+    }
+    mesh.material = material;
+    mesh.userData.boardPaperDressed = true;
+    dressed += 1;
+  });
+  return { dressed, seams };
 }
 
 // Sky, sun, fog and lamp settings per phase. Colours are plain values so the
