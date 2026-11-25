@@ -900,6 +900,12 @@ export function serialize(state, world = null) {
 }
 
 /** Keeps only the world fields a save understands, so bad data cannot leak in. */
+// The playable world spans the plaza and the market lane to its north. The
+// lane reaches z -26 (see areas.js LANE), so a save taken there must survive
+// the clamp instead of being teleported back into the plaza. x stays within the
+// plaza's east/west extent, which also covers the lane's narrower corridor.
+export const WORLD_BOUNDS = { minX: -17, maxX: 17, minZ: -26, maxZ: 17 };
+
 export function sanitizeWorld(world) {
   if (!world || typeof world !== 'object') return null;
   const x = Number(world.x);
@@ -908,8 +914,8 @@ export function sanitizeWorld(world) {
   const clock = Number(world.clock);
   if (![x, z, yaw, clock].every(Number.isFinite)) return null;
   return {
-    x: Math.max(-16, Math.min(16, x)),
-    z: Math.max(-16, Math.min(16, z)),
+    x: Math.max(WORLD_BOUNDS.minX, Math.min(WORLD_BOUNDS.maxX, x)),
+    z: Math.max(WORLD_BOUNDS.minZ, Math.min(WORLD_BOUNDS.maxZ, z)),
     yaw,
     clock: ((clock % 180) + 180) % 180
   };
