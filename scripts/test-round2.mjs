@@ -3380,18 +3380,6 @@ try {
   // A star field sits inside the sky dome. At night it is full opacity and
   // twinkle-bright; at day it is hidden; dusk sits between. Checked live, on
   // the scene the real boot built.
-  const stars = await page.evaluate(async () => {
-    const api = window.amazingAdventure;
-    await api.assetsReady();
-    const field = () => {
-      let mesh = null;
-      api.scene.traverse((o) => { if (o.name === 'sky-stars') mesh = o; });
-      return mesh;
-    };
-    // Let the boot settle so assets are really in.
-    await new Promise((r) => setTimeout(r, 400));
-    return { night: field() };
-  });
   await page.evaluate(() => {
     const api = window.amazingAdventure;
     api.setClock(150); // deep night
