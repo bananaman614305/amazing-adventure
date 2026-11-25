@@ -51,7 +51,11 @@ import {
   remember,
   buyOswinWare,
   OSWIN_WARES,
-  ITEMS
+  ITEMS,
+  redeemKeeperPromise,
+  redeemTraderMarker,
+  KEEPER_PROMISE_REWARD,
+  TRADER_MARKER_REWARD
 } from './state.js';
 import { npcTier, FACTIONS, NPC_FACTION } from './factions.js';
 import { refusalFor, refusalHint } from './refusal.js';
@@ -186,6 +190,14 @@ const settleDebtChoice = (state) => ({
  */
 const debtChoices = (state) => (state.perks.oswin_debt ? [settleDebtChoice(state)] : []);
 
+// Oswin's marker is a one-time favour he owes. It is offered wherever he is
+// reachable, and spending it consumes the token so it cannot be farmed.
+const markerChoice = (state) => (hasItem(state, 'oswin_marker') ? [{
+  label: `Call in Oswin’s marker — ${TRADER_MARKER_REWARD.coins} coins, Market +${TRADER_MARKER_REWARD.delta}`,
+  do: () => redeemTraderMarker(state),
+  next: () => node('Oswin the Trader', 'Oswin turns the token over in his hand, then sets it aside. “A deal is a deal. Do not ask again — I only give one of these.”')
+}] : []);
+
 // Oswin's stall has one priced item: a coil of rope. Buying it spends coins and
 // grants a permanent item, with no restock and no dawn reset, so it cannot be
 // farmed into coins or standing. The node is offered wherever the old "What do
@@ -211,7 +223,8 @@ function oswinSellNode(state) {
   });
   return node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best. The rope is three coins — real rope, not a promise.', [
     ...choices,
-    ...debtChoices(state),
+    ...markerChoice(state),
+        ...debtChoices(state),
     end('Leave')
   ]);
 }
@@ -289,6 +302,11 @@ const mara = {
     if (status === 'done') {
       const wicks = questStatus(state, 'wicks');
       const choices = [
+        ...(hasItem(state, 'keeper_promise') ? [{
+          label: `Call in Mara’s word — ${KEEPER_PROMISE_REWARD.coins} coins, Keepers +${KEEPER_PROMISE_REWARD.delta}`,
+          do: () => redeemKeeperPromise(state),
+          next: () => node('Mara the Keeper', 'Mara nods once. “A word given is a word kept. Take this, and the plaza remembers.”')
+        }] : []),
         { label: 'Who keeps the lanterns usually?', next: () => node('Mara the Keeper', 'I do. Twenty years of trimming wicks. My hands know the work better than my eyes do.') },
         { label: 'Ask about Oswin.', next: () => node('Mara the Keeper', state.perks.oswin_debt ? 'Oswin tells me you owe him. Settle it when you can — he remembers every debt.' : 'Oswin is honest enough, for a trader. He just never lets a favour go.') }
       ];
@@ -421,6 +439,7 @@ const oswin = {
       return node('Oswin the Trader', 'Oswin nods at the lit lane. “Go on then — the post is at the far end. Light them and the round is yours to finish.”', [
         { label: 'Where was the post again?', next: () => node('Oswin the Trader', 'Far end of the lane, past the barrels. You cannot miss it.') },
         { label: 'What do you sell?', next: () => oswinSellNode(state) },
+        ...markerChoice(state),
         ...debtChoices(state),
         end('Leave')
       ]);
@@ -428,6 +447,7 @@ const oswin = {
     if (nightlight === 'started' && !getFlag(state, 'laneLanternsLit')) {
       return node('Oswin the Trader', '“Dawn put your lanterns out. The night order stands — walk the round again after sundown.”', [
         { label: 'Where was the post again?', next: () => node('Oswin the Trader', 'Far end of the lane, past the barrels. You cannot miss it.') },
+        ...markerChoice(state),
         ...debtChoices(state),
         end('Leave')
       ]);
@@ -435,6 +455,7 @@ const oswin = {
     if (nightlight === 'walked') {
       return node('Oswin the Trader', '“You walked the round and the lane is lit. A deal is a deal.”', [
         nightLightSettleChoice(state),
+        ...markerChoice(state),
         ...debtChoices(state),
         end('Leave')
       ]);
@@ -442,6 +463,7 @@ const oswin = {
     if (nightlight === 'done') {
       return node('Oswin the Trader', `The night trade is good this week. You made it good.${standingGreeting(state, 'oswin')}`, [
         { label: 'What do you sell?', next: () => oswinSellNode(state) },
+        ...markerChoice(state),
         ...debtChoices(state),
         end('Leave')
       ]);
@@ -454,6 +476,7 @@ const oswin = {
           next: () => node('Oswin the Trader', '“Walk my lamp round after sundown. Light the lane lanterns, then come back and tell me it is done. Six coins, and the Market remembers.”')
         },
         { label: 'What do you sell?', next: () => oswinSellNode(state) },
+        ...markerChoice(state),
         ...debtChoices(state),
         end('Leave')
       ]);
@@ -485,6 +508,7 @@ const oswin = {
         { label: 'Do you have lantern oil?', next: () => node('Oswin the Trader', 'Always. Bring Mara’s name and I will even be polite about the price.') },
         { label: 'Ask about Halden.', next: () => node('Oswin the Trader', 'The guard? Lost his gate key again, I hear. Careless man for someone who watches doors.') },
         { label: 'What do you sell?', next: () => oswinSellNode(state) },
+        ...markerChoice(state),
         end('Leave')
       ]
     );
