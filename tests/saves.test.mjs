@@ -142,7 +142,12 @@ test('bad world data is dropped, never trusted', () => {
   assert.equal(sanitizeWorld({ x: 1, z: 2, yaw: 3 }), null, 'clock is required');
   assert.equal(sanitizeWorld({ x: NaN, z: 2, yaw: 3, clock: 4 }), null);
   const clamped = sanitizeWorld({ x: 999, z: -999, yaw: 0, clock: 400 });
-  assert.deepEqual(clamped, { x: 16, z: -16, yaw: 0, clock: 40 });
+  assert.deepEqual(clamped, { x: 17, z: -26, yaw: 0, clock: 40 });
+
+  // A save taken deep in the market lane must survive the clamp instead of being
+  // teleported back into the plaza (the lane runs to z -26; see areas.js LANE).
+  const lane = sanitizeWorld({ x: 10, z: -22.5, yaw: 0.4, clock: 120 });
+  assert.deepEqual(lane, { x: 10, z: -22.5, yaw: 0.4, clock: 120 });
 });
 
 test('readSave returns null for unusable saves', () => {
