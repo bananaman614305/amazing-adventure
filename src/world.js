@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildStarField, starFieldOpacity, starTwinkle } from './stars.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -117,6 +118,25 @@ export function buildWorld(renderer) {
   sunDisc.renderOrder = -1;
   sunDisc.add(sunGlow, sunCore);
   scene.add(sunDisc);
+
+  // The night sky's star field. A few hundred points on the inside of the dome,
+  // additive so they glow, faded in/out per phase by applyPhase(). Built from
+  // the pure numbers in src/stars.js so the exact field is unit-testable.
+  const starFieldData = buildStarField();
+  const starGeometry = new THREE.BufferGeometry();
+  starGeometry.setAttribute('position', new THREE.BufferAttribute(starFieldData.position, 3));
+  starGeometry.setAttribute('color', new THREE.BufferAttribute(starFieldData.color, 3));
+  const starMaterial = new THREE.PointsMaterial({
+    size: 0.9, vertexColors: true, sizeAttenuation: true,
+    fog: false, depthWrite: false, transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending
+  });
+  const starField = new THREE.Points(starGeometry, starMaterial);
+  starField.name = 'sky-stars';
+  starField.renderOrder = -1;
+  scene.add(starField);
+
+  let starTime = 0;
 
   const zenithColor = new THREE.Color(0x6fa8dc);
   const horizonColor = new THREE.Color(0x9fc4e8);
@@ -2875,6 +2895,14 @@ export function buildWorld(renderer) {
     paintSky,
     paintSun,
     sunDisc,
+    starField,
+    // Round 85: the field breathes. One cheap per-frame call nudges the whole
+    // material's size with the pure twinkle maths from src/stars.js; the
+    // per-phase opacity stays with applyPhase().
+    updateStars(dt) {
+      starTime += dt;
+      starField.material.size = 0.9 * starTwinkle(0, starTime);
+    },
     // The palette for a phase, so the camera pipeline can derive its ambient
     // room from the same numbers the sky dome is painted with.
     phaseLook,
@@ -3187,6 +3215,13 @@ export function applyPhase(environment, phaseId, laneLit = true) {
     environment.paintSun(look.sunColor, sunDiskIntensity(phaseId), look.sunPosition);
   }
   scene.fog.color.setHex(look.fog);
+  // The star field's opacity follows the phase: day hides it, dusk hints,
+  // night shows it full. The mesh itself keeps rendering (one draw call) so
+  // applyPhase() is the only place the field's visibility is set.
+  if (environment.starField) {
+    environment.starField.material.opacity = starFieldOpacity(phaseId);
+    environment.starField.visible = starFieldOpacity(phaseId) > 0;
+  }
   scene.fog.near = look.fogNear;
   scene.fog.far = look.fogFar;
   hemi.color.setHex(look.hemiSky);

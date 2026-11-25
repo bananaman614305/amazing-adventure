@@ -3376,7 +3376,77 @@ try {
                      metalness: [...new Set(castPaper.rows.map((r) => r.metalness))] }));
 
   await capture(page, 'round84-cast-paper.png');
-  // --- 28n. Vegetation: trees stand in, upgrade to models --------------------
+  // --- 28n. The night sky's star field (round 85) -----------------------------
+  // A star field sits inside the sky dome. At night it is full opacity and
+  // twinkle-bright; at day it is hidden; dusk sits between. Checked live, on
+  // the scene the real boot built.
+  const stars = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const field = () => {
+      let mesh = null;
+      api.scene.traverse((o) => { if (o.name === 'sky-stars') mesh = o; });
+      return mesh;
+    };
+    // Let the boot settle so assets are really in.
+    await new Promise((r) => setTimeout(r, 400));
+    return { night: field() };
+  });
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    api.setClock(150); // deep night
+    api.player.placeAt(0, 11, 0, -0.05);
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  const starNight = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    let mesh = null;
+    let star = null;
+    api.scene.traverse((o) => { if (o.name === 'sky-stars') mesh = o; });
+    if (mesh) star = mesh.geometry.getAttribute('position');
+    const material = mesh ? mesh.material : null;
+    const seen = [];
+    if (star) {
+      for (let i = 0; i < star.count; i += 1) {
+        seen.push(star.getY(i));
+      }
+    }
+    return {
+      opacity: material ? material.opacity : null,
+      visible: mesh ? mesh.visible : null,
+      count: star ? star.count : 0,
+      radius: star ? seen.reduce((m, v) => Math.max(m, Math.abs(v)), 0) : 0,
+      // Twinkle ran for a second: the size must have moved off its base 0.9.
+      size: material ? material.size : null
+    };
+  });
+  const starInfo = { night: starNight };
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    api.setClock(10); // day
+  });
+  await new Promise((r) => setTimeout(r, 700));
+  const starDay = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    let mesh = null;
+    api.scene.traverse((o) => { if (o.name === 'sky-stars') mesh = o; });
+    const material = mesh ? mesh.material : null;
+    return { opacity: material ? material.opacity : null, visible: mesh ? mesh.visible : null };
+  });
+  starInfo.day = starDay;
+  checks.check('the star field is opaque and fully populated at night',
+    starInfo.night.opacity === 1 && starInfo.night.visible === true
+      && starInfo.night.count === 260 && starInfo.night.radius > 110,
+    JSON.stringify({ opacity: starInfo.night.opacity, visible: starInfo.night.visible,
+                     count: starInfo.night.count, radius: starInfo.night.radius }));
+  checks.check('the star field twinkles (its size moved off the base 0.9)',
+    starInfo.night.size !== null && starInfo.night.size !== 0.9,
+    JSON.stringify({ size: starInfo.night.size }));
+  checks.check('the star field is hidden at day',
+    starInfo.day.opacity === 0 && starInfo.day.visible === false,
+    JSON.stringify({ opacity: starInfo.day.opacity, visible: starInfo.day.visible }));
+  await capture(page, 'round85-stars.png');
+  // --- 28o. Vegetation: trees stand in, upgrade to models --------------------
   const trees = await page.evaluate(async () => {
     const api = window.amazingAdventure;
     await api.assetsReady();
