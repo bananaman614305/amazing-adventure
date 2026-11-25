@@ -3321,8 +3321,8 @@ try {
 
   await capture(page, 'round83-job-board-paper.png');
   // --- 28m2e. The cast's paper props (round 84) -------------------------------
-  // Oswin's apron and Wren's ledger pages, plus a third Paper mesh on one of
-  // the other rigs (the materials audit counts 3): all carry the round 83
+  // One Paper mesh on each of three rigs -- oswin's Apron, sable's PropMap
+  // and wren's PropLedgerPages -- all carry the round 83
   // paper maps at a 0.3 m physical tile, with a forced white tint so the cream
   // albedo stands alone. Checked on the live scene, after the real boot chain
   // (upgradeCastPaper runs at the end of castReady).

@@ -135,9 +135,9 @@ test('the shipped rigs carry the expected Paper meshes, with no UVs', async () =
   const { npcs, summary } = await modelledCast();
   assert.equal(summary.mode, 'model', 'all six rigs must load for this test to mean anything');
   const paper = paperMeshes(npcs);
-  // Oswin's apron and Wren's ledger pages, plus a third Paper mesh on one of
-  // the other rigs (the live-scene audit counts 3): these are the meshes the
-  // pass must dress.
+  // One Paper mesh on each of three rigs -- oswin's Apron, sable's PropMap
+  // and wren's PropLedgerPages -- three meshes in all, one authored Paper
+  // material per rig, so the pass must dress three.
   assert.equal(paper.length, 3);
   for (const { npc, mesh } of paper) {
     assert.equal(mesh.geometry.getAttribute('uv'), undefined,

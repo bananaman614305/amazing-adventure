@@ -332,9 +332,9 @@ its procedural stand-in or flat colour and stays fully playable.
 
 ### Round 84 additions
 
-- No new outside assets. The cast's three `Paper` meshes (Oswin's apron,
-  Wren's ledger pages and one further Paper mesh counted by the materials
-  audit — 0.31 m2 of flat colour before) reuse the round 83 parchment
+- No new outside assets. The cast's three `Paper` meshes (Oswin's Apron,
+  Sable's PropMap and Wren's PropLedgerPages — 0.31 m2 of flat colour before)
+  reuse the round 83 parchment
   maps unchanged, with the same 0.3 m tile, roughness 0.9 / metalness 0
   and a forced white tint. Applied by the new
   `upgradeCastPaper()` / `dressCastPaper()` (`src/paper.js` rules,
