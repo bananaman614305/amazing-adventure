@@ -27,20 +27,20 @@ Evidence: unit suite 733/733 pass (paper 18/18, boot 12/12, preview 10/10);
 desktop browser suite 285/285 pass with all 4 cast-paper checks green
 (3 meshes x 3 maps @ 512px, keys oswin/Apron + sable/PropMap +
 wren/PropLedgerPages, projection tiling [1,1], white tint, roughness 0.9
-metalness 0, userData.paperDressed, round84-cast-paper.png captured); no
-console errors. Materials audit no longer lists Paper as flat. dist restamped
-at f38d827 (111 files); commits 28cb1b0 (sources+tests), 2020c1b (CREDITS),
-09e7d32 (rig names), c594b72 (status). Mobile suite result lands next
-(b3kf3i15n).
+metalness 0, userData.paperDressed, round84-cast-paper.png captured); mobile
+suite 184/184 pass (no console errors). Materials audit no longer lists Paper
+as flat. dist restamped at f38d827 (111 files); commits 28cb1b0 (sources+
+tests), 2020c1b (CREDITS), 09e7d32 (rig names), c594b72 (status),
+ac77e29 (desktop suite evidence), acf7b25 (mobile suite evidence).
 
 ## Next steps
 
-1. Publish Round 84 via the PR-only fallback once the mobile suite lands:
-   overwrite /worker/state/outbox/publish.json with branch
-   grunt/round72-bunting-felt, base main, title "Round 84: dress the cast's
-   paper props", exact HEAD, body summarising the checks and evidence;
-   refresh needs-supervision.json to the same head. Do not merge or deploy
-   from a shell.
+1. Publish Round 84 via the PR-only fallback: overwrite
+   /worker/state/outbox/publish.json with branch grunt/round72-bunting-felt,
+   base main, title "Round 84: dress the cast's paper props", exact HEAD
+   acf7b25, body summarising the checks and evidence; refresh
+   needs-supervision.json to the same head. Do not merge or deploy from a
+   shell.
 2. Choose the next useful milestone: the audit flat list is now
    HouseGlass 4.63, LampGlass 4.5, LaneRope 1.92, NpcMarker 1.77,
    LanternHousing 1.32, SackTie 1.04, LampBulb 0.58, WoodP 0.34 (all by
