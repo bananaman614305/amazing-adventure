@@ -12,46 +12,35 @@
 
 ## Current task
 
-**Round 85: the night sky's star field.**
+**Round 86: dress the lane bunting's rope strand (LaneRope).**
 
-The night sky is the biggest free realism win left: the dome is a gradient, the
-sun a disc, and after dark the sky itself was featureless navy. `src/stars.js`
-(now registered in the manifest) is the pure half — a deterministic seeded field
-of 260 points on a 116 m radius inside the 120 m dome, all above the horizon
-haze band, with per-phase visibility (day 0 / dusk 0.22 / night 1), a bounded
-twinkle, white-with-warm-and-cool-tints colours, and slight size variation. No
-`Math.random` anywhere in the sim; a screenshot taken twice looks the same. The
-world half builds one `THREE.Points` mesh (one draw call, additive, fog and
-depth-write off, renderOrder -1 with the sun) from `buildStarField()`; the
-phase opacity lives in `applyPhase()` and a per-frame `updateStars(dt)` breathes
-the size via `starTwinkle`. main.js calls it beside `updateWater(dt)`.
+Round 85 (night-sky star field) is complete, verified and published via the
+PR-only fallback. publish.json is at HEAD 4d45bf9 with the full evidence
+(unit 743/743, desktop browser 288/288 with 3 star checks, mobile 184/184);
+the trusted channel stays blocked_infrastructure. Round 86 picks the largest
+genuinely dressable flat family left from the audit: the LaneRope strand (3
+meshes, 1.92 m², authored brown 0x6b5236, roughness 0.95). It gets a
+procedural twisted-fibre rope map at a 0.08 m tile (keepTint true so the
+authored brown survives), a new pure src/rope.js family, an
+upgradeLaneRope() pass in world.js modeled on upgradeBuntingFelt(), and
+browser checks with a round86-rope.png capture. LanternHousing (reuse LAMP
+maps at a smaller tile) is the Round 87 follow-up.
 
-Evidence: unit suite 743/743 (stars 10/10, preview/manifest/digest green, dist
-restamped at digest d7a92722, HEAD 3b85ff5). Desktop browser suite 288/288 pass
-with all 3 star checks green (night opacity 1 + 260 stars radius > 110;
-twinkle moved size off 0.9; day hidden), `round85-stars.png` captured (717227
-bytes, looking up at the dome). Mobile suite 184/184 pass, no console errors
-(4 profiles: iPhone 13 portrait 10.4fps, Pixel 7 portrait 1.2fps, iPhone SE
-small 1.7fps, iPhone 13 landscape 1.5fps); artefacts restored to clean tree.
+Evidence so far: A (src/rope.js pure module + tests/rope.test.mjs) 8/8 pass;
+B (art/kaggle/rope_textures.py generator) in progress. C (world.js pass) and
+D (assets/manifest/browser checks) running in parallel.
 
 ## Next steps
 
-1. Mobile suite result: expect 184/184 (no console errors). Record it, then
-   publish via the PR-only fallback: overwrite
-   /worker/state/outbox/publish.json with branch grunt/round72-bunting-felt,
-   base main, title "Round 85: night-sky star field", exact HEAD; refresh
-   needs-supervision.json to the same head. Do not merge or deploy from a shell.
-2. Round 86 candidate (chosen by the subagent audit): dress the bunting's rope
-   strand (LaneRope) — the largest genuinely dressable flat family left (1.92
-   m², 3 meshes). A new src/rope.js family (tile ~0.05-0.1 m, keepTint true),
-   a rope-texture generator under art/kaggle/, an upgradeLaneRope() pass in
-   world.js modeled on upgradeBuntingFelt(), tests mirroring the felt block,
-   browser checks with a round86-rope.png capture. LanternHousing (reuse LAMP
-   maps at a smaller tile) is the Round 87 follow-up. The two cosmetic audit
-   notes (resting size 0.857 vs comment 0.9; built-but-unattached per-star
-   size array) are acknowledged, not blockers.
-3. Continue the economy rule (hasItem-guarded, one-time, no restock, no dawn
-   reset) for any new sink.
+1. Parallel Round 86 build: A done (rope.js + tests 8/8); B generator running
+   (webps may be produced locally if numpy/Pillow are available); C and D in
+   flight. When all finish, integrate, rerun `npm test`, then desktop and
+   mobile suites one at a time, restamp dist, and checkpoint.
+2. After Round 86 integrates: Round 87 LanternHousing (reuse LAMP maps at a
+   smaller tile) is the follow-up candidate. Continue the economy rule
+   (hasItem-guarded, one-time, no restock, no dawn reset) for any new sink.
+3. Keep the trusted release channel's blocked_infrastructure status in view;
+   publication continues via the PR-only fallback until it clears.
 
 ## Round 84 complete: dress the cast's paper props.
 
