@@ -7,7 +7,7 @@ import {
   buyOilWithPromise, deliverOil, startKey, pickUpKey, returnKey,
   startCheer, watchLanterns, tellPipAboutLanterns,
   startToll, collectToll, waiveToll, finishToll,
-  hasItem, coins, startWicks, trimWicks, finishWicks, startTally, walkTally, finishTally,
+  hasItem, coins, addCoins, startWicks, trimWicks, finishWicks, startTally, walkTally, finishTally,
   setQuestStep
 } from '../src/state.js';
 import { startConversation, applyChoice, DIALOGUE } from '../src/dialogue.js';
@@ -303,4 +303,46 @@ test('neither chore is offered before its gate opens', () => {
   assert.ok(!halden.choices.some((c) => /else need doing/.test(c.label)), 'Halden waits for the key');
   assert.equal(startWicks(state).changed, false);
   assert.equal(startTally(state).changed, false);
+});
+
+test('Oswin sells rope through the dialogue and will not sell it twice', () => {
+  const state = createInitialState();
+  const open = startConversation(state, 'oswin');
+  const sell = open.choices.find((c) => /What do you sell/.test(c.label));
+  assert.ok(sell, 'the stall offers its wares: ' + open.choices.map((c) => c.label).join(' | '));
+  const wares = sell.next();
+  const buy = wares.choices.find((c) => /Buy Coil of Rope/.test(c.label));
+  assert.ok(buy, 'the rope is priced: ' + wares.choices.map((c) => c.label).join(' | '));
+  assert.match(buy.label, /3 coins/, 'the label states the price');
+  const bought = applyChoice(state, 'oswin', buy);
+  assert.equal(bought.changed, true);
+  assert.equal(coins(state), 3, '6 starting coins minus 3');
+  assert.equal(hasItem(state, 'rope'), true);
+  assert.match(buy.next().text, /No refunds/, 'the purchase closes with the handover');
+
+  // Reopening the stall shows the rope as owned and a second attempt is inert.
+  const again = startConversation(state, 'oswin')
+    .choices.find((c) => /What do you sell/.test(c.label)).next();
+  const owned = again.choices.find((c) => /already yours/.test(c.label));
+  assert.ok(owned, 'the rope is shown as owned: ' + again.choices.map((c) => c.label).join(' | '));
+  assert.ok(!again.choices.some((c) => /Buy Coil of Rope/.test(c.label)), 'no second purchase is offered');
+  const noop = applyChoice(state, 'oswin', owned);
+  assert.equal(noop.changed, false);
+  assert.equal(coins(state), 3, 'the failed second buy costs nothing');
+});
+
+test('Oswin still offers the wares when the player cannot afford them', () => {
+  const state = createInitialState();
+  addCoins(state, -4); // down to 2 coins, a normal working balance
+  assert.equal(coins(state), 2);
+  const open = startConversation(state, 'oswin');
+  const sell = open.choices.find((c) => /What do you sell/.test(c.label));
+  assert.ok(sell, 'the stall is browsable with a light purse: ' + open.choices.map((c) => c.label).join(' | '));
+  const wares = sell.next();
+  const buy = wares.choices.find((c) => /Buy Coil of Rope/.test(c.label));
+  const result = applyChoice(state, 'oswin', buy);
+  assert.equal(result.changed, false, '2 coins cannot buy a 3-coin rope');
+  assert.equal(coins(state), 2);
+  assert.equal(hasItem(state, 'rope'), false);
+  assert.match(buy.next().text, /Coins first/);
 });

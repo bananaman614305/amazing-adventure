@@ -48,7 +48,10 @@ import {
   tallyUnlocked,
   startTally,
   finishTally,
-  remember
+  remember,
+  buyOswinWare,
+  OSWIN_WARES,
+  ITEMS
 } from './state.js';
 import { npcTier, FACTIONS, NPC_FACTION } from './factions.js';
 import { refusalFor, refusalHint } from './refusal.js';
@@ -182,6 +185,36 @@ const settleDebtChoice = (state) => ({
  * never become payable again.
  */
 const debtChoices = (state) => (state.perks.oswin_debt ? [settleDebtChoice(state)] : []);
+
+// Oswin's stall has one priced item: a coil of rope. Buying it spends coins and
+// grants a permanent item, with no restock and no dawn reset, so it cannot be
+// farmed into coins or standing. The node is offered wherever the old "What do
+// you sell?" dead-end used to be.
+function oswinSellNode(state) {
+  const choices = OSWIN_WARES.map((ware) => {
+    const owned = hasItem(state, ware.id);
+    const affordable = coins(state) >= ware.price;
+    const label = owned
+      ? `${ITEMS[ware.id].name} — already yours`
+      : `Buy ${ITEMS[ware.id].name} — ${ware.price} coins (you have ${coins(state)})`;
+    return {
+      label,
+      do: () => (owned
+        ? { changed: false, message: 'You already carry that.' }
+        : buyOswinWare(state, ware.id)),
+      next: () => node('Oswin the Trader', owned
+        ? 'Oswin taps the coil. “You already bought that one. I am not a chandler with a back room.”'
+        : affordable
+          ? `Oswin cuts a length and coils it. “${ware.price} coins, and it is yours. No refunds, no returns, no stories.”`
+          : 'Oswin shakes his head. “Coins first. Stories are free, rope is not.”')
+    };
+  });
+  return node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best. The rope is three coins — real rope, not a promise.', [
+    ...choices,
+    ...debtChoices(state),
+    end('Leave')
+  ]);
+}
 
 // Every action returns { changed, message }; dialogue wrappers just remember the
 // topic so NPCs can react next time you speak to them.
@@ -387,7 +420,7 @@ const oswin = {
       // after taking the order IS the walk, so this node only points at the post.
       return node('Oswin the Trader', 'Oswin nods at the lit lane. “Go on then — the post is at the far end. Light them and the round is yours to finish.”', [
         { label: 'Where was the post again?', next: () => node('Oswin the Trader', 'Far end of the lane, past the barrels. You cannot miss it.') },
-        { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+        { label: 'What do you sell?', next: () => oswinSellNode(state) },
         ...debtChoices(state),
         end('Leave')
       ]);
@@ -408,7 +441,7 @@ const oswin = {
     }
     if (nightlight === 'done') {
       return node('Oswin the Trader', `The night trade is good this week. You made it good.${standingGreeting(state, 'oswin')}`, [
-        { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+        { label: 'What do you sell?', next: () => oswinSellNode(state) },
         ...debtChoices(state),
         end('Leave')
       ]);
@@ -420,7 +453,7 @@ const oswin = {
           do: () => startNightLight(state),
           next: () => node('Oswin the Trader', '“Walk my lamp round after sundown. Light the lane lanterns, then come back and tell me it is done. Six coins, and the Market remembers.”')
         },
-        { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+        { label: 'What do you sell?', next: () => oswinSellNode(state) },
         ...debtChoices(state),
         end('Leave')
       ]);
@@ -434,7 +467,7 @@ const oswin = {
           : 'Paid in full. Mara’s lanterns and my purse both thank you.',
         [
           ...(state.perks.oswin_debt ? [settleDebtChoice(state)] : []),
-          { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+          { label: 'What do you sell?', next: () => oswinSellNode(state) },
           ...(nightLightUnlocked(state)
             ? [{ label: 'Anything else need doing?', next: () => node('Oswin the Trader', '“Now that the lane is lit, yes. Come back when you want the night round.”') }]
             : []),
@@ -451,6 +484,7 @@ const oswin = {
       [
         { label: 'Do you have lantern oil?', next: () => node('Oswin the Trader', 'Always. Bring Mara’s name and I will even be polite about the price.') },
         { label: 'Ask about Halden.', next: () => node('Oswin the Trader', 'The guard? Lost his gate key again, I hear. Careless man for someone who watches doors.') },
+        { label: 'What do you sell?', next: () => oswinSellNode(state) },
         end('Leave')
       ]
     );

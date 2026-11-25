@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 
 import {
   createInitialState, questStatus, setQuestStep, advanceQuest, startLanterns, buyOilWithCoins, buyOilWithPromise, deliverOil, startKey, pickUpKey, returnKey, startCheer, watchLanterns, tellPipAboutLanterns, addCoins, coins, addItem, hasItem, removeItem, inventoryItems, journalEntries, questCounts, remember, memoryFor, serialize, deserialize, createSaveStore, SAVE_KEY, startToll, collectToll, waiveToll, finishToll, startLedger, hearLedgerRumour, recoverLedger, returnLedger, QUEST_ORDER, CHORE_ORDER, QUESTS,
-  startWicks, trimWicks, finishWicks, startTally, walkTally, finishTally, getFlag
+  startWicks, trimWicks, finishWicks, startTally, walkTally, finishTally, getFlag,
+  buyOswinWare, OSWIN_WARES
 } from '../src/state.js';
 
 test('new state starts with no quests and 6 coins', () => {
@@ -293,4 +294,41 @@ test('an unknown chore step in a save falls back to none instead of wedging', ()
   }));
   assert.equal(questStatus(corrupt, 'wicks'), 'none', 'an unknown step is dropped');
   assert.equal(questStatus(corrupt, 'tally'), 'walked', 'a valid step is kept');
+});
+
+
+
+test('Oswin wares: buying rope spends 3 coins and grants rope once', () => {
+  const state = createInitialState();
+  assert.equal(OSWIN_WARES.length, 1);
+  assert.equal(OSWIN_WARES[0].id, 'rope');
+  assert.equal(OSWIN_WARES[0].price, 3);
+  const result = buyOswinWare(state, 'rope');
+  assert.equal(result.changed, true);
+  assert.equal(coins(state), 3);
+  assert.equal(hasItem(state, 'rope'), true);
+  assert.equal(buyOswinWare(state, 'rope').changed, false, 'cannot buy twice');
+  assert.equal(coins(state), 3, 'no second charge');
+});
+
+test('Oswin wares: cannot afford rope', () => {
+  const state = createInitialState();
+  state.flags.coins = 2;
+  assert.equal(buyOswinWare(state, 'rope').changed, false);
+  assert.equal(hasItem(state, 'rope'), false);
+  assert.equal(coins(state), 2);
+});
+
+test('Oswin wares: unknown ware is rejected', () => {
+  const state = createInitialState();
+  assert.equal(buyOswinWare(state, 'sword_of_nothing').changed, false);
+});
+
+test('Oswin wares: rope survives a save round trip', async () => {
+  const state = createInitialState();
+  buyOswinWare(state, 'rope');
+  const { serialize, deserialize } = await import('../src/state.js');
+  const reloaded = deserialize(serialize(state));
+  assert.equal(hasItem(reloaded, 'rope'), true);
+  assert.equal(coins(reloaded), 3);
 });

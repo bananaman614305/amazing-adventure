@@ -14,7 +14,8 @@ export const ITEMS = {
   arrears_pouch: { name: 'Pouch of Arrears', description: 'Three weeks of lane toll money, sewn into a canvas pouch. Mara is owed this.' },
   keeper_receipt: { name: 'Keeper’s Receipt', description: 'Mara’s mark, dated and countersigned. Proof the plaza took the arrears in full.' },
   keeper_note: { name: 'Keeper’s Note', description: 'Mara’s writing, forgiving the lane’s arrears this quarter. Wren will not like the reason.' },
-  night_order: { name: 'Night Order', description: 'Oswin’s paper chit for two lanterns before the moon is up, signed in his own hand.' }
+  night_order: { name: 'Night Order', description: 'Oswin’s paper chit for two lanterns before the moon is up, signed in his own hand.' },
+  rope: { name: 'Coil of Rope', description: 'Oswin’s good hemp rope. Strong enough to hold a gate shut.' }
 };
 
 export const QUEST_ORDER = ['lanterns', 'key', 'cheer', 'toll', 'ledger', 'arrears', 'nightlight'];
@@ -340,6 +341,26 @@ export function removeItem(state, itemId) {
 /** Items the player owns, expanded with names and descriptions. */
 export function inventoryItems(state) {
   return state.inventory.map((id) => ({ id, ...ITEMS[id] }));
+}
+
+// --- Oswin's stall: a priced purchase ---------------------------------------
+// One real sink for the coins the game hands out. The rope is bought once and
+// owned forever: there is no dawn reset and no restock, so it cannot be farmed
+// into coins or standing. It costs coins and grants an item, nothing more.
+export const OSWIN_WARES = [
+  { id: 'rope', price: 3 }
+];
+
+export function buyOswinWare(state, itemId) {
+  const ware = OSWIN_WARES.find((w) => w.id === itemId);
+  if (!ware) return noChange('Oswin does not stock that.');
+  if (hasItem(state, itemId)) return noChange('You already carry that.');
+  if (coins(state) < ware.price) {
+    return noChange(`Oswin shakes his head. “${ware.price} coins, or nothing.”`);
+  }
+  addCoins(state, -ware.price);
+  addItem(state, itemId);
+  return { changed: true, message: `Bought ${ITEMS[itemId].name} for ${ware.price} coins.` };
 }
 
 // --- Reputation actions (quest-level consequences) ------------------------
