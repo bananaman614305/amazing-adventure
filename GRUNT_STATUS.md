@@ -29,17 +29,27 @@ Commits: `591b1d7` (source + tests), `21f6971` (dist restamp).
 
 Evidence: unit 687/687; playthrough 7/7 quests, 15 coins, 3 items, story
 complete, exit 0; reachability 105784/105784 winnable, 0 dead ends, no
-truncation; dist preview test green. Desktop browser + mobile browser
-suites: rerunning this round (desktop harness in flight).
+truncation; dist preview test green. Desktop browser suite 265/265 checks
+with no console errors; trusted tests receipt b9838e01-2fa3-423d-bfb0-
+c772dd9a7219 and browser receipt 318a3bc3-4641-41c3-86d5-70364f9a0bba
+both completed exit 0 at head 079c5e9. Mobile not verified: the local
+suite hung three times with zero output (voided, recorded in
+needs-supervision.json as a possible host-side issue) and the trusted
+mobile receipt 481f65fd-631f-41d7-878a-285440964b40 was still queued at
+last poll — not a result, do not count it. Publish: PR #59 republished
+at head 079c5e97b3b6bda8bea342492f5cbc491cbf9100 via the PR-only
+fallback (publish-result.json status published, 2026-11-25 10:54:42Z).
 
 PR #59 (head `12fab2060c7b6f5d790ce6f144b423553f6a7419`) published via the
 PR-only fallback; trusted channel still blocked on host history-size screen.
 ## Next steps
 
-1. Record the desktop browser (and, if cost permits, mobile) verification
-   result for head `21f6971` in GRUNT_STATUS, then decide the next round's
-   scope from the weakest remaining surface (audio ambience, cast polish, or
-   a new quest beat) without weakening required verification.
+1. Round 80 scope: pick from the weakest remaining surface (audio
+   ambience, cast polish, or a new quest beat) without weakening required
+   verification. Any new economy sink must be hasItem-guarded, one-time,
+   no restock, no dawn reset. Mobile stays open: poll receipt
+   481f65fd-631f-41d7-878a-285440964b40 to a terminal state before another
+   publish, and never report it as passing while queued.
 2. The trusted release channel remains blocked on the host's 256-commit /
    22000-byte review-diff screen (origin/main still the initial README commit,
    branch now 306 commits ahead). Continue using the PR-only fallback
