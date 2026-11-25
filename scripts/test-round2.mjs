@@ -3320,6 +3320,62 @@ try {
     JSON.stringify({ assetState: paper.assetState, detail: paper.detail }));
 
   await capture(page, 'round83-job-board-paper.png');
+  // --- 28m2e. The cast's paper props (round 84) -------------------------------
+  // Oswin's apron and Wren's ledger pages, plus a third Paper mesh on one of
+  // the other rigs (the materials audit counts 3): all carry the round 83
+  // paper maps at a 0.3 m physical tile, with a forced white tint so the cream
+  // albedo stands alone. Checked on the live scene, after the real boot chain
+  // (upgradeCastPaper runs at the end of castReady).
+  const castPaper = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    await api.castReady;
+    const rows = [];
+    const materials = new Set();
+    for (const npc of api.npcs) {
+      npc.group.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        if (!/^Paper$/i.test(o.material.name || '')) return;
+        const uv = o.geometry.getAttribute('uv');
+        materials.add(o.material.uuid);
+        rows.push({
+          key: `${npc.id}/${o.name}`,
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+          hasUv: Boolean(uv),
+          tint: o.material.color.getHexString(),
+          roughness: Number(Number(o.material.roughness).toFixed(3)),
+          metalness: Number(o.material.metalness).toFixed(3),
+          image: o.material.map ? o.material.map.image.width : 0,
+          repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+          wrapped: o.material.map
+            ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+          dressed: o.userData.paperDressed === true
+        });
+      });
+    }
+    return { rows, materials: materials.size };
+  });
+  checks.check('all 3 cast Paper meshes wear the three paper maps',
+    castPaper.rows.length === 3 && castPaper.rows.every((r) => r.maps === 3 && r.hasUv
+      && r.image === 512 && r.dressed),
+    JSON.stringify({ rows: castPaper.rows.length,
+                    maps: [...new Set(castPaper.rows.map((r) => r.maps))],
+                    images: [...new Set(castPaper.rows.map((r) => r.image))],
+                    keys: castPaper.rows.map((r) => r.key) }));
+  checks.check('the paper map is one per rig and tiles by projection, not repeat',
+    castPaper.materials >= 1 && castPaper.rows.every((r) => r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    `${castPaper.materials} materials for ${castPaper.rows.length} meshes; ` +
+    JSON.stringify([...new Set(castPaper.rows.map((r) => JSON.stringify(r.repeat)))]));
+  checks.check('the cast paper keeps a white tint (cream albedo stands alone)',
+    castPaper.rows.every((r) => r.tint === 'ffffff'),
+    JSON.stringify([...new Set(castPaper.rows.map((r) => r.tint))]));
+  checks.check('the dressed cast paper sits at paper roughness 0.9, not metal',
+    castPaper.rows.every((r) => r.roughness === 0.9 && Number(r.metalness) === 0),
+    JSON.stringify({ roughness: [...new Set(castPaper.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(castPaper.rows.map((r) => r.metalness))] }));
+
+  await capture(page, 'round84-cast-paper.png');
   // --- 28n. Vegetation: trees stand in, upgrade to models --------------------
   const trees = await page.evaluate(async () => {
     const api = window.amazingAdventure;

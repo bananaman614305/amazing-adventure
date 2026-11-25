@@ -4,7 +4,7 @@ import { floorHeightAt } from './world.js';
 import {
   CAST_ASSETS, projectBoxGeometry, loadCast, loadMaterialTextures,
   CLOTH_TEXTURE_FILES, SKIN_TEXTURE_FILES, HAIR_TEXTURE_FILES, FELT_TEXTURE_FILES,
-  LEATHER_TEXTURE_FILES
+  LEATHER_TEXTURE_FILES, PAPER_TEXTURE_FILES
 } from './assets.js';
 import {
   CAST_SKIN_FAMILIES, castSkinFamilyFor, castSkinParams, shouldDressCastSkin
@@ -20,6 +20,11 @@ import {
   CAST_BOOT_TILE_METERS
 } from './boot.js';
 export { CAST_BOOT_TILE_METERS } from './boot.js';
+import {
+  CAST_PAPER_FAMILIES, castPaperFamilyFor, castPaperParams, shouldDressCastPaper,
+  CAST_PAPER_TILE_METERS
+} from './paper.js';
+export { CAST_PAPER_TILE_METERS } from './paper.js';
 
 // Round 67: the metre scale the cast coats are box-projected at. It is the
 // cloth PROP_FAMILY's tile (see assets.js), so a cast coat, a lane sack and any
@@ -911,4 +916,107 @@ export async function upgradeCastBoot(npcs, { THREE, fetchImpl = fetch, textures
     }
   }
   return dressCastBoot(npcs, loadedTextures, { THREE });
+}
+
+// ---------------------------------------------------------------------------
+// Round 84: the cast's paper props.
+//
+// Oswin's apron and Wren's ledger pages are authored with a material named
+// `Paper` -- the same word as the job board, but a different surface scale, so
+// it is its own family (CAST_PAPER_FAMILIES in src/paper.js). It reuses the
+// generated paper maps rather than a new set.
+// ---------------------------------------------------------------------------
+
+/** The downloaded map set, keyed by the family id in src/paper.js. */
+export const CAST_PAPER_TEXTURE_FILES = PAPER_TEXTURE_FILES;
+
+/**
+ * Dresses every mesh whose authored material belongs to a cast paper family.
+ *
+ * Maps are cloned once per *material*, not once per mesh: all Paper meshes in
+ * one rig share the material object the GLB reader built, so a per-mesh clone
+ * would allocate duplicate map sets for one draw. The first mesh through a
+ * material sets it up; later meshes only get their own projected UVs. The
+ * paper albedo is already cream, so the tint stays white (keepTint is false in
+ * src/paper.js) or the cream would multiply down to brown.
+ */
+export function dressCastPaper(npcs, textures, { THREE } = {}) {
+  const dressed = [];
+  const perFamily = { castPaper: 0 };
+  let seams = 0;
+  let anyLoaded = false;
+  if (!THREE || !textures) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  const family = CAST_PAPER_FAMILIES[0];
+  if (!shouldDressCastPaper(family, textures)) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  anyLoaded = true;
+
+  const materialFamilies = new Map();
+
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const fam = castPaperFamilyFor(material && material.name);
+      if (!fam) return;
+      if (!shouldDressCastPaper(fam, textures)) return;
+
+      const scale = accumulatedScale(mesh);
+      const split = projectBoxGeometry({
+        THREE, geometry: mesh.geometry, tileMeters: fam.tileMeters / scale
+      });
+      if (split.seams > 0) seams += split.seams;
+
+      if (materialFamilies.get(material) !== fam) {
+        const params = castPaperParams(fam);
+        for (const key of ['map', 'normalMap', 'roughnessMap']) {
+          const texture = textures[key];
+          if (!texture) continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        material.roughness = params.roughness;
+        material.metalness = params.metalness;
+        if (params.keepTint === false) {
+          // The paper albedo is already cream: force the tint white or the
+          // authored cream multiplies down to brown.
+          material.color.set(0xffffff);
+        }
+        material.needsUpdate = true;
+        materialFamilies.set(material, fam);
+      }
+
+      mesh.userData.paperDressed = true;
+      perFamily.castPaper += 1;
+      dressed.push({ npc: npc.id, name: mesh.name, family: 'castPaper', tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, perFamily, anyLoaded };
+}
+
+/**
+ * Loads the paper maps and dresses the cast's paper props with them.
+ * Never throws.
+ */
+export async function upgradeCastPaper(npcs, { THREE, fetchImpl = fetch, textures = null } = {}) {
+  if (!THREE || !npcs || !npcs.length) {
+    return { dressed: 0, meshes: [], anyLoaded: false, perFamily: { castPaper: 0 } };
+  }
+  let loadedTextures = textures;
+  if (!loadedTextures) {
+    try {
+      loadedTextures = await loadMaterialTextures({ THREE, files: CAST_PAPER_TEXTURE_FILES, fetchImpl });
+    } catch {
+      loadedTextures = null;
+    }
+  }
+  return dressCastPaper(npcs, loadedTextures, { THREE });
 }

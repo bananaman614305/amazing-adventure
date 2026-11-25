@@ -12,9 +12,12 @@
 //     src/world.js does and calls the exported dressBoardPaper()).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
-  CAST_PAPER_TILE_METERS, BOARD_PAPER_FAMILIES,
-  boardPaperFamilyFor, boardPaperParams, shouldDressBoardPaper
+  CAST_PAPER_TILE_METERS, BOARD_PAPER_FAMILIES, CAST_PAPER_FAMILIES,
+  boardPaperFamilyFor, boardPaperParams, shouldDressBoardPaper,
+  castPaperFamilyFor, castPaperParams, shouldDressCastPaper
 } from '../src/paper.js';
 
 test('the job board paper tile is 0.3 m', () => {
@@ -34,6 +37,173 @@ test('every other material is left alone', () => {
   }
   assert.equal(boardPaperFamilyFor(undefined), null);
   assert.equal(boardPaperFamilyFor(null), null);
+});
+
+test('a future variant name is not caught by accident', () => {
+  assert.equal(boardPaperFamilyFor('BoardNote'), null);
+  assert.equal(boardPaperFamilyFor('JobPaper'), null);
+});
+
+test('the family states its exact material settings and forces a white tint', () => {
+  const paper = boardPaperParams(boardPaperFamilyFor('BoardFace'));
+  assert.deepEqual(paper, { roughness: 0.9, metalness: 0, keepTint: false });
+  assert.equal(boardPaperParams(null), null);
+  for (const family of BOARD_PAPER_FAMILIES) assert.equal(family.keepTint, false);
+});
+
+test('a family waits for its maps rather than half-dressing', () => {
+  const paper = boardPaperFamilyFor('BoardFace');
+  assert.equal(shouldDressBoardPaper(paper, { anyLoaded: true }), true);
+  assert.equal(shouldDressBoardPaper(paper, { anyLoaded: false }), false);
+  assert.equal(shouldDressBoardPaper(paper, null), false);
+  assert.equal(shouldDressBoardPaper(null, { anyLoaded: true }), false);
+});
+
+test('the cast paper family names exactly the authored Paper material', () => {
+  assert.equal(castPaperFamilyFor('Paper').id, 'castPaper');
+  assert.equal(castPaperFamilyFor('paper').id, 'castPaper');
+});
+
+test('the cast family leaves every other material alone', () => {
+  for (const name of ['BoardFace', 'BoardPaper', 'BoardNote', 'JobPaper', 'PaperNote',
+    'EyeWhite', 'Mouth', 'Cloth', 'WoodP', 'Marker', '']) {
+    assert.equal(castPaperFamilyFor(name), null,
+      `${name || '(empty)'} must not match the cast paper family`);
+  }
+  assert.equal(castPaperFamilyFor(undefined), null);
+  assert.equal(castPaperFamilyFor(null), null);
+});
+
+test('the cast family states its exact material settings and forces a white tint', () => {
+  const paper = castPaperParams(castPaperFamilyFor('Paper'));
+  assert.deepEqual(paper, { roughness: 0.9, metalness: 0, keepTint: false });
+  assert.equal(castPaperParams(null), null);
+  for (const family of CAST_PAPER_FAMILIES) assert.equal(family.keepTint, false);
+});
+
+test('the cast family waits for its maps rather than half-dressing', () => {
+  const paper = castPaperFamilyFor('Paper');
+  assert.equal(shouldDressCastPaper(paper, { anyLoaded: true }), true);
+  assert.equal(shouldDressCastPaper(paper, { anyLoaded: false }), false);
+  assert.equal(shouldDressCastPaper(paper, null), false);
+  assert.equal(shouldDressCastPaper(null, { anyLoaded: true }), false);
+});
+
+// Round 84: the real pass on the shipped GLBs (assets/npc_*.glb), mirroring
+// the boot layer in tests/boot.test.mjs. Oswin's apron and Wren's ledger pages
+// are the `Paper` meshes.
+async function modelledCast() {
+  const THREE = await import('three');
+  const { loadGlb } = await import('../src/glb.js');
+  const { createNPCs, upgradeNPCs } = await import('../src/npcs.js');
+  const scene = new THREE.Scene();
+  const npcs = createNPCs(scene);
+  const fetchImpl = async (url) => {
+    const id = /npc_([a-z]+)\.glb$/.exec(url)[1];
+    const buf = readFileSync(resolve(import.meta.dirname, '..', 'assets', `npc_${id}.glb`));
+    const copy = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+    return { ok: true, status: 200, arrayBuffer: async () => copy };
+  };
+  const summary = await upgradeNPCs(npcs, { THREE, loadGlb, fetchImpl });
+  return { THREE, npcs, summary };
+}
+
+const PAPER = /^paper$/i;
+
+function paperMeshes(npcs) {
+  const out = [];
+  for (const npc of npcs) {
+    npc.group.traverse((o) => {
+      if (o.isMesh && o.material && PAPER.test(o.material.name)) out.push({ npc, mesh: o });
+    });
+  }
+  return out;
+}
+
+function uvSpan(mesh) {
+  const uv = mesh.geometry.getAttribute('uv');
+  let min = Infinity;
+  let max = -Infinity;
+  for (let i = 0; i < uv.array.length; i++) {
+    if (uv.array[i] < min) min = uv.array[i];
+    if (uv.array[i] > max) max = uv.array[i];
+  }
+  return max - min;
+}
+
+test('the shipped rigs carry the expected Paper meshes, with no UVs', async () => {
+  const { npcs, summary } = await modelledCast();
+  assert.equal(summary.mode, 'model', 'all six rigs must load for this test to mean anything');
+  const paper = paperMeshes(npcs);
+  // Oswin's apron and Wren's ledger pages, plus a third Paper mesh on one of
+  // the other rigs (the live-scene audit counts 3): these are the meshes the
+  // pass must dress.
+  assert.equal(paper.length, 3);
+  for (const { npc, mesh } of paper) {
+    assert.equal(mesh.geometry.getAttribute('uv'), undefined,
+      `${npc.id}/${mesh.name} ships without UVs -- the pass must project them`);
+  }
+});
+
+test('dressCastPaper gives every paper mesh projected UVs and all three maps', async () => {
+  const { THREE, npcs } = await modelledCast();
+  const { dressCastPaper } = await import('../src/npcs.js');
+  const result = dressCastPaper(npcs, mapSet(THREE), { THREE });
+
+  assert.equal(result.anyLoaded, true);
+  assert.equal(result.dressed, 3);
+  assert.deepEqual(result.perFamily, { castPaper: 3 });
+  assert.equal(result.meshes.length, 3);
+
+  const paper = paperMeshes(npcs);
+  for (const { npc, mesh } of paper) {
+    const uv = mesh.geometry.getAttribute('uv');
+    assert.ok(uv, `${npc.id}/${mesh.name} must gain a uv attribute`);
+    assert.equal(uv.itemSize, 2);
+    assert.equal(uv.count, mesh.geometry.getAttribute('position').count, 'one UV pair per vertex');
+    assert.ok(uvSpan(mesh) > 0, `${npc.id}/${mesh.name} UVs must not collapse to a point`);
+
+    const material = mesh.material;
+    for (const key of ['map', 'normalMap', 'roughnessMap']) {
+      assert.ok(material[key], `${npc.id}/${mesh.name} must carry ${key}`);
+      assert.equal(material[key].wrapS, THREE.RepeatWrapping, `${key} wraps in U`);
+      assert.equal(material[key].wrapT, THREE.RepeatWrapping, `${key} wraps in V`);
+      assert.deepEqual([material[key].repeat.x, material[key].repeat.y], [1, 1],
+        'the metre projection carries the tile, not a texture repeat');
+    }
+    assert.equal(material.roughness, 0.9);
+    assert.equal(material.metalness, 0);
+    // keepTint is false: the paper albedo is already cream, so the tint must
+    // stay white, not the authored cream multiplied onto the map.
+    assert.equal(material.color.getHexString(), 'ffffff');
+    assert.equal(mesh.userData.paperDressed, true);
+  }
+});
+
+test('dressing the paper leaves every other cast material alone', async () => {
+  const { THREE, npcs } = await modelledCast();
+  const { dressCastPaper } = await import('../src/npcs.js');
+
+  const before = [];
+  for (const npc of npcs) {
+    npc.group.traverse((o) => {
+      if (!o.isMesh || PAPER.test(o.material.name)) return;
+      before.push({
+        key: `${npc.id}/${o.name}`,
+        material: o.material,
+        map: o.material.map,
+        hasUv: Boolean(o.geometry.getAttribute('uv'))
+      });
+    });
+  }
+  dressCastPaper(npcs, mapSet(THREE), { THREE });
+
+  for (const { npc, mesh } of paperMeshes(npcs)) assert.ok(mesh.userData.paperDressed);
+  for (const entry of before) {
+    assert.equal(entry.material.map, null, `${entry.key} must keep no map`);
+    assert.equal(Boolean(entry.material.normalMap), false, `${entry.key} must keep no normal map`);
+    assert.equal(Boolean(entry.material.roughnessMap), false, `${entry.key} must keep no roughness map`);
+  }
 });
 
 test('a future variant name is not caught by accident', () => {
