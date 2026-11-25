@@ -12,32 +12,43 @@
 
 ## Current task
 
-**Round 83 complete: parchment for the job board.**
+**Round 84 in flight: dress the cast's paper props.**
 
-Round 83 dresses the plaza job board's face (BoardFace, 1 mesh, 2.16 m2) and
-its three pinned slips (BoardPaper, 3 meshes, 0.4 m2) with a new
-paper/parchment family at a 0.3 m tile. The cream albedo stands alone
-(keepTint false, white material tint).
+Round 84 dresses the cast's three `Paper` meshes -- oswin's Apron, sable's
+PropMap and wren's PropLedgerPages (0.31 m2 of flat colour before, GLB JSON
+evidence: one authored Paper material per rig on exactly those three rigs) --
+with the round 83 paper/parchment maps, reused unchanged. The cast's Paper is
+a different surface scale from the job board, so it gets its own exact-name
+family (/^paper$/i vs the board's /^(boardface|boardpaper)$/i), the same 0.3 m
+tile, roughness 0.9 / metalness 0, and a forced white tint (keepTint false)
+so the cream albedo stands alone.
 
-Evidence: npm test 723/723 pass; browser suite 281/281 with all 5 board-paper
-checks pass (4 meshes x 3 maps @ 512px, white tint, roughness 0.9 metalness 0,
-assetState 'textured', detail dressed 4 seams 0); mobile suite 184/184 pass
-(no console errors). Materials audit no longer lists BoardFace/BoardPaper as
-flat (remaining 'Paper' 0.31 m2 is the NPC Paper material, by design). dist
-restamped at 5e6be32 (111 files, 8180 KB). Kaggle version 41 stayed QUEUED;
-textures were produced locally with the same procedural script (numpy, CPU)
-and copied into assets/textures/paper_*.webp (77 KB / 470 KB / 59 KB).
+Done and committed: src/paper.js CAST_PAPER_FAMILIES + castPaperFamilyFor /
+castPaperParams / shouldDressCastPaper; src/npcs.js dressCastPaper +
+upgradeCastPaper (maps cloned once per material, tint forced white when
+keepTint is false); src/main.js upgradeCastPaper chained last on castReady;
+tests/paper.test.mjs 10 new cast tests (18/18 paper tests pass); full unit
+suite 733/733 pass on the committed tree; materials audit no longer lists
+Paper as flat; scripts/test-round2.mjs 4 new live-scene checks; CREDITS.md
+round 83 + 84 entries. dist restamped (f38d827, 111 files); comment-precision
+commit 09e7d32 (Paper rigs named, preview digest still matches).
+
+In flight: desktop browser suite (npm run test:browser) running with the
+Round 84 checks (3 Paper meshes x 3 maps @ 512px, projection tiling, white
+tint, roughness 0.9 metalness 0, userData.paperDressed, round84-cast-paper.png
+evidence); mobile suite (npm run test:mobile) still to run after it.
 
 ## Next steps
 
-1. Publish Round 83 via the PR-only fallback: write
+1. Finish Round 84 verification: desktop suite result, then mobile suite.
+2. Publish Round 84 via the PR-only fallback: overwrite
    /worker/state/outbox/publish.json with branch grunt/round72-bunting-felt,
-   base main, title "Round 83: parchment for the job board", exact HEAD
-   5e6be32..., and a body summarising the checks and evidence; keep the
-   needs-supervision.json blocked_infrastructure entry current. Do not merge
-   or deploy from a shell.
-2. Choose the next useful milestone: the materials audit flat list is now
-   HouseGlass 4.63, LampGlass 4.5, LaneRope 1.92, NpcMarker 1.76,
+   base main, title "Round 84: dress the cast's paper props", exact HEAD
+   (09e7d32 or later), body summarising the checks and evidence; refresh
+   needs-supervision.json to the same head. Do not merge or deploy from a
+   shell.
+3. Choose the next useful milestone: the audit flat list is now
+   HouseGlass 4.63, LampGlass 4.5, LaneRope 1.92, NpcMarker 1.77,
    LanternHousing 1.32, SackTie 1.04, LampBulb 0.58, WoodP 0.34 (all by
    design or already documented stay-flat); the next largest genuinely
    dressable surface family is the next candidate. Continue the economy rule
