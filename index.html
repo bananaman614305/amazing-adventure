@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0d1420">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23101826'/%3E%3Cpath d='M16 5 27 25H5z' fill='%23ffd479'/%3E%3C/svg%3E">
+  <title>Amazing Adventure</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.min.js"
+      }
+    }
+  </script>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; overflow: hidden; background: #0d1420; color: #f4f7fb;
+      /* Stop the browser stealing drags for scrolling or zooming on a phone. */
+      touch-action: none;
+      -webkit-user-select: none; user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+    #game { position: fixed; inset: 0; }
+    #game canvas, #game { touch-action: none; }
+    #game canvas { display: block; }
+
+    #crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      margin: -9px 0 0 -9px;
+      pointer-events: none;
+      opacity: 0.85;
+    }
+    #crosshair::before, #crosshair::after {
+      content: "";
+      position: absolute;
+      background: #fff;
+      box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+    }
+    #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+    #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+    #crosshair.active::before, #crosshair.active::after { background: #ffd479; }
+
+    #hint {
+      position: fixed;
+      left: 50%;
+      bottom: 16%;
+      transform: translateX(-50%);
+      padding: 8px 14px;
+      border-radius: 8px;
+      background: rgba(10, 16, 26, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      font-size: 0.9375rem;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    #hint b { color: #ffd479; }
+
+    #clock {
+      position: fixed;
+      top: 18px;
+      right: 20px;
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(10, 16, 26, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      font-variant-numeric: tabular-nums;
+      pointer-events: none;
+    }
+    #clock .time { font-weight: 700; font-size: 1rem; }
+    #clock .phase {
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #ffd479;
+    }
+    #coin-count { font-size: 0.8125rem; color: #ffe2a3; }
+    #coin-count::before { content: "◈ "; }
+
+    #quest-tracker {
+      position: fixed;
+      top: 18px;
+      left: 20px;
+      width: min(320px, calc(100vw - 40px));
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(10, 16, 26, 0.66);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 0.8125rem;
+      line-height: 1.45;
+      pointer-events: none;
+    }
+    #quest-tracker h2 {
+      margin: 0 0 6px;
+      font-size: 0.625rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #9fb0c6;
+    }
+    #quest-tracker .quest { margin: 0 0 7px; }
+    #quest-tracker .quest:last-child { margin-bottom: 0; }
+    #quest-tracker .quest .title { color: #ffd479; font-weight: 600; }
+    #quest-tracker .quest.done .title { color: #8fd49a; }
+    #quest-tracker .quest .text { color: #c7d4e4; }
+    #quest-tracker .empty { color: #8698ae; font-style: italic; }
+
+    #overheard {
+      position: fixed;
+      left: 50%;
+      bottom: 24%;
+      transform: translateX(-50%);
+      width: min(620px, calc(100vw - 40px));
+      padding: 12px 18px;
+      border-radius: 12px;
+      background: rgba(9, 15, 25, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      pointer-events: none;
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+    #overheard .overheard-label {
+      font-size: 0.625rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #8698ae;
+      margin-bottom: 6px;
+    }
+    #overheard .overheard-line { margin-bottom: 3px; color: #c7d4e4; }
+    #overheard .overheard-line:last-child { margin-bottom: 0; }
+    #overheard .overheard-line b { color: #ffd479; font-weight: 600; }
+    #overheard .overheard-line.speaking { color: #fff; }
+
+    #toast-stack {
+      position: fixed;
+      left: 50%;
+      top: 22%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: center;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 9px 18px;
+      border-radius: 999px;
+      background: rgba(18, 28, 44, 0.94);
+      border: 1px solid rgba(255, 212, 121, 0.55);
+      color: #ffe9bd;
+      font-size: 0.875rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      animation: toast-in 180ms ease-out;
+    }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    /* Above #touch (z-index 40): on a short screen the touch buttons would
+       otherwise sit on top of the dialogue choices and swallow the taps. */
+    #dialogue-close {
+      display: none;
+      position: absolute; top: 8px; right: 8px;
+      width: 40px; height: 40px;
+      align-items: center; justify-content: center;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.06);
+      color: #cfe0f5; font: inherit; font-size: 1.0625rem; line-height: 1;
+      cursor: pointer;
+    }
+    #dialogue-close:hover { background: rgba(255, 255, 255, 0.14); }
+
+    #dialogue {
+      position: fixed;
+      z-index: 50;
+      left: 50%;
+      bottom: 5%;
+      transform: translateX(-50%);
+      width: min(700px, calc(100vw - 32px));
+      padding: 20px 24px 14px;
+      border-radius: 14px;
+      background: rgba(11, 18, 30, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+      /* The panel is anchored to the bottom, so without a ceiling a long line at a
+         large user font size grows off the top of the screen and the first options
+         become unreachable. Scroll inside the panel instead of losing them. */
+      max-height: 82vh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    #dialogue .name {
+      font-size: 0.8125rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: #ffd479;
+      margin-bottom: 2px;
+    }
+    #dialogue .role { font-size: 0.6875rem; color: #8698ae; margin-bottom: 10px; }
+    #dialogue .line { font-size: 1.1875rem; line-height: 1.5; min-height: 56px; }
+    #dialogue .choices { margin: 14px 0 0; display: flex; flex-direction: column; gap: 6px; }
+    #dialogue .choice {
+      font: inherit;
+      text-align: left;
+      color: #dfe8f4;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 9px;
+      padding: 9px 13px;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    #dialogue .choice:hover, #dialogue .choice:focus-visible,
+    #dialogue .choice.selected {
+      background: rgba(255, 212, 121, 0.18);
+      border-color: #ffd479;
+      color: #fff;
+      outline: none;
+    }
+    #dialogue .choice.selected .num::after { content: "›"; margin-left: 6px; }
+    #dialogue .choice .num { color: #ffd479; font-weight: 700; margin-right: 8px; }
+    #dialogue .foot {
+      margin-top: 10px;
+      font-size: 0.75rem;
+      color: #9fb0c6;
+      text-align: right;
+    }
+
+    #panel {
+      position: fixed;
+      right: 20px;
+      top: 68px;
+      width: min(340px, calc(100vw - 40px));
+      max-height: 60vh;
+      overflow: auto;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: rgba(9, 15, 25, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      pointer-events: none;
+    }
+    #panel h3 { margin: 0 0 8px; font-size: 0.6875rem; letter-spacing: 0.16em; text-transform: uppercase; color: #9fb0c6; }
+    #panel h3 + h3, #panel ul + h3 { margin-top: 14px; }
+    #panel ul { margin: 0; padding: 0; list-style: none; }
+    #panel li { margin-bottom: 9px; }
+    #panel .item-name { color: #ffd479; font-weight: 600; }
+    #panel .journal-title { color: #ffd479; font-weight: 600; }
+    #panel .journal-title.done { color: #8fd49a; }
+    #panel .muted { color: #8698ae; font-style: italic; }
+    #panel .standing-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    #panel .standing-name { color: #c7d4e4; }
+    #panel .standing-tier { font-weight: 600; }
+    #panel .tier-hostile { color: #e06c6c; }
+    #panel .tier-cold { color: #d9a06a; }
+    #panel .tier-neutral { color: #8698ae; }
+    #panel .tier-warm { color: #ffd479; }
+    #panel .tier-trusted { color: #8fd49a; }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at 50% 35%, rgba(30, 56, 88, 0.72), rgba(6, 10, 18, 0.94));
+      cursor: pointer;
+    }
+    #overlay .card {
+      text-align: center;
+      padding: 34px 42px;
+      border-radius: 18px;
+      background: rgba(8, 14, 24, 0.84);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+      max-width: min(560px, calc(100vw - 40px));
+    }
+    #overlay h1 { margin: 0; font-size: 2.375rem; letter-spacing: -0.02em; }
+    #overlay .round {
+      margin: 8px 0 20px;
+      color: #ffd479;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    #overlay .controls { margin: 0 0 22px; color: #c7d4e4; font-size: 0.875rem; line-height: 1.9; }
+    #overlay .buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    #overlay button {
+      font: inherit;
+      font-weight: 700;
+      color: #101826;
+      background: #ffd479;
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 26px;
+      cursor: pointer;
+    }
+    #overlay button.ghost { background: transparent; color: #ffd479; border: 1px solid rgba(255, 212, 121, 0.6); }
+    #overlay button:hover { background: #ffe2a3; }
+    #overlay button.ghost:hover { background: rgba(255, 212, 121, 0.14); }
+    #overlay .save-note { margin: 16px 0 0; font-size: 0.75rem; color: #8698ae; }
+    /* --- Touch controls (phones and tablets only) ---------------------- */
+    #touch {
+      position: fixed; inset: 0; pointer-events: none; z-index: 40;
+      padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+               max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    }
+    #touch[hidden] { display: none !important; }
+
+    #stick-zone {
+      position: absolute; left: 0; bottom: 0;
+      width: 55%; height: 62%;
+      pointer-events: auto;
+      touch-action: none;
+    }
+    #stick-base {
+      position: absolute; left: 96px; bottom: 96px;
+      width: 112px; height: 112px; margin: -56px 0 0 -56px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 212, 121, 0.35);
+      background: rgba(13, 20, 32, 0.32);
+      -webkit-backdrop-filter: blur(2px);
+      backdrop-filter: blur(2px);
+      transition: opacity 0.18s ease;
+      opacity: 0.75;
+    }
+    #stick-base.active { opacity: 1; border-color: rgba(255, 212, 121, 0.75); }
+    #stick-knob {
+      position: absolute; left: 50%; top: 50%;
+      width: 52px; height: 52px; margin: -26px 0 0 -26px;
+      border-radius: 50%;
+      background: rgba(255, 212, 121, 0.82);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+      will-change: transform;
+    }
+
+    /* The look zone stops short of the button cluster so a thumb aiming at
+       Pause can never be interpreted as a look drag instead. */
+    #look-zone {
+      position: absolute; right: 0; bottom: 0;
+      width: 50%; height: 68%;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    #touch-buttons {
+      position: absolute; right: 16px; bottom: 24px;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+      padding-right: env(safe-area-inset-right);
+      z-index: 2;
+    }
+    .touch-button {
+      pointer-events: auto;
+      touch-action: manipulation;
+      min-width: 62px; min-height: 56px;
+      padding: 0 16px;
+      border-radius: 28px;
+      border: 1px solid rgba(255, 212, 121, 0.5);
+      background: rgba(13, 20, 32, 0.66);
+      color: #ffd479;
+      font: inherit; font-size: 0.9375rem; font-weight: 600;
+      display: inline-flex; align-items: center; justify-content: center;
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+    }
+    .touch-button:active { background: rgba(255, 212, 121, 0.22); }
+    #touch-interact {
+      min-width: 92px; min-height: 68px; border-radius: 34px;
+      background: rgba(255, 212, 121, 0.9); color: #1a1206;
+      font-size: 1rem;
+    }
+    #touch-interact[hidden] { display: none !important; }
+    #touch-row { display: flex; gap: 10px; }
+    #touch-row-a11y { display: flex; gap: 8px; }
+    /* These three are the phone equivalent of C, L and G. Slightly smaller than the
+       main row because they are secondary, but still a full 44px touch target. */
+    #touch-row-a11y .touch-button {
+      min-width: 0; min-height: 44px;
+      padding: 0 10px; font-size: 0.75rem; font-weight: 500;
+      border-radius: 22px;
+      border-color: rgba(143, 176, 216, 0.45);
+      color: #b8c6d8;
+    }
+
+    /* Dialogues become a full-width sheet on a phone so choices are thumb-sized. */
+    @media (max-width: 760px), (pointer: coarse) {
+      /* The base rule centres with translateX(-50%); switching to left/right
+         edges without clearing that transform pushed the whole panel off the
+         left of the screen, where the thumb stick then swallowed the taps. */
+      #dialogue {
+        left: 8px; right: 8px;
+        transform: none;
+        width: auto;
+        bottom: calc(8px + env(safe-area-inset-bottom));
+        max-height: 62vh; overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      /* The stick must start above the dialogue sheet, not on top of it. */
+      #touch.dialogue-open #stick-zone,
+      #touch.dialogue-open #look-zone,
+      #touch.dialogue-open #touch-buttons { pointer-events: none; }
+      /* Hide the action/journal cluster while a conversation is open: the
+         dialogue sheet owns the bottom of the screen. */
+      #touch.dialogue-open #touch-buttons { opacity: 0.25; }
+      #dialogue .choices button { min-height: 48px; font-size: 0.9375rem; }
+      #dialogue-close { display: flex; }
+      #dialogue .foot { display: none; }
+      #dialogue { padding-right: 52px; }
+      #hint { bottom: auto; top: calc(64px + env(safe-area-inset-top)); font-size: 0.8125rem; }
+      #panel { left: 8px; right: 8px; top: 8px; max-height: 76vh; overflow-y: auto; z-index: 50; }
+      #quest-tracker { max-width: 58vw; font-size: 0.75rem; }
+      #overheard { font-size: 0.8125rem; }
+      .touch-only { display: initial; }
+    }
+    .touch-only { display: none; }
+    @media (max-width: 760px), (pointer: coarse) { .desktop-only { display: none; } }
+    @media (hover: hover) and (pointer: fine) { .touch-only { display: none !important; } }
+
+    /* On a short screen the button cluster and the dialogue fight for the
+       bottom edge, so give the dialogue the room and shrink the buttons. */
+    @media (max-height: 620px) and (pointer: coarse) {
+      #dialogue { max-height: 70vh; }
+      #dialogue .choices button { min-height: 44px; }
+      .touch-button { min-height: 46px; }
+      #touch-interact { min-height: 54px; }
+    }
+
+    /* Pause menu for touch (keyboard uses Esc) */
+    /* Shown only if the browser drops the WebGL context and will not give it
+       back, which otherwise leaves a permanently blank canvas. */
+    /* Sound toggle: small, out of the way, and reachable by touch. */
+    #sound-toggle {
+      position: fixed;
+      top: max(12px, env(safe-area-inset-top, 0px));
+      right: max(12px, env(safe-area-inset-right, 0px));
+      z-index: 30;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 212, 121, 0.35);
+      background: rgba(10, 16, 26, 0.72);
+      color: #ffd479;
+      font-size: 1.1875rem; line-height: 1;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity 140ms ease;
+    }
+    #sound-toggle:hover { background: rgba(20, 30, 46, 0.85); }
+    #sound-toggle.muted { opacity: 0.45; color: #7d8ea6; border-color: rgba(125, 142, 166, 0.35); }
+    /* While talking the dialogue owns the screen; the toggle steps aside. */
+    body.dialogue-open #sound-toggle { opacity: 0; pointer-events: none; }
+
+    /* The ending is deliberately quiet: paper, not fireworks. */
+    /* The compass panel. Text, not a minimap: it has to work for a player who
+       cannot see the 3D view, and reading a list is the accessible equivalent. */
+    #compass-list { margin: 0 0 10px; padding: 0; list-style: none; }
+    #compass-list li {
+      display: flex; justify-content: space-between; gap: 10px;
+      padding: 5px 0; border-bottom: 1px solid #1e2a3c;
+      font-size: 0.8125rem; color: #b8c6d8;
+    }
+    #compass-list .compass-bearing { color: #ffd479; font-variant-numeric: tabular-nums; }
+    #compass-ask { margin: 0 0 12px; }
+    #compass-ask label { display: block; font-size: 0.75rem; color: #93a4bb; margin-bottom: 4px; }
+    #compass-ask input {
+      width: 100%; box-sizing: border-box; padding: 9px 10px; border-radius: 8px;
+      background: #0c1420; color: #e6eefb; border: 1px solid #2b3a52;
+      font: inherit; font-size: 0.8125rem;
+    }
+    #compass-results { margin-top: 6px; font-size: 0.75rem; color: #8fb0d8; min-height: 16px; }
+
+    #ending-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid #2b3a52; }
+    #ending-section p { margin: 0 0 10px; color: #c8d4e4; font-size: 0.8125rem; line-height: 1.55; }
+    #ending-section button {
+      width: 100%; padding: 12px; border-radius: 9px; cursor: pointer;
+      background: transparent; color: #ffd479; font: inherit; font-size: 0.875rem;
+      border: 1px solid rgba(255, 212, 121, 0.5);
+    }
+
+    #epilogue {
+      position: fixed; inset: 0; z-index: 85;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(5, 9, 15, 0.92); padding: 24px;
+      overflow-y: auto;
+    }
+    #epilogue[hidden] { display: none !important; }
+    #epilogue .card {
+      background: #101a28; border: 1px solid #2b3a52; border-radius: 14px;
+      padding: 26px; max-width: 560px; width: 100%;
+    }
+    #epilogue h2 { margin: 0 0 14px; font-size: 1.375rem; letter-spacing: -0.01em; }
+    #epilogue p { margin: 0 0 14px; color: #c8d4e4; font-size: 0.875rem; line-height: 1.65; }
+    #epilogue .epilogue-line {
+      margin: 0 0 10px; padding-left: 12px; border-left: 2px solid #3a4c66;
+      color: #b8c6d8; font-size: 0.8125rem; line-height: 1.6;
+    }
+    #epilogue .epilogue-standing { color: #93a4bb; font-size: 0.8125rem; line-height: 1.6; margin: 0 0 8px; }
+    #epilogue button.primary {
+      width: 100%; margin-top: 8px; padding: 14px; border-radius: 10px;
+      background: #ffd479; color: #1a1206; border: 1px solid #ffd479;
+      font: inherit; font-size: 0.9375rem; font-weight: 600; cursor: pointer;
+    }
+
+    /* Visually hidden but read aloud. Standard clipping pattern: display:none
+       and visibility:hidden are both ignored by screen readers. */
+    .sr-only {
+      position: absolute; width: 1px; height: 1px;
+      padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0, 0, 0, 0); clip-path: inset(50%);
+      white-space: nowrap; border: 0;
+    }
+
+    /* Honour the OS reduce-motion setting. The interface has only a few
+       transitions, so this is a short list rather than a blanket rule. */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    #context-lost {
+      position: fixed; inset: 0; z-index: 80;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(6, 10, 16, 0.94);
+      padding: 24px;
+    }
+    #context-lost[hidden] { display: none !important; }
+    #context-lost .card {
+      background: #131c2b; border: 1px solid #2b3a52; border-radius: 14px;
+      padding: 24px; max-width: 360px; width: 100%; text-align: center;
+    }
+    #context-lost h2 { margin: 0 0 8px; font-size: 1.1875rem; }
+    #context-lost p { margin: 0 0 16px; color: #98a9c0; font-size: 0.8125rem; line-height: 1.5; }
+    #context-lost button {
+      width: 100%; margin-top: 10px; padding: 14px; border-radius: 10px;
+      border: 1px solid rgba(255, 212, 121, 0.5); background: transparent;
+      color: #ffd479; font: inherit; font-size: 0.9375rem; font-weight: 600;
+      cursor: pointer;
+    }
+    #context-lost button.primary { background: #ffd479; color: #1a1206; border-color: #ffd479; }
+    #context-lost .hint-line { margin: 14px 0 0; font-size: 0.75rem; color: #7d8ea6; }
+
+    #touch-pause {
+      position: fixed; inset: 0; z-index: 60;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(6, 10, 16, 0.82);
+      padding: 24px;
+    }
+    #touch-pause[hidden] { display: none !important; }
+    #touch-pause .menu {
+      background: #131c2b; border: 1px solid #2b3a52; border-radius: 14px;
+      padding: 22px; max-width: 340px; width: 100%; text-align: center;
+    }
+    #touch-pause h2 { margin: 0 0 6px; font-size: 1.125rem; }
+    #touch-pause p { margin: 0 0 18px; color: #98a9c0; font-size: 0.8125rem; }
+    #touch-pause button {
+      width: 100%; margin-top: 10px; padding: 14px; border-radius: 10px;
+      border: 1px solid rgba(255, 212, 121, 0.5); background: transparent;
+      color: #ffd479; font: inherit; font-size: 0.9375rem; font-weight: 600;
+    }
+    #touch-pause button.primary { background: #ffd479; color: #1a1206; border-color: #ffd479; }
+    #touch-pause .hint-line { margin: 14px 0 0; font-size: 0.75rem; color: #7d8ea6; }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="crosshair" hidden></div>
+  <div id="hint" hidden role="status" aria-live="polite"></div>
+
+  <div id="clock" hidden>
+    <span class="phase" id="clock-phase">Day</span>
+    <span class="time" id="clock-time">07:00</span>
+    <span id="coin-count">0</span>
+  </div>
+
+  <div id="quest-tracker" hidden>
+    <h2 id="quest-tracker-title">Quests</h2>
+    <div id="quest-list"></div>
+  </div>
+
+  <div id="panel" hidden>
+    <h3 id="inventory-title">Inventory</h3>
+    <ul id="inventory-list" aria-labelledby="inventory-title"></ul>
+    <h3 id="journal-panel-title">Journal</h3>
+    <ul id="journal-list" aria-labelledby="journal-panel-title"></ul>
+    <h3 id="standing-title">Standing</h3>
+    <ul id="standing-list" aria-labelledby="standing-title"></ul>
+    <h3 id="compass-title">Where things are</h3>
+    <div id="compass-list" role="list" aria-labelledby="compass-title"></div>
+    <div id="compass-ask">
+      <label for="compass-input">Walk to…</label>
+      <input type="text" id="compass-input" list="compass-options" autocomplete="off" placeholder="a place or person">
+      <datalist id="compass-options"></datalist>
+      <div id="compass-results" role="status" aria-live="polite"></div>
+    </div>
+    <div id="ending-section" hidden>
+      <h3>The end</h3>
+      <p id="ending-text"></p>
+      <button type="button" id="ending-open">Read the epilogue</button>
+    </div>
+  </div>
+
+  <div id="epilogue" hidden role="dialog" aria-labelledby="epilogue-title">
+    <div class="card">
+      <h2 id="epilogue-title"></h2>
+      <p id="epilogue-opening"></p>
+      <div id="epilogue-branches"></div>
+      <div id="epilogue-closers"></div>
+      <p id="epilogue-closing"></p>
+      <button type="button" class="primary" id="epilogue-close">Back to the plaza</button>
+    </div>
+  </div>
+
+  <div id="overheard" hidden>
+    <div class="overheard-label">Overheard</div>
+    <div id="overheard-lines"></div>
+  </div>
+
+  <div id="toast-stack"></div>
+
+  <!-- Screen-reader support. Visually hidden, but spoken. The game is first-person
+       and rendered to a canvas, so without this a blind player gets silence. -->
+  <div id="sr-live" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+  <div id="sr-alert" role="alert" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
+
+  <div id="touch" hidden>
+    <div id="stick-zone" aria-hidden="true">
+      <div id="stick-base"><div id="stick-knob"></div></div>
+    </div>
+    <div id="look-zone" aria-hidden="true"></div>
+    <div id="touch-buttons">
+      <button type="button" class="touch-button" id="touch-interact" hidden>Use</button>
+      <div id="touch-row">
+        <button type="button" class="touch-button" id="touch-journal">Journal</button>
+        <button type="button" class="touch-button" id="touch-pause-button">Pause</button>
+      </div>
+      <!-- The keyboard shortcuts C, L and G have no key on a phone. VoiceOver on
+           iOS is the most common screen reader there is, so these need to exist as
+           buttons or the whole accessibility feature is desktop-only. -->
+      <div id="touch-row-a11y">
+        <button type="button" class="touch-button" id="touch-describe" aria-label="Describe where I am">Where am I</button>
+        <button type="button" class="touch-button" id="touch-nearby" aria-label="What is nearby">Nearby</button>
+        <button type="button" class="touch-button" id="touch-travel" aria-label="Walk to the nearest place of interest">Take me</button>
+      </div>
+    </div>
+  </div>
+
+  <button type="button" id="sound-toggle" title="Toggle sound (M)" aria-label="Toggle sound">♪</button>
+
+  <div id="context-lost" hidden role="alert">
+    <div class="card">
+      <h2>Screen went blank</h2>
+      <p id="context-lost-message">The graphics context was lost. Restoring…</p>
+      <button type="button" class="primary" id="context-lost-reload">Reload the game</button>
+      <p class="hint-line">Your progress is already saved — reload, then choose Continue.</p>
+    </div>
+  </div>
+
+  <div id="touch-pause" hidden>
+    <div class="menu">
+      <h2>Paused</h2>
+      <p>Your progress is saved automatically.</p>
+      <button type="button" class="primary" id="touch-resume">Resume</button>
+      <button type="button" id="touch-save">Save now</button>
+      <p class="hint-line">Tab away and the game pauses, keeping your place.</p>
+    </div>
+  </div>
+
+  <div id="dialogue" hidden role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="dialogue-name" aria-describedby="dialogue-line">
+    <button type="button" id="dialogue-close" aria-label="Close conversation">✕</button>
+    <div class="name" id="dialogue-name"></div>
+    <div class="role" id="dialogue-role"></div>
+    <div class="line" id="dialogue-line"></div>
+    <div class="choices" id="dialogue-choices"></div>
+    <div class="foot">W / S select &nbsp;·&nbsp; E or Enter confirm &nbsp;·&nbsp; 1–5 pick &nbsp;·&nbsp; Esc close</div>
+  </div>
+
+  <div id="overlay">
+    <div class="card">
+      <h1>Amazing Adventure</h1>
+      <p class="round">A living world · v0.3.0</p>
+      <p class="controls desktop-only">
+        W A S D walk &nbsp;·&nbsp; mouse look &nbsp;·&nbsp; Shift run<br>
+        E talk / interact &nbsp;·&nbsp; J journal &nbsp;·&nbsp; C describe &nbsp;·&nbsp; L nearby &nbsp;·&nbsp; Esc pause<br>
+        At a bench, E rests until the next hour
+      </p>
+      <p class="controls touch-only">
+        Left thumb to walk &nbsp;·&nbsp; drag the right side to look<br>
+        Tap <b>Talk</b> to speak to people &nbsp;·&nbsp; <b>Journal</b> to check your quests<br>
+        <b>Pause</b> at the bottom right saves and stops
+      </p>
+      <div class="buttons">
+        <button type="button" id="play">Play</button>
+        <button type="button" id="continue" class="ghost" hidden>Continue saved game</button>
+      </div>
+      <p class="save-note" id="save-note">Progress saves automatically.</p>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

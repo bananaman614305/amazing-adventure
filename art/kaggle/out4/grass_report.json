@@ -1,0 +1,44 @@
+{
+  "size": 512,
+  "generator": "procedural grass",
+  "gpu": "Tesla T4",
+  "backend": "cupy",
+  "noise_seconds": 2.808,
+  "blade_seconds": 0.199,
+  "normal_seconds": 0.705,
+  "seam_ratio_albedo": [
+    1.183,
+    0.692
+  ],
+  "seam_ratio_normal": [
+    1.096,
+    0.838
+  ],
+  "seam_ratio_rough": [
+    1.258,
+    0.685
+  ],
+  "preview_seconds": 0.659,
+  "albedo_stats": {
+    "min": 0.1752,
+    "max": 0.567,
+    "mean": 0.3517
+  },
+  "normal_stats": {
+    "min": 0.0264,
+    "max": 1.0,
+    "mean": 0.636
+  },
+  "rough_stats": {
+    "min": 0.7533,
+    "max": 0.9406,
+    "mean": 0.8524
+  },
+  "bytes": {
+    "grass_albedo.png": 289459,
+    "grass_normal.png": 702180,
+    "grass_rough.png": 137778,
+    "grass_preview.png": 997316
+  },
+  "total_seconds": 10.725
+}

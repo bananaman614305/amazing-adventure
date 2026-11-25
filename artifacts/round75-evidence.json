@@ -1,0 +1,430 @@
+{
+  "checks": [
+    {
+      "detail": "0.04",
+      "name": "water flow speed is a gentle swell, not a conveyor belt",
+      "ok": true
+    },
+    {
+      "detail": "false, true",
+      "name": "the low tier freezes the surface",
+      "ok": true
+    },
+    {
+      "detail": "zero/negative/NaN/Infinity",
+      "name": "a zero or negative dt never moves the surface",
+      "ok": true
+    },
+    {
+      "detail": "0.024 / 0.04",
+      "name": "the y step lags the x step, so ripples are not square",
+      "ok": true
+    },
+    {
+      "detail": "wrap + non-mutation",
+      "name": "the offset wraps into [0, 1) and never mutates its input",
+      "ok": true
+    },
+    {
+      "detail": "water textured",
+      "name": "assetState reports the water as textured",
+      "ok": true
+    },
+    {
+      "detail": "[\"map\",\"normalMap\",\"roughnessMap\"]",
+      "name": "assetState reports the three water maps",
+      "ok": true
+    },
+    {
+      "detail": "{\"map\":{\"present\":true,\"offset\":{\"x\":0,\"y\":0}},\"normalMap\":{\"present\":true,\"offset\":{\"x\":0.002,\"y\":0.0012}},\"roughnessMap\":{\"present\":true,\"offset\":{\"x\":0.002,\"y\":0.0012}}}",
+      "name": "the fountain water material exists and carries all three maps",
+      "ok": true
+    },
+    {
+      "detail": "{\"x\":0,\"y\":0}",
+      "name": "the albedo map never travels (it is the water colour, not the surface)",
+      "ok": true
+    },
+    {
+      "detail": "{\"x\":0,\"y\":0}",
+      "name": "at creation the shared offset is zero",
+      "ok": true
+    },
+    {
+      "detail": "offset 0.0640 (expected roughly 0.0200 after ~0.5s)",
+      "name": "real frames advance the shared offset",
+      "ok": true
+    },
+    {
+      "detail": "{\"map\":{\"x\":0.06400000000000004,\"y\":0.0384},\"shared\":{\"x\":0.06400000000000004,\"y\":0.0384}}",
+      "name": "the normal map offset follows the shared offset",
+      "ok": true
+    },
+    {
+      "detail": "{\"map\":{\"x\":0.06400000000000004,\"y\":0.0384},\"shared\":{\"x\":0.06400000000000004,\"y\":0.0384}}",
+      "name": "the roughness map rides with the normal map",
+      "ok": true
+    },
+    {
+      "detail": "{\"x\":0,\"y\":0}",
+      "name": "the albedo map stays put while the surface moves",
+      "ok": true
+    },
+    {
+      "detail": "{\"x\":0.06400000000000004,\"y\":0.0384}",
+      "name": "the shared offset wraps into [0, 1)",
+      "ok": true
+    },
+    {
+      "detail": "{\"before\":{\"x\":0.06600000000000004,\"y\":0.039599999999999996},\"frozen\":{\"x\":0.06600000000000004,\"y\":0.039599999999999996}}",
+      "name": "the low tier freezes the normal map offset",
+      "ok": true
+    },
+    {
+      "detail": "{\"before\":{\"x\":0.06600000000000004,\"y\":0.039599999999999996},\"frozen\":{\"x\":0.06600000000000004,\"y\":0.039599999999999996}}",
+      "name": "the low tier leaves the shared offset untouched",
+      "ok": true
+    },
+    {
+      "detail": "{\"before\":\"day\",\"frozen\":\"day\",\"resumed\":\"day\"}",
+      "name": "flipping the tier does not move the hour",
+      "ok": true
+    },
+    {
+      "detail": "full",
+      "name": "the full tier is restored after the flip",
+      "ok": true
+    },
+    {
+      "detail": "{\"frozen\":{\"x\":0.06600000000000004,\"y\":0.039599999999999996},\"resumed\":{\"x\":0.09600000000000007,\"y\":0.05759999999999999}}",
+      "name": "resuming motion moves the offset again",
+      "ok": true
+    },
+    {
+      "detail": "changed 10515 px, max delta 32, mean 1.44",
+      "name": "a different UV offset paints different water pixels",
+      "ok": true
+    },
+    {
+      "detail": "sameAB false, sameAC true",
+      "name": "the same UV offset reproduces byte-for-byte",
+      "ok": true
+    },
+    {
+      "detail": "",
+      "name": "the run produced no console errors",
+      "ok": true
+    }
+  ],
+  "live": {
+    "quality": "full",
+    "state": {
+      "banner": "model",
+      "bannerDetail": {
+        "bytes": 17608,
+        "canvasDressed": 1,
+        "instances": 1,
+        "ironDressed": 3,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "parts": 4
+      },
+      "bark": "textured",
+      "barkDetail": {
+        "dressed": 3
+      },
+      "barrelDetail": {
+        "bytes": 15856,
+        "instances": 4,
+        "parts": 3
+      },
+      "barrels": "model",
+      "bench": "model",
+      "benchDetail": {
+        "bytes": 9592,
+        "instances": 1,
+        "parts": 8
+      },
+      "brick": "textured",
+      "brickDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "bunting": "textured",
+      "buntingDetail": {
+        "flags": 28,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "materials": 2,
+        "seams": 3,
+        "tileMeters": 0.18
+      },
+      "cloth": "textured",
+      "clothDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "cobble": "textured",
+      "cobbleDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "crates": "model",
+      "cratesDetail": {
+        "bytes": 11888,
+        "instances": 3,
+        "parts": 10
+      },
+      "foliage": "textured",
+      "foliageDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "fountain": "model",
+      "fountainDetail": {
+        "bytes": 22604,
+        "height": 2.24,
+        "parts": 12,
+        "width": 3.9
+      },
+      "fountainStone": "textured",
+      "fountainStoneDetail": {
+        "dark": 6,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "meshes": 10,
+        "parts": 10,
+        "stone": 4,
+        "tileMeters": 1.6
+      },
+      "gateDoor": "model",
+      "gateDoorDetail": {
+        "bytes": 13036,
+        "instances": 1,
+        "parts": 11
+      },
+      "gateStone": "textured",
+      "gateStoneDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "meshes": 3,
+        "tileMeters": 1.6
+      },
+      "glass": "phase-lit",
+      "glassDetail": {
+        "lamps": 5,
+        "lanePanes": 1,
+        "panes": 7,
+        "windows": 2
+      },
+      "grass": "textured",
+      "grassDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "house": "model",
+      "houseDetail": {
+        "bytes": 18040,
+        "instances": 1,
+        "parts": 15
+      },
+      "iron": "textured",
+      "ironDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "lampDetail": {
+        "bytes": 8940,
+        "instances": 4,
+        "parts": 6
+      },
+      "lampMetal": "textured",
+      "lampMetalDetail": {
+        "dressed": 4,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "lamps": "model",
+      "laneLamp": "model",
+      "laneLampDetail": {
+        "lanternX": 12.8231,
+        "lanternZ": -24.6352,
+        "parts": 6,
+        "rotationY": -2.8633
+      },
+      "marketStallDetail": {
+        "bytes": 7536,
+        "instances": 2,
+        "parts": 6
+      },
+      "marketStalls": "model",
+      "notice": "model",
+      "noticeDetail": {
+        "bytes": 10936,
+        "instances": 1,
+        "parts": 9
+      },
+      "plaster": "textured",
+      "plasterDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "plazaFloor": "textured",
+      "plazaFloorDetail": {
+        "aoMap": true,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "propWood": "textured",
+      "propWoodDetail": {
+        "byFamily": {
+          "bark": 0,
+          "brick": 3,
+          "cloth": 3,
+          "iron": 59,
+          "leaf": 12,
+          "roof": 7,
+          "stone": 6,
+          "wood": 49
+        },
+        "dressed": 139,
+        "groups": 24,
+        "projected": 139,
+        "seams": 32
+      },
+      "roof": "textured",
+      "roofDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "sky": "gradient",
+      "stallDetail": {
+        "bytes": 9796,
+        "instances": 1,
+        "parts": 8
+      },
+      "stalls": "model",
+      "terrace": "textured",
+      "terraceDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "parts": {
+          "parapet": [
+            "terrace-kerb",
+            "terrace-parapet"
+          ],
+          "tread": [
+            "terrace-tread",
+            "terrace-ramp"
+          ]
+        },
+        "projected": {
+          "parapet": 6,
+          "tread": 2
+        },
+        "tileMeters": 1.6
+      },
+      "treeDetail": {
+        "bytes": 19120,
+        "instances": 3,
+        "parts": 5
+      },
+      "trees": "model",
+      "walls": "textured",
+      "wallsDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "water": "textured",
+      "waterDetail": {
+        "discs": 2,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "seams": 0,
+        "tileMeters": 1
+      },
+      "wood": "textured",
+      "woodDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      }
+    },
+    "water0": {
+      "map": {
+        "x": 0,
+        "y": 0
+      },
+      "normal": {
+        "x": 0,
+        "y": 0
+      },
+      "roughness": {
+        "x": 0,
+        "y": 0
+      },
+      "shared": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  },
+  "pure": 5,
+  "shots": [
+    "/home/alan/projects/amazing-adventure/artifacts/round75-fountain-day.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round75-fountain-night.png"
+  ]
+}

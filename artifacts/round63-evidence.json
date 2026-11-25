@@ -1,0 +1,727 @@
+{
+ "families": {
+  "roof": "textured",
+  "roofDetail": {
+   "maps": [
+    "map",
+    "normalMap",
+    "roughnessMap"
+   ]
+  },
+  "foliage": "textured",
+  "foliageDetail": {
+   "maps": [
+    "map",
+    "normalMap",
+    "roughnessMap"
+   ]
+  },
+  "propWood": "textured",
+  "propWoodDetail": {
+   "dressed": 62,
+   "projected": 62,
+   "groups": 22,
+   "byFamily": {
+    "leaf": 12,
+    "roof": 6,
+    "bark": 0,
+    "wood": 44
+   }
+  },
+  "bark": "textured",
+  "barkDetail": {
+   "dressed": 3
+  }
+ },
+ "meshes": [
+  {
+   "material": "BarkWood",
+   "mesh": "TreeTrunk",
+   "uvSpan": [
+    0.298,
+    2.167
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 0.506,
+    "y": 2.6,
+    "z": 0.506
+   },
+   "roughness": 0.85,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy",
+   "uvSpan": [
+    2.017,
+    5.429
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 2.568,
+    "y": 2.7,
+    "z": 2.568
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.001",
+   "uvSpan": [
+    2.185,
+    5.745
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 2.003,
+    "y": 2.106,
+    "z": 2.003
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.002",
+   "uvSpan": [
+    2.064,
+    5.231
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 1.849,
+    "y": 1.944,
+    "z": 1.849
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.003",
+   "uvSpan": [
+    1.634,
+    4.689
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 1.797,
+    "y": 1.89,
+    "z": 1.797
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "BarkWood",
+   "mesh": "TreeTrunk",
+   "uvSpan": [
+    0.298,
+    2.167
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 0.506,
+    "y": 2.6,
+    "z": 0.506
+   },
+   "roughness": 0.85,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy",
+   "uvSpan": [
+    2.017,
+    5.429
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 2.568,
+    "y": 2.7,
+    "z": 2.568
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.001",
+   "uvSpan": [
+    2.185,
+    5.745
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 2.003,
+    "y": 2.106,
+    "z": 2.003
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.002",
+   "uvSpan": [
+    2.064,
+    5.231
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 1.849,
+    "y": 1.944,
+    "z": 1.849
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.003",
+   "uvSpan": [
+    1.634,
+    4.689
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 1.797,
+    "y": 1.89,
+    "z": 1.797
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "BarkWood",
+   "mesh": "TreeTrunk",
+   "uvSpan": [
+    0.298,
+    2.167
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 0.506,
+    "y": 2.6,
+    "z": 0.506
+   },
+   "roughness": 0.85,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy",
+   "uvSpan": [
+    2.017,
+    5.429
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 2.568,
+    "y": 2.7,
+    "z": 2.568
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.001",
+   "uvSpan": [
+    2.185,
+    5.745
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 2.003,
+    "y": 2.106,
+    "z": 2.003
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.002",
+   "uvSpan": [
+    2.064,
+    5.231
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 1.849,
+    "y": 1.944,
+    "z": 1.849
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.003",
+   "uvSpan": [
+    1.634,
+    4.689
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 1.797,
+    "y": 1.89,
+    "z": 1.797
+   },
+   "roughness": 0.92,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "StallRoof",
+   "mesh": "StallAwning",
+   "uvSpan": [
+    2.909,
+    2.909
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 1.2,
+    "y": 0.43,
+    "z": 3.2
+   },
+   "roughness": 0.9,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "MarketRoof",
+   "mesh": "MarketAwning",
+   "uvSpan": [
+    3.909,
+    1.727
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 4.3,
+    "y": 0.33,
+    "z": 1
+   },
+   "roughness": 0.9,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "MarketRoof",
+   "mesh": "MarketAwning",
+   "uvSpan": [
+    3.909,
+    1.727
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 4.3,
+    "y": 0.33,
+    "z": 1
+   },
+   "roughness": 0.9,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "HouseRoof",
+   "mesh": "HouseRoofSlope_-1",
+   "uvSpan": [
+    7.273,
+    4.36
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 8,
+    "y": 1.794,
+    "z": 3.198
+   },
+   "roughness": 0.9,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "HouseRoof",
+   "mesh": "HouseRoofSlope_1",
+   "uvSpan": [
+    7.273,
+    7.087
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 8,
+    "y": 1.794,
+    "z": 3.198
+   },
+   "roughness": 0.9,
+   "hasNormal": true,
+   "hasRoughness": true
+  },
+  {
+   "material": "HouseRoof",
+   "mesh": "HouseRidge",
+   "uvSpan": [
+    7.364,
+    4.436
+   ],
+   "repeat": [
+    1,
+    1
+   ],
+   "wrap": 1000,
+   "extent": {
+    "x": 8.1,
+    "y": 0.16,
+    "z": 0.3
+   },
+   "roughness": 0.9,
+   "hasNormal": true,
+   "hasRoughness": true
+  }
+ ],
+ "shots": [
+  {
+   "label": "market-roofs",
+   "file": "/worker/state/wt60/artifacts/round63-market-roofs.png",
+   "bytes": 388935
+  },
+  {
+   "label": "canopy",
+   "file": "/worker/state/wt60/artifacts/round63-canopy.png",
+   "bytes": 345082
+  },
+  {
+   "label": "house-roof",
+   "file": "/worker/state/wt60/artifacts/round63-house-roof.png",
+   "bytes": 389752
+  }
+ ],
+ "screenshots": [
+  "/worker/state/wt60/artifacts/round63-market-roofs.png",
+  "/worker/state/wt60/artifacts/round63-canopy.png",
+  "/worker/state/wt60/artifacts/round63-house-roof.png"
+ ],
+ "density": [
+  {
+   "material": "BarkWood",
+   "mesh": "TreeTrunk",
+   "triangles": 16,
+   "tileMin": 1.2,
+   "tileMean": 1.2,
+   "tileMax": 1.2
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.001",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.002",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.003",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "BarkWood",
+   "mesh": "TreeTrunk",
+   "triangles": 16,
+   "tileMin": 1.2,
+   "tileMean": 1.2,
+   "tileMax": 1.2
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.001",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.002",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.003",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "BarkWood",
+   "mesh": "TreeTrunk",
+   "triangles": 16,
+   "tileMin": 1.2,
+   "tileMean": 1.2,
+   "tileMax": 1.2
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.001",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.002",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "Canopy",
+   "mesh": "TreeCanopy.003",
+   "triangles": 64,
+   "tileMin": 0.9,
+   "tileMean": 0.9,
+   "tileMax": 0.9
+  },
+  {
+   "material": "StallRoof",
+   "mesh": "StallAwning",
+   "triangles": 12,
+   "tileMin": 1.1,
+   "tileMean": 1.1,
+   "tileMax": 1.1
+  },
+  {
+   "material": "MarketRoof",
+   "mesh": "MarketAwning",
+   "triangles": 12,
+   "tileMin": 1.1,
+   "tileMean": 1.1,
+   "tileMax": 1.1
+  },
+  {
+   "material": "MarketRoof",
+   "mesh": "MarketAwning",
+   "triangles": 12,
+   "tileMin": 1.1,
+   "tileMean": 1.1,
+   "tileMax": 1.1
+  },
+  {
+   "material": "HouseRoof",
+   "mesh": "HouseRoofSlope_-1",
+   "triangles": 12,
+   "tileMin": 1.1,
+   "tileMean": 1.1,
+   "tileMax": 1.1
+  },
+  {
+   "material": "HouseRoof",
+   "mesh": "HouseRoofSlope_1",
+   "triangles": 12,
+   "tileMin": 1.1,
+   "tileMean": 1.1,
+   "tileMax": 1.1
+  },
+  {
+   "material": "HouseRoof",
+   "mesh": "HouseRidge",
+   "triangles": 12,
+   "tileMin": 1.1,
+   "tileMean": 1.1,
+   "tileMax": 1.1
+  }
+ ],
+ "files": [
+  {
+   "id": "roof",
+   "kind": "map",
+   "file": "assets/textures/roof_albedo.webp",
+   "bytes": 11268,
+   "sha256": "500c313d2ccfb10e8a4397ba8588ed2eb2ed513e48350d0bd14a304bfd6afbfb"
+  },
+  {
+   "id": "roof",
+   "kind": "normalMap",
+   "file": "assets/textures/roof_normal.webp",
+   "bytes": 20236,
+   "sha256": "fc4919e7ae25a62522ffec4753ed43f151d280a021e7fac799d93e875f9f3532"
+  },
+  {
+   "id": "roof",
+   "kind": "roughnessMap",
+   "file": "assets/textures/roof_rough.webp",
+   "bytes": 5578,
+   "sha256": "d719e84a407bf23ff15e18667074a34a7a55c187e145a1f15a58460d1854b097"
+  },
+  {
+   "id": "leaf",
+   "kind": "map",
+   "file": "assets/textures/leaf_albedo.webp",
+   "bytes": 35176,
+   "sha256": "9d8c51cd2e37b93ba37e359092fca7ba093718fc3dd33cbe407f7344010a098d"
+  },
+  {
+   "id": "leaf",
+   "kind": "normalMap",
+   "file": "assets/textures/leaf_normal.webp",
+   "bytes": 66680,
+   "sha256": "254098d5306051abeb7ed953c1f6ee951f79c0af81803a63fe2a9526baacaf4d"
+  },
+  {
+   "id": "leaf",
+   "kind": "roughnessMap",
+   "file": "assets/textures/leaf_rough.webp",
+   "bytes": 13324,
+   "sha256": "2d38e2e6aec3561226300381de0f29ad4f1c7d1265f1d7d30784464a3c2fdb09"
+  }
+ ],
+ "familyOrder": [
+  "leaf",
+  "roof",
+  "bark",
+  "wood"
+ ],
+ "play": {
+  "walked": true,
+  "z": -8.796,
+  "ground": 0.051,
+  "quests": 9
+ }
+}

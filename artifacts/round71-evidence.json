@@ -1,0 +1,622 @@
+{
+  "banner": {
+    "wrapRepeat": 1000,
+    "wrapClamp": 1001,
+    "state": {
+      "fountain": "model",
+      "plazaFloor": "textured",
+      "barrels": "model",
+      "stalls": "model",
+      "lamps": "model",
+      "plaster": "textured",
+      "marketStalls": "model",
+      "bench": "model",
+      "notice": "model",
+      "crates": "model",
+      "gateDoor": "model",
+      "house": "model",
+      "propWood": "flat",
+      "propWoodDetail": null,
+      "roof": "textured",
+      "roofDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "foliage": "textured",
+      "foliageDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "cloth": "flat",
+      "clothDetail": null,
+      "iron": "flat",
+      "ironDetail": null,
+      "banner": "model",
+      "bannerDetail": {
+        "parts": 4,
+        "bytes": 17608,
+        "instances": 1,
+        "canvasDressed": 1,
+        "ironDressed": 3,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "cobble": "textured",
+      "grass": "textured",
+      "walls": "textured",
+      "gateStone": "textured",
+      "fountainStone": "textured",
+      "terrace": "textured",
+      "sky": "gradient",
+      "wood": "textured",
+      "brick": "textured",
+      "fountainDetail": {
+        "parts": 12,
+        "bytes": 22604,
+        "height": 2.24,
+        "width": 3.9
+      },
+      "plazaFloorDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "aoMap": true
+      },
+      "barrelDetail": {
+        "parts": 3,
+        "bytes": 15856,
+        "instances": 4
+      },
+      "laneLamp": "model",
+      "laneLampDetail": {
+        "parts": 6,
+        "rotationY": -2.8633,
+        "lanternX": 12.8231,
+        "lanternZ": -24.6352
+      },
+      "lampMetal": "textured",
+      "lampMetalDetail": {
+        "dressed": 4,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "trees": "model",
+      "bark": "textured",
+      "barkDetail": {
+        "dressed": 3
+      },
+      "terraceDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 1.6,
+        "projected": {
+          "tread": 2,
+          "parapet": 6
+        },
+        "parts": {
+          "tread": [
+            "terrace-tread",
+            "terrace-ramp"
+          ],
+          "parapet": [
+            "terrace-kerb",
+            "terrace-parapet"
+          ]
+        }
+      },
+      "gateStoneDetail": {
+        "meshes": 3,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 1.6
+      },
+      "fountainStoneDetail": {
+        "meshes": 10,
+        "stone": 4,
+        "dark": 6,
+        "parts": 10,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ],
+        "tileMeters": 1.6
+      },
+      "stallDetail": {
+        "parts": 8,
+        "bytes": 9796,
+        "instances": 1
+      },
+      "lampDetail": {
+        "parts": 6,
+        "bytes": 8940,
+        "instances": 4
+      },
+      "benchDetail": {
+        "parts": 8,
+        "bytes": 9592,
+        "instances": 1
+      },
+      "marketStallDetail": {
+        "parts": 6,
+        "bytes": 7536,
+        "instances": 2
+      },
+      "noticeDetail": {
+        "parts": 9,
+        "bytes": 10936,
+        "instances": 1
+      },
+      "cratesDetail": {
+        "parts": 10,
+        "bytes": 11888,
+        "instances": 3
+      },
+      "gateDoorDetail": {
+        "parts": 11,
+        "bytes": 13036,
+        "instances": 1
+      },
+      "houseDetail": {
+        "parts": 15,
+        "bytes": 18040,
+        "instances": 1
+      },
+      "treeDetail": {
+        "parts": 5,
+        "bytes": 19120,
+        "instances": 3
+      },
+      "wallsDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "grassDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "cobbleDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "woodDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "brickDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "plasterDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      }
+    },
+    "groupPresent": true,
+    "groupPosition": [
+      0,
+      2.7,
+      -16.42
+    ],
+    "meshNames": [
+      "BannerCanvas",
+      "BannerRod",
+      "BannerFinial",
+      "BannerStrap"
+    ],
+    "meshes": [
+      {
+        "name": "BannerCanvas",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "worldBox": {
+          "minY": 2.1499999880790712,
+          "maxY": 3.250000011920929,
+          "minZ": -16.42,
+          "maxZ": -16.397571999654176,
+          "minX": -1.2000000476837158,
+          "maxX": 1.2000000476837158
+        },
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "hasUv": true,
+        "wrapS": 1001,
+        "wrapT": 1001,
+        "repeatX": 1,
+        "wrapRepeat": null,
+        "wrapClamp": null,
+        "metalness": 0,
+        "roughness": 0.92,
+        "castShadow": true,
+        "triangles": 384
+      },
+      {
+        "name": "BannerRod",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "worldBox": {
+          "minY": 3.2628809928894045,
+          "maxY": 3.2971190333366396,
+          "minZ": -16.43799999922514,
+          "maxZ": -16.402000000774862,
+          "minX": -1.3700000047683716,
+          "maxX": 1.3700000047683716
+        },
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "hasUv": true,
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "wrapRepeat": null,
+        "wrapClamp": null,
+        "metalness": 0.45,
+        "roughness": 0.55,
+        "castShadow": true,
+        "triangles": 36
+      },
+      {
+        "name": "BannerFinial",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "worldBox": {
+          "minY": 3.2474738478660585,
+          "maxY": 3.3125261187553408,
+          "minZ": -16.454200001508,
+          "maxZ": -16.385799998492004,
+          "minX": -1.399999976158142,
+          "maxX": 1.399999976158142
+        },
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "hasUv": true,
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "wrapRepeat": null,
+        "wrapClamp": null,
+        "metalness": 0.45,
+        "roughness": 0.55,
+        "castShadow": true,
+        "triangles": 72
+      },
+      {
+        "name": "BannerStrap",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "worldBox": {
+          "minY": 3.209999990463257,
+          "maxY": 3.2799999833106996,
+          "minZ": -16.426000000052156,
+          "maxZ": -16.413999999947848,
+          "minX": -0.9160000085830688,
+          "maxX": 0.9160000085830688
+        },
+        "hasMap": true,
+        "hasNormal": true,
+        "hasRoughness": true,
+        "hasUv": true,
+        "wrapS": 1000,
+        "wrapT": 1000,
+        "repeatX": 1,
+        "wrapRepeat": null,
+        "wrapClamp": null,
+        "metalness": 0.45,
+        "roughness": 0.55,
+        "castShadow": true,
+        "triangles": 48
+      }
+    ],
+    "standinFound": true,
+    "standinVisible": false,
+    "flatBuckets": {
+      "DoorWood": 4,
+      "DoorIron": 7,
+      "LaneWood": 2,
+      "SackCloth": 3,
+      "SackTie": 9,
+      "LaneRope": 3,
+      "BuntingRed": 15,
+      "BuntingGold": 13,
+      "LanternHousing": 3,
+      "LanternBulb": 3,
+      "Water": 2,
+      "BoardFace": 1,
+      "BoardPaper": 3,
+      "Canopy": 12,
+      "BarrelWood": 4,
+      "BarrelIron": 8,
+      "NpcMarker": 6,
+      "Skin": 36,
+      "WoodP": 4,
+      "Accent": 9,
+      "EyeWhite": 12,
+      "EyeIris": 12,
+      "Mouth": 6,
+      "HairC": 8,
+      "Boot": 18,
+      "Paper": 3,
+      "Steel": 5,
+      "StallWood": 7,
+      "StallRoof": 1,
+      "LampIron": 16,
+      "LampGlass": 5,
+      "LampBulb": 5,
+      "BenchWood": 6,
+      "BenchIron": 2,
+      "MarketWood": 10,
+      "MarketRoof": 2,
+      "NoticeWood": 6,
+      "NoticeFace": 1,
+      "NoticeIron": 2,
+      "CrateWood": 6,
+      "CrateIron": 24,
+      "HouseRoof": 3,
+      "HouseBrick": 3,
+      "HouseStone": 6,
+      "HouseGlass": 2,
+      "HouseDoorWood": 1
+    }
+  },
+  "audit": {
+    "flatBuckets": {
+      "DoorWood": 4,
+      "DoorIron": 7,
+      "LaneWood": 2,
+      "SackCloth": 3,
+      "SackTie": 9,
+      "LaneRope": 3,
+      "BuntingRed": 15,
+      "BuntingGold": 13,
+      "LanternHousing": 3,
+      "LanternBulb": 3,
+      "Water": 2,
+      "BoardFace": 1,
+      "BoardPaper": 3,
+      "Canopy": 12,
+      "BarrelWood": 4,
+      "BarrelIron": 8,
+      "NpcMarker": 6,
+      "Skin": 36,
+      "WoodP": 4,
+      "Accent": 9,
+      "EyeWhite": 12,
+      "EyeIris": 12,
+      "Mouth": 6,
+      "HairC": 8,
+      "Boot": 18,
+      "Paper": 3,
+      "Steel": 5,
+      "StallWood": 7,
+      "StallRoof": 1,
+      "LampIron": 16,
+      "LampGlass": 5,
+      "LampBulb": 5,
+      "BenchWood": 6,
+      "BenchIron": 2,
+      "MarketWood": 10,
+      "MarketRoof": 2,
+      "NoticeWood": 6,
+      "NoticeFace": 1,
+      "NoticeIron": 2,
+      "CrateWood": 6,
+      "CrateIron": 24,
+      "HouseRoof": 3,
+      "HouseBrick": 3,
+      "HouseStone": 6,
+      "HouseGlass": 2,
+      "HouseDoorWood": 1
+    }
+  },
+  "shots": [
+    "/home/alan/projects/amazing-adventure/artifacts/round71-banner-front.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round71-banner-across.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round71-banner-cloth.png"
+  ],
+  "pure": true,
+  "checks": [
+    {
+      "name": "the banner is authored 2.4 m wide",
+      "ok": true,
+      "detail": "2.4"
+    },
+    {
+      "name": "the banner is authored 1.1 m tall",
+      "ok": true,
+      "detail": "1.1"
+    },
+    {
+      "name": "the rod overhang is recorded",
+      "ok": true,
+      "detail": "0.21"
+    },
+    {
+      "name": "the canvas is not dressed by the prop registry",
+      "ok": true,
+      "detail": "undefined"
+    },
+    {
+      "name": "BannerRod is not in a prop family",
+      "ok": true,
+      "detail": "undefined"
+    },
+    {
+      "name": "BannerFinial is not in a prop family",
+      "ok": true,
+      "detail": "undefined"
+    },
+    {
+      "name": "BannerStrap is not in a prop family",
+      "ok": true,
+      "detail": "undefined"
+    },
+    {
+      "name": "the banner ships albedo, normal and roughness",
+      "ok": true,
+      "detail": "map,normalMap,roughnessMap"
+    },
+    {
+      "name": "assetState reports the banner as a model",
+      "ok": true,
+      "detail": "banner model"
+    },
+    {
+      "name": "the modelled banner group is in the scene",
+      "ok": true,
+      "detail": "group banner-model"
+    },
+    {
+      "name": "the banner group sits at the terrace back wall",
+      "ok": true,
+      "detail": "[0,2.7,-16.42]"
+    },
+    {
+      "name": "the cloth and the rod family all arrived",
+      "ok": true,
+      "detail": "BannerCanvas,BannerRod,BannerFinial,BannerStrap"
+    },
+    {
+      "name": "the cloth is dressed with albedo, normal and roughness",
+      "ok": true,
+      "detail": "{\"map\":true,\"normal\":true,\"rough\":true}"
+    },
+    {
+      "name": "the cloth maps clamp at the edge instead of tiling",
+      "ok": true,
+      "detail": "1001/1001 vs clamp 1001"
+    },
+    {
+      "name": "the cloth repeats exactly once over its authored UVs",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "name": "the cloth keeps the authored non-metal painted surface",
+      "ok": true,
+      "detail": "metalness 0 roughness 0.92"
+    },
+    {
+      "name": "the cloth subdivides its fold wave rather than staying a quad",
+      "ok": true,
+      "detail": "384 tris"
+    },
+    {
+      "name": "every rod part is present as iron",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "every rod part carries the painted-iron maps",
+      "ok": true,
+      "detail": "[{\"n\":\"BannerRod\",\"m\":[true,true,true]},{\"n\":\"BannerFinial\",\"m\":[true,true,true]},{\"n\":\"BannerStrap\",\"m\":[true,true,true]}]"
+    },
+    {
+      "name": "every rod part has UVs for its maps",
+      "ok": true,
+      "detail": "[{\"n\":\"BannerRod\",\"uv\":true},{\"n\":\"BannerFinial\",\"uv\":true},{\"n\":\"BannerStrap\",\"uv\":true}]"
+    },
+    {
+      "name": "the iron maps tile, they do not clamp",
+      "ok": true,
+      "detail": "[1000,1000,1000]"
+    },
+    {
+      "name": "the rod reads as painted metal, not dielectric",
+      "ok": true,
+      "detail": "[[0.45,0.55],[0.45,0.55],[0.45,0.55]]"
+    },
+    {
+      "name": "the cloth hangs in front of the terrace back wall",
+      "ok": true,
+      "detail": "{\"minY\":2.1499999880790712,\"maxY\":3.250000011920929,\"minZ\":-16.42,\"maxZ\":-16.397571999654176,\"minX\":-1.2000000476837158,\"maxX\":1.2000000476837158}"
+    },
+    {
+      "name": "the cloth clears the terrace floor",
+      "ok": true,
+      "detail": "2.1499999880790712"
+    },
+    {
+      "name": "the rod rides above the cloth",
+      "ok": true,
+      "detail": "[3.2628809928894045,3.2474738478660585,3.209999990463257]"
+    },
+    {
+      "name": "the flat stand-in is gone from the picture",
+      "ok": true,
+      "detail": "found true visible false"
+    },
+    {
+      "name": "TerraceBanner has left the flat-material audit",
+      "ok": true,
+      "detail": "DoorWood, DoorIron, LaneWood, SackCloth, SackTie, LaneRope, BuntingRed, BuntingGold, LanternHousing, LanternBulb, Water, BoardFace, BoardPaper, Canopy, BarrelWood, BarrelIron, NpcMarker, Skin, WoodP, Accent, EyeWhite, EyeIris, Mouth, HairC, Boot, Paper, Steel, StallWood, StallRoof, LampIron, LampGlass, LampBulb, BenchWood, BenchIron, MarketWood, MarketRoof, NoticeWood, NoticeFace, NoticeIron, CrateWood, CrateIron, HouseRoof, HouseBrick, HouseStone, HouseGlass, HouseDoorWood"
+    },
+    {
+      "name": "nothing banner-shaped is left flat",
+      "ok": true,
+      "detail": "DoorWood, DoorIron, LaneWood, SackCloth, SackTie, LaneRope, BuntingRed, BuntingGold, LanternHousing, LanternBulb, Water, BoardFace, BoardPaper, Canopy, BarrelWood, BarrelIron, NpcMarker, Skin, WoodP, Accent, EyeWhite, EyeIris, Mouth, HairC, Boot, Paper, Steel, StallWood, StallRoof, LampIron, LampGlass, LampBulb, BenchWood, BenchIron, MarketWood, MarketRoof, NoticeWood, NoticeFace, NoticeIron, CrateWood, CrateIron, HouseRoof, HouseBrick, HouseStone, HouseGlass, HouseDoorWood"
+    },
+    {
+      "name": "every banner mesh casts a shadow",
+      "ok": true,
+      "detail": "[[\"BannerCanvas\",true],[\"BannerRod\",true],[\"BannerFinial\",true],[\"BannerStrap\",true]]"
+    },
+    {
+      "name": "the run produced no console errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

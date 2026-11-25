@@ -1,0 +1,65 @@
+{
+  "size": 512,
+  "generator": "procedural wood + brick",
+  "gpu": "Tesla T4",
+  "backend": "cupy",
+  "seam_ratio_wood_albedo": [
+    1.088,
+    0.232
+  ],
+  "seam_ratio_wood_normal": [
+    0.271,
+    0.487
+  ],
+  "wood_albedo_stats": {
+    "min": 0.0649,
+    "max": 0.7083,
+    "mean": 0.3044
+  },
+  "wood_normal_stats": {
+    "min": 0.0087,
+    "max": 1.0,
+    "mean": 0.6411
+  },
+  "wood_rough_stats": {
+    "min": 0.7009,
+    "max": 0.977,
+    "mean": 0.7624
+  },
+  "wood_seconds": 5.905,
+  "seam_ratio_brick_albedo": [
+    0.058,
+    0.034
+  ],
+  "seam_ratio_brick_normal": [
+    0.268,
+    0.157
+  ],
+  "brick_albedo_stats": {
+    "min": 0.1214,
+    "max": 0.6695,
+    "mean": 0.3317
+  },
+  "brick_normal_stats": {
+    "min": 0.0092,
+    "max": 1.0,
+    "mean": 0.6542
+  },
+  "brick_rough_stats": {
+    "min": 0.7539,
+    "max": 1.0,
+    "mean": 0.8486
+  },
+  "brick_seconds": 0.601,
+  "bytes": {
+    "wood_albedo.png": 246225,
+    "wood_normal.png": 683674,
+    "wood_rough.png": 51948,
+    "wood_preview.png": 697719,
+    "brick_albedo.png": 97964,
+    "brick_normal.png": 213306,
+    "brick_rough.png": 44466,
+    "brick_preview.png": 229928
+  },
+  "total_seconds": 12.178
+}

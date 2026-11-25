@@ -1,0 +1,66 @@
+{
+  "view": {
+    "x": 0,
+    "z": 10,
+    "yaw": 3.141592653589793
+  },
+  "rows": [
+    {
+      "phase": "day",
+      "before": {
+        "mean": 0.1876,
+        "stdDev": 0.1813,
+        "clippedFraction": 0,
+        "samples": 16200
+      },
+      "after": {
+        "mean": 0.5076,
+        "stdDev": 0.1791,
+        "clippedFraction": 0,
+        "samples": 16200
+      },
+      "dMean": 0.32,
+      "dSpread": -0.0022,
+      "bytesBefore": 458172,
+      "bytesAfter": 561217
+    },
+    {
+      "phase": "dusk",
+      "before": {
+        "mean": 0.094,
+        "stdDev": 0.1005,
+        "clippedFraction": 0,
+        "samples": 16200
+      },
+      "after": {
+        "mean": 0.3581,
+        "stdDev": 0.1656,
+        "clippedFraction": 0,
+        "samples": 16200
+      },
+      "dMean": 0.2641,
+      "dSpread": 0.0651,
+      "bytesBefore": 422833,
+      "bytesAfter": 552901
+    },
+    {
+      "phase": "night",
+      "before": {
+        "mean": 0.0058,
+        "stdDev": 0.0018,
+        "clippedFraction": 0,
+        "samples": 16200
+      },
+      "after": {
+        "mean": 0.0473,
+        "stdDev": 0.0279,
+        "clippedFraction": 0,
+        "samples": 16200
+      },
+      "dMean": 0.0415,
+      "dSpread": 0.0261,
+      "bytesBefore": 301895,
+      "bytesAfter": 427350
+    }
+  ]
+}

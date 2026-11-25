@@ -1,0 +1,86 @@
+{
+  "size": 512,
+  "generator": "procedural felt",
+  "gpu": null,
+  "backend": "numpy",
+  "height_range": [
+    0.0,
+    1.0
+  ],
+  "height_seconds": 0.106,
+  "normal_seconds": 0.014,
+  "albedo_seconds": 0.012,
+  "roughness_seconds": 0.0,
+  "mip_survival_albedo": {
+    "0": 0.06967,
+    "1": 0.0695,
+    "2": 0.06893,
+    "3": 0.06679,
+    "4": 0.06436,
+    "5": 0.06008,
+    "6": 0.04235,
+    "7": 0.03342,
+    "8": 0.01575
+  },
+  "mip_survival_normal": {
+    "0": 0.14521,
+    "1": 0.13985,
+    "2": 0.12489,
+    "3": 0.10273,
+    "4": 0.06223,
+    "5": 0.04091,
+    "6": 0.03208,
+    "7": 0.01437,
+    "8": 0.00678
+  },
+  "seam_ratio_albedo": [
+    0.0038118462543934584,
+    0.0048136841505765915
+  ],
+  "seam_ratio_normal": [
+    0.047564420849084854,
+    0.13695834577083588
+  ],
+  "seam_ratio_rough": [
+    0.0022344542667269707,
+    0.00275628874078393
+  ],
+  "albedo_stats": {
+    "min": 0.532542884349823,
+    "max": 0.9747433662414551,
+    "mean": 0.7679390907287598
+  },
+  "normal_stats": {
+    "min": 0.07659807801246643,
+    "max": 0.9999997615814209,
+    "mean": 0.6518077254295349
+  },
+  "rough_stats": {
+    "min": 0.6800000071525574,
+    "max": 0.949999988079071,
+    "mean": 0.8098226189613342
+  },
+  "preview_seconds": 0.008,
+  "felt_albedo.png": {
+    "bytes": 121231
+  },
+  "felt_normal.png": {
+    "bytes": 464640
+  },
+  "felt_rough.png": {
+    "bytes": 68761
+  },
+  "felt_preview.png": {
+    "bytes": 117532
+  },
+  "felt_albedo.webp": {
+    "bytes": 64438
+  },
+  "felt_normal.webp": {
+    "bytes": 424370
+  },
+  "felt_rough.webp": {
+    "bytes": 56408
+  },
+  "total_seconds": 10.517
+}

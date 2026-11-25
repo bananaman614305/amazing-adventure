@@ -1,0 +1,81 @@
+{
+  "size": 512,
+  "tileMeters": 1.0,
+  "generator": "procedural fountain water",
+  "gpu": null,
+  "backend": "numpy",
+  "height_range": [
+    0.0,
+    1.0
+  ],
+  "height_seconds": 0.108,
+  "normal_seconds": 0.014,
+  "albedo_seconds": 0.015,
+  "roughness_seconds": 0.002,
+  "seam_ratio_albedo": [
+    14.446,
+    19.701
+  ],
+  "seam_ratio_normal": [
+    1.605,
+    0.649
+  ],
+  "seam_ratio_rough": [
+    6.157,
+    8.769
+  ],
+  "seam_ratio_scaled_albedo": [
+    0.555,
+    1.119
+  ],
+  "seam_ratio_scaled_normal": [
+    0.255,
+    0.198
+  ],
+  "seam_ratio_scaled_rough": [
+    0.541,
+    1.065
+  ],
+  "mip_survival_albedo": {
+    "0": 0.04055,
+    "1": 0.0405,
+    "2": 0.0403,
+    "3": 0.0399,
+    "4": 0.03868,
+    "5": 0.0352
+  },
+  "mip_survival_normal": {
+    "0": 0.09247,
+    "1": 0.08765,
+    "2": 0.08051,
+    "3": 0.06503,
+    "4": 0.05485,
+    "5": 0.04342
+  },
+  "albedo_stats": {
+    "min": 0.2963,
+    "max": 0.8126,
+    "mean": 0.5914,
+    "std": 0.1246
+  },
+  "normal_stats": {
+    "min": 0.0095,
+    "max": 1.0,
+    "mean": 0.6609,
+    "std": 0.2396
+  },
+  "rough_stats": {
+    "min": 0.0324,
+    "max": 0.1547,
+    "mean": 0.0806,
+    "std": 0.0208
+  },
+  "preview_seconds": 0.078,
+  "bytes": {
+    "water_albedo.png": 163322,
+    "water_normal.png": 607561,
+    "water_rough.png": 94145,
+    "water_preview.png": 385541
+  },
+  "total_seconds": 0.747
+}

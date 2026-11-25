@@ -1,0 +1,307 @@
+{
+  "round": 61,
+  "title": "plaza floor: a dedicated flagstone paving family",
+  "generatedAt": "2026-11-22T04:05:19.730Z",
+  "expectedRepeat": 6,
+  "tileMeters": 3,
+  "minBytes": 4096,
+  "maps": {
+    "found": true,
+    "state": {
+      "fountain": "model",
+      "plazaFloor": "textured",
+      "barrels": "model",
+      "stalls": "model",
+      "lamps": "model",
+      "plaster": "textured",
+      "marketStalls": "model",
+      "bench": "model",
+      "notice": "model",
+      "crates": "model",
+      "gateDoor": "model",
+      "house": "model",
+      "propWood": "textured",
+      "cobble": "textured",
+      "grass": "textured",
+      "walls": "textured",
+      "sky": "gradient",
+      "wood": "textured",
+      "brick": "textured",
+      "fountainDetail": {
+        "parts": 12,
+        "bytes": 22604,
+        "height": 2.24,
+        "width": 3.9
+      },
+      "plazaFloorDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "barrelDetail": {
+        "parts": 3,
+        "bytes": 15856,
+        "instances": 4
+      },
+      "laneLamp": "model",
+      "laneLampDetail": {
+        "parts": 6,
+        "rotationY": -2.8633,
+        "lanternX": 12.8231,
+        "lanternZ": -24.6352
+      },
+      "lampMetal": "textured",
+      "lampMetalDetail": {
+        "dressed": 4,
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "trees": "model",
+      "bark": "textured",
+      "barkDetail": {
+        "dressed": 3
+      },
+      "stallDetail": {
+        "parts": 8,
+        "bytes": 9796,
+        "instances": 1
+      },
+      "marketStallDetail": {
+        "parts": 6,
+        "bytes": 7536,
+        "instances": 2
+      },
+      "lampDetail": {
+        "parts": 6,
+        "bytes": 8940,
+        "instances": 4
+      },
+      "benchDetail": {
+        "parts": 8,
+        "bytes": 9592,
+        "instances": 1
+      },
+      "noticeDetail": {
+        "parts": 9,
+        "bytes": 10936,
+        "instances": 1
+      },
+      "cratesDetail": {
+        "parts": 10,
+        "bytes": 11888,
+        "instances": 3
+      },
+      "gateDoorDetail": {
+        "parts": 11,
+        "bytes": 13036,
+        "instances": 1
+      },
+      "houseDetail": {
+        "parts": 15,
+        "bytes": 18040,
+        "instances": 1
+      },
+      "treeDetail": {
+        "parts": 5,
+        "bytes": 19120,
+        "instances": 3
+      },
+      "cobbleDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "grassDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "wallsDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "woodDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "brickDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "plasterDetail": {
+        "maps": [
+          "map",
+          "normalMap",
+          "roughnessMap"
+        ]
+      },
+      "propWoodDetail": {
+        "dressed": 26,
+        "projected": 19,
+        "groups": 10
+      }
+    },
+    "repeat": [
+      6,
+      6
+    ],
+    "color": "ffffff",
+    "roughness": 1,
+    "metalness": 0,
+    "hasMap": true,
+    "hasNormal": true,
+    "hasRough": true,
+    "mapPixels": [
+      512,
+      512
+    ],
+    "wrap": [
+      1000,
+      1000
+    ],
+    "sharers": 0,
+    "normalSharers": 0,
+    "roughSharers": 0,
+    "wallCount": 3,
+    "wallTextured": 3,
+    "wallMapShare": 0,
+    "wallRepeat": [
+      17,
+      2
+    ],
+    "wallColor": "ffffff",
+    "drawCalls": 324,
+    "triangles": 8062
+  },
+  "files": {
+    "map": {
+      "url": "assets/textures/plaza_floor_albedo.webp",
+      "bytes": 8764,
+      "sha256": "6eeb840319d1de81bbebce732fac538f0d518a489dbba74aeaaf0789723034a8"
+    },
+    "normalMap": {
+      "url": "assets/textures/plaza_floor_normal.webp",
+      "bytes": 18210,
+      "sha256": "bed0283561053c1efa2ae27fa3f16462d5f76f5d8f21ebc40d3bc9ef66d7bb2b"
+    },
+    "roughnessMap": {
+      "url": "assets/textures/plaza_floor_rough.webp",
+      "bytes": 11702,
+      "sha256": "9ce48f7871b421984501c7b71662eb0dcb51d19cc68b5c7baee773a7fb3b9994"
+    }
+  },
+  "shots": [
+    {
+      "label": "plaza-floor-look-down",
+      "file": "round61-plaza-floor-look-down.png",
+      "bytes": 300348
+    },
+    {
+      "label": "plaza-floor-grazing",
+      "file": "round61-plaza-floor-grazing.png",
+      "bytes": 292382
+    },
+    {
+      "label": "plaza-wide",
+      "file": "round61-plaza-wide.png",
+      "bytes": 283771
+    }
+  ],
+  "checks": [
+    {
+      "name": "the plaza floor mesh is present in the loaded scene",
+      "ok": true,
+      "detail": "{\"found\":true}"
+    },
+    {
+      "name": "the plaza floor is textured with maps, not the flat fallback",
+      "ok": true,
+      "detail": "{\"plazaFloor\":\"textured\"}"
+    },
+    {
+      "name": "all three flagstone maps loaded (albedo, normal, roughness)",
+      "ok": true,
+      "detail": "{\"hasMap\":true,\"hasNormal\":true,\"hasRough\":true}"
+    },
+    {
+      "name": "the albedo map is a real 512x512 image",
+      "ok": true,
+      "detail": "{\"mapPixels\":[512,512]}"
+    },
+    {
+      "name": "the flagstone maps are exclusive to the plaza floor",
+      "ok": true,
+      "detail": "{\"sharers\":0,\"normalSharers\":0,\"roughSharers\":0}"
+    },
+    {
+      "name": "the border walls are textured from their own stone family",
+      "ok": true,
+      "detail": "{\"wallCount\":3,\"wallTextured\":3,\"wallMapShare\":0,\"wallRepeat\":[17,2],\"wallColor\":\"ffffff\"}"
+    },
+    {
+      "name": "the tiled plaza repeats at the scale the tiling math predicts",
+      "ok": true,
+      "detail": "{\"repeat\":[6,6],\"expected\":6}"
+    },
+    {
+      "name": "the mapped material is white and fully rough, so it is not tinted twice",
+      "ok": true,
+      "detail": "{\"color\":\"ffffff\",\"roughness\":1,\"metalness\":0}"
+    },
+    {
+      "name": "the maps wrap and tile rather than clamp at the disc edge",
+      "ok": true,
+      "detail": "{\"wrap\":[1000,1000]}"
+    },
+    {
+      "name": "the frame still draws the plaza geometry",
+      "ok": true,
+      "detail": "{\"drawCalls\":324,\"triangles\":8062}"
+    },
+    {
+      "name": "no page errors while the textured plaza rendered",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "all three flagstone files are shipped and non-trivial",
+      "ok": true,
+      "detail": "{\"map\":{\"url\":\"assets/textures/plaza_floor_albedo.webp\",\"bytes\":8764,\"sha256\":\"6eeb840319d1de81bbebce732fac538f0d518a489dbba74aeaaf0789723034a8\"},\"normalMap\":{\"url\":\"assets/textures/plaza_floor_normal.webp\",\"bytes\":18210,\"sha256\":\"bed0283561053c1efa2ae27fa3f16462d5f76f5d8f21ebc40d3bc9ef66d7bb2b\"},\"roughnessMap\":{\"url\":\"assets/textures/plaza_floor_rough.webp\",\"bytes\":11702,\"sha256\":\"9ce48f7871b421984501c7b71662eb0dcb51d19cc68b5c7baee773a7fb3b9994\"}}"
+    },
+    {
+      "name": "the three flagstone files are byte-distinct from one another",
+      "ok": true,
+      "detail": "{\"map\":\"6eeb840319d1\",\"normalMap\":\"bed028356105\",\"roughnessMap\":\"9ce48f7871b4\"}"
+    },
+    {
+      "name": "no flagstone file is a copy of a wall-stone file",
+      "ok": true,
+      "detail": "{\"flagstones\":[\"map\",\"normalMap\",\"roughnessMap\"],\"wallMapsCompared\":3}"
+    },
+    {
+      "name": "the flat fallback keeps the plaza distinct from the stone wall",
+      "ok": true,
+      "detail": "{\"color\":10130308,\"roughness\":0.88,\"metalness\":0,\"useMaps\":false}"
+    }
+  ],
+  "errors": [],
+  "note": "Every claim here is a scene-graph measurement, a file byte count or a pure-math check. The model is text-only: no screenshot was looked at."
+}

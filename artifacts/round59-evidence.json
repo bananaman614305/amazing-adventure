@@ -1,0 +1,327 @@
+{
+  "round": 59,
+  "title": "cast fidelity: grounding, facing and prop attachment",
+  "generatedAt": "2026-11-21T22:32:54.781Z",
+  "soleTarget": 0,
+  "soleTolerance": 0.03,
+  "noseMinForward": 0.05,
+  "measurements": {
+    "mara": {
+      "id": "mara",
+      "mode": "model",
+      "bodyScale": 1,
+      "meshes": 22,
+      "noseForward": 0.17,
+      "soleY": null,
+      "toeForward": null,
+      "props": {
+        "PropPole": {
+          "minY": 0.92,
+          "maxY": 1.72,
+          "maxZ": 0.022,
+          "parent": "LimbArmR"
+        },
+        "PropLantern": {
+          "minY": 1.54,
+          "maxY": 1.72,
+          "maxZ": 0.069,
+          "parent": "LimbArmR"
+        }
+      },
+      "pivots": {
+        "PropPole": "LimbArmR",
+        "PropLantern": "LimbArmR"
+      }
+    },
+    "oswin": {
+      "id": "oswin",
+      "mode": "model",
+      "bodyScale": 1,
+      "meshes": 24,
+      "noseForward": 0.1656,
+      "soleY": -0.0024,
+      "toeForward": 0.1725,
+      "props": {
+        "PropPouch": {
+          "minY": 0.72,
+          "maxY": 0.88,
+          "maxZ": 0.21,
+          "parent": "group"
+        }
+      },
+      "pivots": {
+        "PropPouch": "(body)"
+      }
+    },
+    "pip": {
+      "id": "pip",
+      "mode": "model",
+      "bodyScale": 0.72,
+      "meshes": 21,
+      "noseForward": 0.1332,
+      "soleY": -0.0016,
+      "toeForward": 0.1242,
+      "props": {
+        "PropHoop": {
+          "minY": 0.934,
+          "maxY": 0.967,
+          "maxZ": 0.159,
+          "parent": "LimbArmL"
+        }
+      },
+      "pivots": {
+        "PropHoop": "LimbArmL"
+      }
+    },
+    "halden": {
+      "id": "halden",
+      "mode": "model",
+      "bodyScale": 1,
+      "meshes": 27,
+      "noseForward": 0.17,
+      "soleY": -0.0021,
+      "toeForward": 0.1725,
+      "props": {
+        "PropSpear": {
+          "minY": 0.47,
+          "maxY": 2.17,
+          "maxZ": 0.07,
+          "parent": "LimbArmR"
+        },
+        "PropSpearTip": {
+          "minY": 2.166,
+          "maxY": 2.391,
+          "maxZ": 0.106,
+          "parent": "LimbArmR"
+        }
+      },
+      "pivots": {
+        "PropSpear": "LimbArmR",
+        "PropSpearTip": "LimbArmR"
+      }
+    },
+    "sable": {
+      "id": "sable",
+      "mode": "model",
+      "bodyScale": 1,
+      "meshes": 24,
+      "noseForward": 0.1693,
+      "soleY": -0.0021,
+      "toeForward": 0.1725,
+      "props": {
+        "PropMap": {
+          "minY": 1.117,
+          "maxY": 1.523,
+          "maxZ": 0.061,
+          "parent": "LimbArmL"
+        }
+      },
+      "pivots": {
+        "PropMap": "LimbArmL"
+      }
+    },
+    "wren": {
+      "id": "wren",
+      "mode": "model",
+      "bodyScale": 1,
+      "meshes": 24,
+      "noseForward": 0.1688,
+      "soleY": -0.001,
+      "toeForward": 0.1725,
+      "props": {
+        "PropLedger": {
+          "minY": 1.149,
+          "maxY": 1.491,
+          "maxZ": 0.031,
+          "parent": "LimbArmL"
+        },
+        "PropLedgerPages": {
+          "minY": 1.171,
+          "maxY": 1.471,
+          "maxZ": 0.05,
+          "parent": "LimbArmL"
+        }
+      },
+      "pivots": {
+        "PropLedger": "LimbArmL",
+        "PropLedgerPages": "LimbArmL"
+      }
+    }
+  },
+  "shots": [
+    {
+      "label": "plaza-wide",
+      "file": "round59-plaza-wide.png",
+      "bytes": 534575
+    },
+    {
+      "label": "cast-close",
+      "file": "round59-cast-close.png",
+      "bytes": 505211
+    },
+    {
+      "label": "pip-child",
+      "file": "round59-pip-child.png",
+      "bytes": 541840
+    }
+  ],
+  "checks": [
+    {
+      "name": "mara runs its Blender body, not the box fallback",
+      "ok": true,
+      "detail": "{\"mode\":\"model\",\"meshes\":22}"
+    },
+    {
+      "name": "oswin runs its Blender body, not the box fallback",
+      "ok": true,
+      "detail": "{\"mode\":\"model\",\"meshes\":24}"
+    },
+    {
+      "name": "pip runs its Blender body, not the box fallback",
+      "ok": true,
+      "detail": "{\"mode\":\"model\",\"meshes\":21}"
+    },
+    {
+      "name": "halden runs its Blender body, not the box fallback",
+      "ok": true,
+      "detail": "{\"mode\":\"model\",\"meshes\":27}"
+    },
+    {
+      "name": "sable runs its Blender body, not the box fallback",
+      "ok": true,
+      "detail": "{\"mode\":\"model\",\"meshes\":24}"
+    },
+    {
+      "name": "wren runs its Blender body, not the box fallback",
+      "ok": true,
+      "detail": "{\"mode\":\"model\",\"meshes\":24}"
+    },
+    {
+      "name": "oswin stands on the cobbles (boot sole at world 0)",
+      "ok": true,
+      "detail": "{\"soleY\":-0.0024,\"target\":0,\"tol\":0.03}"
+    },
+    {
+      "name": "pip stands on the cobbles (boot sole at world 0)",
+      "ok": true,
+      "detail": "{\"soleY\":-0.0016,\"target\":0,\"tol\":0.03}"
+    },
+    {
+      "name": "halden stands on the cobbles (boot sole at world 0)",
+      "ok": true,
+      "detail": "{\"soleY\":-0.0021,\"target\":0,\"tol\":0.03}"
+    },
+    {
+      "name": "sable stands on the cobbles (boot sole at world 0)",
+      "ok": true,
+      "detail": "{\"soleY\":-0.0021,\"target\":0,\"tol\":0.03}"
+    },
+    {
+      "name": "wren stands on the cobbles (boot sole at world 0)",
+      "ok": true,
+      "detail": "{\"soleY\":-0.001,\"target\":0,\"tol\":0.03}"
+    },
+    {
+      "name": "mara faces its walk direction (nose forward on local +Z)",
+      "ok": true,
+      "detail": "{\"noseForward\":0.17,\"min\":0.05}"
+    },
+    {
+      "name": "oswin faces its walk direction (nose forward on local +Z)",
+      "ok": true,
+      "detail": "{\"noseForward\":0.1656,\"min\":0.05}"
+    },
+    {
+      "name": "pip faces its walk direction (nose forward on local +Z)",
+      "ok": true,
+      "detail": "{\"noseForward\":0.1332,\"min\":0.05}"
+    },
+    {
+      "name": "halden faces its walk direction (nose forward on local +Z)",
+      "ok": true,
+      "detail": "{\"noseForward\":0.17,\"min\":0.05}"
+    },
+    {
+      "name": "sable faces its walk direction (nose forward on local +Z)",
+      "ok": true,
+      "detail": "{\"noseForward\":0.1693,\"min\":0.05}"
+    },
+    {
+      "name": "wren faces its walk direction (nose forward on local +Z)",
+      "ok": true,
+      "detail": "{\"noseForward\":0.1688,\"min\":0.05}"
+    },
+    {
+      "name": "oswin has toes pointing forward (+Z)",
+      "ok": true,
+      "detail": "{\"toeForward\":0.1725}"
+    },
+    {
+      "name": "pip has toes pointing forward (+Z)",
+      "ok": true,
+      "detail": "{\"toeForward\":0.1242}"
+    },
+    {
+      "name": "halden has toes pointing forward (+Z)",
+      "ok": true,
+      "detail": "{\"toeForward\":0.1725}"
+    },
+    {
+      "name": "sable has toes pointing forward (+Z)",
+      "ok": true,
+      "detail": "{\"toeForward\":0.1725}"
+    },
+    {
+      "name": "wren has toes pointing forward (+Z)",
+      "ok": true,
+      "detail": "{\"toeForward\":0.1725}"
+    },
+    {
+      "name": "mara: PropLantern rides the same pivot as PropPole",
+      "ok": true,
+      "detail": "{\"child\":\"PropLantern\",\"childPivot\":\"LimbArmR\",\"parent\":\"PropPole\",\"parentPivot\":\"LimbArmR\"}"
+    },
+    {
+      "name": "halden: PropSpearTip rides the same pivot as PropSpear",
+      "ok": true,
+      "detail": "{\"child\":\"PropSpearTip\",\"childPivot\":\"LimbArmR\",\"parent\":\"PropSpear\",\"parentPivot\":\"LimbArmR\"}"
+    },
+    {
+      "name": "wren: PropLedgerPages rides the same pivot as PropLedger",
+      "ok": true,
+      "detail": "{\"child\":\"PropLedgerPages\",\"childPivot\":\"LimbArmL\",\"parent\":\"PropLedger\",\"parentPivot\":\"LimbArmL\"}"
+    },
+    {
+      "name": "mara: the lantern sits at the top of the pole",
+      "ok": true,
+      "detail": "{\"lanternTop\":1.72,\"poleTop\":1.72}"
+    },
+    {
+      "name": "halden: the spear point sits on the shaft, not inside it",
+      "ok": true,
+      "detail": "{\"tipMin\":2.166,\"shaftMax\":2.17}"
+    },
+    {
+      "name": "pip is scaled exactly once, by the child factor",
+      "ok": true,
+      "detail": "{\"bodyScale\":0.72,\"expected\":0.72}"
+    },
+    {
+      "name": "pip is not double-scaled (boot still reaches the ground)",
+      "ok": true,
+      "detail": "{\"soleY\":-0.0016}"
+    },
+    {
+      "name": "the game resolved its cast-ready promise with all six models",
+      "ok": true,
+      "detail": "{\"loaded\":6,\"total\":6,\"mode\":\"model\"}"
+    },
+    {
+      "name": "the frame draws the plaza with the full cast in the scene",
+      "ok": true,
+      "detail": "{\"calls\":357,\"triangles\":8942,\"sceneChildren\":154,\"castInScene\":6}"
+    }
+  ],
+  "errors": [],
+  "note": "Every claim here is a scene-graph measurement or a byte count. The model is text-only: no screenshot was looked at."
+}

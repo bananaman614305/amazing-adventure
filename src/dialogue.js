@@ -1,0 +1,918 @@
+// Dialogue and quests are data. Each NPC exposes `talk(state, ctx)` which
+// returns a node: { speaker, text, choices }. A choice can run an action
+// (`do`) and then either jump to another node (`next`) or close the dialogue.
+//
+// Keeping this pure makes the story testable without a browser: see
+// tests/dialogue.test.mjs, which walks every branch.
+
+import {
+  questStatus,
+  hasItem,
+  coins,
+  getFlag,
+  memoryFor,
+  startLanterns,
+  buyOilWithCoins,
+  buyOilWithPromise,
+  deliverOil,
+  startKey,
+  returnKey,
+  startCheer,
+  tellPipAboutLanterns,
+  startToll,
+  collectToll,
+  waiveToll,
+  finishToll,
+  startLedger,
+  hearLedgerRumour,
+  recoverLedger,
+  returnLedger,
+  ledgerUnlocked,
+  duesSettleTheBook,
+  LEDGER_REWARD,
+  TOLL_COST,
+  ARREARS_REWARD,
+  REFUSAL_RULES,
+  arrearsUnlocked,
+  startArrears,
+  deliverArrears,
+  finishArrears,
+  reissueArrearsMark,
+  nightLightUnlocked,
+  startNightLight,
+  walkNightLight,
+  finishNightLight,
+  wicksUnlocked,
+  startWicks,
+  finishWicks,
+  tallyUnlocked,
+  startTally,
+  finishTally,
+  remember
+} from './state.js';
+import { npcTier, FACTIONS, NPC_FACTION } from './factions.js';
+import { refusalFor, refusalHint } from './refusal.js';
+import { JOBS, canWork, work, payFor } from './repair.js';
+
+/**
+ * A one-line greeting suffix that reflects how the NPC's faction currently
+ * sees the player. Returns '' at neutral so ordinary lines stay unchanged.
+ */
+function standingGreeting(state, npcId) {
+  const tier = npcTier(state, npcId).id;
+  const faction = FACTIONS[NPC_FACTION[npcId]];
+  if (!faction) return '';
+  switch (tier) {
+    case 'hostile':
+      return ` Every ${faction.member} in this plaza has heard of you, and none of it is kind.`;
+    case 'cold':
+      return ` Word travels, and the ${faction.collective} have been careful around you since.`;
+    case 'warm':
+      return ` ${faction.name} are saying good things about you.`;
+    case 'trusted':
+      return ` You have done enough for the ${faction.collective} that nobody questions you now.`;
+    default:
+      return '';
+  }
+}
+
+const node = (speaker, text, choices = []) => ({ speaker, text, choices });
+
+/**
+ * Builds the node shown when an NPC will not deal with the player. It always
+ * names the faction and says what would help, so the Standing panel is
+ * discoverable from the refusal itself rather than being a hidden system.
+ */
+function refusalNode(state, npcId, name, flavour) {
+  const refusal = refusalFor(state, npcId, REFUSAL_RULES);
+  if (!refusal) return null;
+  return node(name, `${flavour} ${refusalHint(refusal)}`, [
+    {
+      label: 'What would change your mind?',
+      next: () => node(name, refusal.shortfall >= 2
+        ? 'Do something for the people I answer to. Words will not move me, and neither will apologies. There is always work if you are willing to do it.'
+        : 'One good turn. Help someone I trust and I will hear about it soon enough. There is work, if you want it.',
+        [
+          { label: 'Show me the work.', next: () => workMenu(state, npcId, name) },
+          end('Leave')
+        ])
+    },
+    end('Leave')
+  ]);
+}
+
+/**
+ * The repeatable way back up. Every job costs something real — coins, or a
+ * stretch of the day — so reputation cannot be farmed by pressing a button in
+ * one place. Each job also nudges a rival faction down, which is what keeps the
+ * choice of who to work for meaningful.
+ */
+export function workMenu(state, npcId, name, intro = '“Work is work. Pick something.”') {
+  const jobs = Object.values(JOBS);
+  const choices = jobs.map((job) => {
+    const allowed = canWork(job, state);
+    const pays = payFor(job, state);
+    const costBits = [];
+    if (job.cost?.coins) costBits.push(`${job.cost.coins} coin${job.cost.coins === 1 ? '' : 's'}`);
+    if (job.cost?.time) costBits.push('the rest of the hour');
+    const cost = costBits.length ? `costs ${costBits.join(' and ')}` : 'costs nothing but time';
+    return {
+      label: allowed.ok
+        ? `${job.title} (${cost}) — ${FACTIONS[job.factionId].name} +${pays}`
+        : `${job.title} — ${allowed.reason}`,
+      // A job the player cannot afford stays visible but does nothing, so the
+      // reason is the feedback rather than a silently missing option.
+      do: () => (allowed.ok ? doJob(state, job.id) : { changed: false, message: allowed.reason }),
+      next: () => (allowed.ok
+        ? node(name, jobDoneLine(job, state), [
+            { label: 'Anything else?', next: () => workMenu(state, npcId, name) },
+            end('That is enough for now')
+          ])
+        : node(name, allowed.reason, [
+            { label: 'Something else?', next: () => workMenu(state, npcId, name) },
+            end('Leave')
+          ]))
+    };
+  });
+  return node(name, intro, [...choices, end('Leave')]);
+}
+
+/** Runs a job and folds in its time cost, which only the caller can apply. */
+function doJob(state, jobId) {
+  const result = work(state, jobId);
+  if (!result.changed) return result;
+  const bits = [result.message];
+  if (result.note) bits.push(result.note);
+  return { ...result, changed: true, message: bits.filter(Boolean).join(' ') };
+}
+
+function jobDoneLine(job, state) {
+  switch (job.id) {
+    case 'sweep':
+      return 'You sweep the steps until the stone shows through. Mara nods once, which from her is a speech.';
+    case 'carry':
+      return 'You haul crates until your arms ache. Oswin counts coins into your hand without looking up.';
+    case 'drill':
+      return 'Halden puts you through the paces twice. By the end he is correcting your stance instead of ignoring you.';
+    default:
+      return 'You work until the job is done.';
+  }
+}
+
+const say = (text) => ({ label: text, do: () => ({}) });
+const end = (label) => ({ label, end: true });
+
+// Closing out Oswin's ledger is offered anywhere he is owed money, so a player
+// who changes their mind can still make good on the promise.
+const settleDebtChoice = (state) => ({
+  label: 'Settle the debt — 4 coins.',
+  do: () => {
+    if (coins(state) < 4) return { changed: false, message: 'Oswin taps the ledger. “Four coins. I can wait.”' };
+    state.flags.coins = coins(state) - 4;
+    state.perks.oswin_debt = false;
+    return { changed: true, message: 'Debt settled with Oswin.', topic: 'settled' };
+  }
+});
+
+/**
+ * The debt-settlement option, or nothing when Oswin is not owed. Spread into
+ * every Oswin node that can be reached while a promise is open, because a
+ * permanent night-order gate sits above those nodes: without this, an unpaid
+ * promise could be buried under an offer the player keeps saying yes to and
+ * never become payable again.
+ */
+const debtChoices = (state) => (state.perks.oswin_debt ? [settleDebtChoice(state)] : []);
+
+// Every action returns { changed, message }; dialogue wrappers just remember the
+// topic so NPCs can react next time you speak to them.
+
+const mara = {
+  id: 'mara',
+  name: 'Mara the Keeper',
+  talk(state, ctx) {
+    const status = questStatus(state, 'lanterns');
+    const mem = memoryFor(state, 'mara');
+    const arrears = questStatus(state, 'arrears');
+
+    // The arrears arrive from the lane, so Mara is the far end of a walk the
+    // player has to actually make. Paying in full and forgiving the debt lead
+    // to different reputations, and to a different note carried back north.
+    if (arrears === 'started' && hasItem(state, 'arrears_pouch')) {
+      return node(
+        'Mara the Keeper',
+        'Mara looks at the pouch, then at you. “That is the lane’s money. Three weeks late and carried by a stranger. Did Wren send you?”',
+        [
+          {
+            label: 'She did. Here is the full amount.',
+            do: () => deliverArrears(state, 'pay'),
+            next: () => node('Mara the Keeper', 'She counts it twice, then signs her mark on the slip and presses it into your hand. “Then we are square, and the books will say so. Take this back to her.”')
+          },
+          {
+            label: 'She did. But the lane cannot pay this.',
+            do: () => deliverArrears(state, 'forgive'),
+            next: () => node('Mara the Keeper', 'Mara is quiet for a while. “Then I will write it off, and the Watch can ask me why the lanterns are short this quarter.” She hands you a folded note. “Give her this. She will not like it.”')
+          },
+          end('Not yet')
+        ]
+      );
+    }
+
+    if (arrears === 'delivered') {
+      const holding = hasItem(state, 'keeper_note') || hasItem(state, 'keeper_receipt');
+      return node(
+        'Mara the Keeper',
+        !holding
+          ? 'Mara looks at your empty hands. “You have lost my mark. Very well. I will write it out again — do not lose this one.”'
+          : hasItem(state, 'keeper_note')
+            ? '“Give Wren the note. She will argue. Let her.”'
+            : '“Take my mark back to Wren. She will want it in her own hand, not my word.”',
+        [
+          // Never leave the player holding a quest they cannot finish.
+          ...(!holding ? [{
+            label: 'Take a fresh mark.',
+            do: () => reissueArrearsMark(state),
+            next: () => node('Mara the Keeper', 'She presses it into your hand and closes her fingers around it. “North. Past the gate.”')
+          }] : []),
+          end('Leave')
+        ]
+      );
+    }
+
+    if (status === 'oil_bought' && hasItem(state, 'lantern_oil')) {
+      return node(
+        'Mara the Keeper',
+        mem.talks > 0 ? 'You came back. Good. Hand it over, then.' : 'That flask is Oswin’s, no mistake. You have the oil. Hand it over?',
+        [
+        {
+          label: 'Here — the lantern oil.',
+          do: () => ({ ...deliverOil(state), topic: 'delivered', opinion: 1 }),
+          next: () => node('Mara the Keeper', 'Mara holds the flask up to the lamplight and smiles for the first time. “The plaza will be bright tonight. Take this — and my word.”')
+        },
+          { label: 'Not yet.', end: true }
+        ]
+      );
+    }
+
+    if (status === 'done') {
+      const wicks = questStatus(state, 'wicks');
+      const choices = [
+        { label: 'Who keeps the lanterns usually?', next: () => node('Mara the Keeper', 'I do. Twenty years of trimming wicks. My hands know the work better than my eyes do.') },
+        { label: 'Ask about Oswin.', next: () => node('Mara the Keeper', state.perks.oswin_debt ? 'Oswin tells me you owe him. Settle it when you can — he remembers every debt.' : 'Oswin is honest enough, for a trader. He just never lets a favour go.') }
+      ];
+      if (wicks === 'none' && wicksUnlocked(state)) {
+        choices.unshift({
+          label: 'Anything else need doing?',
+          do: () => startWicks(state),
+          next: () => node('Mara the Keeper', '“The plaza lanterns want trimming at dusk. Walk the wick round, check every flame, and come back to me. Two coins, and the Keepers remember.”')
+        });
+      }
+      if (wicks === 'started') {
+        choices.unshift({
+          label: 'About the wick round.',
+          next: () => node('Mara the Keeper', 'Trim them at dusk, when the lanterns are lit. Come back when you have checked every one.')
+        });
+      }
+      if (wicks === 'trimmed') {
+        choices.unshift({
+          label: 'The wick round is walked.',
+          do: () => finishWicks(state),
+          next: () => node('Mara the Keeper', questStatus(state, 'wicks') === 'done'
+            ? '“Good. The square burns steady, and I will not have to check it twice.”'
+            : '“Not yet. Trim the lanterns at dusk first.”')
+        });
+      }
+      choices.push(end('Leave'));
+      return node('Mara the Keeper', 'The north lantern burns steady now. You did that.', choices);
+    }
+
+    if (status === 'started') {
+      return node(
+        'Mara the Keeper',
+        'Oswin sells the only good oil in the plaza. Go on — before the wick gives out.',
+        [
+          { label: 'Where is Oswin’s stall?', next: () => node('Mara the Keeper', 'East side, past the fountain. You cannot miss the red awning.') },
+          end('Leave')
+        ]
+      );
+    }
+
+    return node(
+      'Mara the Keeper',
+      mem.talks > 0
+        ? `Back again. The lanterns still need oil, if you are offering.${standingGreeting(state, 'mara')}`
+        : `You came on foot? Nobody walks the north road this late.${standingGreeting(state, 'mara')}`,
+      [
+        {
+          label: 'The lanterns look low. What is wrong?',
+          do: () => ({ ...startLanterns(state), topic: 'lanterns', opinion: 1 }),
+          next: () => node('Mara the Keeper', 'The north one has been guttering for three nights. One flask of good oil would hold it until the weather turns.', [
+            { label: 'I will find some oil.', end: true },
+            { label: 'Four nights of guttering and nobody noticed?', next: () => node('Mara the Keeper', 'I noticed. I have been carrying the whole plaza’s light on my own shoulders.') }
+          ])
+        },
+        { label: 'Who are you?', next: () => node('Mara the Keeper', 'Mara. Keeper of this plaza: the lanterns, the fountain, and the peace between them.') },
+        end('Leave')
+      ]
+    );
+  }
+};
+
+/**
+ * The settle choice: the one place that hands over the night-order coins.
+ * The payout runs as the choice's action, so the dialogue walker (and every
+ * test that drives it) goes through the same `finishNightLight()` call the
+ * player's click runs -- it must not fire as a side effect of building a node.
+ * `finishNightLight()` refuses anything but a walked round, so this choice is
+ * also safe to offer from a branch that turns out to be stale.
+ */
+function nightLightSettleChoice(state) {
+  return {
+    label: 'Settle the night order.',
+    do: () => finishNightLight(state),
+    next: () => (questStatus(state, 'nightlight') === 'done'
+      ? node('Oswin the Trader', 'Oswin counts six coins onto the counter. “Same time tomorrow, and the lane stays lit.”', [ end('Leave') ])
+      : node('Oswin the Trader', 'Oswin taps his chit. “Not yet. Walk the round first, then we settle.”', [ end('Leave') ]))
+  };
+}
+
+const oswin = {
+  id: 'oswin',
+  name: 'Oswin the Trader',
+  talk(state, ctx) {
+    const status = questStatus(state, 'lanterns');
+    const mem = memoryFor(state, 'oswin');
+    const nightlight = questStatus(state, 'nightlight');
+
+    // Reputation cuts both ways: a player the Market distrusts cannot shop.
+    const refused = refusalNode(state, 'oswin', 'Oswin the Trader',
+      'Oswin looks up, recognises you, and goes back to folding cloth. “I have nothing for you.”');
+    if (refused) return refused;
+
+    // The oil trade comes first. An open order from Mara is a transaction the
+    // player already agreed to, so no later offer may preempt it: the night
+    // order's gate is permanent now, and letting it sit above this branch
+    // stranded a player who lit the lane before taking Mara's quest with no
+    // way to ever buy the oil. The night order is always still there afterwards.
+    if (status === 'started') {
+      return node('Oswin the Trader', `Lantern oil? The good stuff. Four coins${state.perks.oswin_debt ? ', or another promise' : ' — or a promise I can call in later'}.`, [
+        {
+          label: `Pay 4 coins (you have ${coins(state)}).`,
+          do: () => ({ ...buyOilWithCoins(state), topic: 'bought_oil', opinion: 1 })
+        },
+        {
+          label: 'I will owe you one.',
+          do: () => ({ ...buyOilWithPromise(state), topic: 'promised_oil', opinion: -1 })
+        },
+        { label: 'Never mind.', end: true }
+      ]);
+    }
+
+    // Carrying the oil is also an open transaction, and it is the one state
+    // where Oswin can call in the promise, so it is answered before any
+    // optional work is offered. A carried obligation must never be hidden
+    // behind something the player could also say yes to.
+    if (status === 'oil_bought') {
+      return node('Oswin the Trader', 'The oil is yours to carry. You are paying for it one way or another.', [
+        ...(state.perks.oswin_debt ? [settleDebtChoice(state)] : []),
+        end('Leave')
+      ]);
+    }
+
+    // The night-light order is the round-56 payoff: Oswin only offers paid
+    // work for the lane's lamp round once the lane is actually lit. The
+    // offer is gated on the same flag the lanterns burn under, and dawn
+    // resets it, so the night trade is a per-night opportunity.
+    if (nightlight === 'started' && getFlag(state, 'laneLanternsLit')) {
+      // The order is taken but its round is not walked yet: lighting the lane
+      // after taking the order IS the walk, so this node only points at the post.
+      return node('Oswin the Trader', 'Oswin nods at the lit lane. “Go on then — the post is at the far end. Light them and the round is yours to finish.”', [
+        { label: 'Where was the post again?', next: () => node('Oswin the Trader', 'Far end of the lane, past the barrels. You cannot miss it.') },
+        { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+        ...debtChoices(state),
+        end('Leave')
+      ]);
+    }
+    if (nightlight === 'started' && !getFlag(state, 'laneLanternsLit')) {
+      return node('Oswin the Trader', '“Dawn put your lanterns out. The night order stands — walk the round again after sundown.”', [
+        { label: 'Where was the post again?', next: () => node('Oswin the Trader', 'Far end of the lane, past the barrels. You cannot miss it.') },
+        ...debtChoices(state),
+        end('Leave')
+      ]);
+    }
+    if (nightlight === 'walked') {
+      return node('Oswin the Trader', '“You walked the round and the lane is lit. A deal is a deal.”', [
+        nightLightSettleChoice(state),
+        ...debtChoices(state),
+        end('Leave')
+      ]);
+    }
+    if (nightlight === 'done') {
+      return node('Oswin the Trader', `The night trade is good this week. You made it good.${standingGreeting(state, 'oswin')}`, [
+        { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+        ...debtChoices(state),
+        end('Leave')
+      ]);
+    }
+    if (nightLightUnlocked(state)) {
+      return node('Oswin the Trader', 'Oswin looks past you at the glowing lane and smiles. “There it is. A lit lane is a trading lane. I have work for someone who can keep it lit.”', [
+        {
+          label: 'What kind of work?',
+          do: () => startNightLight(state),
+          next: () => node('Oswin the Trader', '“Walk my lamp round after sundown. Light the lane lanterns, then come back and tell me it is done. Six coins, and the Market remembers.”')
+        },
+        { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+        ...debtChoices(state),
+        end('Leave')
+      ]);
+    }
+
+    if (status === 'done') {
+      return node(
+        'Oswin the Trader',
+        state.perks.oswin_debt
+          ? 'There you are. My ledger still has your name in it. One favour, whenever I ask.'
+          : 'Paid in full. Mara’s lanterns and my purse both thank you.',
+        [
+          ...(state.perks.oswin_debt ? [settleDebtChoice(state)] : []),
+          { label: 'What do you sell?', next: () => node('Oswin the Trader', 'Oil, rope, old keys, other people’s stories. The stories sell best.') },
+          ...(nightLightUnlocked(state)
+            ? [{ label: 'Anything else need doing?', next: () => node('Oswin the Trader', '“Now that the lane is lit, yes. Come back when you want the night round.”') }]
+            : []),
+          end('Leave')
+        ]
+      );
+    }
+
+    return node(
+      'Oswin the Trader',
+      mem.talks > 0
+        ? `Still browsing? Everything is for sale twice over.${standingGreeting(state, 'oswin')}`
+        : `Stall is open. Everything worth having is worth haggling for.${standingGreeting(state, 'oswin')}`,
+      [
+        { label: 'Do you have lantern oil?', next: () => node('Oswin the Trader', 'Always. Bring Mara’s name and I will even be polite about the price.') },
+        { label: 'Ask about Halden.', next: () => node('Oswin the Trader', 'The guard? Lost his gate key again, I hear. Careless man for someone who watches doors.') },
+        end('Leave')
+      ]
+    );
+  }
+};
+
+const pip = {
+  id: 'pip',
+  name: 'Pip',
+  talk(state) {
+    const status = questStatus(state, 'cheer');
+    const mem = memoryFor(state, 'pip');
+
+    if (status === 'watched') {
+      return node('Pip', 'Well? Did you see it? Did you stand on the wall when they lit?', [
+        {
+          label: 'I did. The whole plaza went gold.',
+          do: () => ({ ...tellPipAboutLanterns(state), topic: 'lanterns_seen', opinion: 2 }),
+          next: () => node('Pip', 'I knew it. Nobody ever goes and looks. Here — take my ribbon. It is the only thing I have that is worth anything.')
+        },
+        { label: 'Not yet, but soon.', end: true }
+      ]);
+    }
+
+    if (status === 'done') {
+      return node('Pip', mem.opinion > 0 ? 'You still wear my ribbon? Good. It means you keep promises.' : 'The lanterns really do look like that, then. I knew it.', [
+        { label: 'Who lights them?', next: () => node('Pip', 'Mara. Every evening, exact as a bell. She will not let anyone else touch the wicks.') },
+        { label: 'Why not go up and look yourself?', next: () => node('Pip', 'The stairs to the north wall are not for children. Halden says so, and Halden is very serious.') },
+        end('Leave')
+      ]);
+    }
+
+    if (status === 'started') {
+      return node('Pip', 'You have to be on the wall when the sky turns. Not before, not after.', [
+        { label: 'Why the wall?', next: () => node('Pip', 'Because from the wall you see all four lanterns light at once. From down here you only see one.') },
+        end('Leave')
+      ]);
+    }
+
+    return node(
+      'Pip',
+      mem.talks > 0
+        ? `Back again! You never come when there is anything to see.${standingGreeting(state, 'pip')}`
+        : `Have you seen the lanterns at dusk? That is the whole reason to live here.${standingGreeting(state, 'pip')}`,
+      [
+        {
+          label: 'What is so special about the lanterns?',
+          do: () => ({ ...startCheer(state), topic: 'cheer', opinion: 1 }),
+          next: () => node('Pip', 'They all light at once. If you stood on the north wall when the sky turns, you would see it properly. Will you?', [
+            { label: 'I will go and look.', end: true },
+            { label: 'That sounds like a lot of stairs.', next: () => node('Pip', 'It is only a few. Please?') }
+          ])
+        },
+        { label: 'What do you do around here?', next: () => node('Pip', 'Run messages, mostly. And notice things nobody asks me about.') },
+        end('Leave')
+      ]
+    );
+  }
+};
+
+const halden = {
+  id: 'halden',
+  name: 'Halden the Guard',
+  talk(state) {
+    const status = questStatus(state, 'key');
+    const mem = memoryFor(state, 'halden');
+
+    const refused = refusalNode(state, 'halden', 'Halden the Guard',
+      'Halden plants his spear and does not move aside. “Not you.”');
+    if (refused) return refused;
+
+    if (status === 'found' && hasItem(state, 'brass_key')) {
+      return node('Halden the Guard', 'That is my key. Where — never mind. Hand it here.', [
+        {
+          label: 'Here it is.',
+          do: () => ({ ...returnKey(state), topic: 'key_returned', opinion: 2 }),
+          next: () => node('Halden the Guard', 'You are a better finder than I am a keeper. If Oswin gives you trouble, tell him I said you are square with the watch.')
+        },
+        { label: 'What is it worth to you?', next: () => node('Halden the Guard', 'A guard’s goodwill. Which is worth more than it sounds.', [
+          {
+            label: 'Fine. Here.',
+            do: () => ({ ...returnKey(state), topic: 'key_returned', opinion: 1 })
+          },
+          end('Walk away')
+        ]) }
+      ]);
+    }
+
+    if (status === 'done') {
+      const tally = questStatus(state, 'tally');
+      const choices = [
+        { label: 'Who else has a key?', next: () => node('Halden the Guard', 'Mara, the captain, and me. That is the whole list, and it stays that way.') },
+        tollChoice(state)
+      ];
+      if (tally === 'none' && tallyUnlocked(state)) {
+        choices.push({
+          label: 'Anything else need doing?',
+          do: () => startTally(state),
+          next: () => node('Halden the Guard', '“The open gate wants a count. Walk out through it and back, and I will pay for the tally. Two coins, and the Watch remembers.”')
+        });
+      }
+      if (tally === 'started') {
+        choices.push({
+          label: 'About the gate tally.',
+          next: () => node('Halden the Guard', 'Walk out through the gate and back. I will be here with the coin.')
+        });
+      }
+      if (tally === 'walked') {
+        choices.push({
+          label: 'The tally is walked.',
+          do: () => finishTally(state),
+          next: () => node('Halden the Guard', questStatus(state, 'tally') === 'done'
+            ? '“Counted and logged. The Watch stands easier.”'
+            : '“Not yet. Walk it first.”')
+        });
+      }
+      choices.push(end('Leave'));
+      return node('Halden the Guard', 'Gate is locked proper again. Much obliged.', choices);
+    }
+
+    if (status === 'started') {
+      return node('Halden the Guard', 'Any luck? I dropped it this morning, on my rounds. South-east, by the crates.', [
+        { label: 'Why not search yourself?', next: () => node('Halden the Guard', 'Because I am standing here guarding. That is the whole job.') },
+        end('Leave')
+      ]);
+    }
+
+    return node(
+      'Halden the Guard',
+      mem.talks > 0
+        ? `Still here. Still guarding.${standingGreeting(state, 'halden')}`
+        : `Keep off the walls and we will get along fine.${standingGreeting(state, 'halden')}`,
+      [
+        {
+          label: 'You look like you lost something.',
+          do: () => ({ ...startKey(state), topic: 'key_lost', opinion: 1 }),
+          next: () => node('Halden the Guard', 'The brass gate key. Dropped it somewhere on my rounds this morning. Find it and I will owe you.', [
+            { label: 'I will look.', end: true },
+            { label: 'Have you checked by the crates?', next: () => node('Halden the Guard', 'South-east crates. That is the last place I remember having it.') }
+          ])
+        },
+        { label: 'Tell me about the plaza.', next: () => node('Halden the Guard', 'Walls are for keeping the weather out. Mostly. The rest they keep out too.') },
+        end('Leave')
+      ]
+    );
+  }
+};
+
+// --- The Market Toll dialogue -------------------------------------------
+// Halden offers the toll once he trusts you with the key. Both resolutions are
+// on the table at once, and the player can only take one: that is the point.
+
+function tollChoice(state) {
+  const status = questStatus(state, 'toll');
+
+  if (status === 'none') {
+    return {
+      label: 'Ask about the gate toll.',
+      next: () => node(
+        'Halden the Guard',
+        'Oswin has not paid the gate toll in three weeks. Fetch the money, or talk me into letting it go. Your choice.',
+        [
+          {
+            label: 'I will get your toll.',
+            do: () => ({ ...startToll(state), topic: 'toll', opinion: 1 }),
+            // Stay in the conversation and offer the decision straight away.
+            next: () => tollOptionsNode(state)
+          },
+          {
+            label: 'What if I argued for him instead?',
+            do: () => ({ ...startToll(state), topic: 'toll', opinion: 0 }),
+            next: () => tollOptionsNode(state)
+          },
+          end('Later')
+        ]
+      )
+    };
+  }
+
+  if (status === 'started') {
+    return { label: 'About Oswin’s toll.', next: () => tollOptionsNode(state) };
+  }
+
+  if (status === 'collected') {
+    return {
+      label: 'Hand over the toll money.',
+      do: () => ({ ...finishToll(state), topic: 'toll_paid', opinion: 1 }),
+      next: () => node('Halden the Guard', 'Counted and logged. The Watch remembers who squares up.')
+    };
+  }
+
+  if (status === 'waived') {
+    return {
+      label: 'Tell Halden the toll is settled.',
+      do: () => ({ ...finishToll(state), topic: 'toll_settled', opinion: 0 }),
+      next: () => node('Halden the Guard', 'Waived and witnessed. You are collecting favours like a trader. Be careful whose.')
+    };
+  }
+
+  return {
+    label: 'About the toll.',
+    next: () => node(
+      'Halden the Guard',
+      'The toll is settled. Do not expect me to forget which way you settled it.'
+    )
+  };
+}
+
+/** The actual decision: pay the Watch or side with the Market. */
+function tollOptionsNode(state) {
+  return node(
+    'Halden the Guard',
+    `The toll. ${TOLL_COST} coins, or a good reason why not.`,
+    [
+      {
+        label: `Pay it myself (${TOLL_COST} coins).`,
+        do: () => ({ ...collectToll(state) })
+      },
+      {
+        label: 'Waive it. He has had a hard season.',
+        do: () => {
+          // The tier is read when the choice is taken, not when it was drawn.
+          const result = waiveToll(state, npcTier(state, 'halden').id);
+          return { ...result, topic: result.changed ? 'toll_waived' : 'toll_refused', opinion: result.changed ? 1 : 0 };
+        },
+        next: () => node('Halden the Guard', '...Fine. Put it on my conscience, not my ledger. Do not make me regret it.')
+      },
+      end('Not yet')
+    ]
+  );
+}
+
+// Sable is the plaza's mapmaker: a quieter character whose lines change with
+// what the player knows, and who explains the north terrace for new players.
+const sable = {
+  id: 'sable',
+  name: 'Sable the Cartographer',
+  talk(state) {
+    const mem = memoryFor(state, 'sable');
+    const seenTerrace = state.flags.seen_terrace;
+    const knowsKey = questStatus(state, 'key') !== 'none';
+    const knowsLanterns = questStatus(state, 'lanterns') !== 'none';
+
+    if (knowsKey || knowsLanterns) {
+      const notes = [];
+      if (knowsLanterns) notes.push('Mara’s lantern is the north one. You can see the whole ring from up on the terrace.');
+      if (knowsKey) notes.push('Halden’s key will be in the grass. Small brass things always are.');
+      return node(
+        'Sable the Cartographer',
+        `You have been busy. ${notes[0]}`,
+        [
+          ...(notes.length > 1 ? [{ label: 'What did you say about the key?', next: () => node('Sable the Cartographer', notes[1]) }] : []),
+          { label: 'How do I get up on the terrace?', next: () => node('Sable the Cartographer', 'Ramp on the west end, past Mara’s house. Steep, but the view is worth the climb.') },
+          { label: 'Show me what you are drawing.', next: () => node('Sable the Cartographer', 'The plaza, four times over. One for each hour the light changes. The dusk sheet is the one I keep redrawing.') },
+          end('Leave')
+        ]
+      );
+    }
+
+    return node(
+      'Sable the Cartographer',
+      mem.talks > 0
+        ? `You again. Still no map of your own, I notice.${standingGreeting(state, 'sable')}`
+        : `Mind the ink. This is the fourth map of this plaza I have drawn, and the only one that is right.${standingGreeting(state, 'sable')}`,
+      [
+        {
+          label: 'Why four maps?',
+          do: () => ({ topic: 'maps', opinion: 1 }),
+          next: () => node('Sable the Cartographer', 'Because the plaza is not the same place at dawn, at noon, at dusk and at night. The lanterns redraw it every evening.', [
+            { label: 'Where can I see all of it at once?', next: () => node('Sable the Cartographer', 'The north terrace. Climb the ramp on its west end and you will see all four lanterns together when they light.') },
+            { label: 'Which hour do you like best?', next: () => node('Sable the Cartographer', 'Dusk. Always dusk. Everything goes gold for about a minute and then it is over.') }
+          ])
+        },
+        { label: 'What do you know about the people here?', next: () => node('Sable the Cartographer', 'Mara keeps the light. Halden keeps the gate. Oswin keeps accounts of everyone. Pip keeps secrets badly.') },
+        end('Leave')
+      ]
+    );
+  }
+};
+
+// Wren keeps the toll ledger in the market lane. She is the faction gate: her
+// quest is refused below Warm Market standing, which makes the reputation built
+// in the plaza the thing that opens the lane's story.
+const wren = {
+  id: 'wren',
+  name: 'Wren the Toll Clerk',
+  talk(state) {
+    const mem = memoryFor(state, 'wren');
+    const tier = npcTier(state, 'wren').id;
+    const status = questStatus(state, 'ledger');
+    const greeting = standingGreeting(state, 'wren');
+    const unlocked = ledgerUnlocked(state, tier);
+
+    if (status === 'none') {
+      if (!unlocked) {
+        return node(
+          'Wren the Toll Clerk',
+          `Wren does not look up from her book. “Market business is for people the Market trusts. Come back when it does.”${greeting}`,
+          [
+            { label: 'What would earn that trust?', next: () => node('Wren the Toll Clerk', 'Dues paid. Promises kept. Oswin at his stall with his accounts in order. It is not complicated, it is just slow.') },
+            end('Leave')
+          ]
+        );
+      }
+      // Arriving with the dues already settled reads differently from arriving on
+      // good standing, and she is the person whose book that fact lives in.
+      const opening = duesSettleTheBook(state)
+        ? `Wren taps her book, where Oswin’s dues are now entered. “Your doing, that. So I will ask you: my toll ledger is missing. A quarter of the lane’s takings, gone, and every trader here suddenly cannot remember their own name.”${greeting}`
+        : `Wren runs a finger down a column of numbers. “My toll ledger is missing. A quarter of the lane’s takings, gone, and every trader here suddenly cannot remember their own name.”${greeting}`;
+      return node(
+        'Wren the Toll Clerk',
+        mem.talks > 0
+          ? `Wren marks her page. “Back again. Still nobody has owned up.”${greeting}`
+          : opening,
+        [
+          {
+            label: 'I could look for it.',
+            do: () => startLedger(state, tier),
+            next: () => node('Wren the Toll Clerk', '“Then look. I want the ledger and I want the name of whoever took it.”')
+          },
+          { label: 'That sounds like your problem.', next: () => node('Wren the Toll Clerk', '“It is everybody’s problem. The toll is how the gate stays lit and the gate is how the lane stays open.”') },
+          end('Leave')
+        ]
+      );
+    }
+
+    if (status === 'started') {
+      return node(
+        'Wren the Toll Clerk',
+        '“The ledger is somewhere in this lane. Nobody here admits to anything, but nobody here is a good liar either.”',
+        [
+          {
+            label: 'Any idea who took it?',
+            do: () => hearLedgerRumour(state),
+            next: () => node('Wren the Toll Clerk', 'Wren lowers her voice. “The quarter is in the ledgers by the barrels. Ask yourself who would want the page with the arrears on it. Then look behind a barrel.”')
+          },
+          end('Leave')
+        ]
+      );
+    }
+
+    if (status === 'booked') {
+      return node(
+        'Wren the Toll Clerk',
+        '“Behind the barrels by the far wall. Go and look, and do not touch anything else.”',
+        [ end('Leave') ]
+      );
+    }
+
+    if (status === 'recovered') {
+      return node(
+        'Wren the Toll Clerk',
+        'You set the toll ledger on the stall. Wren opens it and finds the page she has been looking for. “Now. Whose name do I write?”',
+        [
+          {
+            label: `Name the trader honestly. (Watch +20, Market -10, ${LEDGER_REWARD} coins)`,
+            do: () => returnLedger(state, 'name')
+          },
+          {
+            label: 'Cover for the trader. (Market +20, Watch -10)',
+            do: () => returnLedger(state, 'cover')
+          },
+          end('Not yet')
+        ]
+      );
+    }
+
+    // With the ledger closed, Wren has a bigger problem: the lane owes Mara.
+    const arrears = questStatus(state, 'arrears');
+    if (status === 'done' && arrears === 'none' && arrearsUnlocked(state)) {
+      return node(
+        'Wren the Toll Clerk',
+        'Wren closes the ledger and rubs her eyes. “One thing settled, one thing not. The lane is three weeks behind to Mara in the plaza, and she will not come north to ask.”',
+        [
+          {
+            label: 'I could carry it to her.',
+            do: () => startArrears(state),
+            next: () => node('Wren the Toll Clerk', 'She weighs a canvas pouch in one hand and sets it on the counter. “Count it if you like. Do not lose it. Go out the gate, south past the fountain, and give it to Mara herself.”')
+          },
+          { label: 'Why not send it with someone?', next: () => node('Wren the Toll Clerk', '“Because whoever carries it has to look Mara in the eye and explain why it is late. Nobody here will do that.”') },
+          end('Leave')
+        ]
+      );
+    }
+
+    if (arrears === 'started') {
+      return node(
+        'Wren the Toll Clerk',
+        '“Still carrying it? Mara is south, past the gate and across the plaza. The fountain. You cannot miss her.”',
+        [ end('Leave') ]
+      );
+    }
+
+    if (arrears === 'delivered') {
+      const receipt = hasItem(state, 'keeper_receipt');
+      const note = hasItem(state, 'keeper_note');
+      return node(
+        'Wren the Toll Clerk',
+        receipt
+          ? 'Wren reads Mara’s mark twice. “Paid in full. She signed it herself.” She sounds more relieved than pleased.'
+          : note
+            ? 'Wren reads Mara’s note and her jaw tightens. “Forgiven. So the books stay short and the Watch will want to know why.”'
+            : '“You came back without anything from Mara. Go and see her before you come to me.”',
+        [
+          ...(receipt || note ? [{
+            label: `Hand over Mara’s ${receipt ? 'receipt' : 'note'}. (${ARREARS_REWARD} coins)`,
+            do: () => finishArrears(state),
+            next: () => node('Wren the Toll Clerk', receipt
+              ? '“Then the lane is square. Take this for the walk — and for not making me do it.”'
+              : '“Then I will write it up as forgiven, and let the Watch make of it what they will. Take this.”')
+          }] : []),
+          end('Not yet')
+        ]
+      );
+    }
+
+    return node(
+      'Wren the Toll Clerk',
+      status === 'done'
+        ? 'Wren’s ledger is open at a fresh page, and she is writing in it. “Busy. The lane pays its toll now, one way or another.”'
+        : '“Mind the ledger.”',
+      [
+        { label: 'How are the accounts?', next: () => node('Wren the Toll Clerk', '“Balanced. Do not tell anyone, they might expect it more often.”') },
+        end('Leave')
+      ]
+    );
+  }
+};
+
+export const DIALOGUE = { mara, oswin, pip, halden, sable, wren };
+
+/** Runs a choice's action, records NPC memory and returns { changed, message }. */
+export function applyChoice(state, npcId, choice) {
+  let result = { changed: false, message: '' };
+  if (typeof choice?.do === 'function') {
+    result = choice.do() || result;
+  }
+  // The plaza job board is not a person, so it has no memory to update. Without
+  // this guard it would invent a phantom NPC called 'job_board' in the save.
+  if (npcId && DIALOGUE[npcId]) {
+    remember(state, npcId, { topic: result.topic, opinionDelta: result.opinion || 0 });
+  }
+  return result;
+}
+
+/**
+ * The plaza job board as a conversation-shaped object. It reuses the dialogue
+ * UI so the board looks and behaves like every other interaction, but it grants
+ * no personal opinion: the board is a notice, not a person.
+ */
+export const JOB_BOARD_SPEAKER = {
+  id: 'job_board',
+  name: 'The Work Board',
+  talk(state) {
+    return workMenu(state, null, 'The Work Board',
+      'Tacked to the board are three slips, each with a job and what it pays. Nobody is watching who takes one down.');
+  }
+};
+
+/** Starts talking to an NPC and returns the opening node, or null. */
+export function startConversation(state, npcId) {
+  const npc = DIALOGUE[npcId];
+  if (!npc) return null;
+  return npc.talk(state, {});
+}
