@@ -316,6 +316,31 @@ its procedural stand-in or flat colour and stays fully playable.
   chained last on `castReady` after the accent pass. Fully procedural;
   nothing new to license.
 
+### Round 83 additions
+
+- No new outside assets. The plaza job board's face (`BoardFace`, 2.16 m2)
+  and its three pinned slips (`BoardPaper`, 0.4 m2) are dressed with a
+  parchment map family generated for this round by the project's own
+  Kaggle texture job (`art/kaggle/paper_textures.py`,
+  `assets/textures/paper_{albedo,normal,rough}.webp`, 512x512 lossless WebP:
+  periodic layered fibre streaks with pore detail, a Sobel-derived
+  tangent-space normal, a warm-cream albedo so the tint is forced white).
+  Applied by the new `dressBoardPaper()` (`src/paper.js` rules,
+  `src/world.js` geometry) with metre-space box-projected UVs at a 0.3 m
+  physical tile, roughness 0.9 / metalness 0, one cloned material per mesh.
+  Fully procedural; nothing new to license.
+
+### Round 84 additions
+
+- No new outside assets. The cast's three `Paper` meshes (Oswin's apron,
+  Wren's ledger pages and one further Paper mesh counted by the materials
+  audit — 0.31 m2 of flat colour before) reuse the round 83 parchment
+  maps unchanged, with the same 0.3 m tile, roughness 0.9 / metalness 0
+  and a forced white tint. Applied by the new
+  `upgradeCastPaper()` / `dressCastPaper()` (`src/paper.js` rules,
+  `src/npcs.js` geometry) with metre-space box-projected UVs, one cloned
+  material per rig, chained last on `castReady` after the boot pass.
+
 ### Round 67 additions
 
 - `assets/textures/cloth_*.webp` — `art/kaggle/cloth_textures.py`, run on the
