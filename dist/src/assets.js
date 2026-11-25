@@ -270,6 +270,24 @@ export const LEATHER_TEXTURE_FILES = {
 };
 
 /**
+ * Paper family for the job board (Round 83).
+ *
+ * The plaza work board's face (BoardFace, 1.2 x 0.9 m) and its three pinned
+ * slips (BoardPaper) are authored as flat cream (#d8c9a8 / #f2ead6) planes.
+ * A fibrous paper/parchment albedo with gentle tooth at a 0.3 m tile reads as
+ * pinned paper rather than a flat colour, and the slips share the same map.
+ *
+ * The albedo is cream with faint fibre variation, so the material tint must
+ * stay white or the cream gets multiplied down; the family carries no authored
+ * hue of its own.
+ */
+export const PAPER_TEXTURE_FILES = {
+  map: 'assets/textures/paper_albedo.webp',
+  normalMap: 'assets/textures/paper_normal.webp',
+  roughnessMap: 'assets/textures/paper_rough.webp'
+};
+
+/**
  * Metres per felt tile, in UV space.
  *
  * Chosen against the thing that actually has to read as felt: a bunting pennant
