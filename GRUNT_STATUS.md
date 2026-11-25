@@ -12,7 +12,7 @@
 
 ## Current task
 
-**Round 81 complete at head d30cab4: the cast's accent bands wear felt.**
+**Round 81 complete at head 051c4ee: the cast's accent bands wear felt.**
 
 The accent material was the largest still-flat cast surface the materials audit
 found (2.38 m2 over 9 meshes: sashes, scarves, tabard, cloak band, collar, leg
@@ -20,32 +20,33 @@ wraps). It is felted fabric at 0.1-0.2 m, so it reuses the round 72 neutral
 felt maps rather than a new set, keeping one fibre read across the scene and
 six distinct per-NPC dyes.
 
-Commits: 8d66cd4 (source, tests, scripts, manifest), d30cab4 (dist restamp).
+Commits: 8d66cd4 (source, tests, scripts, manifest), d30cab4 (dist restamp),
+051c4ee (checkpoint).
 
-Evidence actually run at d30cab4: npm test 703/703 pass exit 0; desktop browser
-suite 272/272 checks, no console errors, exit 0 (4 new accent checks: 9/9
-meshes wear all 3 felt maps, 6 materials for 9 meshes, 6 distinct dyes, felt
-roughness 0.9); mobile suite 184/184 checks, no console errors, exit 0;
-materials audit run at this head: Accent no longer in the flat list (top
-remaining: HouseGlass, LampGlass, BoardFace, LaneRope, NpcMarker, Boot,
-LanternHousing, SackTie, ...). Unit layer: tests/accent.test.mjs 12/12.
+Evidence at 051c4ee790293b53126ad07e21bd3c7aaa165e63: npm test 703/703 pass
+exit 0; desktop browser suite 272/272 checks no console errors exit 0 (4 new
+accent checks: 9/9 meshes wear all 3 felt maps, 6 materials for 9 meshes, 6
+distinct dyes, felt roughness 0.9); mobile suite 184/184 checks no console
+errors exit 0; materials audit run at this head: Accent no longer in the flat
+list. Unit layer: tests/accent.test.mjs 12/12.
 
-Receipts: Round 80 receipts all completed exit 0 unchanged True at
-001b48c...324ef (tests db0e2d70, browser 9fba3827, mobile 4c984001). Trusted
-release channel still blocked_infrastructure (256-commit / 22000-byte host
-screen); PR #59 published via the PR-only fallback.
+Trusted receipts at exact head 051c4ee790293b53126ad07e21bd3c7aaa165e63, all
+completed exit 0 unchanged True: tests fa7c21ce-2fcd-4667-a98f-6d10e0691893,
+browser e958d418-4ed0-4134-823f-4fc975e05fa9, mobile
+081cdd78-25f7-4e1c-91bd-fa595375ea50. Trusted release channel still
+blocked_infrastructure (256-commit / 22000-byte host screen); PR-only fallback
+used (publish.json written at this head, grants no merge/deployment authority).
 
 ## Next steps
 
-1. Request fresh trusted receipts at exact head d30cab4: `grunt-release verify
-   release tests`, `... browser`, `... mobile` (plan id `release`, clean tree),
-   poll each to terminal with verify-status/verify-result, record real exit codes.
-2. Re-stamp /worker/state/outbox/needs-supervision.json with the new head and
-   receipt ids; submit via /worker/state/outbox/publish.json at d30cab4 (branch
-   grunt/round72-bunting-felt, base main) with only checks that actually ran.
-3. Round 82 candidate: next largest still-flat cast surface is Boot (1.49 m2,
-   18 meshes) or LanternHousing (1.32 m2); or a new quest beat. Keep the economy
-   rule: any new sink is hasItem-guarded, one-time, no restock, no dawn reset.
+1. Read /worker/state/outbox/publish-result.json next cycle; the trusted
+   channel cannot advance until the host screen clears (256-commit / 22000-byte
+   limits), so no further action is available from this side beyond keeping the
+   branch clean and verified.
+2. Round 82 candidate: next largest still-flat cast surface is Boot (1.49 m2,
+   18 meshes) or LanternHousing (1.32 m2); or a new quest beat. Keep the
+   economy rule: any new sink is hasItem-guarded, one-time, no restock, no dawn
+   reset.
 
 
 ## Round 5 — playable phone preview (owner priority)
