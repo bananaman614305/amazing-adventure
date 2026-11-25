@@ -363,6 +363,42 @@ export function buyOswinWare(state, itemId) {
   return { changed: true, message: `Bought ${ITEMS[itemId].name} for ${ware.price} coins.` };
 }
 
+// --- Favours the game actually honours --------------------------------------
+// The plaza hands out three tokens of gratitude — Mara's word, Oswin's marker,
+// Pip's ribbon — and until now only Oswin's marker did anything (it lifted his
+// refusal). These two redeem a real, one-time payoff and are then spent, so they
+// cannot be farmed. Pip's ribbon stays a keepsake: Pip is a child, and a ribbon
+// you wear is the favour.
+export const KEEPER_PROMISE_REWARD = { coins: 2, factionId: 'keepers', delta: 10 };
+export const TRADER_MARKER_REWARD = { coins: 2, factionId: 'trade', delta: 10 };
+
+export function redeemKeeperPromise(state) {
+  if (!hasItem(state, 'keeper_promise')) return noChange('Mara owes you nothing right now.');
+  removeItem(state, 'keeper_promise');
+  addCoins(state, KEEPER_PROMISE_REWARD.coins);
+  const standing = applyStanding(state, { factionId: KEEPER_PROMISE_REWARD.factionId, delta: KEEPER_PROMISE_REWARD.delta });
+  return {
+    changed: true,
+    message: `Mara honours her word: +${KEEPER_PROMISE_REWARD.coins} coins. ${standing.message}`.trim(),
+    topic: 'promise_redeemed',
+    opinion: 1
+  };
+}
+
+export function redeemTraderMarker(state) {
+  if (!hasItem(state, 'oswin_marker')) return noChange('Oswin owes you nothing right now.');
+  removeItem(state, 'oswin_marker');
+  addCoins(state, TRADER_MARKER_REWARD.coins);
+  const standing = applyStanding(state, { factionId: TRADER_MARKER_REWARD.factionId, delta: TRADER_MARKER_REWARD.delta });
+  return {
+    changed: true,
+    message: `Oswin honours the marker: +${TRADER_MARKER_REWARD.coins} coins. ${standing.message}`.trim(),
+    topic: 'marker_redeemed',
+    opinion: 1
+  };
+}
+
+
 // --- Reputation actions (quest-level consequences) ------------------------
 
 /**

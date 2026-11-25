@@ -198,7 +198,7 @@ test('no reachable game state is a dead end, not just the one route I played', (
   // end, which looks like a finding and is only a truncation. So the cap is set
   // above the real graph (~33k states) and the result is checked for truncation
   // before any of its numbers are believed.
-  const result = findDeadEnds({ maxStates: 60000 });
+  const result = findDeadEnds({ maxStates: 200000 });
   assert.equal(result.truncated, false, 'the search finished; a capped run is not a proof');
   assert.ok(result.explored > 100, `the search actually covered ground, found ${result.explored}`);
   assert.equal(result.startReachable, true, 'the game is winnable from the start');

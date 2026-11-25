@@ -346,3 +346,39 @@ test('Oswin still offers the wares when the player cannot afford them', () => {
   assert.equal(hasItem(state, 'rope'), false);
   assert.match(buy.next().text, /Coins first/);
 });
+
+test('Mara offers to honour her word only while the promise is held', () => {
+  const state = createInitialState();
+  startLanterns(state);
+  buyOilWithPromise(state);
+  deliverOil(state);
+  assert.equal(hasItem(state, 'keeper_promise'), true);
+  const withPromise = startConversation(state, 'mara');
+  // Mara's done branch is gated on quest status 'done'; force it
+  // by checking choices after delivery — the promise choice appears on the done node.
+  // Drive to done node by re-entering after delivery (status now done).
+  const after = startConversation(state, 'mara');
+  const callIn = after.choices.find((c) => /Call in Mara/.test(c.label));
+  assert.ok(callIn, 'the call-in choice appears while the token is held: ' + after.choices.map((c) => c.label).join(' | '));
+  const result = applyChoice(state, 'mara', callIn);
+  assert.equal(result.changed, true);
+  assert.equal(hasItem(state, 'keeper_promise'), false);
+  const again = startConversation(state, 'mara');
+  assert.ok(!again.choices.some((c) => /Call in Mara/.test(c.label)), 'the choice disappears once spent');
+});
+
+test('Oswin offers to honour his marker only while it is held', () => {
+  const state = createInitialState();
+  startKey(state);
+  pickUpKey(state);
+  returnKey(state);
+  assert.equal(hasItem(state, 'oswin_marker'), true);
+  const open = startConversation(state, 'oswin');
+  const callIn = open.choices.find((c) => /Call in Oswin/.test(c.label));
+  assert.ok(callIn, 'the call-in choice appears while the token is held: ' + open.choices.map((c) => c.label).join(' | '));
+  const result = applyChoice(state, 'oswin', callIn);
+  assert.equal(result.changed, true);
+  assert.equal(hasItem(state, 'oswin_marker'), false);
+  const again = startConversation(state, 'oswin');
+  assert.ok(!again.choices.some((c) => /Call in Oswin/.test(c.label)), 'the choice disappears once spent');
+});

@@ -6,8 +6,9 @@ import assert from 'node:assert/strict';
 import {
   createInitialState, questStatus, setQuestStep, advanceQuest, startLanterns, buyOilWithCoins, buyOilWithPromise, deliverOil, startKey, pickUpKey, returnKey, startCheer, watchLanterns, tellPipAboutLanterns, addCoins, coins, addItem, hasItem, removeItem, inventoryItems, journalEntries, questCounts, remember, memoryFor, serialize, deserialize, createSaveStore, SAVE_KEY, startToll, collectToll, waiveToll, finishToll, startLedger, hearLedgerRumour, recoverLedger, returnLedger, QUEST_ORDER, CHORE_ORDER, QUESTS,
   startWicks, trimWicks, finishWicks, startTally, walkTally, finishTally, getFlag,
-  buyOswinWare, OSWIN_WARES
+  buyOswinWare, OSWIN_WARES, redeemKeeperPromise, redeemTraderMarker, KEEPER_PROMISE_REWARD, TRADER_MARKER_REWARD
 } from '../src/state.js';
+import { reputation } from '../src/factions.js';
 
 test('new state starts with no quests and 6 coins', () => {
   const state = createInitialState();
@@ -331,4 +332,42 @@ test('Oswin wares: rope survives a save round trip', async () => {
   const reloaded = deserialize(serialize(state));
   assert.equal(hasItem(reloaded, 'rope'), true);
   assert.equal(coins(reloaded), 3);
+});
+
+test('favours: redeeming Mara’s word pays 2 coins, +10 Keepers, spends the token', () => {
+  const state = createInitialState();
+  startLanterns(state);
+  buyOilWithPromise(state);
+  deliverOil(state);
+  assert.equal(hasItem(state, 'keeper_promise'), true, 'promise granted');
+  const beforeCoins = coins(state);
+  const beforeStanding = reputation(state, 'keepers');
+  const result = redeemKeeperPromise(state);
+  assert.equal(result.changed, true);
+  assert.equal(hasItem(state, 'keeper_promise'), false, 'token spent');
+  assert.equal(coins(state), beforeCoins + KEEPER_PROMISE_REWARD.coins);
+  assert.equal(reputation(state, 'keepers'), beforeStanding + KEEPER_PROMISE_REWARD.delta);
+  assert.equal(redeemKeeperPromise(state).changed, false, 'cannot redeem twice');
+});
+
+test('favours: redeeming Oswin’s marker pays 2 coins, +10 Market, spends the token', () => {
+  const state = createInitialState();
+  startKey(state);
+  pickUpKey(state);
+  returnKey(state);
+  assert.equal(hasItem(state, 'oswin_marker'), true, 'marker granted');
+  const beforeCoins = coins(state);
+  const beforeStanding = reputation(state, 'trade');
+  const result = redeemTraderMarker(state);
+  assert.equal(result.changed, true);
+  assert.equal(hasItem(state, 'oswin_marker'), false, 'token spent');
+  assert.equal(coins(state), beforeCoins + TRADER_MARKER_REWARD.coins);
+  assert.equal(reputation(state, 'trade'), beforeStanding + TRADER_MARKER_REWARD.delta);
+  assert.equal(redeemTraderMarker(state).changed, false, 'cannot redeem twice');
+});
+
+test('favours: redeeming without the token is refused', () => {
+  const state = createInitialState();
+  assert.equal(redeemKeeperPromise(state).changed, false);
+  assert.equal(redeemTraderMarker(state).changed, false);
 });
