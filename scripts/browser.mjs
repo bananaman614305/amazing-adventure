@@ -56,8 +56,19 @@ export async function startServer() {
   return {
     base,
     async stop() {
+      // If the server already exited (a crash, or an early port-bind failure),
+      // 'exit' will never fire again and awaiting it hangs the whole run after
+      // every check has already passed -- which throws away the results. Guard
+      // on the recorded exit code and back SIGTERM with SIGKILL.
+      if (child.exitCode !== null || child.signalCode !== null) return;
       child.kill('SIGTERM');
-      await new Promise((done) => child.once('exit', done));
+      await new Promise((done) => {
+        const timer = setTimeout(() => {
+          try { child.kill('SIGKILL'); } catch { /* already gone */ }
+          done();
+        }, 5000);
+        child.once('exit', () => { clearTimeout(timer); done(); });
+      });
     }
   };
 }
@@ -92,8 +103,15 @@ export async function launchBrowser() {
   return {
     browser,
     async close() {
-      await browser.close();
-      await rm(userDataDir, { recursive: true, force: true });
+      // Same hazard as server.stop(): a browser that already died (or a hung
+      // SwiftShader process) must not swallow the collected PASS/FAIL lines.
+      try {
+        await Promise.race([
+          browser.close(),
+          new Promise((done) => setTimeout(done, 10000))
+        ]);
+      } catch { /* the process may already be gone */ }
+      await rm(userDataDir, { recursive: true, force: true }).catch(() => {});
     }
   };
 }
