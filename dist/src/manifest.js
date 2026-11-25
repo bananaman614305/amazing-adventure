@@ -37,6 +37,7 @@ export const REQUIRED_FILES = [
   'src/ambient.js',
   'src/daynight.js',
   'src/atmosphere.js',
+  'src/stars.js',
   'src/onboard.js',
   'src/glb.js',
   'src/glass.js',
