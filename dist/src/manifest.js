@@ -19,6 +19,7 @@ export const REQUIRED_FILES = [
   'src/areas.js',
   'src/terrain.js',
   'src/npcs.js',
+  'src/skin.js',
   'src/idle.js',
   'src/dialogue.js',
   'src/state.js',
@@ -101,6 +102,12 @@ export const REQUIRED_FILES = [
   'assets/textures/water_albedo.webp',
   'assets/textures/water_normal.webp',
   'assets/textures/water_rough.webp',
+  'assets/textures/skin_albedo.webp',
+  'assets/textures/skin_normal.webp',
+  'assets/textures/skin_rough.webp',
+  'assets/textures/hair_albedo.webp',
+  'assets/textures/hair_normal.webp',
+  'assets/textures/hair_rough.webp',
   'vendor/three.module.min.js',
   'vendor/THREE-LICENSE.txt'
 ];

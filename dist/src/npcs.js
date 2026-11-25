@@ -1,7 +1,13 @@
 import { weightShift, glanceAngle } from './idle.js';
 import * as THREE from 'three';
 import { floorHeightAt } from './world.js';
-import { CAST_ASSETS, projectBoxGeometry, loadCast, loadMaterialTextures, CLOTH_TEXTURE_FILES } from './assets.js';
+import {
+  CAST_ASSETS, projectBoxGeometry, loadCast, loadMaterialTextures,
+  CLOTH_TEXTURE_FILES, SKIN_TEXTURE_FILES, HAIR_TEXTURE_FILES
+} from './assets.js';
+import {
+  CAST_SKIN_FAMILIES, castSkinFamilyFor, castSkinParams, shouldDressCastSkin
+} from './skin.js';
 
 // Round 67: the metre scale the cast coats are box-projected at. It is the
 // cloth PROP_FAMILY's tile (see assets.js), so a cast coat, a lane sack and any
@@ -91,6 +97,147 @@ export async function upgradeCastCloth(npcs, { THREE, fetchImpl = fetch, tileMet
     clothTextures = null;
   }
   return dressCastCloth(npcs, clothTextures, { tileMeters });
+}
+
+// ---------------------------------------------------------------------------
+// Round 76: the cast's skin and hair.
+//
+// The cloth pass above attaches one neutral map set to every coat. Skin and hair
+// need the same treatment but at a much smaller tile (0.35 m and 0.22 m vs the
+// coat's 1.2 m), because the player stands about 2 m from a 0.31 m head when the
+// Talk prompt opens. The rules live in src/skin.js so the browser pass and the
+// tests cannot drift apart; this file only does the geometry work.
+// ---------------------------------------------------------------------------
+
+/** The downloaded map sets, keyed by the family id in src/skin.js. */
+export const CAST_SKIN_TEXTURE_FILES = {
+  skin: SKIN_TEXTURE_FILES,
+  hair: HAIR_TEXTURE_FILES
+};
+
+/**
+ * Accumulated scale from a mesh up to the scene root.
+ *
+ * Pip is authored at 0.72 scale (buildModelled applies it), so his head is
+ * smaller than an adult's. Projecting his skin at the same metre tile would put
+ * 28% larger pores and creases on a child than on Mara; dividing the tile by the
+ * rig's scale keeps one physical tile size across the whole cast. The walk stops
+ * at the top rather than trusting one parent, because meshes sit under limb and
+ * neck pivots as well as the rig root.
+ */
+function accumulatedScale(mesh) {
+  let scale = 1;
+  for (let node = mesh; node; node = node.parent) {
+    const sx = node.scale ? node.scale.x : 1;
+    if (Number.isFinite(sx) && sx > 0) scale *= sx;
+  }
+  return scale;
+}
+
+/**
+ * Dresses every mesh whose authored material belongs to a cast skin family.
+ *
+ * `texturesByFamily` is `{ skin, hair }` of loadMaterialTextures() results, so a
+ * family whose download failed simply drops out and its meshes stay flat in
+ * their authored colour instead of being half-dressed.
+ *
+ * Maps are cloned once per *material*, not once per mesh: all Skin meshes in one
+ * rig share the material object the GLB reader built (src/glb.js indexes into
+ * one materials array), so a per-mesh clone would allocate 36 map sets to draw
+ * with one. The first mesh through a material sets it up; later meshes only get
+ * their own projected UVs.
+ */
+export function dressCastSkin(npcs, texturesByFamily, { THREE } = {}) {
+  const dressed = [];
+  const perFamily = { skin: 0, hair: 0 };
+  let seams = 0;
+  let anyLoaded = false;
+  if (!THREE || !texturesByFamily) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  for (const family of CAST_SKIN_FAMILIES) {
+    if (shouldDressCastSkin(family, texturesByFamily[family.id])) anyLoaded = true;
+  }
+  if (!anyLoaded) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+
+  // Material object -> the family it was dressed as. A rig's Skin material is
+  // shared by head, nose, hands and thumbs, so this both avoids duplicate clones
+  // and makes "dress each material once" provable.
+  const materialFamilies = new Map();
+
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const family = castSkinFamilyFor(material && material.name);
+      if (!family) return;
+      const textures = texturesByFamily[family.id];
+      if (!shouldDressCastSkin(family, textures)) return;
+
+      // The projection works in the mesh's local space, which the rig may scale
+      // (Pip is 0.72). Dividing the world tile by that scale gives the local
+      // tile that lands at one physical 0.35 m tile on every character.
+      const scale = accumulatedScale(mesh);
+      const split = projectBoxGeometry({
+        THREE, geometry: mesh.geometry, tileMeters: family.tileMeters / scale
+      });
+      if (split.seams > 0) seams += split.seams;
+
+      if (materialFamilies.get(material) !== family) {
+        const params = castSkinParams(family);
+        for (const key of ['map', 'normalMap', 'roughnessMap']) {
+          const texture = textures[key];
+          if (!texture) continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          // The metre projection carries the tile; the texture stays at one
+          // repeat so density does not depend on how large a mesh happens to be.
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        material.roughness = params.roughness;
+        material.metalness = params.metalness;
+        material.needsUpdate = true;
+        materialFamilies.set(material, family);
+      }
+
+      mesh.userData.skinDressed = true;
+      perFamily[family.id] += 1;
+      dressed.push({ npc: npc.id, name: mesh.name, family: family.id, tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, perFamily, anyLoaded: true };
+}
+
+/**
+ * Loads the skin and hair map sets and dresses the cast with them.
+ *
+ * Each family is loaded independently, so a missing hair download still leaves
+ * the faces dressed (and vice versa) and a network failure leaves the cast flat
+ * rather than blocking the rigs. Never throws.
+ */
+export async function upgradeCastSkin(npcs, { THREE, fetchImpl = fetch, textures = null } = {}) {
+  if (!THREE || !npcs || !npcs.length) {
+    return { dressed: 0, meshes: [], anyLoaded: false, perFamily: { skin: 0, hair: 0 } };
+  }
+  let texturesByFamily = textures;
+  if (!texturesByFamily) {
+    const ids = CAST_SKIN_FAMILIES.map((family) => family.id);
+    const loaded = await Promise.all(ids.map(async (id) => {
+      try {
+        return [id, await loadMaterialTextures({ THREE, files: CAST_SKIN_TEXTURE_FILES[id], fetchImpl })];
+      } catch {
+        return [id, null];
+      }
+    }));
+    texturesByFamily = Object.fromEntries(loaded);
+  }
+  return dressCastSkin(npcs, texturesByFamily, { THREE });
 }
 
 // Round 2 cast. Each NPC has a name, a role, a palette, a routine of spots for
