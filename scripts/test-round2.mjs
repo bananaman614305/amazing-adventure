@@ -4233,6 +4233,52 @@ try {
   await page.keyboard.press('Escape');
   await new Promise((r) => setTimeout(r, 400));
 
+  // --- 29d. The stall actually sells its rope (round 78) --------------------
+  // The four "What do you sell?" branches used to be dead ends. Drive the real
+  // page: walk up to Oswin, open the stall, buy the rope, and reopen it.
+  const ropeSale = await page.evaluate(async () => {
+    const S = await import('./src/state.js');
+    const api = window.amazingAdventure;
+    const before = api.getState();
+    api.setState(S.createInitialState());
+    api.refreshHUD();
+    return { coins: S.coins(api.getState()), rope: S.hasItem(api.getState(), 'rope'), keep: before };
+  });
+  const stallOpen = await talkToNpc('oswin');
+  const stallChoice = await clickChoiceRegex('What do you sell');
+  const wares = await page.evaluate(() => window.amazingAdventure.getDialogue());
+  checks.check('Oswin\u2019s stall opens a priced ware instead of a dead end',
+    stallOpen.visible && stallChoice.ok && Boolean(wares) && wares.choices.some((l) => /Buy Coil of Rope/.test(l)),
+    JSON.stringify({ line: stallOpen.line.slice(0, 60), choices: wares?.choices }));
+  const bought = await clickChoiceRegex('Buy Coil of Rope');
+  const afterSale = await page.evaluate(async () => {
+    const S = await import('./src/state.js');
+    const state = window.amazingAdventure.getState();
+    return {
+      coins: S.coins(state), rope: S.hasItem(state, 'rope'),
+      line: document.getElementById('dialogue-line').textContent,
+      inventory: document.getElementById('inventory-list')?.textContent ?? ''
+    };
+  });
+  checks.check('buying the rope spends 3 coins and puts it in the pack',
+    bought.ok && afterSale.coins === ropeSale.coins - 3 && afterSale.rope === true,
+    JSON.stringify(afterSale));
+  await capture(page, 'round78-rope-sale.png');
+  const reopen = await clickChoiceRegex('already yours|Leave');
+  await page.evaluate(() => document.getElementById('dialogue-close')?.click() ?? null);
+  await new Promise((r) => setTimeout(r, 200));
+  const reoffer = await talkToNpc('oswin');
+  const reofferSell = await clickChoiceRegex('What do you sell');
+  const owned = await page.evaluate(() => window.amazingAdventure.getDialogue());
+  checks.check('the rope cannot be bought twice',
+    reoffer.visible && reofferSell.ok && Boolean(owned) &&
+    owned.choices.some((l) => /already yours/.test(l)) &&
+    !owned.choices.some((l) => /Buy Coil of Rope/.test(l)),
+    JSON.stringify({ choices: owned?.choices }));
+  await page.evaluate((keep) => { window.amazingAdventure.setState(keep); }, ropeSale.keep);
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 200));
+
   // --- 30. Save hardening and exhaustive reachability ----------------------
   // Save loading is the only place untrusted data enters the game, and a coin
   // balance that is finite but absurd slipped through the floor-only clamp.
