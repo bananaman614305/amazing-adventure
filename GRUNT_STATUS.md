@@ -27,9 +27,11 @@ phase opacity lives in `applyPhase()` and a per-frame `updateStars(dt)` breathes
 the size via `starTwinkle`. main.js calls it beside `updateWater(dt)`.
 
 Evidence: unit suite 743/743 (stars 10/10, preview/manifest/digest green, dist
-restamped at 9e836e9 digest 5aa80a5e, status b123595). Desktop browser suite
-running in the background (3 new star checks + `round85-stars.png` capture);
-mobile suite to follow.
+restamped at digest d7a92722, HEAD 3b85ff5). Desktop browser suite 288/288 pass
+with all 3 star checks green (night opacity 1 + 260 stars radius > 110;
+twinkle moved size off 0.9; day hidden), `round85-stars.png` captured (717227
+bytes, looking up at the dome). Mobile suite running now (184/184 baseline
+expected, no console errors).
 
 ## Next steps
 
