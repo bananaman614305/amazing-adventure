@@ -30,25 +30,28 @@ Evidence: unit suite 743/743 (stars 10/10, preview/manifest/digest green, dist
 restamped at digest d7a92722, HEAD 3b85ff5). Desktop browser suite 288/288 pass
 with all 3 star checks green (night opacity 1 + 260 stars radius > 110;
 twinkle moved size off 0.9; day hidden), `round85-stars.png` captured (717227
-bytes, looking up at the dome). Mobile suite running now (184/184 baseline
-expected, no console errors).
+bytes, looking up at the dome). Mobile suite 184/184 pass, no console errors
+(4 profiles: iPhone 13 portrait 10.4fps, Pixel 7 portrait 1.2fps, iPhone SE
+small 1.7fps, iPhone 13 landscape 1.5fps); artefacts restored to clean tree.
 
 ## Next steps
 
-1. Browser suite result: expect 288/288 (285 + 3 star checks) and
-   `round85-stars.png` captured; then run the mobile suite (expect 184/184, no
-   console errors).
-2. Record the browser and mobile evidence in GRUNT_STATUS.md, commit, and
+1. Mobile suite result: expect 184/184 (no console errors). Record it, then
    publish via the PR-only fallback: overwrite
    /worker/state/outbox/publish.json with branch grunt/round72-bunting-felt,
    base main, title "Round 85: night-sky star field", exact HEAD; refresh
    needs-supervision.json to the same head. Do not merge or deploy from a shell.
-3. Choose the next useful milestone: the audit flat list is HouseGlass 4.63,
-   LampGlass 4.5, LaneRope 1.92, NpcMarker 1.77, LanternHousing 1.32, SackTie
-   1.04, LampBulb 0.58, WoodP 0.34 (all by design or already documented
-   stay-flat); the next largest genuinely dressable surface family is the next
-   candidate. Continue the economy rule (hasItem-guarded, one-time, no restock,
-   no dawn reset) for any new sink.
+2. Round 86 candidate (chosen by the subagent audit): dress the bunting's rope
+   strand (LaneRope) — the largest genuinely dressable flat family left (1.92
+   m², 3 meshes). A new src/rope.js family (tile ~0.05-0.1 m, keepTint true),
+   a rope-texture generator under art/kaggle/, an upgradeLaneRope() pass in
+   world.js modeled on upgradeBuntingFelt(), tests mirroring the felt block,
+   browser checks with a round86-rope.png capture. LanternHousing (reuse LAMP
+   maps at a smaller tile) is the Round 87 follow-up. The two cosmetic audit
+   notes (resting size 0.857 vs comment 0.9; built-but-unattached per-star
+   size array) are acknowledged, not blockers.
+3. Continue the economy rule (hasItem-guarded, one-time, no restock, no dawn
+   reset) for any new sink.
 
 ## Round 84 complete: dress the cast's paper props.
 
