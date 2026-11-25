@@ -3489,6 +3489,143 @@ try {
     rope.assetState === 'textured',
     JSON.stringify({ assetState: rope.assetState, detail: rope.detail }));
   await capture(page, 'round86-rope.png');
+  // --- 28n3. The lane lanterns, sack ties and notice board (round 87) --------
+  // The three lane lantern housings reuse the lamp-post maps at a 0.25 m
+  // tile, the nine sack ties wear the authored dark cord maps at 0.04 m, and
+  // the single notice board face carries its maps at 0.4 m. Checked live.
+  const laneDetail = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const housing = [];
+    const sackTies = [];
+    const notices = [];
+    const housingMaterials = new Set();
+    const housingMaterialNames = new Set();
+    api.scene.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const name = o.material.name || '';
+      const uv = o.geometry.getAttribute('uv');
+      const row = {
+        name: o.name,
+        materialName: name,
+        maps: ['map', 'normalMap', 'roughnessMap']
+          .filter((k) => Boolean(o.material[k])).length,
+        hasUv: Boolean(uv),
+        tint: o.material.color.getHexString(),
+        roughness: Number(Number(o.material.roughness).toFixed(3)),
+        metalness: Number(Number(o.material.metalness).toFixed(3)),
+        image: o.material.map ? o.material.map.image.width : null,
+        repeat: o.material.map
+          ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+        wrapped: o.material.map
+          ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+        dressed: o.userData.housingDressed === true
+          || o.userData.sackTieDressed === true
+          || o.userData.noticeFaceDressed === true
+      };
+      if (/^LanternHousing$/i.test(name)) {
+        housingMaterials.add(o.material.uuid);
+        housingMaterialNames.add(name);
+        housing.push(row);
+      } else if (/^SackTie$/i.test(name)) {
+        sackTies.push(row);
+      } else if (/^NoticeFace(Lane)?$/i.test(name)) {
+        // Two faces belong to the family: the modelled panel (NoticeFace) and
+        // the procedural stand-in (NoticeFaceLane) the model pass hides. The
+        // visible one must be dressed too, or the board reads flat paint.
+        let hidden = false;
+        for (let p = o; p; p = p.parent) if (p.visible === false) hidden = true;
+        notices.push({ ...row, hidden, modelled: /^NoticeFace$/i.test(name) });
+      }
+    });
+    const state = typeof api.assetState === 'function' ? api.assetState() : api.assetState;
+    return {
+      housing,
+      sackTies,
+      notices,
+      housingMaterials: housingMaterials.size,
+      housingMaterialNames: [...housingMaterialNames],
+      housingState: state?.housing,
+      housingDetail: state?.housingDetail,
+      sackTieState: state?.sackTie,
+      sackTieDetail: state?.sackTieDetail,
+      noticeFaceState: state?.noticeFace,
+      noticeFaceDetail: state?.noticeFaceDetail
+    };
+  });
+  const laneText = (value) => (typeof value === 'string'
+    ? value : JSON.stringify(value ?? null));
+  const laneNum = (text, key, val) => new RegExp(
+    key + '["\']?\\s*[:=]?\\s*' + String(val).replace('.', '\\.') + '(?![\\d.])').test(text);
+  checks.check('all 3 LanternHousing meshes wear the reused lamp maps at a 0.25 m tile',
+    laneDetail.housing.length === 3 && laneDetail.housing.every((r) => r.maps === 3
+      && r.hasUv && r.image === 512 && r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    JSON.stringify({ rows: laneDetail.housing.length,
+                    maps: [...new Set(laneDetail.housing.map((r) => r.maps))],
+                    images: [...new Set(laneDetail.housing.map((r) => r.image))] }));
+  checks.check('the housing keeps one LanternHousing material at 0.55/0.35, tint ffffff',
+    laneDetail.housingMaterials <= 1
+      && laneDetail.housingMaterialNames.length === 1
+      && laneDetail.housingMaterialNames[0] === 'LanternHousing'
+      && laneDetail.housing.every((r) => r.tint === 'ffffff' && r.roughness === 0.55
+        && r.metalness === 0.35 && r.dressed),
+    JSON.stringify({ materials: laneDetail.housingMaterials,
+                    names: laneDetail.housingMaterialNames,
+                    tints: [...new Set(laneDetail.housing.map((r) => r.tint))],
+                    roughness: [...new Set(laneDetail.housing.map((r) => r.roughness))],
+                    metalness: [...new Set(laneDetail.housing.map((r) => r.metalness))] }));
+  await capture(page, 'round87-lane-detail.png');
+  const housingDetailText = laneText(laneDetail.housingDetail);
+  checks.check('assetState reports the housing textured at a 0.25 m tile with all three maps',
+    laneDetail.housingState === 'textured' && laneNum(housingDetailText, 'meshes', 3)
+      && laneNum(housingDetailText, 'tileMeters', 0.25)
+      && housingDetailText.includes('map') && housingDetailText.includes('normalMap')
+      && housingDetailText.includes('roughnessMap'),
+    JSON.stringify({ assetState: laneDetail.housingState,
+                    detail: laneDetail.housingDetail }));
+  checks.check('all 9 SackTie meshes are dressed with three maps and no repeat',
+    laneDetail.sackTies.length >= 9 && laneDetail.sackTies.every((r) => r.dressed
+      && r.maps === 3 && r.hasUv && r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    JSON.stringify({ rows: laneDetail.sackTies.length,
+                    maps: [...new Set(laneDetail.sackTies.map((r) => r.maps))],
+                    repeats: [...new Set(laneDetail.sackTies.map((r) => JSON.stringify(r.repeat)))] }));
+  checks.check('the sack ties keep the authored dark cord (keepTint true) at 0.95 roughness',
+    laneDetail.sackTies.every((r) => r.tint !== 'ffffff' && r.roughness === 0.95
+      && r.metalness === 0),
+    JSON.stringify({ tints: [...new Set(laneDetail.sackTies.map((r) => r.tint))],
+                    roughness: [...new Set(laneDetail.sackTies.map((r) => r.roughness))],
+                    metalness: [...new Set(laneDetail.sackTies.map((r) => r.metalness))] }));
+  await capture(page, 'round87-sacktie.png');
+  const sackTieDetailText = laneText(laneDetail.sackTieDetail);
+  checks.check('assetState reports the sack ties textured at a 0.04 m tile',
+    laneDetail.sackTieState === 'textured'
+      && laneNum(sackTieDetailText, 'tileMeters', 0.04)
+      && laneNum(sackTieDetailText, 'meshes', laneDetail.sackTies.length),
+    JSON.stringify({ assetState: laneDetail.sackTieState,
+                    detail: laneDetail.sackTieDetail }));
+  checks.check('both notice faces (modelled and stand-in) wear three maps at 0.4 m',
+    laneDetail.notices.length === 2
+      && laneDetail.notices.every((r) => r.maps === 3
+        && r.hasUv && r.wrapped && r.repeat[0] === 1 && r.repeat[1] === 1
+        && r.tint === 'ffffff' && r.roughness === 0.9 && r.metalness === 0
+        && r.dressed),
+    JSON.stringify({ rows: laneDetail.notices.length,
+                    names: laneDetail.notices.map((r) => r.materialName),
+                    maps: laneDetail.notices.map((r) => r.maps),
+                    tint: laneDetail.notices.map((r) => r.tint),
+                    roughness: laneDetail.notices.map((r) => r.roughness) }));
+  checks.check('the notice face the player can see is the dressed modelled panel',
+    laneDetail.notices.some((r) => r.modelled && !r.hidden && r.dressed),
+    JSON.stringify(laneDetail.notices.map((r) => ({ name: r.materialName,
+      hidden: r.hidden, modelled: r.modelled, dressed: r.dressed }))));
+  checks.check('assetState reports the notice face textured at a 0.4 m tile',
+    laneDetail.noticeFaceState === 'textured'
+      && laneNum(laneText(laneDetail.noticeFaceDetail), 'tileMeters', 0.4)
+      && laneNum(laneText(laneDetail.noticeFaceDetail), 'meshes', 2),
+    JSON.stringify({ assetState: laneDetail.noticeFaceState,
+                    detail: laneDetail.noticeFaceDetail }));
   // --- 28o. Vegetation: trees stand in, upgrade to models --------------------
   const trees = await page.evaluate(async () => {
     const api = window.amazingAdventure;

@@ -12,38 +12,49 @@
 
 ## Current task
 
-**Round 86: dress the lane bunting's rope strand (LaneRope) -- COMPLETE.**
+**Round 87: dress the lane lantern housings, sack ties and notice face -- COMPLETE.**
 
-Round 85 (night-sky star field) is complete, verified and published via the
-PR-only fallback. Round 86 dresses the three LaneRope boxes (2 cm, 1.92 m2,
-authored brown 0x6b5236) with a procedural twisted-fibre rope map at a 0.08 m
-tile (keepTint true). Delivered: src/rope.js pure module + tests/rope.test.mjs
-(8/8), art/kaggle/rope_textures.py generator + the three rope_*.webp maps
-produced locally with PIL, an upgradeLaneRope() pass in world.js modeled on
-upgradeBuntingFelt() (assetState.rope 'textured', 3 meshes, 1 material,
-seams, tileMeters 0.08), src/assets.js ROPE_TEXTURE_FILES, manifest entries
-(src/rope.js + 3 textures), and browser checks in scripts/test-round2.mjs
-(5 checks + round86-rope.png capture). Round 87 follow-ups (housing.js and
-sacktie.js pure modules, 8/8 each) are also landed, ready for their world.js
-passes.
+Round 86 (lane rope) is complete, verified and committed. Round 87 dressed the
+lane's remaining small flat surfaces: the three LanternHousing bodies (0.24 m,
+reusing LAMP maps at a 0.25 m tile, keepTint false, 0.55/0.35), the nine
+SackTie cords (0.02 m, reusing CLOTH maps at a 0.04 m tile, keepTint true,
+0.95/0), and both notice faces (the procedural NoticeFaceLane stand-in and
+the modelled NoticeFace panel from assets/notice.glb, reusing PAPER maps at
+a 0.4 m tile, keepTint false, 0.9/0). Delivered: src/housing.js and
+src/sacktie.js pure modules + tests (8/8 each), src/noticeface.js pure module
++ tests (9/9) accepting both NoticeFace and NoticeFaceLane, src/lanedress.js
+shared dressing pass (dressLanternHousing/dressSackTie) + tests (18/18),
+upgradeLanternHousing()/upgradeSackTie()/upgradeNoticeFace() passes in
+world.js with assetState keys housing/sackTie/noticeFace, shared lantern
+housing material, manifest entries (120 required files), and browser checks in
+scripts/test-round2.mjs (10 checks + round87-lane-detail.png +
+round87-sacktie.png captures). Unit suite 780/781 (1 preview digest stale
+before restamp, now 781/781 after build-preview); desktop browser suite
+303 PASS / 0 FAIL (no console errors); mobile suite 189 PASS / 0 FAIL
+(no console errors) at iPhone 13 portrait 11fps, Pixel 7 portrait 1.2fps,
+iPhone SE small 2fps, iPhone 13 landscape 1.5fps.
 
-Parallel build record (owner request): split into A (src/rope.js + tests),
-B (rope_textures.py generator), C (world.js upgradeLaneRope pass) and D
-(assets.js/manifest/browser checks). A took ~42s, B ~568s (429 relaunch, then
-completed locally via PIL), C ~276s, D was folded into the integration step
-because no agent landed it. Parallel was faster than serial for the pure
-modules and the world pass, and the 429 on B was recoverable.
+Parallel build record (owner request, parallel-build-20261125a): split into
+A (src/lanedress.js + tests), B (src/noticeface.js + tests), C (round 87
+browser checks in scripts/test-round2.mjs), and D (world.js integration +
+manifest + assetState wiring, done by me). A and B completed at the same
+time (~1-2 min each); C landed after ~3 min; D was folded into the
+integration step. Parallel was faster and cleaner than serial: the three
+agents each owned disjoint files, and their outputs slotted together without
+conflicts. No 429 this cycle.
 
 ## Next steps
 
-1. Round 86 is integrated; rerun `npm test` (currently 1 preview digest stale
-   after the manifest change -- restamp dist next), then desktop and mobile
-   browser suites one at a time, then commit and checkpoint.
-2. Round 87: wire housing.js and sacktie.js into src/assets.js (HOUSING/SACKTIE
-   texture files -- housing reuses LAMP maps at a 0.25 m tile, sacktie reuses
-   CLOTH maps at 0.04 m), add upgradeLanternHousing() and upgradeSackTie()
-   passes in world.js, manifest entries, browser checks, and captures. Continue
-   the economy rule (hasItem-guarded, one-time, no restock, no dawn reset) for
+1. Commit Round 87 integration (sources + tests + screenshots + manifest +
+   dist restamp) and checkpoint GRUNT_STATUS.md. Publish via the PR-only
+   fallback (publish.json + needs-supervision.json) at the exact final HEAD.
+2. Choose the next useful milestone. Graphics realism is the standing priority;
+   the materials audit flat list is now much shorter. Candidates: dress any
+   remaining flat families (iron, banner, cobble, grass, walls, gateStone,
+   fountainStone, terrace, plazaFloor, wood, brick, foliage, roof, bark,
+   propWood are already dressed; check the audit for what is still flat),
+   improve lighting/atmosphere, or geometry work in Blender. Continue the
+   economy rule (hasItem-guarded, one-time, no restock, no dawn reset) for
    any new sink.
 3. Keep the trusted release channel's blocked_infrastructure status in view;
    publication continues via the PR-only fallback until it clears.

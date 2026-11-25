@@ -41,6 +41,8 @@ export const REQUIRED_FILES = [
   'src/rope.js',
   'src/housing.js',
   'src/sacktie.js',
+  'src/lanedress.js',
+  'src/noticeface.js',
   'src/onboard.js',
   'src/glb.js',
   'src/glass.js',
