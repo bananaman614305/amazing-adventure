@@ -3395,7 +3395,7 @@ try {
   await page.evaluate(() => {
     const api = window.amazingAdventure;
     api.setClock(150); // deep night
-    api.player.placeAt(0, 11, 0, -0.05);
+    api.player.placeAt(0, 11, 0, -0.05, -0.6);
   });
   await new Promise((r) => setTimeout(r, 900));
   const starNight = await page.evaluate(() => {
