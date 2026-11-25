@@ -12,48 +12,42 @@
 
 ## Current task
 
-**Round 78 complete and verified at head `3f479fd`; PR-only fallback submitted (trusted channel blocked on host base/history).**
+**Round 79 complete and verified at head `21f6971`: favours are now honoured.**
 
-Round 78 priced Oswin's market stall. `src/state.js` gained the `rope` item plus
-`OSWIN_WARES` and `buyOswinWare` (3 coins, one-time, `hasItem`-guarded — no
-restock, no dawn reset, cannot be farmed). `src/dialogue.js` replaced all four
-dead-end "What do you sell?" branches and the default stall node with a priced
-wares node (labels show owned/affordable/short-purse states; debt choices kept).
-Tests added in `tests/state.test.mjs` and `tests/dialogue.test.mjs`; desktop
-browser harness gained section 29d (real page: walk up, open stall, buy rope,
-coins −3, rope owned; reopen shows "already yours", no second buy; state
-restored). Commits: `3b50519` (source + tests), `7954500` (dist restamp),
-`b1f51ef` (checkpoint), `3f479fd` (desktop rope-sale harness check).
+Round 79 made the plaza's gratitude real. `src/state.js` gained
+`KEEPER_PROMISE_REWARD`/`TRADER_MARKER_REWARD` and `redeemKeeperPromise`/
+`redeemTraderMarker`: each spends its token exactly once for +2 coins and
++10 own-faction standing, and refuses a second redeem (no farm, no restock,
+no dawn reset). `src/dialogue.js` wires a "Call in …" choice into Mara's
+done node and every Oswin node, shown only while the token is held, and
+removed from the menu once spent. Pip's ribbon stays a keepsake (documented
+in source). Reachability graph grew 33184 -> 105784 states, 0 dead ends, no
+truncation (cap raised 60000 -> 200000 in tests/playthrough.test.mjs).
+Unit tests added in tests/state.test.mjs and tests/dialogue.test.mjs.
 
-Evidence: unit 682/682; playthrough 7/7 quests, 15 coins, 3 items, story
-complete, exit 0; reachability 33184/33184 winnable states, 0 dead ends, no
-truncation; desktop browser 265/265 checks, no console errors; mobile 184/184
-checks, no console errors.
+Commits: `591b1d7` (source + tests), `21f6971` (dist restamp).
 
-Trusted verification receipts all completed exit 0, unchanged, clean, bound to
-head `3f479fd327480f9e1c5435ca1724977835b4a0db`: tests
-`2e2138f8-4ea0-44a2-80ef-8151375c604a`, browser
-`bf54e2fc-fca5-4b3c-bf3e-c677ec7dd2ae`, mobile
-`da5d91dd-ec59-4998-902f-65a2633fb3ba`.
+Evidence: unit 687/687; playthrough 7/7 quests, 15 coins, 3 items, story
+complete, exit 0; reachability 105784/105784 winnable, 0 dead ends, no
+truncation; dist preview test green. Desktop browser + mobile browser
+suites: rerunning this round (desktop harness in flight).
 
-Trusted `grunt-release prepare` (request `44094cbb-113e-4c61-aea1-f4cffbb5e143`)
-was blocked: "Publication requires a clean, fully committed project containing
-the current base." — the host's 256-commit / 22000-byte review-diff screen
-(origin/main is still the initial README commit, this branch is 303 commits
-ahead). PR-only fallback written to `/worker/state/outbox/publish.json` at head
-`3f479fd327480f9e1c5435ca1724977835b4a0db`. No merge or deploy authority
-granted. Awaiting `/worker/state/outbox/publish-result.json`.
-
+PR #59 (head `12fab2060c7b6f5d790ce6f144b423553f6a7419`) published via the
+PR-only fallback; trusted channel still blocked on host history-size screen.
 ## Next steps
 
-1. Read `/worker/state/outbox/publish-result.json` next cycle; if published,
-   record the PR number/URL in GRUNT_STATUS and continue. Do not push or merge
-   from a shell.
-2. Pick the next round's scope (round 79) from the game's weakest remaining
-   surface; keep the economy and save/load assertions green; do not wait idle on
-   the open PR.
-3. The stale `needs-supervision.json` note has been refreshed to describe the
-   current host history-size block and the fallback submission.
+1. Record the desktop browser (and, if cost permits, mobile) verification
+   result for head `21f6971` in GRUNT_STATUS, then decide the next round's
+   scope from the weakest remaining surface (audio ambience, cast polish, or
+   a new quest beat) without weakening required verification.
+2. The trusted release channel remains blocked on the host's 256-commit /
+   22000-byte review-diff screen (origin/main still the initial README commit,
+   branch now 306 commits ahead). Continue using the PR-only fallback
+   (`/worker/state/outbox/publish.json`) for whole-round submissions; do not
+   push or merge from a shell. Refresh `needs-supervision.json` if the host
+   state changes.
+3. Keep the economy green: favours are one-time and token-consuming; any new
+   sink must follow the same hasItem-guarded, no-restock, no-dawn-reset rule.
 
 ## Round 5 — playable phone preview (owner priority)
 
