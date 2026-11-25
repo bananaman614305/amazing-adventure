@@ -12,48 +12,42 @@
 
 ## Current task
 
-**Round 76 released: cast faces and hair dressed with their own family (PR #58).**
-Head `63ed9ca` is the exact published head. Trusted verification receipts all
-completed exit 0 at this head: tests `b0af46b7`, browser `3e5a6910`, mobile
-`3a1e5d2c`. Self-review approved (`af976a97`, verdict approve); host advanced
-to `pull_request` (PR #58, round 76). Tree is clean.
+**Round 78 built and verified at head `7954500`; release prep still pending.**
 
-Round 76 content: `src/skin.js` pure module + `tests/skin.test.mjs`,
-`dressCastSkin`/`upgradeCastSkin` in `src/npcs.js`, chained through the single
-`castReady` settle point; six lossless WebP maps (skin + hair, Kaggle T4 CuPy);
-manifest + assets entries; CREDITS round 76 entry. 36 `Skin` meshes (1.31 m2)
-and 8 `HairC` meshes (0.67 m2) now carry neutral PBR at 0.35 m / 0.22 m tiles,
-metre-space box-projected UVs, one cloned material per rig+family (12 total).
-Eyes and mouth deliberately excluded. Evidence: 31/31 checks, rendered-pixel proof
-9893/13221 face pixels change with normal maps removed (max delta 111), restored
-frame byte-identical. Unit 676/676; desktop browser 35/35 exit 0.
+Round 78 priced Oswin's market stall. `src/state.js` gained the `rope` item plus
+`OSWIN_WARES` and `buyOswinWare` (3 coins, one-time, `hasItem`-guarded — no
+restock, no dawn reset, so it cannot be farmed). `src/dialogue.js` replaced all
+four dead-end "What do you sell?" branches and the default stall node with a
+priced wares node (labels show owned/affordable/short-purse states; debt choices
+kept). Tests added in `tests/state.test.mjs` and `tests/dialogue.test.mjs`.
+Evidence: unit 682/682; playthrough 7/7 quests, 15 coins, story complete, exit 0;
+reachability 33184/33184 winnable states, 0 dead ends, no truncation. Commits:
+`3b50519` (source + tests), `7954500` (dist restamp).
 
-Pending release id: `af976a97-2544-4259-acbb-cc97dfd1d08a` (phase pull_request,
-PR #58). Trusted receipts above are bound to head `63ed9ca`. Host-side
-publication/deploy is the trusted channel's job; do not push or merge from shell.
+Trusted verification receipts all completed exit 0, unchanged, clean, bound to
+head `7954500ebdc07db6a211de5d79e003b083ddd43d`: tests
+`c22ddde0-e14f-4914-a77c-826f09eec5ae`, browser
+`4fd2ca8f-33b0-4aec-a509-cbfe33bc20cc`, mobile
+`ef7d0485-337e-4718-b1ab-d74bf08f04ce` (the mobile receipt was confirmed
+completed this cycle).
 
-Next gameplay focus chosen from a read-only survey of the code (independent agent):
-the strongest, cheapest depth win is fixing `sanitizeWorld`'s ±16 m position clamp
-(`state.js:903-916`) so Continue restores a lane position instead of teleporting
-into the plaza (lane runs z -17.5..-26). Close behind: a priced market-stall
-purchase using existing coins (economy has ~22 coins of quest income against ~9
-of fixed one-time sinks, and "What do you sell?" nodes are dead-ends). Ambient
-gossip persistence + making `topicFor`'s facts drive `scriptKeyFor`, and giving
-the Trusted reputation tier exclusive interactions (today `atLeast`/`spreadNews`
-have no src callers), are the next two.
+Still pending: the local desktop rerun of `scripts/test-round2.mjs` with the new
+uncommitted browser rope-sale check (section 29d) was stopped by background time
+limits twice and has no completed pass/fail on record; `scripts/test-mobile.mjs`
+also has no completed rerun this round. The `scripts/test-round2.mjs` harness
+change is uncommitted. No `grunt-release prepare` yet.
 
 ## Next steps
 
-1. **Land the round 76 release.** PR #58 is open via the trusted channel; wait for
-   the host to merge and verify the exact Pages build before reporting deployed.
-   Do not push or merge from a shell.
-2. **Fix save position clamping (`state.js:sanitizeWorld`).** Widen the clamp to the
-   lane extent so Continue restores a lane position; add a save test. Small,
-   high-value, low risk.
-3. **Price one real purchase at the market stall (economy payoff).** Use existing
-   coins and ITEM slots; keep `playthrough.test.mjs` economy assertions green and
-   avoid dawn-reset farming. Wire a dialogue node per NPC's "What do you sell?"
-   line instead of the current dead-ends.
+1. Rerun `node scripts/test-round2.mjs` and `node scripts/test-mobile.mjs` to
+   completion; confirm the section 29d rope-sale checks pass, then commit the
+   `scripts/test-round2.mjs` harness change.
+2. Run `grunt-release prepare` at head `7954500ebdc07db6a211de5d79e003b083ddd43d`
+   on branch `grunt/round72-bunting-felt` with the three verification ids above,
+   then self-review, `grunt-release advance`, and check the exact Pages build
+   before reporting the release deployed. Do not push or merge from a shell.
+3. Refresh or clear the stale `needs-supervision.json` note (it still describes a
+   Round 73 history-size block; later rounds have verified green).
 
 ## Round 5 — playable phone preview (owner priority)
 
