@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildWorld, applyPhase, KEY_SPOT, KEY_PICKUP_RANGE, floorHeightAt, TERRACE, STEP_HEIGHT, BENCH } from './world.js';
 import { Player } from './player.js';
-import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, upgradeCastSkin, animateCast, TALK_RANGE } from './npcs.js';
+import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, upgradeCastSkin, upgradeCastAccent, animateCast, TALK_RANGE } from './npcs.js';
 import { welcome } from './onboard.js';
 import {
   createInitialState,
@@ -550,7 +550,10 @@ const castReady = upgradeNPCs(npcs, { THREE, loadGlb })
       .catch((error) => Object.assign(summary, { cloth: { dressed: 0, reason: String(error) } }))
       .then(() => upgradeCastSkin(npcs, { THREE }))
       .then((skin) => Object.assign(summary, { skin }))
-      .catch((error) => Object.assign(summary, { skin: { dressed: 0, reason: String(error) } }));
+      .catch((error) => Object.assign(summary, { skin: { dressed: 0, reason: String(error) } }))
+      .then(() => upgradeCastAccent(npcs, { THREE }))
+      .then((accent) => Object.assign(summary, { accent }))
+      .catch((error) => Object.assign(summary, { accent: { dressed: 0, reason: String(error) } }));
   })
   .catch((error) => {
     return { loaded: 0, total: npcs.length, mode: 'boxes', reason: String(error) };

@@ -286,6 +286,20 @@ its procedural stand-in or flat colour and stays fully playable.
   deliberately excluded. Fully procedural; no outside images, datasets or
   models to license.
 
+### Round 81 additions
+
+- No new outside assets. The cast's nine `Accent` meshes (Mara's sash and
+  lantern strap, Oswin's scarf and pouch strap, Pip's two leg wraps, Halden's
+  tabard, Sable's cloak band, Wren's collar — 2.38 m2 of flat colour before)
+  are now dressed with the existing round 72 felt maps
+  (`assets/textures/felt_{albedo,normal,rough}.webp`, credited above, already
+  covered by the game's licence): the accent bands are felted fabric at the
+  same 0.18 m scale as the lane pennants, and the neutral albedo means each
+  NPC's authored dye still reads. Applied by the new `upgradeCastAccent()` /
+  `dressCastAccent()` (`src/accent.js` rules, `src/npcs.js` geometry) with
+  metre-space box-projected UVs and one cloned material per rig, roughness 0.9
+  / metalness 0. Nothing new to license.
+
 ### Round 67 additions
 
 - `assets/textures/cloth_*.webp` — `art/kaggle/cloth_textures.py`, run on the

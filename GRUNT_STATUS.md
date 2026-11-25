@@ -12,75 +12,46 @@
 
 ## Current task
 
-**Round 80 complete at head 7f2688d: the ending tells the truth about the game.**
-Trusted receipts for this head are queued (see below).
+**Round 81 in progress: dressing the cast's accent bands with felt.**
 
-Two player-visible lies in the ending, both fixed:
-1. The epilogue opening said "Six errands" while QUEST_ORDER holds seven
-   (nightlight arrived in round 56). It now opens "Seven errands, and none of
-   them were only errands.", the epilogue header comments and the state.js
-   QUEST_ORDER comment agree, and a test derives the expected word from
-   QUEST_ORDER.length so the count cannot drift again.
-2. src/state.js says the late chores exist so "a player who did the side work
-   still gets the recognition for it" — but src/epilogue.js never mentioned
-   wicks or tally. buildEpilogue now returns `sidework` (sideWorkLines, ordered
-   by CHORE_ORDER, one line per chore actually finished, nothing for a chore
-   that was never taken or only half-walked). main.js renders it in its own
-   #epilogue-sidework block, hidden when empty so the branch list and its
-   existing assertions are untouched.
+Source work complete and unit-tested (npm test 702/703, the single failure
+being the stale committed preview which clears on the source-then-dist restamp):
+- src/accent.js (new): pure rules mirroring src/skin.js. CAST_ACCENT_TILE_METERS
+  = 0.18; CAST_ACCENT_FAMILIES (one family, exact /^accent$/i match, roughness
+  0.9 / metalness 0 / keepTint true); castAccentFamilyFor, castAccentParams,
+  shouldDressCastAccent. Felt is reused (no new asset or licence work).
+- src/npcs.js: re-exports CAST_ACCENT_TILE_METERS, adds CAST_ACCENT_TEXTURE_FILES
+  (= FELT_TEXTURE_FILES), dressCastAccent (per-material cloned felt maps, RepeatWrapping,
+  repeat(1,1), projectBoxGeometry at fam.tileMeters / accumulatedScale, sets
+  roughness 0.9 / metalness 0, marks userData.accentDressed), upgradeCastAccent
+  (never throws).
+- src/main.js: castReady chain extended after upgradeCastSkin with upgradeCastAccent
+  (each failure leaves that family flat, others dressed).
+- tests/accent.test.mjs (new, 12 tests): pure rules + real-GLB pass; 9 Accent
+  meshes, projected UVs, tints preserved (6 distinct dyes), no other material
+  touched, failed download leaves authored roughness 0.6 untouched.
+- src/manifest.js + release-manifest.json: added 'src/accent.js'.
+- CREDITS.md: Round 81 entry (no new outside assets; felt reused, credited).
+- scripts/test-round2.mjs: 4 new desktop checks (9 maps, 6 materials, 6 dyes, felt
+  roughness); idle lean-break fix so the weight-shift sample stops only once both
+  motions were seen.
+- scripts/audit-materials.mjs: now also awaits castReady before measuring, so the
+  audit reports dressed cast surfaces instead of pre-dress flat colours.
 
-Also fixed this round: the browser harness threw away a fully passed run.
-scripts/browser.mjs server.stop()/close() awaited an 'exit' event that never
-fires for an already-dead child; they now guard on exitCode and time out to
-SIGKILL (server) / a bounded race (browser), so a finished suite always prints
-its results.
-
-Commits: 565e684 (count fix + test), 04be9ef (dist), 2e5ca9a (checkpoint),
-64a3bdf (side work + tests + browser checks), 71d835a (dist), d57dbb2
-(harness teardown fix), 7f2688d (chore playthrough + ending evidence).
-
-Evidence actually run at 7f2688d: npm test 691/691 pass exit 0;
-tests/epilogue.test.mjs 19/19; tests/playthrough.test.mjs 14/14;
-scripts/playthrough.mjs 7/7 spine quests, 15 coins, 3 items, story complete;
-scripts/playthrough.mjs --chores 9/9 (spine + both chores), 19 coins, ending
-reports 2 chores remembered; desktop browser suite 268/268 checks, no console
-errors, exit 0 — including "the rendered ending counts the quests the game
-has" (opening "Seven errands", 7 quests), "the ending stays quiet about side
-work that was never walked" (0 lines) and "the ending remembers a walked wick
-round without disturbing the branches" (1 line, 3 branches). Screenshots
-artifacts/round12-ending.png (refreshed) and
-artifacts/round80-ending-sidework.png (new). dist restamped and preview
-digests green.
-
-Receipts: Round 79 mobile 481f65fd-631f-41d7-878a-285440964b40 completed
-exit 0 at 079c5e9 — mobile IS verified for that head, which corrects the
-earlier "not verified, do not count it" note. Trusted tests
-70960e92-5d66-4802-aaf3-918ac0d198ba and browser
-e22fa9d2-31d4-4be6-b0fc-097ece7bce72 completed exit 0 at 7c23866; mobile
-91c928d8-64be-4f48-9e25-2bc56e95081c at 7c23866 ended state failed and is NOT
-counted.
-
-Publish: PR #59 is at head 079c5e9 via the PR-only fallback. For Round 80 the
-trusted receipts requested are tests fd9b5a55-8e3a-420e-b44c-18112406232d,
-browser f662fc6f-70d6-4d48-8749-3dbb1275d497, mobile
-f5c9fb71-7f40-4597-af53-8488ceb96c32 — all queued at last poll, none is a
-result yet.
+Desktop browser suite rerunning at this head after the idle fix; accent checks
+passed on the prior run (9/9 meshes, 6 materials, 6 dyes, roughness 0.9). Mobile
+suite not yet run at this head. dist not yet restamped. No commit yet this round.
 
 ## Next steps
 
-1. Poll the three Round 80 receipts (fd9b5a55 tests, f662fc6f browser,
-   f5c9fb71 mobile) to a terminal state with `grunt-release verify-status`.
-   Record the real exit codes. If any fails, fix the cause and rerun that
-   check; never report a queued receipt as passing.
-2. Until the trusted channel clears its host screen, submit the round through
-   /worker/state/outbox/publish.json at the exact committed head with only the
-   checks that actually ran, and read publish-result.json next cycle.
-3. Round 81 candidate work: the harness fix means local full runs are usable
-   again, so re-run the desktop and mobile suites locally at the next head.
-   Then pick the next chunk from the weakest surface — graphics materials via
-   scripts/audit-materials.mjs, cast polish, or a new quest beat. Keep the
-   economy rule: any new sink is hasItem-guarded, one-time, no restock, no
-   dawn reset.
+1. Finish the desktop browser rerun (idle lean fix) and run the mobile suite at
+   this head; record real exit codes. If any fails, fix and rerun.
+2. Run scripts/audit-materials.mjs to confirm Accent leaves the flat list, then
+   commit source + tests, restamp dist (build-preview.mjs refuses a dirty tree),
+   commit dist, rerun npm test for 703/703.
+3. Update this checkpoint, request trusted receipts at the exact committed head,
+   poll to terminal, then submit via /worker/state/outbox/publish.json.
+
 
 ## Round 5 — playable phone preview (owner priority)
 

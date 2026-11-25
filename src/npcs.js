@@ -3,11 +3,16 @@ import * as THREE from 'three';
 import { floorHeightAt } from './world.js';
 import {
   CAST_ASSETS, projectBoxGeometry, loadCast, loadMaterialTextures,
-  CLOTH_TEXTURE_FILES, SKIN_TEXTURE_FILES, HAIR_TEXTURE_FILES
+  CLOTH_TEXTURE_FILES, SKIN_TEXTURE_FILES, HAIR_TEXTURE_FILES, FELT_TEXTURE_FILES
 } from './assets.js';
 import {
   CAST_SKIN_FAMILIES, castSkinFamilyFor, castSkinParams, shouldDressCastSkin
 } from './skin.js';
+import {
+  CAST_ACCENT_FAMILIES, castAccentFamilyFor, castAccentParams, shouldDressCastAccent,
+  CAST_ACCENT_TILE_METERS
+} from './accent.js';
+export { CAST_ACCENT_TILE_METERS } from './accent.js';
 
 // Round 67: the metre scale the cast coats are box-projected at. It is the
 // cloth PROP_FAMILY's tile (see assets.js), so a cast coat, a lane sack and any
@@ -707,3 +712,101 @@ export function findNearestNPC(npcs, playerPosition) {
 }
 
 export { TALK_RANGE };
+
+// ---------------------------------------------------------------------------
+// Round 81: the cast's accent bands.
+//
+// The accent material is the per-NPC dye (mara's gold sash, oswin's red scarf,
+// pip's green leg wraps, halden's grey tabard, sable's violet cloak, wren's
+// amber collar) -- 2.38 m2 across 9 meshes. It is the largest still-flat cast
+// surface the materials audit finds, and it is the same kind of surface as the
+// lane bunting (felted fabric at 0.1-0.2 m) so it reuses the neutral felt maps
+// rather than a new set. The rules live in src/accent.js.
+// ---------------------------------------------------------------------------
+
+/** The downloaded map set, keyed by the family id in src/accent.js. */
+export const CAST_ACCENT_TEXTURE_FILES = FELT_TEXTURE_FILES;
+
+/**
+ * Dresses every mesh whose authored material belongs to a cast accent family.
+ *
+ * Maps are cloned once per *material*, not once per mesh: all Accent meshes in
+ * one rig share the material object the GLB reader built, so a per-mesh clone
+ * would allocate duplicate map sets for one draw. The first mesh through a
+ * material sets it up; later meshes only get their own projected UVs.
+ */
+export function dressCastAccent(npcs, textures, { THREE } = {}) {
+  const dressed = [];
+  const perFamily = { accent: 0 };
+  let seams = 0;
+  let anyLoaded = false;
+  if (!THREE || !textures) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  const family = CAST_ACCENT_FAMILIES[0];
+  if (!shouldDressCastAccent(family, textures)) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  anyLoaded = true;
+
+  const materialFamilies = new Map();
+
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const fam = castAccentFamilyFor(material && material.name);
+      if (!fam) return;
+      if (!shouldDressCastAccent(fam, textures)) return;
+
+      const scale = accumulatedScale(mesh);
+      const split = projectBoxGeometry({
+        THREE, geometry: mesh.geometry, tileMeters: fam.tileMeters / scale
+      });
+      if (split.seams > 0) seams += split.seams;
+
+      if (materialFamilies.get(material) !== fam) {
+        const params = castAccentParams(fam);
+        for (const key of ['map', 'normalMap', 'roughnessMap']) {
+          const texture = textures[key];
+          if (!texture) continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        material.roughness = params.roughness;
+        material.metalness = params.metalness;
+        material.needsUpdate = true;
+        materialFamilies.set(material, fam);
+      }
+
+      mesh.userData.accentDressed = true;
+      perFamily.accent += 1;
+      dressed.push({ npc: npc.id, name: mesh.name, family: 'accent', tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, perFamily, anyLoaded };
+}
+
+/**
+ * Loads the felt maps and dresses the cast's accent bands with them.
+ * Never throws.
+ */
+export async function upgradeCastAccent(npcs, { THREE, fetchImpl = fetch, textures = null } = {}) {
+  if (!THREE || !npcs || !npcs.length) {
+    return { dressed: 0, meshes: [], anyLoaded: false, perFamily: { accent: 0 } };
+  }
+  let loadedTextures = textures;
+  if (!loadedTextures) {
+    try {
+      loadedTextures = await loadMaterialTextures({ THREE, files: CAST_ACCENT_TEXTURE_FILES, fetchImpl });
+    } catch {
+      loadedTextures = null;
+    }
+  }
+  return dressCastAccent(npcs, loadedTextures, { THREE });
+}

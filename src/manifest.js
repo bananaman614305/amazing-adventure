@@ -20,6 +20,7 @@ export const REQUIRED_FILES = [
   'src/terrain.js',
   'src/npcs.js',
   'src/skin.js',
+  'src/accent.js',
   'src/idle.js',
   'src/dialogue.js',
   'src/state.js',

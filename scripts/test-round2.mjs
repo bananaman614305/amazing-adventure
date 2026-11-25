@@ -3154,6 +3154,61 @@ try {
       .map((r) => [r.key.split('/')[0], Number(r.headTile.toFixed(3))])));
 
   await capture(page, 'round76-cast-skin.png');
+  // --- 28m2b. The cast's accent bands (round 81) ----------------------------
+  // The nine Accent meshes (sashes, scarves, tabard, cloak band, collar, leg
+  // wraps — 2.38 m2, the largest still-flat cast surface the audit found) are
+  // dressed with the neutral felt maps at a 0.18 m physical tile, keeping each
+  // NPC's authored dye. Checked on the live scene, after the real boot chain.
+  const accents = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    await api.castReady;
+    const rows = [];
+    const materials = new Set();
+    for (const npc of api.npcs) {
+      npc.group.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        if (!/^Accent$/i.test(o.material.name || '')) return;
+        const uv = o.geometry.getAttribute('uv');
+        materials.add(o.material.uuid);
+        rows.push({
+          key: `${npc.id}/${o.name}`,
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+          hasUv: Boolean(uv),
+          tint: o.material.color.getHexString(),
+          roughness: Number(Number(o.material.roughness).toFixed(3)),
+          metalness: Number(o.material.metalness).toFixed(3),
+          image: o.material.map ? o.material.map.image.width : 0,
+          repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+          wrapped: o.material.map
+            ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+          dressed: o.userData.accentDressed === true
+        });
+      });
+    }
+    return { rows, materials: materials.size };
+  });
+  checks.check('all 9 cast accent meshes wear the three felt maps',
+    accents.rows.length === 9 && accents.rows.every((r) => r.maps === 3 && r.hasUv
+      && r.image === 512 && r.dressed),
+    JSON.stringify({ rows: accents.rows.length,
+                    maps: [...new Set(accents.rows.map((r) => r.maps))],
+                    images: [...new Set(accents.rows.map((r) => r.image))] }));
+  checks.check('the accent map is one per rig and tiles by projection, not repeat',
+    accents.materials === 6 && accents.rows.every((r) => r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    `${accents.materials} materials for ${accents.rows.length} meshes; ` +
+    JSON.stringify([...new Set(accents.rows.map((r) => JSON.stringify(r.repeat)))]) );
+  checks.check('six characters keep six distinct accent dyes under one felt set',
+    new Set(accents.rows.map((r) => r.tint)).size === 6
+      && accents.rows.every((r) => r.tint !== 'ffffff'),
+    JSON.stringify([...new Set(accents.rows.map((r) => r.tint))]));
+  checks.check('the dressed accents sit at felt roughness, not the authored 0.6',
+    accents.rows.every((r) => r.roughness === 0.9 && Number(r.metalness) === 0),
+    JSON.stringify({ roughness: [...new Set(accents.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(accents.rows.map((r) => r.metalness))] }));
+
+  await capture(page, 'round81-cast-accent.png');
   // --- 28n. Vegetation: trees stand in, upgrade to models --------------------
   const trees = await page.evaluate(async () => {
     const api = window.amazingAdventure;
@@ -3232,7 +3287,14 @@ try {
       await new Promise((r) => requestAnimationFrame(r));
       if (mara.limbs.legL) leanMax.v = Math.max(leanMax.v, Math.abs(mara.limbs.legL.rotation.z));
       if (mara.limbs.neck) glanceMax.v = Math.max(glanceMax.v, Math.abs(mara.limbs.neck.rotation.y));
-      if (glanceMax.v > 0.1) break; // seen one; no need to wait the full cycle
+      // Break only once BOTH idle motions have been seen. Breaking on the
+      // glance alone (the old condition) ended the sample early on runs where
+      // a glance happened to fall in the first second: round 81 measured
+      // leanRange 0.008 against a 0.01 threshold while the weight shift was
+      // still on its way up. The two motions have independent periods (7.5 s
+      // lean, 11 s glance), so a sample that stops at the first of either is
+      // measuring the scheduler, not the animation.
+      if (glanceMax.v > 0.1 && leanMax.v > 0.01) break;
     }
     // Walk the player back next to her: attention must override the glance.
     //
