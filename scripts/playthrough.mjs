@@ -13,7 +13,8 @@ import {
   startToll, collectToll, waiveToll, finishToll,
   startLedger, hearLedgerRumour, recoverLedger, returnLedger,
   startArrears, deliverArrears, reissueArrearsMark, finishArrears,
-  nightLightUnlocked, startNightLight, questCounts
+  nightLightUnlocked, startNightLight, questCounts,
+  startWicks, trimWicks, finishWicks, startTally, walkTally, finishTally
 } from '../src/state.js';
 import { lightLaneLanterns, laneLanternsAtDawn } from '../src/areas.js';
 import { startConversation, applyChoice } from '../src/dialogue.js';
@@ -37,7 +38,7 @@ function talk(state, npcId, matcher, log) {
  * Play the whole game. Throws if any step is unavailable, so a broken chain fails
  * this script rather than silently leaving a quest unfinished.
  */
-export function runPlaythrough({ log = () => {} } = {}) {
+export function runPlaythrough({ log = () => {}, chores = false } = {}) {
   const state = createInitialState();
 
   // --- 1. The Failing Lantern: buy oil, carry it back ----------------------
@@ -139,6 +140,28 @@ export function runPlaythrough({ log = () => {} } = {}) {
   talk(state, 'oswin', /night order/i, log);
   require(state, 'nightlight', log);
 
+  // --- 8. The late faction chores, when the caller asks for them -----------
+  // These live outside QUEST_ORDER and are optional, which is exactly why the
+  // ending has to remember them deliberately. Opt-in, so the spine-only proof
+  // above stays the same shape for every other test that uses it.
+  if (chores) {
+    talk(state, 'halden', /Anything else need doing/i, log);
+    requireStep(state, 'tally', 'started', log);
+    const walked = walkTally(state);
+    if (!walked.changed) throw new Error(`walking the gate tally failed: ${walked.message}`);
+    log(`tally: ${walked.message}`);
+    talk(state, 'halden', /The tally is walked/i, log);
+    require(state, 'tally', log);
+
+    talk(state, 'mara', /Anything else need doing/i, log);
+    requireStep(state, 'wicks', 'started', log);
+    const trimmed = trimWicks(state, 'dusk');
+    if (!trimmed.changed) throw new Error(`trimming the wick round failed: ${trimmed.message}`);
+    log(`wicks: ${trimmed.message}`);
+    talk(state, 'mara', /The wick round is walked/i, log);
+    require(state, 'wicks', log);
+  }
+
   return { state, counts: questCounts(state), ended: buildEpilogue(state) };
 }
 
@@ -162,11 +185,13 @@ function requireStep(state, questId, step, log) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   try {
-    const { state, counts, ended } = runPlaythrough({ log: (line) => console.log('  ' + line) });
+    const chores = process.argv.includes('--chores');
+    const { state, counts, ended } = runPlaythrough({ log: (line) => console.log('  ' + line), chores });
     console.log(`\nquests: ${counts.done}/${counts.done + counts.active} done`);
     console.log(`coins: ${coins(state)} | items: ${state.inventory.length}`);
     console.log(`story complete: ${storyComplete(state)} | epilogue: ${ended ? ended.title : 'none'}`);
     if (ended) ended.branches.forEach((b) => console.log('  branch:', b.text.slice(0, 70)));
+    if (ended) console.log(`side work remembered: ${ended.sidework.length} chore(s)`);
     process.exit(storyComplete(state) ? 0 : 1);
   } catch (error) {
     console.error('PLAYTHROUGH FAILED:', error.message);
