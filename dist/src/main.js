@@ -71,6 +71,7 @@ const epilogueEl = $('epilogue');
 const epilogueTitle = $('epilogue-title');
 const epilogueOpening = $('epilogue-opening');
 const epilogueBranches = $('epilogue-branches');
+const epilogueSidework = $('epilogue-sidework');
 const epilogueClosers = $('epilogue-closers');
 const epilogueClosing = $('epilogue-closing');
 const epilogueClose = $('epilogue-close');
@@ -738,6 +739,13 @@ function showEpilogue(epilogue) {
   epilogueBranches.innerHTML = epilogue.branchesUnrecorded
     ? `${branchHtml}<p class="epilogue-line">Some of what you did here was not written down, and the record of it is gone.</p>`
     : branchHtml;
+  // The late faction chores sit outside the main quest list, so they get their
+  // own block. It stays empty (no heading, no blank space) for a player who
+  // never took them, and never claims a chore that was only half-walked.
+  epilogueSidework.innerHTML = (epilogue.sidework || [])
+    .map((line) => `<p class="epilogue-line">${escapeHtml(line.text)}</p>`)
+    .join('');
+  epilogueSidework.hidden = epilogueSidework.innerHTML === '';
   epilogueClosers.innerHTML = epilogue.closers
     .map((closer) => `<p class="epilogue-standing"><strong>${escapeHtml(closer.name)}.</strong> ${escapeHtml(closer.text)}</p>`)
     .join('');
