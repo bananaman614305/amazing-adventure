@@ -131,6 +131,8 @@ export function buildWorld(renderer) {
     fog: false, depthWrite: false, transparent: true, opacity: 0,
     blending: THREE.AdditiveBlending
   });
+  // Keep the mesh name stable for the browser suite and any future star
+  // evidence: the check finds it by name, not by structure.
   const starField = new THREE.Points(starGeometry, starMaterial);
   starField.name = 'sky-stars';
   starField.renderOrder = -1;

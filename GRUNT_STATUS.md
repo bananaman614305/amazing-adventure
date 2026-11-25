@@ -26,8 +26,8 @@ depth-write off, renderOrder -1 with the sun) from `buildStarField()`; the
 phase opacity lives in `applyPhase()` and a per-frame `updateStars(dt)` breathes
 the size via `starTwinkle`. main.js calls it beside `updateWater(dt)`.
 
-Evidence so far: unit suite 743/743 (stars 10/10, preview/manifest/digest
-green, dist restamped 9e836e9 at digest 5aa80a5e). Desktop browser suite
+Evidence: unit suite 743/743 (stars 10/10, preview/manifest/digest green, dist
+restamped at 9e836e9 digest 5aa80a5e, status b123595). Desktop browser suite
 running in the background (3 new star checks + `round85-stars.png` capture);
 mobile suite to follow.
 
