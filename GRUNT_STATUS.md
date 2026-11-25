@@ -12,51 +12,75 @@
 
 ## Current task
 
-**Round 80 complete and verified at dist head 04be9ef: the ending counts the seven quests.**
+**Round 80 complete at head 7f2688d: the ending tells the truth about the game.**
+Trusted receipts for this head are queued (see below).
 
-Round 80 fixed the ending's stale count. The epilogue opening said "Six
-errands" while QUEST_ORDER holds seven quests (nightlight arrived in round
-56), so the ending lied about the size of the game. src/epilogue.js now
-opens "Seven errands, and none of them were only errands." and its header
-comments agree; the src/state.js QUEST_ORDER comment now reads "the
-seven-quest spine stays seven quests". A new test, "the ending counts the
-quests the game actually has", derives the expected word from
-QUEST_ORDER.length, so the opening cannot drift from the quest list again.
+Two player-visible lies in the ending, both fixed:
+1. The epilogue opening said "Six errands" while QUEST_ORDER holds seven
+   (nightlight arrived in round 56). It now opens "Seven errands, and none of
+   them were only errands.", the epilogue header comments and the state.js
+   QUEST_ORDER comment agree, and a test derives the expected word from
+   QUEST_ORDER.length so the count cannot drift again.
+2. src/state.js says the late chores exist so "a player who did the side work
+   still gets the recognition for it" — but src/epilogue.js never mentioned
+   wicks or tally. buildEpilogue now returns `sidework` (sideWorkLines, ordered
+   by CHORE_ORDER, one line per chore actually finished, nothing for a chore
+   that was never taken or only half-walked). main.js renders it in its own
+   #epilogue-sidework block, hidden when empty so the branch list and its
+   existing assertions are untouched.
 
-Commits: 565e684 (source + test), 04be9ef (dist restamp).
+Also fixed this round: the browser harness threw away a fully passed run.
+scripts/browser.mjs server.stop()/close() awaited an 'exit' event that never
+fires for an already-dead child; they now guard on exitCode and time out to
+SIGKILL (server) / a bounded race (browser), so a finished suite always prints
+its results.
 
-Evidence (all actually run): npm test 688/688 pass exit 0 (the only
-failure before the restamp was the stale dist digest); node
-tests/epilogue.test.mjs 17/17 pass; node scripts/playthrough.mjs 7/7
-quests, 15 coins, story complete, epilogue "The plaza at closing";
-dist/src/epilogue.js confirmed carrying "Seven errands".
+Commits: 565e684 (count fix + test), 04be9ef (dist), 2e5ca9a (checkpoint),
+64a3bdf (side work + tests + browser checks), 71d835a (dist), d57dbb2
+(harness teardown fix), 7f2688d (chore playthrough + ending evidence).
 
-Receipt corrections (verified by polling): mobile receipt
-481f65fd-631f-41d7-878a-285440964b40 completed exit 0 at head 079c5e9,
-unchanged - Round 79 mobile IS verified, superseding this file's earlier
-"not verified, do not count it" sentence. Trusted tests
+Evidence actually run at 7f2688d: npm test 691/691 pass exit 0;
+tests/epilogue.test.mjs 19/19; tests/playthrough.test.mjs 14/14;
+scripts/playthrough.mjs 7/7 spine quests, 15 coins, 3 items, story complete;
+scripts/playthrough.mjs --chores 9/9 (spine + both chores), 19 coins, ending
+reports 2 chores remembered; desktop browser suite 268/268 checks, no console
+errors, exit 0 — including "the rendered ending counts the quests the game
+has" (opening "Seven errands", 7 quests), "the ending stays quiet about side
+work that was never walked" (0 lines) and "the ending remembers a walked wick
+round without disturbing the branches" (1 line, 3 branches). Screenshots
+artifacts/round12-ending.png (refreshed) and
+artifacts/round80-ending-sidework.png (new). dist restamped and preview
+digests green.
+
+Receipts: Round 79 mobile 481f65fd-631f-41d7-878a-285440964b40 completed
+exit 0 at 079c5e9 — mobile IS verified for that head, which corrects the
+earlier "not verified, do not count it" note. Trusted tests
 70960e92-5d66-4802-aaf3-918ac0d198ba and browser
-e22fa9d2-31d4-4be6-b0fc-097ece7bce72 completed exit 0 at 7c23866. Mobile
-91c928d8-64be-4f48-9e25-2bc56e95081c at 7c23866 ended state "failed"
-(exitCode 0, unchanged false) and is NOT counted.
+e22fa9d2-31d4-4be6-b0fc-097ece7bce72 completed exit 0 at 7c23866; mobile
+91c928d8-64be-4f48-9e25-2bc56e95081c at 7c23866 ended state failed and is NOT
+counted.
 
-Publish: PR #59 is at head 079c5e9 via the PR-only fallback; the Round 80
-head is submitted this round (see publish.json).
+Publish: PR #59 is at head 079c5e9 via the PR-only fallback. For Round 80 the
+trusted receipts requested are tests fd9b5a55-8e3a-420e-b44c-18112406232d,
+browser f662fc6f-70d6-4d48-8749-3dbb1275d497, mobile
+f5c9fb71-7f40-4597-af53-8488ceb96c32 — all queued at last poll, none is a
+result yet.
 
 ## Next steps
 
-1. Round 81: if publish-result.json confirms the Round 80 head, request
-   fresh trusted receipts for it (grunt-release verify release
-   tests/browser/mobile) and record the ids here; never report one as
-   passing while queued. Pick the next useful chunk from the weakest
-   surface (cast polish, a new quest beat, or graphics materials via
-   scripts/audit-materials.mjs).
-2. The trusted release channel remains blocked on the host's 256-commit /
-   22000-byte review-diff screen. Keep using the PR-only fallback
-   (/worker/state/outbox/publish.json); do not push or merge from a shell.
-   needs-supervision.json was refreshed this round with the current head.
-3. Keep the economy green: any new sink must be hasItem-guarded, one-time,
-   no restock, no dawn reset.
+1. Poll the three Round 80 receipts (fd9b5a55 tests, f662fc6f browser,
+   f5c9fb71 mobile) to a terminal state with `grunt-release verify-status`.
+   Record the real exit codes. If any fails, fix the cause and rerun that
+   check; never report a queued receipt as passing.
+2. Until the trusted channel clears its host screen, submit the round through
+   /worker/state/outbox/publish.json at the exact committed head with only the
+   checks that actually ran, and read publish-result.json next cycle.
+3. Round 81 candidate work: the harness fix means local full runs are usable
+   again, so re-run the desktop and mobile suites locally at the next head.
+   Then pick the next chunk from the weakest surface — graphics materials via
+   scripts/audit-materials.mjs, cast polish, or a new quest beat. Keep the
+   economy rule: any new sink is hasItem-guarded, one-time, no restock, no
+   dawn reset.
 
 ## Round 5 — playable phone preview (owner priority)
 
