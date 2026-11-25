@@ -255,6 +255,21 @@ export const FELT_TEXTURE_FILES = {
 };
 
 /**
+ * Leather family for the modelled cast's boots (`Boot`, 18 meshes, 1.49 m2).
+ *
+ * The boots are small (0.15 x 0.25 x 0.19 m) and authored as flat dark
+ * grey-brown (#726c66) with no UVs, so they are box-projected at boot scale
+ * rather than sharing a larger family's tile. The albedo is neutral so the
+ * authored boot colour survives tinting; the maps supply relief and
+ * self-shadowing only.
+ */
+export const LEATHER_TEXTURE_FILES = {
+  map: 'assets/textures/leather_albedo.webp',
+  normalMap: 'assets/textures/leather_normal.webp',
+  roughnessMap: 'assets/textures/leather_rough.webp'
+};
+
+/**
  * Metres per felt tile, in UV space.
  *
  * Chosen against the thing that actually has to read as felt: a bunting pennant
