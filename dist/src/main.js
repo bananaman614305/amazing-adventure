@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildWorld, applyPhase, KEY_SPOT, KEY_PICKUP_RANGE, floorHeightAt, TERRACE, STEP_HEIGHT, BENCH } from './world.js';
 import { Player } from './player.js';
-import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, upgradeCastSkin, upgradeCastAccent, upgradeCastBoot, animateCast, TALK_RANGE } from './npcs.js';
+import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, upgradeCastSkin, upgradeCastAccent, upgradeCastBoot, upgradeCastPaper, animateCast, TALK_RANGE } from './npcs.js';
 import { welcome } from './onboard.js';
 import {
   createInitialState,
@@ -557,7 +557,13 @@ const castReady = upgradeNPCs(npcs, { THREE, loadGlb })
       // Round 82: boots last, for the same settle-point reason.
       .then(() => upgradeCastBoot(npcs, { THREE }))
       .then((boot) => Object.assign(summary, { boot }))
-      .catch((error) => Object.assign(summary, { boot: { dressed: 0, reason: String(error) } }));
+      .catch((error) => Object.assign(summary, { boot: { dressed: 0, reason: String(error) } }))
+      // Round 84: the cast's paper props (Oswin's apron, Wren's ledger pages),
+      // after boots on the same chain so `await castReady` still sees the
+      // fully dressed cast.
+      .then(() => upgradeCastPaper(npcs, { THREE }))
+      .then((paper) => Object.assign(summary, { paper }))
+      .catch((error) => Object.assign(summary, { paper: { dressed: 0, reason: String(error) } }));
   })
   .catch((error) => {
     return { loaded: 0, total: npcs.length, mode: 'boxes', reason: String(error) };
