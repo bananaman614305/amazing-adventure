@@ -260,6 +260,32 @@ its procedural stand-in or flat colour and stays fully playable.
   (roughness base 1 so the map carries the mirror, metalness 0.1). Fully
   procedural; no outside images, datasets or models to license.
 
+### Round 76 additions
+
+- `assets/textures/skin_{albedo,normal,rough}.webp` and
+  `assets/textures/hair_{albedo,normal,rough}.webp` —
+  `art/kaggle/skin_textures.py`, run on the private Kaggle notebook (Tesla T4,
+  CuPy backend; `artifacts/r76/skin_report.json`, previews
+  `artifacts/r76/skin_preview.png` / `hair_preview.png`). Procedural only.
+  Skin: fine creases, pores and broad soft undulation at a 0.35 m tile. Hair:
+  combed strands (long ridges, lighter crowns, dark gaps) at a 0.22 m tile.
+  Both albedos are neutral (skin 0.801–0.977, hair 0.70–1.0) so the cast's
+  authored skin tones and hair dyes survive `map x material.colour`. 512 x 512,
+  shipped as lossless WebP: skin 126.5 / 405.5 / 51.0 KB, hair 51.1 / 239.3 /
+  46.6 KB. Seam ratios (gate 3x, none visible): skin albedo 0.29/0.31, normal
+  0.36/1.13, rough 0.34/0.32; hair albedo 0.28/1.22, normal 0.29/0.34, rough
+  0.27/1.22. Relief survives to mip 3, where a Talk-range face samples (skin
+  normal std 0.090, hair 0.285). Dressed by `upgradeCastSkin()` /
+  `dressCastSkin()` on the modelled cast's 36 `Skin` meshes (six heads, noses,
+  twelve hands, twelve thumbs — 1.31 m2) and 8 `HairC` meshes (caps, bun, tail
+  — 0.67 m2), metre-space box-projected UVs, anisotropy 1 (the maps are close
+  to the sampler's natural frequency and anisotropic filtering buys nothing at
+  this tile), one cloned material per rig and family (12, not 44). Pip's rig is
+  authored at 0.72 scale, so his tile is divided by the accumulated rig scale
+  to keep one physical 0.35 m tile across the cast. Eyes and mouth are
+  deliberately excluded. Fully procedural; no outside images, datasets or
+  models to license.
+
 ### Round 67 additions
 
 - `assets/textures/cloth_*.webp` — `art/kaggle/cloth_textures.py`, run on the

@@ -3013,6 +3013,99 @@ try {
     JSON.stringify({ sawBlink: attention.sawBlink, minIris: attention.minIris }));
 
   await capture(page, 'round47-attention.png');
+  // --- 28m2. The cast's faces and hair wear their own family (round 76) -----
+  // Skin (1.31 m2 over 36 meshes) and HairC (0.67 m2 over 8) were the last flat
+  // mass the audit could find on the cast, and the surface the player looks at
+  // most closely. They are dressed at a 0.35 m / 0.22 m physical tile, so Pip's
+  // 0.72-scaled rig must divide its tile by that scale to keep the same grain.
+  const faces = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    await api.castReady;
+    const rows = [];
+    const flat = [];
+    for (const npc of api.npcs) {
+      npc.group.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        const name = o.material.name || '';
+        const key = `${npc.id}/${o.name}:${name}`;
+        if (/^Skin$|^HairC$/i.test(name)) {
+          const uv = o.geometry.getAttribute('uv');
+          const heads = o.name === 'Head';
+          rows.push({
+            key, family: /^Skin$/i.test(name) ? 'skin' : 'hair',
+            maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+            hasUv: Boolean(uv),
+            tint: o.material.color.getHexString(),
+            roughness: Number(Number(o.material.roughness).toFixed(3)),
+            metalness: Number(o.material.metalness).toFixed(3),
+            image: o.material.map ? o.material.map.image.width : 0,
+            // World tile: how many UV units per metre of head, measured on the
+            // head's own local width times the rig scale.
+            headTile: heads && uv ? (() => {
+              let min = Infinity, max = -Infinity;
+              for (let i = 0; i < uv.count; i += 1) {
+                min = Math.min(min, uv.getX(i)); max = Math.max(max, uv.getX(i));
+              }
+              let scale = 1;
+              for (let n = o; n; n = n.parent) if (n.scale) scale *= n.scale.x;
+              const box = o.geometry.boundingBox
+                || (o.geometry.computeBoundingBox(), o.geometry.boundingBox);
+              const worldWidth = (box.max.x - box.min.x) * scale;
+              return (max - min) / worldWidth;
+            })() : null
+          });
+        } else if (/^EyeWhite$|^EyeIris$|^Mouth$/i.test(name)) {
+          flat.push({ key, mapped: Boolean(o.material.map) });
+        }
+      });
+    }
+    const headTints = rows.filter((r) => r.key.endsWith('/Head:Skin')).map((r) => r.tint);
+    const materials = new Set();
+    for (const npc of api.npcs) {
+      npc.group.traverse((o) => {
+        if (o.isMesh && o.material && /^Skin$|^HairC$/i.test(o.material.name || '')) {
+          materials.add(o.material.uuid);
+        }
+      });
+    }
+    return { rows, flat, headTints, materials: materials.size, npcs: api.npcs.length };
+  });
+  const faceSkin = faces.rows.filter((r) => r.family === 'skin');
+  const faceHair = faces.rows.filter((r) => r.family === 'hair');
+  checks.check('every cast face and hair mesh wears the three family maps',
+    faces.rows.length === 44 && faceSkin.length === 36 && faceHair.length === 8
+      && faces.rows.every((r) => r.maps === 3 && r.hasUv && r.image === 512),
+    JSON.stringify({ rows: faces.rows.length, skin: faceSkin.length, hair: faceHair.length,
+                    maps: [...new Set(faces.rows.map((r) => r.maps))] }));
+  checks.check('the gaze and mouth stay unmapped so a face still reads',
+    faces.flat.length > 0 && faces.flat.every((f) => f.mapped === false),
+    JSON.stringify(faces.flat.filter((f) => f.mapped).slice(0, 3)));
+  checks.check('six characters keep six distinct skin tones under one map set',
+    new Set(faces.headTints).size === 6,
+    JSON.stringify(faces.headTints));
+  checks.check('the map set is shared per rig and family, not cloned per mesh',
+    faces.materials === 12,
+    `${faces.materials} materials for ${faces.rows.length} meshes`);
+  checks.check('skin and hair keep their authored roughness bases',
+    faceSkin.every((r) => r.roughness === 0.7) && faceHair.every((r) => r.roughness === 0.8)
+      && faces.rows.every((r) => Number(r.metalness) === 0),
+    JSON.stringify({ skin: [...new Set(faceSkin.map((r) => r.roughness))],
+                     hair: [...new Set(faceHair.map((r) => r.roughness))] }));
+  checks.check('Pip\'s smaller rig still meets the adult 0.35 m tile on screen',
+    (() => {
+      const byNpc = {};
+      for (const r of faceSkin.filter((x) => x.headTile !== null)) {
+        if (!byNpc[r.key.split('/')[0]]) byNpc[r.key.split('/')[0]] = r.headTile;
+      }
+      const adult = byNpc.mara;
+      return adult > 0 && Math.abs(byNpc.pip / adult - 1) < 0.05
+        && Object.values(byNpc).every((d) => Math.abs(d / adult - 1) < 0.05);
+    })(),
+    JSON.stringify(faceSkin.filter((r) => r.headTile !== null)
+      .map((r) => [r.key.split('/')[0], Number(r.headTile.toFixed(3))])));
+
+  await capture(page, 'round76-cast-skin.png');
   // --- 28n. Vegetation: trees stand in, upgrade to models --------------------
   const trees = await page.evaluate(async () => {
     const api = window.amazingAdventure;

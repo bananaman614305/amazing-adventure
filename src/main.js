@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildWorld, applyPhase, KEY_SPOT, KEY_PICKUP_RANGE, floorHeightAt, TERRACE, STEP_HEIGHT, BENCH } from './world.js';
 import { Player } from './player.js';
-import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, animateCast, TALK_RANGE } from './npcs.js';
+import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, upgradeCastSkin, animateCast, TALK_RANGE } from './npcs.js';
 import { welcome } from './onboard.js';
 import {
   createInitialState,
@@ -535,12 +535,21 @@ const npcs = createNPCs(scene);
 // awaiting `castReady` is already the documented settle point for tests and
 // evidence scripts -- so a dress result is visible exactly where a caller
 // expects the cast to be final. A failed cloth download leaves the coats flat
-// painted, which is the same coat colour the cast shipped with before.
+// painted, which is the same coat colour the cast shipped with before. Round 76
+// chains the skin and hair pass after it on the same promise, for the same
+// reason: a caller that awaited `castReady` sees the fully dressed cast.
 const castReady = upgradeNPCs(npcs, { THREE, loadGlb })
   .then((summary) => {
+    // Round 76: the faces and hair are dressed after the coats. The three passes
+    // are independent downloads, but they are sequenced through one promise so
+    // `await castReady` remains the single settle point tests and evidence rely
+    // on. A failure in any one leaves that family flat and the others dressed.
     return upgradeCastCloth(npcs, { THREE })
       .then((cloth) => Object.assign(summary, { cloth }))
-      .catch((error) => Object.assign(summary, { cloth: { dressed: 0, reason: String(error) } }));
+      .catch((error) => Object.assign(summary, { cloth: { dressed: 0, reason: String(error) } }))
+      .then(() => upgradeCastSkin(npcs, { THREE }))
+      .then((skin) => Object.assign(summary, { skin }))
+      .catch((error) => Object.assign(summary, { skin: { dressed: 0, reason: String(error) } }));
   })
   .catch((error) => {
     return { loaded: 0, total: npcs.length, mode: 'boxes', reason: String(error) };

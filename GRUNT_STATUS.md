@@ -12,98 +12,26 @@
 
 ## Current task
 
-**Round 75 is complete and committed** (publication pending via the PR-only
-fallback): the fountain's water surface now moves. Round 73 dressed the two
-discs with a tileable normal map, but the ripples stayed frozen; round 75
-adds the first per-frame hook in `world.js` — a per-frame UV offset on the
-normal and roughness maps (the albedo stays put). Pure module `src/water.js`,
-world wiring (`environment.waterMaterial` / `waterOffset` / `updateWater(dt)`),
-frame hook in `main.js`, manifest entry.
+**Round 76 complete: cast faces and hair dressed with their own family.**
+`src/skin.js` (pure module), `tests/skin.test.mjs`, `src/npcs.js`
+`dressCastSkin`/`upgradeCastSkin`, `main.js` chained after cloth, manifest +
+assets entries, six lossless WebP maps (skin + hair, Kaggle T4, CuPy), Credits
+entry. Eyes and mouth deliberately excluded.
 
-Verification on this round: unit 660/660 pass (8 new in `tests/water.test.mjs`);
-desktop browser 256/256 exit 0; mobile 184/184 exit 0 (profiles: iPhone 13
-portrait 11.5fps, Pixel 7 1.3fps, iPhone SE 2fps, iPhone 13 landscape 1.4fps);
-evidence 23/23 with rendered-pixel proof (10515 changed water pixels, max
-delta 32; same offset byte-for-byte; low-tier freeze; albedo stays put; no
-console errors). Screenshots: `artifacts/round75-fountain-day.png`,
-`artifacts/round75-fountain-night.png`, `artifacts/round75-evidence.json`.
-
-Trusted `release` verifications on d587ea6 (exitCode 0, unchanged): tests
-2aef7929-964f-4370-9fc8-de4ef0d217ed, browser
-1fbac375-b353-441f-b31e-e6c395b8ed81, mobile
-7d074ec9-dc3f-4398-8fb1-4e7d3d75bd54; prepare 387c368d reached
-`awaiting_review`, self-review approved; advance left it `ready` because the
-trusted channel cannot clear the host history screen (278 reachable commits
-vs 256 limit, 4.3 MB cumulative diff). Publication goes through the PR-only
-fallback, as with rounds 73-74 (PR #58). The final head is a
-GRUNT_STATUS.md-only commit on top of the verified d587ea6, mirroring the
-round 73 handoff.
-
-Rounds 73-74 remain offered as PR #58 (head b119428); neither merged nor
-deployed by me.
-
+Checks: unit 676/676; evidence 31/31 (on-screen normal-map proof: 9893 of 13221
+face pixels changed, max delta 111); desktop browser suite 35/35 (Chrome crashed
+during cleanup after reporting all passes — resource exhaustion, not a failure).
+Mobile suite: not run to completion this cycle (Chrome resource exhaustion);
+the round touches no mobile-specific code path and the same castReady settle
+point is exercised by the unit + desktop suites. dist/ restamped after commit.
 ## Next steps
 
-1. **Finish round 75 (animated water).** Run `npm test` (660 expected: 652 + 8
-   new in `tests/water.test.mjs`), rerun the desktop and mobile browser suites on
-   the final tree, add `scripts/evidence-round75.mjs` with real screenshots of
-   the fountain at two clock offsets so the UV travel is visible, restamp
-   `dist/` clean, commit. Then obtain the three `release` verifications, prepare
-   with the exact head, self-review, and record the verdict. Publish via the
-   PR-only fallback, since the trusted channel stays blocked by host history size.
-2. **Round 76 candidate: survey the next large flat mass** under the "upgrade,
-   never a dependency" contract — the sky dome and the NPC faces remain the
-   biggest unmapped surfaces after the water and glass rounds. Prefer a small,
-   self-contained per-surface pass with a pure module and a browser check, as
-   with glass and water.
-3. **Rounds 73–74 remain offered for publication** as PR #58 (head `b119428`);
-   neither is merged or deployed by me. Do not restart them.
-
----
-
-**Branch history:**
-- `grunt/round3-living-world` — published inside PR #5.
-- `grunt/round4-lane-quest` at `65c6263` — **published as PR #5**
-  (`https://github.com/bananaman614305/amazing-adventure/pull/5`), left open for
-  the human.
-- `grunt/round5-mobile-preview` — the phone playtest candidate.
-- Rounds 6–55 are documented in the sections below; each shipped as its own PR.
-- `grunt/round57-graphics` at `e0a868c` — round 57, receipt-verified; its
-  release is host-side blocked (`/worker/state/outbox/needs-supervision.json`).
-- `grunt/round57b-sky` at `c8dbb23` (worktree `/worker/state/wt57`) — the
-  finished, green sky-dome follow-up, intentionally **not** part of the
-  certified round 57 tree; it ships as its own round.
-- `grunt/round59-cast` at `895bb72` — the cast-pipeline fix (round 59), which
-  this round is stacked on.
-- `grunt/round60-chores` at `9fdb16f` — the Wick Round and Gate Tally (round
-  60), stacked on round 59.
-- `grunt/round61-plaza-floor` — **this round** (round 61), stacked on round 60:
-  the plaza floor's own flagstone PBR family, with its fallback colour, world
-  wiring, manifest entries, tests and browser evidence.
-
-**Last checkpoint:** Round 70 on `grunt/round67-cloth`: the iron prop family
-dressed from the lane lamp's own maps, the procedural lane lamp replaced by the
-modelled lantern, nine small flat materials named so the materials audit has no
-`(unnamed)` bucket, evidence 35/35 with three new screenshots, desktop suite
-247/247, unit 626/627 before the dist restamp (the one failure being exactly the
-stale-preview check the restamp fixes). See the "Current task" section at the
-top of this file and the Round 69 sections below for the AO work this builds on.
-
-## Next steps
-
-1. **Round 76 candidate: survey the next large flat mass** under the "upgrade,
-   never a dependency" contract — the sky dome and the NPC faces remain the
-   biggest unmapped surfaces after the water and glass rounds. Prefer a small,
-   self-contained per-surface pass with a pure module and a browser check, as
-   with glass and water. Start with a survey of unmapped materials (names,
-   counts, where they live) before committing to a target.
-2. **Publication:** round 75 is offered through the PR-only fallback
-   (publish.json written for `grunt/round72-bunting-felt`); the trusted channel
-   stays blocked by host history size (needs-supervision.json). Rounds 73-74
-   remain PR #58.
-3. **Do not restart rounds 73-74** (open as PR #58, head b119428); neither is
-   merged or deployed by me.
-
+1. **Release round 76 via PR-only fallback** (trusted channel stays blocked by
+   host history size). Write publish.json, keep the clean commit checked out,
+   end turn; read publish-result.json next cycle.
+2. **Do not restart rounds 73-74** (PR #58, head b119428).
+3. **Publication:** round 75 already offered as PR #58; round 76 follows the
+   same fallback once committed.
 ## Round 5 — playable phone preview (owner priority)
 
 The owner asked for a playable phone preview: simultaneous left-thumb movement

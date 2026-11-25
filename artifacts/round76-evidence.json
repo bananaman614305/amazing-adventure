@@ -1,0 +1,2329 @@
+{
+  "assets": {
+    "assets/textures/skin_albedo.webp": {
+      "bytes": 126466,
+      "container": "RIFF/WEBP"
+    },
+    "assets/textures/skin_normal.webp": {
+      "bytes": 405530,
+      "container": "RIFF/WEBP"
+    },
+    "assets/textures/skin_rough.webp": {
+      "bytes": 50954,
+      "container": "RIFF/WEBP"
+    },
+    "assets/textures/hair_albedo.webp": {
+      "bytes": 51132,
+      "container": "RIFF/WEBP"
+    },
+    "assets/textures/hair_normal.webp": {
+      "bytes": 239326,
+      "container": "RIFF/WEBP"
+    },
+    "assets/textures/hair_rough.webp": {
+      "bytes": 46646,
+      "container": "RIFF/WEBP"
+    }
+  },
+  "cast": {
+    "loaded": 6,
+    "mode": "model",
+    "cloth": 23,
+    "skin": {
+      "dressed": 44,
+      "perFamily": {
+        "skin": 36,
+        "hair": 8
+      },
+      "seams": 0,
+      "anyLoaded": true
+    }
+  },
+  "live": {
+    "rows": [
+      {
+        "npc": "mara",
+        "mesh": "HandL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2714,
+        "vSpan": 1.5643,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#eed5be",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "mara",
+        "mesh": "ThumbL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.3214,
+        "vSpan": 1.3143,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#eed5be",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "mara",
+        "mesh": "HandR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2714,
+        "vSpan": 1.5643,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#eed5be",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "mara",
+        "mesh": "ThumbR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2643,
+        "vSpan": 1.3143,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#eed5be",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "mara",
+        "mesh": "Head",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.8857,
+        "vSpan": 1.364,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#eed5be",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "mara",
+        "mesh": "Nose",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.6429,
+        "vSpan": 0.2286,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#eed5be",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "mara",
+        "mesh": "Hair",
+        "family": "hair",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 1.5909,
+        "vSpan": 2.3838,
+        "roughness": 0.8,
+        "metalness": 0,
+        "tint": "#837160",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "mara",
+        "mesh": "HairBun",
+        "family": "hair",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 1.3841,
+        "vSpan": 2.7273,
+        "roughness": 0.8,
+        "metalness": 0,
+        "tint": "#837160",
+        "indexed": true,
+        "verts": 48,
+        "dressedFlag": true
+      },
+      {
+        "npc": "oswin",
+        "mesh": "HandL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2714,
+        "vSpan": 1.5643,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#e6c5ab",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "oswin",
+        "mesh": "ThumbL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.3214,
+        "vSpan": 1.3143,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#e6c5ab",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "oswin",
+        "mesh": "HandR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2714,
+        "vSpan": 1.5643,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#e6c5ab",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "oswin",
+        "mesh": "ThumbR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2643,
+        "vSpan": 1.3143,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#e6c5ab",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "oswin",
+        "mesh": "Head",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.8857,
+        "vSpan": 1.364,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#e6c5ab",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "oswin",
+        "mesh": "Nose",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.6429,
+        "vSpan": 0.2286,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#e6c5ab",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "oswin",
+        "mesh": "Hair",
+        "family": "hair",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 1.5909,
+        "vSpan": 2.3838,
+        "roughness": 0.8,
+        "metalness": 0,
+        "tint": "#625a53",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "pip",
+        "mesh": "HandL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.1954,
+        "vSpan": 1.1263,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#f1ddc7",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "pip",
+        "mesh": "ThumbL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2314,
+        "vSpan": 0.9463,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#f1ddc7",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "pip",
+        "mesh": "HandR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.1954,
+        "vSpan": 1.1263,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#f1ddc7",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "pip",
+        "mesh": "ThumbR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.1903,
+        "vSpan": 0.9463,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#f1ddc7",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "pip",
+        "mesh": "Head",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.6994,
+        "vSpan": 0.7646,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#f1ddc7",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "pip",
+        "mesh": "Nose",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.4937,
+        "vSpan": 0.36,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#f1ddc7",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "pip",
+        "mesh": "Hair",
+        "family": "hair",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 1.3091,
+        "vSpan": 1.4014,
+        "roughness": 0.8,
+        "metalness": 0,
+        "tint": "#c2a071",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "halden",
+        "mesh": "HandL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2714,
+        "vSpan": 1.5643,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ead0b9",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "halden",
+        "mesh": "ThumbL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.3214,
+        "vSpan": 1.3143,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ead0b9",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "halden",
+        "mesh": "HandR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2714,
+        "vSpan": 1.5643,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ead0b9",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "halden",
+        "mesh": "ThumbR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2643,
+        "vSpan": 1.3143,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ead0b9",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "halden",
+        "mesh": "Head",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.8857,
+        "vSpan": 1.364,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ead0b9",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "halden",
+        "mesh": "Nose",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.6429,
+        "vSpan": 0.2286,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ead0b9",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "halden",
+        "mesh": "Hair",
+        "family": "hair",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 1.5909,
+        "vSpan": 2.3838,
+        "roughness": 0.8,
+        "metalness": 0,
+        "tint": "#665d56",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "sable",
+        "mesh": "HandL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2714,
+        "vSpan": 1.5643,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#d4b9a0",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "sable",
+        "mesh": "ThumbL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.3214,
+        "vSpan": 1.3143,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#d4b9a0",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "sable",
+        "mesh": "HandR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2714,
+        "vSpan": 1.5643,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#d4b9a0",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "sable",
+        "mesh": "ThumbR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2643,
+        "vSpan": 1.3143,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#d4b9a0",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "sable",
+        "mesh": "Head",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.8857,
+        "vSpan": 1.364,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#d4b9a0",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "sable",
+        "mesh": "Nose",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.6429,
+        "vSpan": 0.2286,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#d4b9a0",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "sable",
+        "mesh": "Hair",
+        "family": "hair",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 1.5909,
+        "vSpan": 2.3838,
+        "roughness": 0.8,
+        "metalness": 0,
+        "tint": "#ad9471",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "wren",
+        "mesh": "HandL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2714,
+        "vSpan": 1.5643,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ddc2a7",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "wren",
+        "mesh": "ThumbL",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.3214,
+        "vSpan": 1.3143,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ddc2a7",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "wren",
+        "mesh": "HandR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2714,
+        "vSpan": 1.5643,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ddc2a7",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "wren",
+        "mesh": "ThumbR",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.2643,
+        "vSpan": 1.3143,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ddc2a7",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "wren",
+        "mesh": "Head",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.8857,
+        "vSpan": 1.364,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ddc2a7",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "wren",
+        "mesh": "Nose",
+        "family": "skin",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.6429,
+        "vSpan": 0.2286,
+        "roughness": 0.7,
+        "metalness": 0,
+        "tint": "#ddc2a7",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      },
+      {
+        "npc": "wren",
+        "mesh": "Hair",
+        "family": "hair",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 1.5909,
+        "vSpan": 2.3838,
+        "roughness": 0.8,
+        "metalness": 0,
+        "tint": "#716556",
+        "indexed": true,
+        "verts": 60,
+        "dressedFlag": true
+      },
+      {
+        "npc": "wren",
+        "mesh": "HairTail",
+        "family": "hair",
+        "badUv": false,
+        "maps": 3,
+        "mapInfo": {
+          "map": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": "srgb"
+          },
+          "normalMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          },
+          "roughnessMap": {
+            "width": 512,
+            "height": 512,
+            "wrapS": 1000,
+            "wrapT": 1000,
+            "repeatX": 1,
+            "repeatY": 1,
+            "anisotropy": 1,
+            "colorSpace": ""
+          }
+        },
+        "uSpan": 0.9091,
+        "vSpan": 1.7273,
+        "roughness": 0.8,
+        "metalness": 0,
+        "tint": "#716556",
+        "indexed": true,
+        "verts": 24,
+        "dressedFlag": true
+      }
+    ],
+    "materials": 12,
+    "albedos": 12,
+    "worstRigid": 0.4816000662573052,
+    "worstKey": "pip/Head tri 2 ratio 0.5184",
+    "triangles": 832,
+    "headDensity": {
+      "mara": 2.8571,
+      "oswin": 2.8571,
+      "pip": 2.8571,
+      "halden": 2.8571,
+      "sable": 2.8571,
+      "wren": 2.8571
+    },
+    "otherMapped": [
+      "mara/LimbArmL:Cloth",
+      "mara/LimbLegL:Cloth",
+      "mara/LimbArmR:Cloth",
+      "mara/LimbLegR:Cloth",
+      "mara/Torso:Cloth",
+      "oswin/LimbArmL:Cloth",
+      "oswin/LimbArmR:Cloth",
+      "oswin/Torso:Cloth",
+      "oswin/HatCap:Cloth",
+      "pip/LimbArmL:Cloth",
+      "pip/LimbArmR:Cloth",
+      "pip/Torso:Cloth",
+      "halden/LimbArmL:Cloth",
+      "halden/LimbArmR:Cloth",
+      "halden/Torso:Cloth",
+      "sable/LimbArmL:Cloth",
+      "sable/LimbArmR:Cloth",
+      "sable/Torso:Cloth",
+      "sable/HatBrim:Cloth",
+      "sable/HatCrown:Cloth",
+      "wren/LimbArmL:Cloth",
+      "wren/LimbArmR:Cloth",
+      "wren/Torso:Cloth"
+    ],
+    "npcs": 6
+  },
+  "pixels": {
+    "rect": {
+      "x": 291,
+      "y": 175,
+      "w": 59,
+      "h": 57
+    },
+    "canvas": [
+      640,
+      400
+    ],
+    "materials": 12,
+    "mean": 9.125,
+    "max": 98,
+    "changedPx": 2339,
+    "facePx": 3363,
+    "sameAB": false,
+    "sameAC": true
+  },
+  "shots": [
+    "/home/alan/projects/amazing-adventure/artifacts/round76-mara-face.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round76-sable-face.png",
+    "/home/alan/projects/amazing-adventure/artifacts/round76-plaza-wide.png"
+  ],
+  "checks": [
+    {
+      "name": "two neutral families, named exactly as the rigs author them",
+      "ok": true,
+      "detail": "skin,hair"
+    },
+    {
+      "name": "both families keep the authored tint",
+      "ok": true,
+      "detail": "[true,true]"
+    },
+    {
+      "name": "the tiles are sized for a face at Talk range",
+      "ok": true,
+      "detail": "0.35 m skin, 0.22 m hair"
+    },
+    {
+      "name": "the gaze and mouth stay out of the pass",
+      "ok": true,
+      "detail": "EyeWhite/EyeIris/Mouth excluded"
+    },
+    {
+      "name": "six committed files are real WebP containers",
+      "ok": true,
+      "detail": "RIFF/WEBP,RIFF/WEBP,RIFF/WEBP,RIFF/WEBP,RIFF/WEBP,RIFF/WEBP"
+    },
+    {
+      "name": "the committed bytes are the generator's reported output",
+      "ok": true,
+      "detail": "skin_albedo.webp 126466, skin_normal.webp 405530, skin_rough.webp 50954, hair_albedo.webp 51132, hair_normal.webp 239326, hair_rough.webp 46646"
+    },
+    {
+      "name": "every map is a substantial 512 px texture, not a stub",
+      "ok": true,
+      "detail": "skin_albedo.webp 124 KB, skin_normal.webp 396 KB, skin_rough.webp 50 KB, hair_albedo.webp 50 KB, hair_normal.webp 234 KB, hair_rough.webp 46 KB"
+    },
+    {
+      "name": "the generator measured no visible seam on any map",
+      "ok": true,
+      "detail": "worst seam ratio 1.22 (gate 3)"
+    },
+    {
+      "name": "skin albedo is neutral and narrow so the tint survives",
+      "ok": true,
+      "detail": "range 0.801..0.977"
+    },
+    {
+      "name": "skin relief survives to mip 3, where a Talk-range face samples",
+      "ok": true,
+      "detail": "skin normal std 0.09044, hair 0.28501"
+    },
+    {
+      "name": "the job ran on the free GPU, not the CPU fallback",
+      "ok": true,
+      "detail": "cupy"
+    },
+    {
+      "name": "the cast is the six modelled rigs and the skin pass ran",
+      "ok": true,
+      "detail": "{\"loaded\":6,\"mode\":\"model\",\"cloth\":23,\"skin\":{\"dressed\":44,\"perFamily\":{\"skin\":36,\"hair\":8},\"seams\":0,\"anyLoaded\":true}}"
+    },
+    {
+      "name": "the skin pass dressed 36 skin and 8 hair meshes",
+      "ok": true,
+      "detail": "{\"skin\":36,\"hair\":8}"
+    },
+    {
+      "name": "all 44 cast face and hair meshes are dressed",
+      "ok": true,
+      "detail": "44 rows, 44 flagged"
+    },
+    {
+      "name": "every dressed mesh carries all three maps",
+      "ok": true,
+      "detail": "[3]"
+    },
+    {
+      "name": "every dressed mesh has finite, positive projected UVs",
+      "ok": true,
+      "detail": "min u span 0.1903, min v span 0.2286"
+    },
+    {
+      "name": "the decoded maps are the 512 px files that shipped",
+      "ok": true,
+      "detail": "{\"width\":512,\"height\":512,\"wrapS\":1000,\"wrapT\":1000,\"repeatX\":1,\"repeatY\":1,\"anisotropy\":1,\"colorSpace\":\"srgb\"}"
+    },
+    {
+      "name": "the maps wrap and stay at one repeat (metre UVs carry the tile)",
+      "ok": true,
+      "detail": "{\"map\":{\"width\":512,\"height\":512,\"wrapS\":1000,\"wrapT\":1000,\"repeatX\":1,\"repeatY\":1,\"anisotropy\":1,\"colorSpace\":\"srgb\"}}"
+    },
+    {
+      "name": "the albedo decodes as sRGB and the data maps stay linear",
+      "ok": true,
+      "detail": "[\"srgb\",\"\"]"
+    },
+    {
+      "name": "the map set is cloned once per rig and family, not per mesh",
+      "ok": true,
+      "detail": "12 material objects, 12 albedo maps for 44 meshes"
+    },
+    {
+      "name": "skin and hair keep their authored roughness bases",
+      "ok": true,
+      "detail": "{\"skin\":[0.7],\"hair\":[0.8]}"
+    },
+    {
+      "name": "every dressed mesh is non-metal",
+      "ok": true,
+      "detail": "metalness 0"
+    },
+    {
+      "name": "six characters keep six distinct head tints",
+      "ok": true,
+      "detail": "[\"#eed5be\",\"#e6c5ab\",\"#f1ddc7\",\"#ead0b9\",\"#d4b9a0\",\"#ddc2a7\"]"
+    },
+    {
+      "name": "every dressed triangle is rigid, none stretched or sheared",
+      "ok": false,
+      "detail": "worst 48.16% off over 832 triangles (pip/Head tri 2 ratio 0.5184)"
+    },
+    {
+      "name": "Pip's smaller rig lands on the same physical tile",
+      "ok": false,
+      "detail": "{\"mara\":2.8571,\"oswin\":2.8571,\"pip\":2.8571,\"halden\":2.8571,\"sable\":2.8571,\"wren\":2.8571}"
+    },
+    {
+      "name": "no other cast material gained a map",
+      "ok": false,
+      "detail": "mara/LimbArmL:Cloth, mara/LimbLegL:Cloth, mara/LimbArmR:Cloth, mara/LimbLegR:Cloth, mara/Torso:Cloth"
+    },
+    {
+      "name": "Mara's head fills a talk-range patch of the frame",
+      "ok": false,
+      "detail": "{\"rect\":{\"x\":291,\"y\":175,\"w\":59,\"h\":57},\"canvas\":[640,400]}"
+    },
+    {
+      "name": "the cast relief changes the rendered face pixels",
+      "ok": true,
+      "detail": "changed 2339 of 3363 face px, max delta 98, mean 9.125"
+    },
+    {
+      "name": "the same maps reproduce the frame byte-for-byte",
+      "ok": true,
+      "detail": "sameAB false, sameAC true"
+    },
+    {
+      "name": "the run produced no console errors",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}
