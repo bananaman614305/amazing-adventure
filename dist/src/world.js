@@ -29,11 +29,16 @@ import {
   cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts,
   fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint,
   ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor,
-  PAPER_TEXTURE_FILES
+  PAPER_TEXTURE_FILES, ROPE_TEXTURE_FILES
 } from './assets.js';
 import {
   boardPaperFamilyFor, boardPaperParams, shouldDressBoardPaper, CAST_PAPER_TILE_METERS
 } from './paper.js';
+import { ROPE_TILE_METERS, ROPE_FAMILY } from './rope.js';
+import { HOUSING_TILE_METERS } from './housing.js';
+import { SACKTIE_TILE_METERS } from './sacktie.js';
+import { NOTICE_FACE_TILE_METERS, dressNoticeFace } from './noticeface.js';
+import { dressLanternHousing, dressSackTie } from './lanedress.js';
 import { loadGlb } from './glb.js';
 import {
   glassKindFor,
@@ -347,6 +352,14 @@ export function buildWorld(renderer) {
   boardMeshGroup.name = 'job-board-paper';
   scene.add(boardMeshGroup);
   const lanePropMeshes = [];
+  // Round 87 collections. The sack ties, the lantern housings and the lane
+  // notice board's face are all built by hand here rather than by a GLB, so
+  // their dressing passes (upgradeSackTie/upgradeLanternHousing/
+  // upgradeNoticeFace) reach them through these arrays instead of a
+  // scene-wide traverse that would also catch the plaza's fixtures.
+  const sackTieMeshes = [];
+  const lanternHousings = [];
+  const noticeFaceMeshes = [];
 
   for (const prop of LANE_PROPS) {
     if (prop.kind === 'post') {
@@ -449,6 +462,9 @@ export function buildWorld(renderer) {
   // The pennants are collected here so the felt pass can reach them without a
   // scene-wide traverse that would also catch every other mesh in the lane.
   const buntingFlags = [];
+  // Round 86: the three rope strands are collected the same way, so
+  // upgradeLaneRope() dresses exactly the `LaneRope` meshes and nothing else.
+  const buntingRopes = [];
   const flagGeometry = new THREE.ConeGeometry(0.09, 0.22, 3);
   for (const strand of LANE_BUNTING) {
     // The rope: a thin box spanning the lane, dipping in the middle.
@@ -459,6 +475,7 @@ export function buildWorld(renderer) {
     // Approximate the sag with two angled halves so the rope visually dips.
     rope.position.set((LANE.minX + LANE.maxX) / 2, strand.y - strand.sag / 2, strand.z);
     scene.add(rope);
+    buntingRopes.push(rope);
     const span = LANE.maxX - LANE.minX;
     for (let i = 0; i < strand.flags; i += 1) {
       const t = (i + 0.5) / strand.flags;
@@ -504,6 +521,7 @@ export function buildWorld(renderer) {
     neck.castShadow = true;
     scene.add(neck);
     lanePropMeshes.push(neck);
+    sackTieMeshes.push(neck);
     colliders.push(boxCollider(
       sack.x - 0.32, sack.z - 0.32, sack.x + 0.32, sack.z + 0.32
     ));
@@ -531,6 +549,7 @@ export function buildWorld(renderer) {
   // and hid it behind smaller surfaces. Named, like the job board's face.
   boardFace.material.name = 'NoticeFaceLane';
   scene.add(boardFace);
+  noticeFaceMeshes.push(boardFace);
   colliders.push(boxCollider(
     NOTICE_BOARD.x - 0.3, NOTICE_BOARD.z - 0.9,
     NOTICE_BOARD.x + 0.3, NOTICE_BOARD.z + 0.9
@@ -553,6 +572,11 @@ export function buildWorld(renderer) {
   // positions come from lanternPlacement() in areas.js, the same source the
   // laneLanternsHang() test uses, so light and mesh cannot drift apart.
   const laneLamps = [];
+  // One material for all three housings: they are identical 0.24 m tapered
+  // bodies, and round 87 dresses them as one, so sharing the authored material
+  // (as the plaza posts do) keeps the dressed result one material too.
+  const lanternHousingMat = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.5, metalness: 0.35 });
+  lanternHousingMat.name = 'LanternHousing';
   for (const lantern of LANE_LANTERNS) {
     const placed = lanternPlacement(lantern);
     const light = new THREE.PointLight(0xffc46b, 0, 9, 2);
@@ -571,6 +595,7 @@ export function buildWorld(renderer) {
     tie.position.set(placed.x, placed.anchorY, placed.z);
     tie.rotation.x = Math.PI / 2;
     fixture.add(tie);
+    sackTieMeshes.push(tie);
 
     const drop = new THREE.Mesh(
       new THREE.CylinderGeometry(0.006, 0.006, placed.anchorY - placed.topY, 6),
@@ -578,19 +603,21 @@ export function buildWorld(renderer) {
     );
     drop.position.set(placed.x, (placed.anchorY + placed.topY) / 2, placed.z);
     fixture.add(drop);
+    sackTieMeshes.push(drop);
 
-    // Named for the audit, not for a prop family: this housing is 0.24 m across,
-    // so a 0.6 m iron tile would smear three chips of paint over the whole thing.
-    // It is deliberately left flat like the bunting flags it hangs among, and
-    // `LanternHousing` matches no family test so that stays true by construction.
+    // Named for the audit, not for the iron family: this housing is 0.24 m
+    // across, so the ironwork's 0.6 m tile would smear three chips of paint
+    // over the whole thing. Round 87 dresses it from its own family
+    // (src/housing.js) at a 0.25 m tile, reusing the lamp maps, and the
+    // `LanternHousing` name is what keeps it out of the ironwork pass.
     const body = new THREE.Mesh(
       new THREE.CylinderGeometry(0.09, 0.12, LANTERN_HEIGHT, 8),
-      new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.5, metalness: 0.35 })
+      lanternHousingMat
     );
-    body.material.name = 'LanternHousing';
     body.position.set(placed.x, lanternY, placed.z);
     body.castShadow = true;
     fixture.add(body);
+    lanternHousings.push(body);
 
     const bulb = new THREE.Mesh(
       new THREE.SphereGeometry(0.055, 10, 8),
@@ -1071,6 +1098,18 @@ export function buildWorld(renderer) {
     clothDetail: null,
     bunting: 'flat',
     buntingDetail: null,
+    // Round 86: the lane bunting's rope strands (LaneRope), dressed separately
+    // from the felt flags because a 2 cm rope wants a fibre map, not a weave.
+    rope: 'flat',
+    ropeDetail: null,
+    // Round 87: the lane's small hand-built metal and cord surfaces, each with
+    // its own tile size (see src/housing.js, src/sacktie.js, src/noticeface.js).
+    housing: 'flat',
+    housingDetail: null,
+    sackTie: 'flat',
+    sackTieDetail: null,
+    noticeFace: 'flat',
+    noticeFaceDetail: null,
     iron: 'flat',
     ironDetail: null,
     banner: 'plane',
@@ -1970,6 +2009,202 @@ export function buildWorld(renderer) {
   }
 
   /**
+   * Dresses the lane bunting's rope strands (Round 86).
+   *
+   * The three `LaneRope` boxes are 2 cm square and 20+ m long, so the authored
+   * 0..1 box UVs would smear one texel along the whole span. A metre-space box
+   * projection at ROPE_TILE_METERS (0.08 m) puts a few tiles across the width
+   * and hundreds along the length, which is what makes the twisted-fibre map
+   * read as lay rather than as a flat brown stripe.
+   *
+   * All three strands share one source material, so one dressed material is
+   * made and handed to all three; the geometries are separate, so each gets its
+   * own projection and its own seam count. `keepTint` is true (see rope.js):
+   * the rope albedo is near-neutral, so the authored 0x6b5236 brown must stay
+   * as the tint over the map.
+   */
+  function upgradeLaneRope() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.rope = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: ROPE_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.rope = 'flat';
+        return assetState;
+      }
+      const dressed = new Map();
+      let ropes = 0;
+      let seams = 0;
+      for (const rope of buntingRopes) {
+        const source = rope.material;
+        if (!source || !/lanerope/i.test(source.name || '')) continue;
+        // Metre-space UVs, not the box's authored 0..1 pair: the rope is the
+        // longest thin surface in the lane, so a 0..1 map is the worst case in
+        // the scene. The projection also splits the box corners that straddle
+        // axes so the fibre does not shear along an edge.
+        const split = projectBoxGeometry({
+          THREE,
+          geometry: rope.geometry,
+          tileMeters: ROPE_TILE_METERS
+        });
+        seams += split.seams;
+        let material = dressed.get(source);
+        if (!material) {
+          material = new THREE.MeshStandardMaterial({
+            // keepTint: the rope albedo carries no strong hue, so the authored
+            // 0x6b5236 brown is what colours the strand. Forcing white would
+            // turn the bunting's rope into pale unbleached cord.
+            color: source.color ? source.color.getHex() : 0xffffff,
+            roughness: ROPE_FAMILY.roughness,
+            metalness: ROPE_FAMILY.metalness,
+            // The source name is what the material audit and the tests key on;
+            // losing it would drop the ropes back into an anonymous bucket.
+            name: source.name,
+            side: source.side
+          });
+          for (const [key, texture] of Object.entries(textures)) {
+            if (!texture || key === 'anyLoaded') continue;
+            const copy = texture.clone();
+            copy.needsUpdate = true;
+            copy.wrapS = THREE.RepeatWrapping;
+            copy.wrapT = THREE.RepeatWrapping;
+            // UVs are already in metres; one repeat keeps the rope tile size
+            // (see ROPE_TILE_METERS -- 0.08 m of lay fibre).
+            copy.repeat.set(1, 1);
+            // The strands are seen edge-on down the whole lane, the worst case
+            // for a fibre map, so spend the full anisotropy the renderer offers
+            // (capped at 8): there are only three ropes, so this is cheap.
+            copy.anisotropy = Math.min(8, renderer.capabilities?.getMaxAnisotropy?.() || 1);
+            material[key] = copy;
+          }
+          dressed.set(source, material);
+        }
+        rope.material = material;
+        rope.userData.ropeDressed = true;
+        ropes += 1;
+      }
+      assetState.rope = ropes > 0 ? 'textured' : 'flat';
+      assetState.ropeDetail = {
+        ropes,
+        materials: dressed.size,
+        seams,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: ROPE_TILE_METERS
+      };
+      return assetState;
+    });
+  }
+
+  /**
+   * Round 87: dresses the lane lanterns' metal housings (LanternHousing).
+   *
+   * The three tapered 8-sided bodies are 0.24 m across and were left flat on
+   * purpose until now (see the comment where they are built). They reuse the
+   * lamp post's maps at HOUSING_TILE_METERS (0.25 m) rather than the ironwork's
+   * 0.6 m, because a 0.6 m tile across a 0.24 m housing smears three chips of
+   * paint over the whole thing. One source material is shared by all three
+   * housings, so dressLanternHousing() hands them one dressed material.
+   */
+  function upgradeLanternHousing() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.housing = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: LAMP_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.housing = 'flat';
+        return assetState;
+      }
+      const result = dressLanternHousing(lanternHousings, textures, { THREE });
+      assetState.housing = result.dressed > 0 ? 'textured' : 'flat';
+      assetState.housingDetail = {
+        meshes: result.dressed,
+        materials: result.materials,
+        seams: result.seams,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: HOUSING_TILE_METERS
+      };
+      return assetState;
+    });
+  }
+
+  /**
+   * Round 87: dresses the lane sacks' pinched necks and the lantern ties
+   * (SackTie, nine small meshes) with the cloth weave at SACKTIE_TILE_METERS
+   * (0.04 m). A 2 cm cord needs a tile far below the sack body's, or the weave
+   * smears into a single stripe; keepTint is true so the authored dark cord
+   * colour survives over the near-neutral weave (see src/sacktie.js).
+   */
+  function upgradeSackTie() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.sackTie = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: CLOTH_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.sackTie = 'flat';
+        return assetState;
+      }
+      const result = dressSackTie(sackTieMeshes, textures, { THREE });
+      assetState.sackTie = result.dressed > 0 ? 'textured' : 'flat';
+      assetState.sackTieDetail = {
+        meshes: result.dressed,
+        materials: result.materials,
+        seams: result.seams,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: SACKTIE_TILE_METERS
+      };
+      return assetState;
+    });
+  }
+
+  /**
+   * Round 87: dresses the lane notice board's painted face (NoticeFaceLane,
+   * one 1.4 x 1.2 m plane) with the paper family at NOTICE_FACE_TILE_METERS
+   * (0.4 m). The job board's slips use 0.3 m; this face is read from 1-2 m in
+   * the lane, so its paper tooth is deliberately coarser.
+   */
+  function upgradeNoticeFace() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.noticeFace = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: PAPER_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.noticeFace = 'flat';
+        return assetState;
+      }
+      const result = dressNoticeFace(noticeFaceMeshes, textures, { THREE });
+      assetState.noticeFace = result.dressed > 0 ? 'textured' : 'flat';
+      assetState.noticeFaceDetail = {
+        meshes: result.dressed,
+        materials: result.materials,
+        seams: result.seams,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: NOTICE_FACE_TILE_METERS
+      };
+      return assetState;
+    });
+  }
+
+  /**
    * Dresses the fountain's two water discs with the procedural water family.
    *
    * The GLB ships `FountainWaterLower` / `FountainWaterUpper` as flat octagons
@@ -2190,6 +2425,13 @@ export function buildWorld(renderer) {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         group.add(mesh);
+        // The modelled board's painted panel is the face the player actually
+        // sees; the procedural `NoticeFaceLane` above is hidden from here on.
+        // Both belong to the round 87 notice-face family, so both are
+        // collected and dressed at the same tile.
+        if (mesh.material && /^noticeface$/i.test(mesh.material.name || '')) {
+          noticeFaceMeshes.push(mesh);
+        }
       }
       group.position.set(NOTICE_BOARD.x, 0, NOTICE_BOARD.z);
       scene.add(group);
@@ -3066,7 +3308,8 @@ export function buildWorld(renderer) {
      */
     loadAssets() {
       return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner()])
-        .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt()).then(() => upgradeBoardPaper())
+        .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt()).then(() => upgradeLaneRope()).then(() => upgradeBoardPaper())
+        .then(() => upgradeLanternHousing()).then(() => upgradeSackTie()).then(() => upgradeNoticeFace())
         // Water runs last and after the prop pass on purpose: the water discs
         // must not pick up the stone/iron families, and it needs the modelled
         // fountain to be in the scene before it has anything to dress.
