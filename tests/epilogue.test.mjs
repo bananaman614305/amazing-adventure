@@ -42,6 +42,16 @@ test('the ending appears once every quest is done', () => {
   assert.ok(epilogue.closing.length > 40);
 });
 
+test('the ending counts the quests the game actually has', () => {
+  // The opening used to say "Six errands" while QUEST_ORDER held seven, so the
+  // ending lied about the size of the game. Lock the count to the quest list.
+  const epilogue = buildEpilogue(finished());
+  const words = ['One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten'];
+  const expected = words[QUEST_ORDER.length - 1];
+  assert.match(epilogue.opening, new RegExp(`^${expected} errands,`),
+    `opening must count the ${QUEST_ORDER.length} quests, not a stale number`);
+});
+
 test('progress counts match the quest list', () => {
   const state = createInitialState();
   assert.deepEqual(storyProgress(state), { done: 0, total: QUEST_ORDER.length, complete: false });
