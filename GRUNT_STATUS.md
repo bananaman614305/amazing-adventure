@@ -12,47 +12,34 @@
 
 ## Current task
 
-**Round 82 in flight: the cast's boots wear leather (head pending commit).**
+**Round 83 in flight: parchment for the job board.**
 
-Boot was the largest remaining still-flat cast surface (1.49 m2, 18 meshes:
-oswin, pip, halden, sable, wren; the robed Keeper's rig has no boots). The
-leather family was generated on the project's Kaggle notebook
-(art/kaggle/leather_textures.py -> assets/textures/leather_*.webp, 512x512
-lossless WebP: periodic value-noise fbm height with pore detail, Sobel
-tangent-space normal, near-neutral albedo so authored boot tint #726c66
-survives, roughness 0.78-0.94).
+Round 83 dresses the plaza job board's face (BoardFace, 1 mesh, 2.16 m2) and
+its three pinned slips (BoardPaper, 3 meshes, 0.4 m2) with a new
+paper/parchment family. The job board is a 1.2 x 0.9 m plane of pinned paper,
+so a fibrous paper albedo with gentle tooth at a 0.3 m tile is the right read;
+the slips share it.
 
-New code: src/boot.js (CAST_BOOT_TILE_METERS 0.2, CAST_BOOT_FAMILIES with
-keepTint, castBootFamilyFor/castBootParams/shouldDressCastBoot);
-LEATHER_TEXTURE_FILES in src/assets.js; dressCastBoot/upgradeCastBoot in
-src/npcs.js; chained LAST on castReady after the accent pass in src/main.js
-(accent chain left intact). src/manifest.js + release-manifest.json (107
-files) regenerated. CREDITS.md Round 82 entry added. tests/boot.test.mjs
-mirrors tests/accent.test.mjs: 6 pure-rule tests + 6 real-GLB tests.
-
-Evidence so far (2026-11-25): npm test 715 tests / 714 pass / 1 fail (the
-single failure is the known-stale committed-preview check, which resolves in
-the commit order below); tests/boot.test.mjs 12/12 pass; desktop browser
-suite 272/272 checks no console errors (Round 81 accent checks, run before
-the Round 82 boot checks were added); mobile suite 184/184 checks no console
-errors. Desktop suite re-run with the new Round 82 boot checks is in flight.
-
-Trusted release channel remains blocked_infrastructure (256-commit /
-22000-byte host screen); PR-only fallback will be used at the final head.
+Done so far: art/kaggle/paper_textures.py written and submitted (Kaggle
+version 41, QUEUED; version 40 errored and was resubmitted). Pure rules module
+src/paper.js created (CAST_PAPER_TILE_METERS 0.3, BOARD_PAPER_FAMILIES
+exact-name test, keepTint false so the cream albedo stands alone). Pending the
+Kaggle textures: add PAPER_TEXTURE_FILES to src/assets.js, wire a dress pass
+into src/world.js for BoardFace and BoardPaper (projectBoxGeometry at 0.3 m
+tile), add tests, update assets.test.mjs must-stay-flat list, commit, restamp
+dist, checkpoint.
 
 ## Next steps
 
-1. Wait for the in-flight desktop browser suite run with the new Round 82
-   boot checks (4 checks: 18/18 meshes wear all 3 leather maps, 5 materials
-   for 18 meshes, per-NPC tints with no Mara boots, leather roughness 0.9
-   metalness 0) and record its true result here.
-2. Run the materials audit to confirm Boot leaves the flat list.
-3. Commit in the established order: (a) sources + tests + manifest + CREDITS
-   + art/kaggle script on a clean tree; (b) node scripts/build-preview.mjs;
-   (c) commit dist/; (d) checkpoint commit updating this file.
-4. Write /worker/state/outbox/publish.json at the exact final HEAD (PR-only
-   fallback, grants no merge/deployment authority). Keep needs-supervision.json
-   current. Never report a queued/failed receipt as passing.
+1. Wait for Kaggle version 41 to finish; download and inspect the three paper
+   webps before integrating.
+2. Add PAPER_TEXTURE_FILES to src/assets.js; wire the dressing pass into
+   src/world.js for BoardFace and BoardPaper.
+3. Add tests (pure rules + browser checks) and update assets.test.mjs
+   must-stay-flat list (remove BoardFace/BoardPaper).
+4. Commit sources+tests+manifest, rebuild dist, commit dist, checkpoint
+   GRUNT_STATUS.md, then write publish.json at the exact final head (PR-only
+   fallback; trusted channel still blocked_infrastructure).
 
 ## Round 5 — playable phone preview (owner priority)
 
