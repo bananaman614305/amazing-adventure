@@ -12,52 +12,51 @@
 
 ## Current task
 
-**Round 79 complete and verified at head `21f6971`: favours are now honoured.**
+**Round 80 complete and verified at dist head 04be9ef: the ending counts the seven quests.**
 
-Round 79 made the plaza's gratitude real. `src/state.js` gained
-`KEEPER_PROMISE_REWARD`/`TRADER_MARKER_REWARD` and `redeemKeeperPromise`/
-`redeemTraderMarker`: each spends its token exactly once for +2 coins and
-+10 own-faction standing, and refuses a second redeem (no farm, no restock,
-no dawn reset). `src/dialogue.js` wires a "Call in …" choice into Mara's
-done node and every Oswin node, shown only while the token is held, and
-removed from the menu once spent. Pip's ribbon stays a keepsake (documented
-in source). Reachability graph grew 33184 -> 105784 states, 0 dead ends, no
-truncation (cap raised 60000 -> 200000 in tests/playthrough.test.mjs).
-Unit tests added in tests/state.test.mjs and tests/dialogue.test.mjs.
+Round 80 fixed the ending's stale count. The epilogue opening said "Six
+errands" while QUEST_ORDER holds seven quests (nightlight arrived in round
+56), so the ending lied about the size of the game. src/epilogue.js now
+opens "Seven errands, and none of them were only errands." and its header
+comments agree; the src/state.js QUEST_ORDER comment now reads "the
+seven-quest spine stays seven quests". A new test, "the ending counts the
+quests the game actually has", derives the expected word from
+QUEST_ORDER.length, so the opening cannot drift from the quest list again.
 
-Commits: `591b1d7` (source + tests), `21f6971` (dist restamp).
+Commits: 565e684 (source + test), 04be9ef (dist restamp).
 
-Evidence: unit 687/687; playthrough 7/7 quests, 15 coins, 3 items, story
-complete, exit 0; reachability 105784/105784 winnable, 0 dead ends, no
-truncation; dist preview test green. Desktop browser suite 265/265 checks
-with no console errors; trusted tests receipt b9838e01-2fa3-423d-bfb0-
-c772dd9a7219 and browser receipt 318a3bc3-4641-41c3-86d5-70364f9a0bba
-both completed exit 0 at head 079c5e9. Mobile not verified: the local
-suite hung three times with zero output (voided, recorded in
-needs-supervision.json as a possible host-side issue) and the trusted
-mobile receipt 481f65fd-631f-41d7-878a-285440964b40 was still queued at
-last poll — not a result, do not count it. Publish: PR #59 republished
-at head 079c5e97b3b6bda8bea342492f5cbc491cbf9100 via the PR-only
-fallback (publish-result.json status published, 2026-11-25 10:54:42Z).
+Evidence (all actually run): npm test 688/688 pass exit 0 (the only
+failure before the restamp was the stale dist digest); node
+tests/epilogue.test.mjs 17/17 pass; node scripts/playthrough.mjs 7/7
+quests, 15 coins, story complete, epilogue "The plaza at closing";
+dist/src/epilogue.js confirmed carrying "Seven errands".
 
-PR #59 (head `12fab2060c7b6f5d790ce6f144b423553f6a7419`) published via the
-PR-only fallback; trusted channel still blocked on host history-size screen.
+Receipt corrections (verified by polling): mobile receipt
+481f65fd-631f-41d7-878a-285440964b40 completed exit 0 at head 079c5e9,
+unchanged - Round 79 mobile IS verified, superseding this file's earlier
+"not verified, do not count it" sentence. Trusted tests
+70960e92-5d66-4802-aaf3-918ac0d198ba and browser
+e22fa9d2-31d4-4be6-b0fc-097ece7bce72 completed exit 0 at 7c23866. Mobile
+91c928d8-64be-4f48-9e25-2bc56e95081c at 7c23866 ended state "failed"
+(exitCode 0, unchanged false) and is NOT counted.
+
+Publish: PR #59 is at head 079c5e9 via the PR-only fallback; the Round 80
+head is submitted this round (see publish.json).
+
 ## Next steps
 
-1. Round 80 scope: pick from the weakest remaining surface (audio
-   ambience, cast polish, or a new quest beat) without weakening required
-   verification. Any new economy sink must be hasItem-guarded, one-time,
-   no restock, no dawn reset. Mobile stays open: poll receipt
-   481f65fd-631f-41d7-878a-285440964b40 to a terminal state before another
-   publish, and never report it as passing while queued.
+1. Round 81: if publish-result.json confirms the Round 80 head, request
+   fresh trusted receipts for it (grunt-release verify release
+   tests/browser/mobile) and record the ids here; never report one as
+   passing while queued. Pick the next useful chunk from the weakest
+   surface (cast polish, a new quest beat, or graphics materials via
+   scripts/audit-materials.mjs).
 2. The trusted release channel remains blocked on the host's 256-commit /
-   22000-byte review-diff screen (origin/main still the initial README commit,
-   branch now 306 commits ahead). Continue using the PR-only fallback
-   (`/worker/state/outbox/publish.json`) for whole-round submissions; do not
-   push or merge from a shell. Refresh `needs-supervision.json` if the host
-   state changes.
-3. Keep the economy green: favours are one-time and token-consuming; any new
-   sink must follow the same hasItem-guarded, no-restock, no-dawn-reset rule.
+   22000-byte review-diff screen. Keep using the PR-only fallback
+   (/worker/state/outbox/publish.json); do not push or merge from a shell.
+   needs-supervision.json was refreshed this round with the current head.
+3. Keep the economy green: any new sink must be hasItem-guarded, one-time,
+   no restock, no dawn reset.
 
 ## Round 5 — playable phone preview (owner priority)
 
