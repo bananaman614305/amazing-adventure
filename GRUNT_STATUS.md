@@ -12,34 +12,36 @@
 
 ## Current task
 
-**Round 83 in flight: parchment for the job board.**
+**Round 83 complete: parchment for the job board.**
 
 Round 83 dresses the plaza job board's face (BoardFace, 1 mesh, 2.16 m2) and
 its three pinned slips (BoardPaper, 3 meshes, 0.4 m2) with a new
-paper/parchment family. The job board is a 1.2 x 0.9 m plane of pinned paper,
-so a fibrous paper albedo with gentle tooth at a 0.3 m tile is the right read;
-the slips share it.
+paper/parchment family at a 0.3 m tile. The cream albedo stands alone
+(keepTint false, white material tint).
 
-Done so far: art/kaggle/paper_textures.py written and submitted (Kaggle
-version 41, QUEUED; version 40 errored and was resubmitted). Pure rules module
-src/paper.js created (CAST_PAPER_TILE_METERS 0.3, BOARD_PAPER_FAMILIES
-exact-name test, keepTint false so the cream albedo stands alone). Pending the
-Kaggle textures: add PAPER_TEXTURE_FILES to src/assets.js, wire a dress pass
-into src/world.js for BoardFace and BoardPaper (projectBoxGeometry at 0.3 m
-tile), add tests, update assets.test.mjs must-stay-flat list, commit, restamp
-dist, checkpoint.
+Evidence: npm test 723/723 pass; browser suite 281/281 with all 5 board-paper
+checks pass (4 meshes x 3 maps @ 512px, white tint, roughness 0.9 metalness 0,
+assetState 'textured', detail dressed 4 seams 0); mobile suite 184/184 pass
+(no console errors). Materials audit no longer lists BoardFace/BoardPaper as
+flat (remaining 'Paper' 0.31 m2 is the NPC Paper material, by design). dist
+restamped at 5e6be32 (111 files, 8180 KB). Kaggle version 41 stayed QUEUED;
+textures were produced locally with the same procedural script (numpy, CPU)
+and copied into assets/textures/paper_*.webp (77 KB / 470 KB / 59 KB).
 
 ## Next steps
 
-1. Wait for Kaggle version 41 to finish; download and inspect the three paper
-   webps before integrating.
-2. Add PAPER_TEXTURE_FILES to src/assets.js; wire the dressing pass into
-   src/world.js for BoardFace and BoardPaper.
-3. Add tests (pure rules + browser checks) and update assets.test.mjs
-   must-stay-flat list (remove BoardFace/BoardPaper).
-4. Commit sources+tests+manifest, rebuild dist, commit dist, checkpoint
-   GRUNT_STATUS.md, then write publish.json at the exact final head (PR-only
-   fallback; trusted channel still blocked_infrastructure).
+1. Publish Round 83 via the PR-only fallback: write
+   /worker/state/outbox/publish.json with branch grunt/round72-bunting-felt,
+   base main, title "Round 83: parchment for the job board", exact HEAD
+   5e6be32..., and a body summarising the checks and evidence; keep the
+   needs-supervision.json blocked_infrastructure entry current. Do not merge
+   or deploy from a shell.
+2. Choose the next useful milestone: the materials audit flat list is now
+   HouseGlass 4.63, LampGlass 4.5, LaneRope 1.92, NpcMarker 1.76,
+   LanternHousing 1.32, SackTie 1.04, LampBulb 0.58, WoodP 0.34 (all by
+   design or already documented stay-flat); the next largest genuinely
+   dressable surface family is the next candidate. Continue the economy rule
+   (hasItem-guarded, one-time, no restock, no dawn reset) for any new sink.
 
 ## Round 5 — playable phone preview (owner priority)
 
