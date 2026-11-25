@@ -3209,6 +3209,61 @@ try {
                      metalness: [...new Set(accents.rows.map((r) => r.metalness))] }));
 
   await capture(page, 'round81-cast-accent.png');
+  // --- 28m2c. The cast's boots (round 82) ------------------------------------
+  // The eighteen Boot meshes (oswin, pip, halden, sable, wren — the robed
+  // Keeper's rig has no boots) are dressed with the round 82 leather maps at
+  // a 0.2 m physical tile, keeping each NPC's authored boot tint. Checked on
+  // the live scene, after the real boot chain.
+  const boots = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    await api.castReady;
+    const rows = [];
+    const materials = new Set();
+    for (const npc of api.npcs) {
+      npc.group.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        if (!/^Boot$/i.test(o.material.name || '')) return;
+        const uv = o.geometry.getAttribute('uv');
+        materials.add(o.material.uuid);
+        rows.push({
+          key: `${npc.id}/${o.name}`,
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+          hasUv: Boolean(uv),
+          tint: o.material.color.getHexString(),
+          roughness: Number(Number(o.material.roughness).toFixed(3)),
+          metalness: Number(o.material.metalness).toFixed(3),
+          image: o.material.map ? o.material.map.image.width : 0,
+          repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+          wrapped: o.material.map
+            ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+          dressed: o.userData.bootDressed === true
+        });
+      });
+    }
+    return { rows, materials: materials.size };
+  });
+  checks.check('all 18 cast boot meshes wear the three leather maps',
+    boots.rows.length === 18 && boots.rows.every((r) => r.maps === 3 && r.hasUv
+      && r.image === 512 && r.dressed),
+    JSON.stringify({ rows: boots.rows.length,
+                    maps: [...new Set(boots.rows.map((r) => r.maps))],
+                    images: [...new Set(boots.rows.map((r) => r.image))] }));
+  checks.check('the leather map is one per rig and tiles by projection, not repeat',
+    boots.materials === 5 && boots.rows.every((r) => r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    `${boots.materials} materials for ${boots.rows.length} meshes; ` +
+    JSON.stringify([...new Set(boots.rows.map((r) => JSON.stringify(r.repeat)))]));
+  checks.check('the booted five keep their own boot tints, and Mara wears none',
+    boots.rows.every((r) => r.tint !== 'ffffff')
+      && !boots.rows.some((r) => r.key.startsWith('mara/')),
+    JSON.stringify([...new Set(boots.rows.map((r) => r.key.split('/')[0]))]));
+  checks.check('the dressed boots sit at leather roughness 0.9, not metal',
+    boots.rows.every((r) => r.roughness === 0.9 && Number(r.metalness) === 0),
+    JSON.stringify({ roughness: [...new Set(boots.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(boots.rows.map((r) => r.metalness))] }));
+
+  await capture(page, 'round82-cast-boot.png');
   // --- 28n. Vegetation: trees stand in, upgrade to models --------------------
   const trees = await page.evaluate(async () => {
     const api = window.amazingAdventure;

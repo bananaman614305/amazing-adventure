@@ -12,42 +12,47 @@
 
 ## Current task
 
-**Round 81 complete at head 051c4ee: the cast's accent bands wear felt.**
+**Round 82 in flight: the cast's boots wear leather (head pending commit).**
 
-The accent material was the largest still-flat cast surface the materials audit
-found (2.38 m2 over 9 meshes: sashes, scarves, tabard, cloak band, collar, leg
-wraps). It is felted fabric at 0.1-0.2 m, so it reuses the round 72 neutral
-felt maps rather than a new set, keeping one fibre read across the scene and
-six distinct per-NPC dyes.
+Boot was the largest remaining still-flat cast surface (1.49 m2, 18 meshes:
+oswin, pip, halden, sable, wren; the robed Keeper's rig has no boots). The
+leather family was generated on the project's Kaggle notebook
+(art/kaggle/leather_textures.py -> assets/textures/leather_*.webp, 512x512
+lossless WebP: periodic value-noise fbm height with pore detail, Sobel
+tangent-space normal, near-neutral albedo so authored boot tint #726c66
+survives, roughness 0.78-0.94).
 
-Commits: 8d66cd4 (source, tests, scripts, manifest), d30cab4 (dist restamp),
-051c4ee (checkpoint).
+New code: src/boot.js (CAST_BOOT_TILE_METERS 0.2, CAST_BOOT_FAMILIES with
+keepTint, castBootFamilyFor/castBootParams/shouldDressCastBoot);
+LEATHER_TEXTURE_FILES in src/assets.js; dressCastBoot/upgradeCastBoot in
+src/npcs.js; chained LAST on castReady after the accent pass in src/main.js
+(accent chain left intact). src/manifest.js + release-manifest.json (107
+files) regenerated. CREDITS.md Round 82 entry added. tests/boot.test.mjs
+mirrors tests/accent.test.mjs: 6 pure-rule tests + 6 real-GLB tests.
 
-Evidence at 051c4ee790293b53126ad07e21bd3c7aaa165e63: npm test 703/703 pass
-exit 0; desktop browser suite 272/272 checks no console errors exit 0 (4 new
-accent checks: 9/9 meshes wear all 3 felt maps, 6 materials for 9 meshes, 6
-distinct dyes, felt roughness 0.9); mobile suite 184/184 checks no console
-errors exit 0; materials audit run at this head: Accent no longer in the flat
-list. Unit layer: tests/accent.test.mjs 12/12.
+Evidence so far (2026-11-25): npm test 715 tests / 714 pass / 1 fail (the
+single failure is the known-stale committed-preview check, which resolves in
+the commit order below); tests/boot.test.mjs 12/12 pass; desktop browser
+suite 272/272 checks no console errors (Round 81 accent checks, run before
+the Round 82 boot checks were added); mobile suite 184/184 checks no console
+errors. Desktop suite re-run with the new Round 82 boot checks is in flight.
 
-Trusted receipts at exact head 051c4ee790293b53126ad07e21bd3c7aaa165e63, all
-completed exit 0 unchanged True: tests fa7c21ce-2fcd-4667-a98f-6d10e0691893,
-browser e958d418-4ed0-4134-823f-4fc975e05fa9, mobile
-081cdd78-25f7-4e1c-91bd-fa595375ea50. Trusted release channel still
-blocked_infrastructure (256-commit / 22000-byte host screen); PR-only fallback
-used (publish.json written at this head, grants no merge/deployment authority).
+Trusted release channel remains blocked_infrastructure (256-commit /
+22000-byte host screen); PR-only fallback will be used at the final head.
 
 ## Next steps
 
-1. Read /worker/state/outbox/publish-result.json next cycle; the trusted
-   channel cannot advance until the host screen clears (256-commit / 22000-byte
-   limits), so no further action is available from this side beyond keeping the
-   branch clean and verified.
-2. Round 82 candidate: next largest still-flat cast surface is Boot (1.49 m2,
-   18 meshes) or LanternHousing (1.32 m2); or a new quest beat. Keep the
-   economy rule: any new sink is hasItem-guarded, one-time, no restock, no dawn
-   reset.
-
+1. Wait for the in-flight desktop browser suite run with the new Round 82
+   boot checks (4 checks: 18/18 meshes wear all 3 leather maps, 5 materials
+   for 18 meshes, per-NPC tints with no Mara boots, leather roughness 0.9
+   metalness 0) and record its true result here.
+2. Run the materials audit to confirm Boot leaves the flat list.
+3. Commit in the established order: (a) sources + tests + manifest + CREDITS
+   + art/kaggle script on a clean tree; (b) node scripts/build-preview.mjs;
+   (c) commit dist/; (d) checkpoint commit updating this file.
+4. Write /worker/state/outbox/publish.json at the exact final HEAD (PR-only
+   fallback, grants no merge/deployment authority). Keep needs-supervision.json
+   current. Never report a queued/failed receipt as passing.
 
 ## Round 5 — playable phone preview (owner priority)
 

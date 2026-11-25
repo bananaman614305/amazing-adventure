@@ -300,6 +300,22 @@ its procedural stand-in or flat colour and stays fully playable.
   metre-space box-projected UVs and one cloned material per rig, roughness 0.9
   / metalness 0. Nothing new to license.
 
+### Round 82 additions
+
+- No new outside assets. The cast's eighteen `Boot` meshes (oswin, pip,
+  halden, sable and wren — the robed Keeper's rig has no boots; 1.49 m2 of
+  flat colour before) are dressed with a leather map family generated for
+  this round by the project's own Kaggle texture job
+  (`assets/textures/leather_{albedo,normal,rough}.webp`, 512x512 lossless
+  WebP: periodic value-noise fbm height field with pore detail, a
+  Sobel-derived tangent-space normal, a near-neutral albedo so each
+  character's authored boot tint still reads, roughness 0.78-0.94). Applied
+  by the new `upgradeCastBoot()` / `dressCastBoot()` (`src/boot.js` rules,
+  `src/npcs.js` geometry) with metre-space box-projected UVs at a 0.2 m
+  physical tile, roughness 0.9 / metalness 0, one cloned material per rig,
+  chained last on `castReady` after the accent pass. Fully procedural;
+  nothing new to license.
+
 ### Round 67 additions
 
 - `assets/textures/cloth_*.webp` — `art/kaggle/cloth_textures.py`, run on the

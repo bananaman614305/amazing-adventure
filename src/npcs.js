@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { floorHeightAt } from './world.js';
 import {
   CAST_ASSETS, projectBoxGeometry, loadCast, loadMaterialTextures,
-  CLOTH_TEXTURE_FILES, SKIN_TEXTURE_FILES, HAIR_TEXTURE_FILES, FELT_TEXTURE_FILES
+  CLOTH_TEXTURE_FILES, SKIN_TEXTURE_FILES, HAIR_TEXTURE_FILES, FELT_TEXTURE_FILES,
+  LEATHER_TEXTURE_FILES
 } from './assets.js';
 import {
   CAST_SKIN_FAMILIES, castSkinFamilyFor, castSkinParams, shouldDressCastSkin
@@ -13,6 +14,12 @@ import {
   CAST_ACCENT_TILE_METERS
 } from './accent.js';
 export { CAST_ACCENT_TILE_METERS } from './accent.js';
+
+import {
+  CAST_BOOT_FAMILIES, castBootFamilyFor, castBootParams, shouldDressCastBoot,
+  CAST_BOOT_TILE_METERS
+} from './boot.js';
+export { CAST_BOOT_TILE_METERS } from './boot.js';
 
 // Round 67: the metre scale the cast coats are box-projected at. It is the
 // cloth PROP_FAMILY's tile (see assets.js), so a cast coat, a lane sack and any
@@ -809,4 +816,99 @@ export async function upgradeCastAccent(npcs, { THREE, fetchImpl = fetch, textur
     }
   }
   return dressCastAccent(npcs, loadedTextures, { THREE });
+}
+
+// ---------------------------------------------------------------------------
+// Round 82: the cast's boots.
+//
+// The boot material is the per-NPC leather (1.49 m2 across 18 meshes on five
+// of the six rigs; mara is robed to the ground and has none). It reuses the
+// generated leather maps rather than a new set. The rules live in src/boot.js.
+// ---------------------------------------------------------------------------
+
+/** The downloaded map set, keyed by the family id in src/boot.js. */
+export const CAST_BOOT_TEXTURE_FILES = LEATHER_TEXTURE_FILES;
+
+/**
+ * Dresses every mesh whose authored material belongs to a cast boot family.
+ *
+ * Maps are cloned once per *material*, not once per mesh: all Boot meshes in
+ * one rig share the material object the GLB reader built, so a per-mesh clone
+ * would allocate duplicate map sets for one draw. The first mesh through a
+ * material sets it up; later meshes only get their own projected UVs.
+ */
+export function dressCastBoot(npcs, textures, { THREE } = {}) {
+  const dressed = [];
+  const perFamily = { boot: 0 };
+  let seams = 0;
+  let anyLoaded = false;
+  if (!THREE || !textures) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  const family = CAST_BOOT_FAMILIES[0];
+  if (!shouldDressCastBoot(family, textures)) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  anyLoaded = true;
+
+  const materialFamilies = new Map();
+
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const fam = castBootFamilyFor(material && material.name);
+      if (!fam) return;
+      if (!shouldDressCastBoot(fam, textures)) return;
+
+      const scale = accumulatedScale(mesh);
+      const split = projectBoxGeometry({
+        THREE, geometry: mesh.geometry, tileMeters: fam.tileMeters / scale
+      });
+      if (split.seams > 0) seams += split.seams;
+
+      if (materialFamilies.get(material) !== fam) {
+        const params = castBootParams(fam);
+        for (const key of ['map', 'normalMap', 'roughnessMap']) {
+          const texture = textures[key];
+          if (!texture) continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        material.roughness = params.roughness;
+        material.metalness = params.metalness;
+        material.needsUpdate = true;
+        materialFamilies.set(material, fam);
+      }
+
+      mesh.userData.bootDressed = true;
+      perFamily.boot += 1;
+      dressed.push({ npc: npc.id, name: mesh.name, family: 'boot', tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, perFamily, anyLoaded };
+}
+
+/**
+ * Loads the leather maps and dresses the cast's boots with them.
+ * Never throws.
+ */
+export async function upgradeCastBoot(npcs, { THREE, fetchImpl = fetch, textures = null } = {}) {
+  if (!THREE || !npcs || !npcs.length) {
+    return { dressed: 0, meshes: [], anyLoaded: false, perFamily: { boot: 0 } };
+  }
+  let loadedTextures = textures;
+  if (!loadedTextures) {
+    try {
+      loadedTextures = await loadMaterialTextures({ THREE, files: CAST_BOOT_TEXTURE_FILES, fetchImpl });
+    } catch {
+      loadedTextures = null;
+    }
+  }
+  return dressCastBoot(npcs, loadedTextures, { THREE });
 }
