@@ -4163,6 +4163,116 @@ try {
     JSON.stringify(r94.low));
   await capture(page, 'round94-dressing.png');
 
+  // --- Round 95: meadow wildflowers, reeds, courtyard moss -----------------
+  // The meadow is dressed with three new instanced fields: wildflower blooms
+  // with their stems, reed stems with cattail heads, and flat moss patches in
+  // the courtyard. Each one is a single InstancedMesh so the whole meadow costs
+  // a handful of draw calls; the sway updates are pure CPU transforms, and the
+  // low tier drops every one of them. The moss must sit flat on the ground, so
+  // its instance y translation is read straight out of the matrix.
+  const r95 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    api.setClock(10);
+    const blooms = byName('meadow-wildflowers');
+    const stems = byName('meadow-wildflower-stems');
+    const reeds = byName('meadow-reeds');
+    const reedHeads = byName('meadow-reed-heads');
+    const moss = byName('courtyard-moss');
+    // wildflowers sway
+    let bloomMoved = false;
+    if (blooms && env.updateWildflowers) {
+      const before = Float32Array.from(blooms.instanceMatrix.array);
+      env.updateWildflowers(0.5);
+      for (let k = 0; k < blooms.instanceMatrix.array.length; k += 1) {
+        if (Math.abs(blooms.instanceMatrix.array[k] - before[k]) > 1e-9) { bloomMoved = true; break; }
+      }
+    }
+    // reeds sway
+    let reedMoved = false;
+    if (reeds && env.updateReeds) {
+      const before = Float32Array.from(reeds.instanceMatrix.array);
+      env.updateReeds(0.5);
+      for (let k = 0; k < reeds.instanceMatrix.array.length; k += 1) {
+        if (Math.abs(reeds.instanceMatrix.array[k] - before[k]) > 1e-9) { reedMoved = true; break; }
+      }
+    }
+    // moss flatness: y translation of each instance matrix
+    const mossY = [];
+    let mossFlat = true;
+    if (moss && moss.instanceMatrix && moss.instanceMatrix.array) {
+      const arr = moss.instanceMatrix.array;
+      const n = Math.min(20, Math.floor(arr.length / 16));
+      for (let i = 0; i < n; i += 1) {
+        const y = arr[i * 16 + 13];
+        mossY.push(y);
+        if (!(y >= 0 && y < 0.2)) mossFlat = false;
+      }
+    }
+    // tier gating
+    api.quality.set('low');
+    const low = {
+      blooms: blooms ? blooms.visible : null,
+      stems: stems ? stems.visible : null,
+      reeds: reeds ? reeds.visible : null,
+      reedHeads: reedHeads ? reedHeads.visible : null,
+      moss: moss ? moss.visible : null
+    };
+    api.quality.set('full');
+    const full = {
+      blooms: blooms ? blooms.visible : null,
+      stems: stems ? stems.visible : null,
+      reeds: reeds ? reeds.visible : null,
+      reedHeads: reedHeads ? reedHeads.visible : null,
+      moss: moss ? moss.visible : null
+    };
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      blooms: blooms ? { count: blooms.count, visible: blooms.visible, colored: !!blooms.instanceColor } : null,
+      stems: stems ? { count: stems.count, visible: stems.visible } : null,
+      reeds: reeds ? { count: reeds.count, visible: reeds.visible, colored: !!reeds.instanceColor } : null,
+      reedHeads: reedHeads ? { count: reedHeads.count, visible: reedHeads.visible } : null,
+      moss: moss ? { count: moss.count, visible: moss.visible, colored: !!moss.instanceColor, ys: mossY } : null,
+      bloomMoved,
+      reedMoved,
+      mossFlat,
+      low,
+      full
+    };
+  });
+  checks.check('wildflower clumps and stems exist',
+    r95.blooms && r95.blooms.count > 0 && r95.blooms.colored === true &&
+      r95.stems && r95.stems.count > 0,
+    JSON.stringify({ blooms: r95.blooms, stems: r95.stems }));
+  checks.check('reed clumps and cattail heads exist',
+    r95.reeds && r95.reeds.count > 0 &&
+      r95.reedHeads && r95.reedHeads.count > 0,
+    JSON.stringify({ reeds: r95.reeds, reedHeads: r95.reedHeads }));
+  checks.check('moss patches lie flat on the ground',
+    r95.moss && r95.moss.count > 0 && r95.moss.colored === true && r95.mossFlat === true,
+    JSON.stringify(r95.moss));
+  checks.check('wildflowers sway',
+    r95.bloomMoved === true,
+    JSON.stringify({ bloomMoved: r95.bloomMoved, blooms: r95.blooms }));
+  checks.check('reeds sway',
+    r95.reedMoved === true,
+    JSON.stringify({ reedMoved: r95.reedMoved, reeds: r95.reeds }));
+  checks.check('the meadow dressing drops on the low tier',
+    r95.low.blooms === false && r95.low.stems === false && r95.low.reeds === false &&
+      r95.low.reedHeads === false && r95.low.moss === false &&
+      r95.full.blooms === true && r95.full.stems === true && r95.full.reeds === true &&
+      r95.full.reedHeads === true && r95.full.moss === true,
+    JSON.stringify({ low: r95.low, full: r95.full }));
+  await capture(page, 'round95-dressing.png');
+
   // --- 28n2. The lane rope's rope strand (round 86) -------------------------
   // The three LaneRope boxes (2 cm diameter, 1.92 m2 total) that span the
   // lane are dressed with the round 86 twisted-fibre rope maps at a 0.08 m

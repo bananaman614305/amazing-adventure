@@ -1905,6 +1905,10 @@ function frame() {
   if (environment.updateRipples) environment.updateRipples(dt);
   if (environment.updateMoths) environment.updateMoths(dt);
   if (environment.updatePuddles) environment.updatePuddles(dt);
+  // Round 95: the wildflower and reed clumps sway in the same wind field. Both
+  // are per-frame instanced passes and both stop on the low tier.
+  if (environment.updateWildflowers) environment.updateWildflowers(dt);
+  if (environment.updateReeds) environment.updateReeds(dt);
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
   maybeStartAmbient(dt);
