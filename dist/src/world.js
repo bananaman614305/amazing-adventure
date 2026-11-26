@@ -22,6 +22,18 @@ import { birdFlock, birdFlight, birdHeading, birdGlowLevel, birdsEnabled,
   BIRD_COUNT, BIRD_WING_AMPLITUDE } from './birds.js';
 import { chimneySpawns, smokePuff, smokeGlowLevel, chimneyEnabled,
   CHIMNEY_PUFFS, CHIMNEY_MAX_OPACITY, CHIMNEY_SEED } from './chimney.js';
+import { butterflySpawns, butterflyFlight, butterflyGlowLevel, butterfliesEnabled,
+  BUTTERFLY_COUNT, BUTTERFLY_TINTS, BUTTERFLY_WING_AMPLITUDE } from './butterflies.js';
+import { litterSpawns, litterGlowLevel, litterEnabled,
+  LITTER_COUNT, LITTER_TINTS, LITTER_VARIANTS } from './litter.js';
+import { moteSpawns, motePosition, moteGlowLevel, motesEnabled, MOTE_COUNT } from './motes.js';
+import { windowSpawns, windowGlow, windowGlowLevel, windowsEnabled,
+  WINDOW_COUNT, WINDOW_WARM_TINT, WINDOW_MAX_GLOW } from './windows.js';
+import { ivySpawns, ivyGlowLevel, ivySway, ivyEnabled, IVY_COUNT, IVY_TINTS } from './ivy.js';
+import { spraySpawns, sprayGlowLevel, sprayDrop, sprayEnabled, SPRAY_COUNT,
+  SPRAY_MAX_OPACITY } from './spray.js';
+import { mistSpawns, mistOpacity, mistDrift, mistEnabled, MIST_COUNT,
+  MIST_MAX_OPACITY } from './mist.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -3827,6 +3839,548 @@ export function buildWorld(renderer) {
     placeSmoke(smokeTime);
   }
 
+  // --- Daytime butterflies -------------------------------------------------
+  // The daylight counterpart to the fireflies, at the height a player actually
+  // looks: just above the grass beyond the plaza edge. Two InstancedMeshes, one
+  // per wing, so the whole field is two draw calls and the flap is the instance
+  // matrix's own rotation rather than a morph. src/butterflies.js decides where
+  // each one wanders and how far its wings swing.
+  const butterflySpawnsList = butterfliesEnabled('full')
+    ? butterflySpawns({ count: BUTTERFLY_COUNT })
+    : [];
+  // A wing is a small rounded quad hinged at the body, so a mirrored copy on the
+  // other side reads as a butterfly rather than as two loose scraps. The tint is
+  // per instance, so one material serves all three colourways.
+  const butterflyWingGeometry = new THREE.BufferGeometry();
+  butterflyWingGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    0, 0, -0.05,
+    0.17, 0, -0.07,
+    0.15, 0, 0.07,
+    0, 0, 0.05
+  ]), 3));
+  butterflyWingGeometry.setIndex([0, 1, 2, 0, 2, 3]);
+  butterflyWingGeometry.computeVertexNormals();
+  butterflyWingGeometry.computeBoundingSphere();
+  const butterflyMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0,
+    // Wings are thin and lit from above; an unlit tinted quad at this size reads
+    // better than a shaded one, and the tint comes from the instance colour.
+    fog: true
+  });
+  butterflyMaterial.name = 'ButterflyWing';
+  const butterflyLeftMesh = new THREE.InstancedMesh(
+    butterflyWingGeometry, butterflyMaterial, Math.max(1, butterflySpawnsList.length)
+  );
+  butterflyLeftMesh.name = 'butterfly-wings-left';
+  butterflyLeftMesh.count = butterflySpawnsList.length;
+  butterflyLeftMesh.frustumCulled = false;
+  const butterflyRightMesh = new THREE.InstancedMesh(
+    butterflyWingGeometry, butterflyMaterial, Math.max(1, butterflySpawnsList.length)
+  );
+  butterflyRightMesh.name = 'butterfly-wings-right';
+  butterflyRightMesh.count = butterflySpawnsList.length;
+  butterflyRightMesh.frustumCulled = false;
+  scene.add(butterflyLeftMesh, butterflyRightMesh);
+
+  // The instance colour carries the colourway; it is written once because a
+  // butterfly never changes its pattern, only its position and wing angle.
+  const _bColor = new THREE.Color();
+  for (let i = 0; i < butterflySpawnsList.length; i += 1) {
+    const tint = BUTTERFLY_TINTS[butterflySpawnsList[i].tintIndex % BUTTERFLY_TINTS.length];
+    _bColor.setHex(tint);
+    butterflyLeftMesh.setColorAt(i, _bColor);
+    butterflyRightMesh.setColorAt(i, _bColor);
+  }
+  if (butterflyLeftMesh.instanceColor) butterflyLeftMesh.instanceColor.needsUpdate = true;
+  if (butterflyRightMesh.instanceColor) butterflyRightMesh.instanceColor.needsUpdate = true;
+
+  const _bMatrix = new THREE.Matrix4();
+  const _bPos = new THREE.Vector3();
+  const _bScale = new THREE.Vector3();
+  const _bYaw = new THREE.Quaternion();
+  const _bFlap = new THREE.Quaternion();
+  const _bQuat = new THREE.Quaternion();
+  const _bUp = new THREE.Vector3(0, 1, 0);
+  const _bForward = new THREE.Vector3(0, 0, 1);
+
+  /** Writes both wings for every butterfly at `time`. */
+  function placeButterflies(time) {
+    // The heading is taken from the wander's own motion: sampling the flight a
+    // hundredth of a second ahead and behind gives the travel direction, so a
+    // butterfly always faces the way it is going. A fixed yaw would make it look
+    // like a sticker sliding across the meadow.
+    const ahead = time + 0.01;
+    const behind = time - 0.01;
+    for (let i = 0; i < butterflySpawnsList.length; i += 1) {
+      const spawn = butterflySpawnsList[i];
+      const flight = butterflyFlight(time, spawn);
+      const next = butterflyFlight(ahead, spawn);
+      const prev = butterflyFlight(behind, spawn);
+      const dx = next.x - prev.x;
+      const dz = next.z - prev.z;
+      const scale = spawn.scale;
+      _bPos.set(flight.x, flight.y, flight.z);
+      const heading = (Math.abs(dx) + Math.abs(dz)) > 1e-9 ? Math.atan2(dx, dz) : 0;
+      _bYaw.setFromAxisAngle(_bUp, heading);
+      // The wing rotation is about the body's forward axis, composed after the
+      // yaw so the flap always hinges along the butterfly's own spine.
+      _bFlap.setFromAxisAngle(_bForward, flight.wing);
+      _bQuat.copy(_bYaw).multiply(_bFlap);
+      _bScale.set(scale, scale, scale);
+      _bMatrix.compose(_bPos, _bQuat, _bScale);
+      butterflyRightMesh.setMatrixAt(i, _bMatrix);
+      _bFlap.setFromAxisAngle(_bForward, -flight.wing);
+      _bQuat.copy(_bYaw).multiply(_bFlap);
+      _bScale.set(-scale, scale, scale);
+      _bMatrix.compose(_bPos, _bQuat, _bScale);
+      butterflyLeftMesh.setMatrixAt(i, _bMatrix);
+    }
+    butterflyRightMesh.instanceMatrix.needsUpdate = true;
+    butterflyLeftMesh.instanceMatrix.needsUpdate = true;
+  }
+  placeButterflies(0);
+
+  function paintButterflies(phaseId) {
+    const glow = butterflyGlowLevel(phaseId);
+    butterflyMaterial.opacity = glow;
+    const show = glow > 0 && butterflySpawnsList.length > 0;
+    butterflyLeftMesh.visible = show;
+    butterflyRightMesh.visible = show;
+  }
+
+  let butterflyTime = 0;
+  function updateButterflies(dt) {
+    if (!butterfliesEnabled(environment.quality)) return;
+    if (!butterflySpawnsList.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    butterflyTime += step;
+    if (!butterflyLeftMesh.visible) return;
+    placeButterflies(butterflyTime);
+  }
+
+  // --- Fallen leaves in the meadow ----------------------------------------
+  // Static dressing, one InstancedMesh per leaf shape, tinted per instance from
+  // src/litter.js's palette. Four draw calls for the whole field, no per-frame
+  // pass at all: the leaves lie still, which is also what makes them read as
+  // litter rather than as another animated effect.
+  const litterSpawnsList = litterEnabled('full') ? litterSpawns({ count: LITTER_COUNT }) : [];
+  const litterMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    roughness: 0.92,
+    metalness: 0,
+    side: THREE.DoubleSide,
+    // Litter is a ground detail; letting it write depth keeps it from sorting
+    // oddly against the grass blades standing through it.
+    depthWrite: true
+  });
+  litterMaterial.name = 'MeadowLitter';
+
+  // Four leaf silhouettes, each a flat fan of quads lying in the ground plane.
+  // The shapes differ only in outline, so a handful of vertices each.
+  function litterLeafGeometry(variant) {
+    const shapes = [
+      // 0: a simple pointed oval
+      [[-0.09, 0, -0.02], [0, 0, -0.12], [0.09, 0, -0.02], [0, 0, 0.09]],
+      // 1: a broader, rounder leaf
+      [[-0.11, 0, 0], [0, 0, -0.1], [0.11, 0, 0], [0, 0, 0.1]],
+      // 2: a long narrow leaf (willow-ish)
+      [[-0.05, 0, -0.06], [0, 0, -0.16], [0.05, 0, -0.06], [0, 0, 0.1]],
+      // 3: a lobed leaf, read as a sycamore
+      [[-0.12, 0, -0.03], [0, 0, -0.13], [0.12, 0, -0.03], [0, 0, 0.11]]
+    ];
+    const pts = shapes[variant % shapes.length];
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      pts[0][0], 0, pts[0][2],
+      pts[1][0], 0, pts[1][2],
+      pts[2][0], 0, pts[2][2],
+      pts[3][0], 0, pts[3][2]
+    ]), 3));
+    geometry.setIndex([0, 1, 2, 0, 2, 3]);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    return geometry;
+  }
+
+  const litterMeshes = [];
+  for (let v = 0; v < LITTER_VARIANTS; v += 1) {
+    const ofVariant = litterSpawnsList.filter((leaf) => leaf.variant === v);
+    const mesh = new THREE.InstancedMesh(
+      litterLeafGeometry(v), litterMaterial, Math.max(1, ofVariant.length)
+    );
+    mesh.name = `meadow-litter-${v}`;
+    mesh.count = ofVariant.length;
+    mesh.visible = ofVariant.length > 0;
+    mesh.receiveShadow = true;
+    const _lMatrix = new THREE.Matrix4();
+    const _lPos = new THREE.Vector3();
+    const _lQuat = new THREE.Quaternion();
+    const _lScale = new THREE.Vector3();
+    const _lColor = new THREE.Color();
+    const _lUp = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < ofVariant.length; i += 1) {
+      const leaf = ofVariant[i];
+      // A hand's width above the ground: lying exactly on the plane would z-fight
+      // with the meadow floor and vanish at grazing angles.
+      _lPos.set(leaf.x, 0.02, leaf.z);
+      _lQuat.setFromAxisAngle(_lUp, leaf.yaw);
+      _lScale.set(leaf.scale, leaf.scale, leaf.scale);
+      _lMatrix.compose(_lPos, _lQuat, _lScale);
+      mesh.setMatrixAt(i, _lMatrix);
+      _lColor.setHex(LITTER_TINTS[leaf.tint % LITTER_TINTS.length]);
+      mesh.setColorAt(i, _lColor);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    scene.add(mesh);
+    litterMeshes.push({ mesh, count: ofVariant.length });
+  }
+
+  function paintLitter(phaseId) {
+    const glow = litterGlowLevel(phaseId);
+    // Litter is not a light: the phase multiplier only dims its tint, which is
+    // done by the scene lighting itself. Visibility is the only thing the phase
+    // needs to own, and it never goes to zero, so the field simply stays.
+    litterMaterial.opacity = 1;
+    const on = glow > 0 && litterEnabled(environment.quality);
+    for (const { mesh, count } of litterMeshes) mesh.visible = on && count > 0;
+  }
+
+  // --- Sunlit dust motes ---------------------------------------------------
+  // Tiny bright specks drifting in the daylight, the low-cost way to put depth
+  // in the air between the player and the wall. src/motes.js bounds every mote's
+  // wander so none can drift out of its own small box, and the phase table is
+  // exactly 0 at night so the mesh is simply hidden then.
+  const moteSpawnsList = motesEnabled('full') ? moteSpawns({ count: MOTE_COUNT }) : [];
+  const moteGeometry = new THREE.PlaneGeometry(1, 1);
+  const moteMaterial = new THREE.MeshBasicMaterial({
+    color: 0xfff3d6,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: false
+  });
+  moteMaterial.name = 'DustMote';
+  const moteMesh = new THREE.InstancedMesh(
+    moteGeometry, moteMaterial, Math.max(1, moteSpawnsList.length)
+  );
+  moteMesh.name = 'dust-motes';
+  moteMesh.count = moteSpawnsList.length;
+  moteMesh.visible = false;
+  moteMesh.renderOrder = 2;
+  scene.add(moteMesh);
+
+  const _mMatrix = new THREE.Matrix4();
+  const _mPos = new THREE.Vector3();
+  const _mScale = new THREE.Vector3();
+  const _mQuat = new THREE.Quaternion();
+
+  function placeMotes(time) {
+    for (let i = 0; i < moteSpawnsList.length; i += 1) {
+      const spawn = moteSpawnsList[i];
+      const p = motePosition(spawn, time);
+      _mPos.set(p.x, p.y, p.z);
+      _mScale.setScalar(spawn.size);
+      _mMatrix.compose(_mPos, _mQuat, _mScale);
+      moteMesh.setMatrixAt(i, _mMatrix);
+    }
+    moteMesh.instanceMatrix.needsUpdate = true;
+  }
+  placeMotes(0);
+
+  function paintMotes(phaseId) {
+    const glow = moteGlowLevel(phaseId);
+    moteMaterial.opacity = 0.55 * glow;
+    moteMesh.visible = glow > 0 && moteSpawnsList.length > 0
+      && motesEnabled(environment.quality);
+  }
+
+  let moteTime = 0;
+  function updateMotes(dt) {
+    if (!motesEnabled(environment.quality)) return;
+    if (!moteSpawnsList.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    moteTime += step;
+    if (!moteMesh.visible) return;
+    placeMotes(moteTime);
+  }
+
+  // --- Lit cottage windows -------------------------------------------------
+  // The village's life at night. src/windows.js owns the whole schedule -- where
+  // each pane sits, how warm it is and when its owner goes to bed -- and this
+  // block only turns each spawn into one small emissive quad on a wall face.
+  //
+  // The panes go on the border wall's inner faces rather than on the modelled
+  // house alone. There is exactly one house model in the world, and a single lit
+  // building would read as a set piece; a scatter of panes at different heights
+  // along all four walls is what makes the plaza feel enclosed by a village. The
+  // schedule's own ring (8-18 m) already sits out among the walls, so the quads
+  // are simply projected onto the nearest face, which also guarantees every pane
+  // is square to the wall it is on and none floats in mid-air.
+  const windowSpawnsList = windowsEnabled('full') ? windowSpawns({ count: WINDOW_COUNT }) : [];
+  const windowMaterial = new THREE.MeshBasicMaterial({
+    color: WINDOW_WARM_TINT,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: true
+  });
+  windowMaterial.name = 'CottageWindow';
+  const windowGeometry = new THREE.PlaneGeometry(0.62, 0.78);
+  const windowMesh = new THREE.InstancedMesh(
+    windowGeometry, windowMaterial, Math.max(1, windowSpawnsList.length)
+  );
+  windowMesh.name = 'cottage-windows';
+  windowMesh.count = windowSpawnsList.length;
+  windowMesh.visible = false;
+  windowMesh.frustumCulled = false;
+  scene.add(windowMesh);
+
+  // Project a schedule position onto the nearest of the four wall inner faces.
+  // The world is a 34 m square, so the inner faces are at +/-HALF on x and z; the
+  // wall thickness is 1 m, so a pane sits half a metre proud of the face to keep
+  // it out of the stonework's z-fighting range.
+  const WALL_INNER = HALF - 0.52;
+  function faceForWindow(x, z) {
+    // Whichever axis the point is furthest out on is the wall it is nearest.
+    if (Math.abs(x) >= Math.abs(z)) {
+      return x >= 0
+        ? { nx: -1, nz: 0, px: WALL_INNER, pz: Math.max(-WALL_INNER, Math.min(WALL_INNER, z)) }
+        : { nx: 1, nz: 0, px: -WALL_INNER, pz: Math.max(-WALL_INNER, Math.min(WALL_INNER, z)) };
+    }
+    return z >= 0
+      ? { nx: 0, nz: -1, px: Math.max(-WALL_INNER, Math.min(WALL_INNER, x)), pz: WALL_INNER }
+      : { nx: 0, nz: 1, px: Math.max(-WALL_INNER, Math.min(WALL_INNER, x)), pz: -WALL_INNER };
+  }
+
+  const windowFaces = windowSpawnsList.map((spawn) => faceForWindow(spawn.x, spawn.z));
+  const _wMatrix = new THREE.Matrix4();
+  const _wPos = new THREE.Vector3();
+  const _wScale = new THREE.Vector3(1, 1, 1);
+  const _wQuat = new THREE.Quaternion();
+  const _wUp = new THREE.Vector3(0, 1, 0);
+
+  /** Writes every pane's transform and per-instance colour for `night`. */
+  let windowNight = 0;
+
+  function paintWindows(phaseId, night) {
+    const coarse = (phaseId === 'dusk' ? 0.18 : phaseId === 'night' ? 0.62 : 0);
+    if (!Number.isFinite(night)) night = coarse;
+    windowNight = Number.isFinite(night) ? Math.min(1, Math.max(0, night)) : 0;
+    const level = windowGlowLevel(phaseId);
+    const enabled = windowsEnabled(environment.quality);
+    let anyLit = false;
+    const colour = new THREE.Color();
+    for (let i = 0; i < windowSpawnsList.length; i += 1) {
+      const spawn = windowSpawnsList[i];
+      const face = windowFaces[i];
+      const glow = enabled ? windowGlow(phaseId, spawn, night) : 0;
+      const lit = glow > 0;
+      if (lit) anyLit = true;
+      _wPos.set(face.px, spawn.y, face.pz);
+      // The plane's own normal is +z, so a yaw of atan2(nx, nz) turns it to face
+      // out of the wall into the plaza.
+      _wQuat.setFromAxisAngle(_wUp, Math.atan2(face.nx, face.nz));
+      _wMatrix.compose(_wPos, _wQuat, _wScale);
+      windowMesh.setMatrixAt(i, _wMatrix);
+      // Brightness is carried as instance colour rather than per-instance alpha:
+      // an InstancedMesh shares one material, and scaling a lit pane to nothing
+      // would also shrink its frame. Dimming the emissive tint is the honest
+      // analogue of a lamp behind glass, and it leaves the quad's size stable.
+      const k = glow > 0 ? Math.max(0.12, glow / WINDOW_MAX_GLOW) : 0;
+      colour.setHex(WINDOW_WARM_TINT).multiplyScalar(k);
+      windowMesh.setColorAt(i, colour);
+    }
+    windowMesh.instanceMatrix.needsUpdate = true;
+    if (windowMesh.instanceColor) windowMesh.instanceColor.needsUpdate = true;
+    windowMaterial.opacity = level > 0 ? 0.92 : 0;
+    windowMesh.visible = enabled && anyLit;
+  }
+  paintWindows('day', 0);
+
+  // --- Ivy on the border walls ---------------------------------------------
+  const ivySpawnsList = ivyEnabled('full')
+    ? ivySpawns({
+        count: IVY_COUNT,
+        faces: [
+          { x: 0, z: HALF - 0.5, yaw: Math.PI, length: WORLD_SIZE },
+          { x: 0, z: -(HALF - 0.5), yaw: 0, length: WORLD_SIZE },
+          { x: HALF - 0.5, z: 0, yaw: -Math.PI / 2, length: WORLD_SIZE },
+          { x: -(HALF - 0.5), z: 0, yaw: Math.PI / 2, length: WORLD_SIZE }
+        ]
+      })
+    : [];
+  const ivyMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 1,
+    roughness: 0.85, metalness: 0
+  });
+  ivyMaterial.name = 'IvyPatch';
+  const ivyPatches = ivySpawnsList.map((spawn) => {
+    const geometry = new THREE.PlaneGeometry(spawn.width, spawn.span);
+    const mesh = new THREE.Mesh(geometry, ivyMaterial.clone());
+    mesh.name = 'ivy-patch';
+    mesh.position.set(
+      spawn.x + Math.sin(spawn.yaw) * 0.06,
+      spawn.baseY + spawn.span / 2,
+      spawn.z + Math.cos(spawn.yaw) * 0.06
+    );
+    mesh.rotation.y = spawn.yaw;
+    const tint = IVY_TINTS[spawn.tint % IVY_TINTS.length];
+    mesh.material.color.setHex(tint);
+    mesh.material.name = 'IvyPatch';
+    scene.add(mesh);
+    return { mesh, spawn };
+  });
+
+  let ivyTime = 0;
+  function placeIvy() {
+    for (let i = 0; i < ivyPatches.length; i += 1) {
+      const entry = ivyPatches[i];
+      const { sway, brightness } = ivySway(entry.spawn, ivyTime);
+      entry.mesh.rotation.z = sway;
+      entry.mesh.material.opacity = brightness * ivyGlowLevel(environment.phase);
+    }
+  }
+  placeIvy();
+
+  function paintIvy(phaseId) {
+    const glow = ivyGlowLevel(phaseId);
+    const on = glow > 0 && ivyEnabled(environment.quality);
+    for (const entry of ivyPatches) {
+      entry.mesh.visible = on;
+      if (on) entry.mesh.material.opacity = glow;
+    }
+  }
+  paintIvy('day');
+
+  function updateIvy(dt) {
+    if (!ivyEnabled(environment.quality)) return;
+    if (!ivyPatches.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    ivyTime += step;
+    if (ivyPatches.every((entry) => !entry.mesh.visible)) return;
+    placeIvy();
+  }
+
+  // --- Fountain spray ------------------------------------------------------
+  const spraySpawnsList = sprayEnabled('full')
+    ? spraySpawns({ count: SPRAY_COUNT })
+    : [];
+  const sprayGeometry = new THREE.PlaneGeometry(1, 1);
+  const sprayMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: 1, depthWrite: false,
+    side: THREE.DoubleSide, fog: true
+  });
+  sprayMaterial.name = 'FountainSpray';
+  const sprayMesh = new THREE.InstancedMesh(
+    sprayGeometry, sprayMaterial, Math.max(1, spraySpawnsList.length)
+  );
+  sprayMesh.name = 'fountain-spray';
+  sprayMesh.count = spraySpawnsList.length;
+  sprayMesh.frustumCulled = false;
+  sprayMesh.position.set(FOUNTAIN_SPOT.x, 0, FOUNTAIN_SPOT.z);
+  scene.add(sprayMesh);
+
+  const _sMatrix = new THREE.Matrix4();
+  const _sPos = new THREE.Vector3();
+  const _sScale = new THREE.Vector3();
+  const _sQuat = new THREE.Quaternion();
+  const _sColor = new THREE.Color();
+
+  function placeSpray(time) {
+    for (let i = 0; i < spraySpawnsList.length; i += 1) {
+      const spawn = spraySpawnsList[i];
+      const drop = sprayDrop(spawn, time);
+      _sPos.set(drop.x, drop.y, drop.z);
+      _sScale.setScalar(drop.size);
+      _sMatrix.compose(_sPos, _sQuat, _sScale);
+      sprayMesh.setMatrixAt(i, _sMatrix);
+      const k = drop.opacity > 0 ? drop.opacity / SPRAY_MAX_OPACITY : 0;
+      _sColor.setRGB(k, k, k);
+      sprayMesh.setColorAt(i, _sColor);
+    }
+    sprayMesh.instanceMatrix.needsUpdate = true;
+    if (sprayMesh.instanceColor) sprayMesh.instanceColor.needsUpdate = true;
+  }
+  placeSpray(0);
+
+  function paintSpray(phaseId) {
+    const glow = sprayGlowLevel(phaseId);
+    sprayMaterial.opacity = glow;
+    sprayMesh.visible = glow > 0 && spraySpawnsList.length > 0
+      && sprayEnabled(environment.quality);
+  }
+  paintSpray('day');
+
+  let sprayTime = 0;
+  function updateSpray(dt) {
+    if (!sprayEnabled(environment.quality)) return;
+    if (!spraySpawnsList.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    sprayTime += step;
+    if (!sprayMesh.visible) return;
+    placeSpray(sprayTime);
+  }
+
+  // --- Ground mist ---------------------------------------------------------
+  const mistSpawnsList = mistEnabled('full')
+    ? mistSpawns({ count: MIST_COUNT })
+    : [];
+  const mistGeometry = new THREE.PlaneGeometry(1, 1);
+  const mistMaterial = new THREE.MeshBasicMaterial({
+    color: 0xdfe7f0, transparent: true, opacity: MIST_MAX_OPACITY,
+    depthWrite: false, side: THREE.DoubleSide, fog: true
+  });
+  mistMaterial.name = 'GroundMist';
+  const mistMesh = new THREE.InstancedMesh(
+    mistGeometry, mistMaterial, Math.max(1, mistSpawnsList.length)
+  );
+  mistMesh.name = 'ground-mist';
+  mistMesh.count = mistSpawnsList.length;
+  mistMesh.frustumCulled = false;
+  scene.add(mistMesh);
+
+  const _gMatrix = new THREE.Matrix4();
+  const _gPos = new THREE.Vector3();
+  const _gScale = new THREE.Vector3();
+  const _gQuat = new THREE.Quaternion();
+
+  function placeMist(time) {
+    for (let i = 0; i < mistSpawnsList.length; i += 1) {
+      const spawn = mistSpawnsList[i];
+      const p = mistDrift(spawn, time);
+      _gPos.set(p.x, spawn.y, p.z);
+      _gScale.setScalar(spawn.size);
+      _gMatrix.compose(_gPos, _gQuat, _gScale);
+      mistMesh.setMatrixAt(i, _gMatrix);
+    }
+    mistMesh.instanceMatrix.needsUpdate = true;
+  }
+  placeMist(0);
+
+  function paintMist(phaseId) {
+    const glow = mistOpacity(phaseId);
+    mistMaterial.opacity = MIST_MAX_OPACITY * glow;
+    mistMesh.visible = glow > 0 && mistSpawnsList.length > 0
+      && mistEnabled(environment.quality);
+  }
+  paintMist('day');
+
+  let mistTime = 0;
+  function updateMist(dt) {
+    if (!mistEnabled(environment.quality)) return;
+    if (!mistSpawnsList.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    mistTime += step;
+    if (!mistMesh.visible) return;
+    placeMist(mistTime);
+  }
+
   // The per-instance scratch objects for the sway pass, allocated once so the
   // frame loop does no allocation.
   const swayMatrix = new THREE.Matrix4();
@@ -4031,6 +4585,87 @@ export function buildWorld(renderer) {
     get smokeOn() {
       return chimneyEnabled(environment.quality);
     },
+    // Round 93: ivy, fountain spray, ground mist.
+    ivy: ivyPatches.map((entry) => entry.mesh),
+    ivyCount: ivyPatches.length,
+    paintIvy(phaseId) {
+      paintIvy(phaseId);
+    },
+    updateIvy(dt) {
+      updateIvy(dt);
+    },
+    get ivyOn() {
+      return ivyEnabled(environment.quality);
+    },
+    spray: sprayMesh,
+    sprayCount: spraySpawnsList.length,
+    paintSpray(phaseId) {
+      paintSpray(phaseId);
+    },
+    updateSpray(dt) {
+      updateSpray(dt);
+    },
+    get sprayOn() {
+      return sprayEnabled(environment.quality);
+    },
+    mist: mistMesh,
+    mistCount: mistSpawnsList.length,
+    paintMist(phaseId) {
+      paintMist(phaseId);
+    },
+    updateMist(dt) {
+      updateMist(dt);
+    },
+    get mistOn() {
+      return mistEnabled(environment.quality);
+    },
+    // Round 93: the daytime butterfly field.
+    butterflyWings: [butterflyLeftMesh, butterflyRightMesh],
+    butterflyCount: butterflySpawnsList.length,
+    paintButterflies(phaseId) {
+      paintButterflies(phaseId);
+    },
+    updateButterflies(dt) {
+      updateButterflies(dt);
+    },
+    get butterfliesOn() {
+      return butterfliesEnabled(environment.quality);
+    },
+    // Round 93: the fallen-leaf scatter.
+    litter: litterMeshes.map((entry) => entry.mesh),
+    litterCount: litterSpawnsList.length,
+    paintLitter(phaseId) {
+      paintLitter(phaseId);
+    },
+    get litterOn() {
+      return litterEnabled(environment.quality);
+    },
+    // Round 93: the sunlit dust motes.
+    motes: moteMesh,
+    moteCount: moteSpawnsList.length,
+    paintMotes(phaseId) {
+      paintMotes(phaseId);
+    },
+    updateMotes(dt) {
+      updateMotes(dt);
+    },
+    get motesOn() {
+      return motesEnabled(environment.quality);
+    },
+    // Round 93: the lit cottage windows.
+    windows: windowMesh,
+    windowCount: windowSpawnsList.length,
+    paintWindows(phaseId, night) {
+      paintWindows(phaseId, night);
+    },
+    updateWindows(night) {
+      const next = Number.isFinite(night) ? Math.min(1, Math.max(0, night)) : 0;
+      if (Math.abs(next - windowNight) < 0.01) return;
+      paintWindows(environment.phase, next);
+    },
+    get windowsOn() {
+      return windowsEnabled(environment.quality);
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -4100,6 +4735,15 @@ export function buildWorld(renderer) {
         smokeMaterial.opacity = CHIMNEY_MAX_OPACITY * smokeGlow;
         smokeMesh.visible = smokeGlow > 0 && smokeInstances.length > 0;
       }
+      // Round 93: the new dressing fields re-derive through their own paint
+      // functions, each of which already consults environment.quality.
+      if (environment.paintButterflies) environment.paintButterflies(environment.phase);
+      if (environment.paintLitter) environment.paintLitter(environment.phase);
+      if (environment.paintMotes) environment.paintMotes(environment.phase);
+      if (environment.paintWindows) environment.paintWindows(environment.phase);
+      if (environment.paintIvy) environment.paintIvy(environment.phase);
+      if (environment.paintSpray) environment.paintSpray(environment.phase);
+      if (environment.paintMist) environment.paintMist(environment.phase);
       // Contact darkening rides on vertex colours; disable it on the low tier by
       // turning the attribute off on every dressed prop mesh.
       for (const { group } of propGroups) {
@@ -4394,6 +5038,13 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintSmoke) {
     environment.paintSmoke(phaseId);
   }
+  if (environment.paintButterflies) environment.paintButterflies(phaseId);
+  if (environment.paintLitter) environment.paintLitter(phaseId);
+  if (environment.paintMotes) environment.paintMotes(phaseId);
+  if (environment.paintWindows) environment.paintWindows(phaseId);
+  if (environment.paintIvy) environment.paintIvy(phaseId);
+  if (environment.paintSpray) environment.paintSpray(phaseId);
+  if (environment.paintMist) environment.paintMist(phaseId);
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,
   // night shows it full. The mesh itself keeps rendering (one draw call) so
