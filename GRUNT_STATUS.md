@@ -12,41 +12,34 @@
 
 ## Current task
 
-**Round 92: daytime bird flock + chimney smoke columns -- VERIFIED.**
+**Round 93: seven dressing fields integrated (butterflies, litter, motes, windows, ivy, spray, mist) + nightFraction.**
 
-Desktop suite: **319/319 PASS, 0 FAIL** (f80e5da), including all 6 new
-dressing checks: bunting flutter moved (28 flags, phaseSpread 0.0037), banner
-canvas moved, fireflies 64 (off by day, lit night blink 0.997, frozen low),
-birds 8 (both wings visible day, moved minY 15.78 maxY 21.82 maxR 17.26, hidden
-night and low), chimney smoke 28 puffs / 4 sites (day opacity 0.138, dusk 0.55,
-night 0.44, moved, topY 11.74, hidden low). No console errors.
+Unit suite: **1243/1243 pass** at 0e0c95d (dist restamped). All new pure modules
+integrated into `src/world.js`: butterflies (two wing InstancedMeshes, wander +
+flap), litter (4 leaf silhouettes, area-uniform scatter), motes (additive specks,
+day-only), cottage windows (12 panes projected onto border-wall faces, bedtime
+schedule via nightFraction), ivy (14 wall patches, sway + breath), fountain spray
+(64 droplets, polar fall), ground mist (14 low quads, area-uniform). `nightFraction`
+added to `src/daynight.js` (smooth 0..1 ramp over dusk+night) so a window can go
+out mid-phase. `src/main.js` frame loop calls updateButterflies/updateMotes/
+updateWindows/updateIvy/updateSpray/updateMist. `setQuality` re-derives all seven.
+Manifest: 140 required files. dist restamped at 0e0c95d.
 
-Unit suite: 1072/1072 pass. Mobile suite: attempted, host cannot boot under
-SwiftShader mobile emulation (infrastructure limit). dist restamped at f80e5da.
-Commits: 86d28be (sources), d034d5e (fixes: smoke sRGB tag, matrixDiff snapshot,
-dusk clock 80), 637b33b (checkpoint), f80e5da (dist).
+Parallel split (standing `parallel-build-20261125b`): prior cycles launched
+subagents for litter (26 tests), motes (23), ripples (27), ivy (35), spray (30),
+mist (28); this cycle integrated all seven plus nightFraction, then committed
+sources (da85632) and dist (0e0c95d). Integration touches shared world.js so
+done alone, recorded here.
 
-Parallel split (standing `parallel-build-20261125b`): previous cycle launched
-birds + chimney subagents; this cycle integrated them and added browser checks,
-which touch world.js and cannot be split, so done alone.
-
-Pending: publish via /worker/state/outbox/publish.json bundling Rounds 89-92;
-mobile suite infrastructure limit noted.
-
-
-
-Pure modules: `src/birds.js` (subagent, BIRD_COUNT 8, orbit 15-23 m, flap 0.5 rad / 0.62 s, PHASE_GLOW day 1 / dusk 0.5 / night 0) and `src/chimney.js` (subagent, CHIMNEY_COUNT 4 plumes x CHIMNEY_PUFFS 7 puffs = 28 billboards, phase glow dusk 1 / night 0.8 / day 0.25). Both reviewed line by line; added `birdHeading` (tangent) and `chimneySpawns({sites})` (real roofs) with focused tests. Unit tests: birds 48 + chimney 51 = 99, all pass.
-
-Integration (this round): `src/world.js` builds two InstancedMesh wing passes (bird-wings-left/right) over a shared triangle and a crossed-quad chimney-smoke mesh (chimney-smoke) over 4 real sites (house chimney + 3 outside the walls). `src/main.js` calls updateBirds/updateSmoke each frame. `src/manifest.js` lists both. `scripts/test-round2.mjs` gained 6 live dressing checks (flutter, fireflies, birds, smoke) in one page.evaluate, mirroring the meadow block.
-
-Subagent split recorded per `parallel-build-20261125b`: this cycle launched two review-and-integrate subagents (birds, chimney) in the previous cycle; this cycle's work is integration + browser checks and cannot be split further (shared world.js), so done alone.
-
-Pending: desktop browser suite run; mobile suite retry; dist restamp; publish.
+Pending: desktop browser suite; mobile suite (infrastructure-limited host);
+publish via publish.json.
 
 ## Next steps
-1. Publish via /worker/state/outbox/publish.json with head f80e5dac8e8d8d67442220601706629f7d9fa96d (Round 89-92).
-2. Next graphics milestone: integrate butterflies.js + windows.js (both committed but not yet in world.js); or Blender geometry work.
-3. Run desktop + mobile suites once per round; record results.
+1. Run desktop browser suite once on 0e0c95d, recording evidence; run mobile suite
+   and note the SwiftShader infrastructure limit honestly.
+2. Publish via /worker/state/outbox/publish.json with head 0e0c95d (Round 89-93).
+3. Next graphics milestone: ripples integration (fountain basin rings) + spray
+   already integrated; or Blender geometry work (house/terrace detail).
 
 ## Round 89 complete (historical)
 
