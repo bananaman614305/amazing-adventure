@@ -2157,6 +2157,25 @@ try {
         repeat: plaza.material.map ? [plaza.material.map.repeat.x, plaza.material.map.repeat.y] : null,
         color: plaza.material.color?.getHexString?.()
       } : null,
+      // Round 100: the plaza was re-dressed from the second-generation flagstone
+      // set. The mesh is still the same CircleGeometry, so its UVs run 0..1 and
+      // the tiling lives on the texture repeat — the span is reported as evidence
+      // that the upgrade did not quietly switch to metre projection. The AO cue
+      // is baked into the set, so it is read straight off the material; the low
+      // tier drops it by design.
+      plazaSet: api.assetState().plazaFloorDetail || null,
+      plazaAo: Boolean(plaza && plaza.material && plaza.material.aoMap),
+      plazaAoIntensity: plaza && plaza.material ? plaza.material.aoMapIntensity : null,
+      plazaUvSpan: plaza ? uvSpan(plaza) : null,
+      // Read the image source rather than trusting the asset-state flag: the flag
+      // only says the loader ran, the src says which file actually reached the
+      // GPU. A browser that exposes no src reports isV2 false so the check fails
+      // loudly instead of passing on a missing value.
+      plazaTextureSet: (() => {
+        const img = plaza && plaza.material && plaza.material.map && plaza.material.map.image;
+        const src = img && (img.currentSrc || img.src || '');
+        return { src: String(src).split('/').pop(), isV2: String(src).includes('plaza_floor_v2_albedo') };
+      })(),
       terrace: {
         tread: describe(named('terrace-tread')),
         ramp: describe(named('terrace-ramp')),
@@ -2202,6 +2221,29 @@ try {
     assets.plazaMaps && assets.plazaMaps.repeat[0] === 6 &&
     assets.plazaMaps.repeat[1] === 6 && assets.plazaMaps.color === 'ffffff',
     JSON.stringify({ repeat: assets.plazaMaps && assets.plazaMaps.repeat, color: assets.plazaMaps && assets.plazaMaps.color }));
+
+  // Round 100: the flagstone v2 set. The three checks above prove *a* flagstone
+  // material is bound; these prove it is the second-generation set and that the
+  // loader's own record of the upgrade agrees with what reached the material.
+  checks.check('the plaza is dressed from the second-generation flagstone set',
+    assets.plazaTextureSet && assets.plazaTextureSet.isV2 === true,
+    JSON.stringify({ src: assets.plazaTextureSet && assets.plazaTextureSet.src,
+                     isV2: assets.plazaTextureSet && assets.plazaTextureSet.isV2 }));
+
+  checks.check('the plaza upgrade reports its texture set, tile and repeat',
+    assets.plazaSet && assets.plazaSet.set === 'v2' && assets.plazaSet.tileMeters === 3 &&
+    Array.isArray(assets.plazaSet.repeat) &&
+    assets.plazaSet.repeat[0] === 6 && assets.plazaSet.repeat[1] === 6 &&
+    assets.plazaSet.maps && assets.plazaSet.maps.length === 3,
+    JSON.stringify(assets.plazaSet));
+
+  // The AO map is dropped on the low tier by design, and a slow headless run on
+  // this GPU-less host may let adaptive quality fall mid-suite. So this is a
+  // check that the baked cue is present with a live intensity, not that it holds
+  // any particular value.
+  checks.check('the plaza keeps its baked AO cue on the full tier',
+    assets.plazaAo === true && assets.plazaAoIntensity > 0,
+    JSON.stringify({ ao: assets.plazaAo, intensity: assets.plazaAoIntensity }));
 
   // Round 62: the north terrace is the largest untextured grey mass left in the
   // plaza view. Tread, ramp deck and parapet share the wall stone family but must

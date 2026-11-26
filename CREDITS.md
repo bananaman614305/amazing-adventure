@@ -215,6 +215,25 @@ its procedural stand-in or flat colour and stays fully playable.
   maps, so the plaza and the border walls are now visually distinct surfaces.
   Fully procedural; no outside images, datasets or models to license.
 
+### Round 100 additions
+
+- `assets/textures/plaza_floor_v2_{albedo,normal,rough}.webp` —
+  `art/kaggle/plaza_floor_v2_textures.py`, run on the private Kaggle notebook
+  (Tesla T4, CuPy backend, 13.0 s including the lit preview). A second-generation
+  flagstone set for the plaza, replacing the round-61 maps in `upgradePlazaFloor()`
+  (the round-61 files stay shipped and are the documented fallback if a v2 file is
+  missing). What changed: the per-stone jitter is stronger (0.40 of a cell) and
+  each stone is inset toward its own centre, so the joints stagger and courses
+  break instead of lining up across the tile; each stone carries its own warm/cool
+  tint (honey and slate rather than one stamped grey); a broad damp field darkens
+  and cools the worn hollows; the joint is deeper (0.16 of normalised height
+  against 0.10) with an irregular chipped arris, and each slab dishes by its own
+  amount. Albedo/normal/roughness 512x512, seam ratios albedo [0.193, 0.154],
+  normal [0.255, 0.194], rough [0.225, 0.195] (all well under 3 = no visible
+  seam). Shipped as high-quality lossy WebP (Pillow quality 88, method 6):
+  9.7 KB / 23.5 KB / 12.5 KB against 164 KB / 208 KB / 111 KB for the source
+  PNGs. Fully procedural; no outside images, datasets or models to license.
+
 ### Round 71 additions
 
 - `assets/banner.glb` — `art/blender/make_banner.py`. 4 meshes, 17.6 KB: a subdivided cloth panel (BannerCanvas, 384 tris, fold wave + sagging hem), a painted-iron rod, finials, and hanging straps. Authored around the cloth centre with front facing glTF +Z, so the game sets position only. Footprint measured off the cloth only (rod span is finial overhang). Same licence as the game (generated, not downloaded).

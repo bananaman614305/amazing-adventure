@@ -18,6 +18,8 @@ import {
   BANNER_ASSET, BANNER_MODEL_SIZE, BANNER_TEXTURE_FILES, loadBanner,
   CLOTH_TEXTURE_FILES, FELT_TEXTURE_FILES, FELT_FAMILY, BUNTING_TILE_METERS,
   WATER_TEXTURE_FILES, WATER_TILE_METERS,
+  PLAZA_FLOOR_V2_TEXTURE_FILES, PLAZA_TEXTURE_TILE_METERS,
+  PLAZA_TEXTURE_SPAN_METERS, plazaFloorRepeat,
   PLAZA_AO_MAP_CHANNEL, plazaAoMapIntensity, plazaAoMapIntensityForQuality,
   createPlazaAoTexture, contactDarkeningColors, applyContactDarkeningGeometry,
   TERRACE_DETAIL_ASSET, TERRACE_DETAIL_MODEL_SIZE, loadTerraceDetail,
@@ -118,6 +120,59 @@ test('the plaza floor family is a separate set of files from the lane cobbles', 
 test('the plaza floor maps are all present on disk', () => {
   for (const url of Object.values(PLAZA_FLOOR_TEXTURE_FILES)) {
     assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${url} exists`);
+  }
+});
+
+test('the plaza v2 family names exactly the three v2 webp maps and is its own object', () => {
+  // The second-generation set is a separate family, not an alias: if a regression
+  // pointed PLAZA_FLOOR_V2_TEXTURE_FILES at the round-61 object, the browser check
+  // could no longer tell the two generations apart and v2 would silently render
+  // the old maps. So assert both the exact paths and object identity.
+  assert.deepEqual(PLAZA_FLOOR_V2_TEXTURE_FILES, {
+    map: 'assets/textures/plaza_floor_v2_albedo.webp',
+    normalMap: 'assets/textures/plaza_floor_v2_normal.webp',
+    roughnessMap: 'assets/textures/plaza_floor_v2_rough.webp'
+  });
+  assert.deepEqual(Object.keys(PLAZA_FLOOR_V2_TEXTURE_FILES).sort(),
+    ['map', 'normalMap', 'roughnessMap']);
+  assert.notEqual(PLAZA_FLOOR_V2_TEXTURE_FILES, PLAZA_FLOOR_TEXTURE_FILES,
+    'v2 must be a distinct object, not an alias of the round-61 family');
+  // And no map may be shared with the first-generation set.
+  const v1 = new Set(Object.values(PLAZA_FLOOR_TEXTURE_FILES));
+  for (const url of Object.values(PLAZA_FLOOR_V2_TEXTURE_FILES)) {
+    assert.equal(v1.has(url), false, `${url} is a v2 map, not a reused round-61 one`);
+  }
+});
+
+test('the plaza spans 18 m at a 3 m tile, so the repeat is 6x6 and stays total', () => {
+  // The disc is 18 m across (9 m radius); a 3 m tile over that span is 6 repeats.
+  assert.equal(PLAZA_TEXTURE_TILE_METERS, 3);
+  assert.equal(PLAZA_TEXTURE_SPAN_METERS, 18);
+  assert.deepEqual(plazaFloorRepeat(), { repeatX: 6, repeatY: 6 });
+  // The single source of truth reads the same whatever the caller passes, and a
+  // missing argument must not throw.
+  assert.deepEqual(plazaFloorRepeat(true), { repeatX: 6, repeatY: 6 });
+  assert.deepEqual(plazaFloorRepeat(false), { repeatX: 6, repeatY: 6 });
+  assert.deepEqual(plazaFloorRepeat(undefined), { repeatX: 6, repeatY: 6 });
+  // It guards non-finite input exactly the way textureRepeat does, because it is
+  // textureRepeat: plazaFloorRepeat takes no numeric args, so totality is proven by
+  // the no-arg call above and the guard is pinned against textureRepeat directly.
+  assert.deepEqual(plazaFloorRepeat(),
+    textureRepeat(PLAZA_TEXTURE_SPAN_METERS, PLAZA_TEXTURE_SPAN_METERS, PLAZA_TEXTURE_TILE_METERS));
+  const guarded = textureRepeat(NaN, undefined, NaN);
+  assert.ok(Number.isFinite(guarded.repeatX) && Number.isFinite(guarded.repeatY),
+    'textureRepeat guards non-finite input the way plazaFloorRepeat relies on');
+});
+
+test('every shipped plaza flagstone map, both generations, is on disk', () => {
+  // The manifest test only forces src/ files to be listed, so a texture path that
+  // is named but never shipped would 404 at runtime and show up as a silently
+  // flat plaza. Both generations are checked because the v2 path falls back to
+  // the round-61 set, and that fallback is only real if its files exist too.
+  for (const url of [...Object.values(PLAZA_FLOOR_TEXTURE_FILES),
+    ...Object.values(PLAZA_FLOOR_V2_TEXTURE_FILES)]) {
+    assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${url} exists`);
+    assert.ok(url.endsWith('.webp'), `${url} ships as WebP, not PNG`);
   }
 });
 
