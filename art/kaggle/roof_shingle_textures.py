@@ -8,18 +8,21 @@ and tile identically on every instance. There is no per-instance projection to
 hide a bad tile, and the eye is right above the roof on approach — the roof is
 one of the largest remaining flat-colour surfaces in the world.
 
-What this job renders: wood shingles laid in horizontal courses with a
-staggered (running-bond) butt, a faint wood grain, a few split or lifted butts,
-and nail dots along the butt. The albedo is a VALUE map: paintShingles()
-rewrites the material colour to 0x6d3a2c (x per-instance tone x per-phase glow)
-on every phase and tier flip, so hue and brightness stay authored in the
-material and the texture carries only pattern -- joint shadow, grain, nails,
-damp field, valley strip. The normal gives the butt edges and grain a shallow
-relief (a shingle is flat compared with paving, so a deeper relief would read
-as tiling); the roughness map darkens the joints and brightens the weathered
-crowns so the roof catches light like wood rather than plastic. A
-damp-darkened valley strip along the bottom course edge ties the set to the
-plaza v2's damp-field idea, because the same rain runs down both.
+What this job renders: wood shingles laid in horizontal courses. The tile is
+ONE banded course -- joint (overlap) bands at top and bottom, the exposed butt
+in the middle -- because each 1 m box carries the map once per metre and
+per-course variation cannot survive that repeat. The running bond (vertical
+joints that never line up across courses) comes from the instances' world
+layout in shingleSpawns, not from variation inside this tile; the tile itself
+is exactly periodic in both directions so the course stacks seamlessly.
+The albedo is a VALUE map: paintShingles() rewrites the material colour to
+0x6d3a2c (x per-instance tone x per-phase glow) on every phase and tier flip,
+so hue and brightness stay authored in the material and the texture carries
+only pattern -- joint shadow, grain, nails, damp field. The normal gives the
+butt edges and grain a shallow relief (a shingle is flat compared with
+paving, so a deeper relief would read as tiling); the roughness map darkens
+the joints and brightens the weathered crowns so the roof catches light like
+wood rather than plastic.
 
 Held from the plaza v2 job on purpose: 1024x1024 (the roof is read at close
 range, so the tile carries more texels per metre), tangent-space normal written
@@ -40,10 +43,9 @@ import time
 import numpy as np
 
 SIZE = 1024
-COURSES = 8          # shingle courses down the tile; 8 x ~0.5 m = a 4 m roof run
 OUT = "/kaggle/working"
 
-report = {"size": SIZE, "courses": COURSES,
+report = {"size": SIZE, "courses": 1,
           "generator": "procedural anisotropic periodic wood-shingle course v1",
           "gpu": None}
 t_start = time.time()
@@ -102,50 +104,26 @@ def value_noise(period, seed, octaves=2):
     return total / norm
 
 
-def downsample(a, factor):
-    """Mean-pool by factor; SIZE must divide evenly."""
-    s = a.shape[0] // factor
-    return a.reshape(s, factor, s, factor).mean(axis=(1, 3))
-
-
-def upsample(a, factor):
-    """Nearest-upsample back to SIZE."""
-    return xp.repeat(xp.repeat(a, factor, axis=0), factor, axis=1)
-
-
 # ---------------------------------------------------------------------------
-# Geometry: a course is a band of shingle butts with a staggered vertical
-# joint. Course pitch is uniform in world terms (a real course is ~0.45 m) but
-# each shingle's width jitters, and the stagger alternates so vertical joints
-# never line up across courses.
-# ---------------------------------------------------------------------------
-# Identical layout on every course so the tile seams vertically: same number
-# of shingles, same stagger. The running bond (vertical joints that never line
-# up across courses) comes from alternating the stagger by course parity, which
-# is itself periodic with period 2 and so tiles cleanly.
-COURSE_PITCH = SIZE / COURSES
-N_SHINGLES = 5
-course_counts = [N_SHINGLES] * COURSES
-course_offsets = [0.0 if (c % 2 == 0) else (SIZE / (2 * N_SHINGLES))
-                  for c in range(COURSES)]
-
+# Geometry: the tile is ONE shingle course of overlap -- a single tile-wide
+# banded field: joint (overlap) bands at top and bottom, the exposed butt in
+# the middle. The running bond (vertical joints that never line up across
+# courses) comes from the box instances' world layout (shingleSpawns scales
+# each 1 m box to its plane's width/depth), not from per-course variation
+# inside this tile, because per-course variation cannot survive the 1 m UV
+# repeat. One banded course per tile is what makes the tile exactly periodic:
+# the top and bottom edges are the same phase (the joint/overlap zone) and the
+# left and right edges are the same phase (clean crown, no nails on the edge).
 # ---------------------------------------------------------------------------
 # Height field: 1.0 on a shingle face, 0.0 in a joint. A chip/arris softens
 # the joint edge (like plaza v2's chipped arris, but shallower), and a few
-# butts are split or lifted at one corner.
+# nail dots sit clear of the edges so left == right.
 # ---------------------------------------------------------------------------
-# One shingle per tile, but the tile must seam in BOTH directions, so the
-# top and bottom edges are the same phase (the joint/overlap zone) and the
-# left and right edges are the same phase (clean crown, no nails on the edge).
-# Within the tile: joint at top, butt/crown in the middle, joint at bottom --
-# a course whose exposed butt is the centre and whose overlap sits above and
-# below. Repeated vertically this reads as overlapping courses.
 H = xp.zeros((SIZE, SIZE), dtype=xp.float32)
 y, x = xp.mgrid[0:SIZE, 0:SIZE]
 joint_band = int(SIZE * 0.14)
 # joint at top and bottom (overlap zones), crown in the middle.
 is_joint = (y < joint_band) | (y >= SIZE - joint_band)
-is_crown = ~is_joint
 H = xp.where(is_joint, 0.22, 0.92)
 # arris chip along both joint edges: irregular bevel (periodic in x via the
 # value noise below, but the chip band itself is horizontal and identical on
@@ -159,9 +137,8 @@ for (nx, ny_) in ((int(SIZE * 0.3), SIZE // 2),
     d = xp.sqrt((x - nx) ** 2 + (y - ny_) ** 2)
     H = xp.clip(H + xp.clip(1 - d / 3.0, 0, 1) * 0.05, 0, 1)
 
-# grain: periodic value noise over the whole tile (period 64 divides SIZE).
-# grain: fine noise over the whole tile, scaled by the height field so joints
-# stay clean
+# grain: periodic value noise over the whole tile (period 64 divides SIZE),
+# scaled by the height field so joints stay clean.
 grain = value_noise(64, seed=7, octaves=3)
 grain = (grain - 0.5) * 0.04
 H = xp.clip(H + grain, 0, 1)
@@ -181,14 +158,13 @@ H[:, -1] = H[:, 0]
 # strip, all in 0..1 value, and the material supplies hue and brightness --
 # the same division of labour as the normal and roughness maps.
 # ---------------------------------------------------------------------------
-base = 1.0
 # darker along joints: use the height field as the shadow carrier (periodic).
 joint_dark = 1.0 - (1.0 - H) * 0.45
 # broad damp field, periodic (period 16 divides SIZE).
 damp = value_noise(16, seed=13, octaves=2)
 damp = xp.clip(1.0 - (damp - 0.5) * 0.12, 0.88, 1.0)
 
-albedo = base * damp * joint_dark
+albedo = damp * joint_dark
 albedo = xp.clip(albedo, 0, 1)
 
 # nail dots: fixed periodic positions (two per tile, symmetric) so the tile
@@ -203,8 +179,11 @@ albedo = xp.clip(albedo + nails * 0.08, 0, 1)
 # ---------------------------------------------------------------------------
 # Normal: central difference on the height field, tangent space, bottom-up for
 # Three.js. The encoding matches plaza v2: normal * 0.5 + 0.5 with no channel
-# flip, because the gradient gives a normal pointing out of the +Z-facing roof
-# surface and Three.js reads the RGB channels as XYZ directly.
+# flip, but the Y gradient is negated (plaza v2 negates both) because
+# write_png flips rows bottom-up: the PNG's first scanline is array row SIZE-1,
+# so a +dh/dy gradient stored in G would read as a negative slope along the
+# texture's up axis, and every butt edge and grain ridge would read as a
+# valley in-world.
 # ---------------------------------------------------------------------------
 # Periodic central differences: H is tileable in both directions, so the
 # gradient must wrap across the seam. xp.gradient uses edge replication and
@@ -214,7 +193,7 @@ norm_x = (xp.roll(H, -1, axis=1) - xp.roll(H, 1, axis=1)) * 0.5
 norm_y = (xp.roll(H, -1, axis=0) - xp.roll(H, 1, axis=0)) * 0.5
 nz = xp.sqrt(1.0 + norm_x ** 2 + norm_y ** 2)
 nx = norm_x / nz
-ny = norm_y / nz
+ny = -norm_y / nz
 normal = xp.stack([nx, ny, xp.ones_like(nz) / nz], axis=-1)
 normal_rgb = xp.clip(normal * 0.5 + 0.5, 0.0, 1.0)
 # Force exact tileability on the normal map too: the derived gradient is not
@@ -298,9 +277,24 @@ Image.fromarray(lit_preview(albedo, normal_rgb)).save(f"{OUT}/roof_shingle_previ
 # Wrap checks: the tile must seam cleanly. Same definition as plaza v2: the
 # mean edge-to-opposite-edge difference divided by the mean interior
 # difference; well under 3 means no visible seam.
+#
+# The measurement runs on the 8-bit quantized arrays that write_png actually
+# emits, not on the float arrays: the float fields are pinned to exact
+# periodicity above, so measuring them would always report 0 and could never
+# catch a seam introduced by 8-bit rounding at the wrap edges (a near-1.0 or
+# near-0 value can round differently on opposite edges even when the floats
+# agree). The game then re-reads these PNGs losslessly as WebP, so what
+# write_png quantizes is exactly what the GPU sees.
 # ---------------------------------------------------------------------------
-def seam_ratio(a):
+def to_8bit(a):
     arr = to_cpu(a)
+    if arr.ndim == 2:
+        arr = arr[:, :, None]
+    q = np.clip(arr * 255.0 + 0.5, 0, 255).astype(np.uint8)
+    return q.astype(np.float64)
+
+def seam_ratio(a):
+    arr = to_8bit(a)
     if arr.ndim == 2:
         arr = arr[:, :, None]
     seam_h = np.abs(arr[:, 0, :] - arr[:, -1, :]).mean()
@@ -310,9 +304,9 @@ def seam_ratio(a):
     return [round(float(seam_h / max(interior_h, 1e-9)), 3),
             round(float(seam_v / max(interior_v, 1e-9)), 3)]
 
-report["seam_ratio_albedo"] = seam_ratio(albedo[..., None] * 255)
-report["seam_ratio_normal"] = seam_ratio(normal_rgb * 255)
-report["seam_ratio_rough"] = seam_ratio(rough_px * 255)
+report["seam_ratio_albedo"] = seam_ratio(albedo[..., None])
+report["seam_ratio_normal"] = seam_ratio(normal_rgb)
+report["seam_ratio_rough"] = seam_ratio(rough_px)
 for key in ("seam_ratio_albedo", "seam_ratio_normal", "seam_ratio_rough"):
     assert max(report[key]) < 3, f"{key} seam too visible: {report[key]}"
 
