@@ -2099,7 +2099,6 @@ try {
     })();
     try {
       return await api.assetsReady().then(() => {
-    const api = window.amazingAdventure;
     const model = api.scene.getObjectByName('fountain-model');
     const standin = api.scene.getObjectByName('fountain-standin');
     let parts = 0;
@@ -2212,11 +2211,12 @@ try {
         kerbUvSpan: uvSpan(kerbs[0]),
         parapetUvSpan: uvSpan(parapets[0])
       }
-    };
+    }
+    });
     } finally {
       restore();
     }
-  }));
+  });
 
   checks.check('the modelled fountain replaces the procedural stand-in',
     assets.state.fountain === 'model' && assets.modelPresent && !assets.standinPresent,
