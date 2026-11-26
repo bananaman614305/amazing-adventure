@@ -12,30 +12,31 @@
 
 ## Current task
 
-**Round 97 in progress: dress the terrace furniture's timber and stone.**
+**Round 98 complete: a passing-cloud layer with ground shadows.**
 
-Widened the wood family test to `/wood|timber/i` and the stone family test to
-`/housestone|terracestone/i` in `src/assets.js`, so the Round 96 terrace GLB's
-`TerraceTimber`/`TerraceTimberDark` members join the wood family and
-`TerraceStone` joins the house-trim stone family. `TerraceSoil` stays flat by
-design (added to the must-stay-flat list in `tests/assets.test.mjs`).
-`upgradeTerraceDetail()` already pushes its group into `propGroups` with tile 1.5
-and `upgradePropFamilies()` already runs after it in `loadAssets()`, so no
-world.js change was needed. Unit tests pin the three new mappings plus the
-no-shadow invariants. Browser check added to `scripts/test-round2.mjs`
-(round97-terrace-dress.png): 4 dressed meshes carry the three maps with repeat
-1:1, 2 soil meshes stay flat. Dist restamped (commit f87cd1c). Desktop browser
-suite 348/348 PASS with the new check. Mobile suite ran to completion (4
-profiles, screenshots present) -- output was buffered to 0 bytes by the
-background runner; re-running with captured output to confirm the count.
+Added a nearby cloud layer whose shadows really land on the walkable world.
+`src/cloudpassers.js` (new, 14 tests) authors five passers at 30-44 m whose
+footprints cross the plaza/meadow, with seeded positions, drift (±6 m, two
+sinusoids per axis), and day/dusk/night opacities (night exactly zero).
+`src/cloudshadow.js` now exports `projectCloudToGround` (renamed from the
+internal helper) and its inverse `raisePointToCloud` (12 new tests). Each
+passer is drawn twice -- a soft ground footprint and a sky disc derived by
+inverse projection, so the disc and its shadow cannot disagree. `src/world.js`
+builds the layer, `paintPassers(phaseId, tier)` and `updatePassers(dt)`,
+wired into the handle, applyPhase and setQuality (dropped on low, re-derived
+on tier flip). `src/main.js` drives it each frame. The layer follows the day
+cycle and caps a single drift step.
+
+Evidence: desktop browser suite 352/352 PASS (4 new round-98 checks); mobile
+suite 184/184 PASS (4 profiles); unit suite 1441/1441 PASS; dist restamped
+(commit 768d62b, digest 3fe18f197a2dc1c269187b7b4b79d54035ac61e647b1ee107d8cf88153536f99).
+Rendered check: shadows darken ~1.5% of the plaza luminance and cover ~23% of
+the frame's pixels at a single instant.
 
 ## Next steps
-1. Re-run the mobile suite with output captured to a file and record the pass
-   count (target 184/184 or higher).
-2. Publish Round 97 via publish.json with exact HEAD after the mobile count is
-   confirmed; refresh needs-supervision.json.
-3. Next graphics milestone: house/terrace detail geometry or contact-shadow
-   decals under the existing sun shadow map.
+1. Publish Round 98 via /worker/state/outbox/publish.json with exact HEAD (the trusted channel is blocked on infrastructure; PR-only fallback is operative).
+2. Next graphics milestone: contact-shadow decals under the existing sun shadow map, or deeper house/terrace detail geometry.
+3. Consider a small Kaggle texture pass on the plaza flagstones if the realism gap persists.
 
 ## Round 89 complete (historical)
 
