@@ -15,7 +15,9 @@ import {
   cloudDapple,
   CLOUD_DAPPLE_MAX,
   CLOUD_DAPPLE_PERIOD_A,
-  CLOUD_DAPPLE_PERIOD_B
+  CLOUD_DAPPLE_PERIOD_B,
+  projectCloudToGround,
+  raisePointToCloud
 } from '../src/cloudshadow.js';
 
 // A high, near-vertical sun for the simple cases: straight down, no offset.
@@ -225,4 +227,70 @@ test('cloudDapple constants are the documented pair', () => {
     'the whole layer must not dim more than a single authored shadow');
   assert.ok(CLOUD_DAPPLE_PERIOD_A > 30 && CLOUD_DAPPLE_PERIOD_B > 30);
   assert.notEqual(CLOUD_DAPPLE_PERIOD_A, CLOUD_DAPPLE_PERIOD_B);
+});
+
+// --- the projection as a public pair -------------------------------------
+// Round 98's passer clouds need the map in both directions: the shadow a cloud
+// throws, and the height a cloud must hang at for its shadow to land on the
+// plaza. These pin the pair as exact inverses, and that neither direction is
+// thrown by the sign convention the module documents.
+
+test('an overhead sun drops the cloud straight down', () => {
+  assert.deepEqual(projectCloudToGround({ x: 10, y: 40, z: -6 }, OVERHEAD), { x: 10, z: -6 });
+});
+
+test('a tilted sun projects along the ray', () => {
+  const sun = { x: 1, y: 2, z: -1 };
+  const cloud = { x: 0, y: 8, z: 0 };
+  // t = 8 / 2 = 4, so ground = (0,0) - (1,2,-1) * 4 = (-4, -8, 4).
+  assert.deepEqual(projectCloudToGround(cloud, sun), { x: -4, z: 4 });
+});
+
+test('the projection refuses a horizontal sun and junk', () => {
+  assert.equal(projectCloudToGround({ x: 1, y: 5, z: 1 }, { x: 1, y: 0, z: 0 }), null);
+  assert.equal(projectCloudToGround({ x: 1, y: 5, z: 1 }, { x: 1, y: 1e-9, z: 0 }), null);
+  assert.equal(projectCloudToGround({ x: 1, y: 5, z: 1 }, { x: NaN, y: 1, z: 0 }), null);
+  assert.equal(projectCloudToGround(null, OVERHEAD), null);
+  assert.equal(projectCloudToGround({ x: 1, y: NaN, z: 1 }, OVERHEAD), null);
+});
+
+test('the sign convention does not move the projection', () => {
+  const cloud = { x: 3, y: 22, z: -9 };
+  const sun = { x: 16, y: 22, z: 10 };
+  const flipped = { x: -16, y: -22, z: -10 };
+  const a = projectCloudToGround(cloud, sun);
+  const b = projectCloudToGround(cloud, flipped);
+  assert.ok(Math.abs(a.x - b.x) < 1e-12 && Math.abs(a.z - b.z) < 1e-12);
+});
+
+test('raisePointToCloud is the exact inverse of the projection', () => {
+  const sun = { x: 16, y: 22, z: 10 };
+  for (const ground of [{ x: 0, z: 0 }, { x: 6, z: -11 }, { x: -18, z: 14 }]) {
+    for (const altitude of [30, 37.5, 44]) {
+      const cloud = raisePointToCloud(ground, sun, altitude);
+      assert.ok(cloud, 'a valid pair must project');
+      assert.ok(Math.abs(cloud.y - altitude) < 1e-9, `altitude ${cloud.y}`);
+      const back = projectCloudToGround(cloud, sun);
+      assert.ok(Math.abs(back.x - ground.x) < 1e-9 && Math.abs(back.z - ground.z) < 1e-9,
+        `round trip moved ${JSON.stringify(ground)} to ${JSON.stringify(back)}`);
+    }
+  }
+});
+
+test('raisePointToCloud only reads the direction of the sun vector', () => {
+  const a = raisePointToCloud({ x: 2, z: 2 }, { x: 16, y: 22, z: 10 }, 36);
+  const b = raisePointToCloud({ x: 2, z: 2 }, { x: 1.6, y: 2.2, z: 1 }, 36);
+  assert.ok(Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9 &&
+    Math.abs(a.z - b.z) < 1e-9);
+});
+
+test('raisePointToCloud refuses a low sun and junk', () => {
+  assert.equal(raisePointToCloud({ x: 0, z: 0 }, { x: 1, y: 0, z: 0 }, 30), null);
+  assert.equal(raisePointToCloud({ x: 0, z: 0 }, { x: 1, y: 1e-8, z: 0 }, 30), null);
+  assert.equal(raisePointToCloud({ x: 0, z: 0 }, OVERHEAD, 0), null);
+  assert.equal(raisePointToCloud({ x: 0, z: 0 }, OVERHEAD, -4), null);
+  assert.equal(raisePointToCloud({ x: 0, z: 0 }, OVERHEAD, NaN), null);
+  assert.equal(raisePointToCloud({ x: 0, z: 0 }, OVERHEAD, '30'), null);
+  assert.equal(raisePointToCloud(null, OVERHEAD, 30), null);
+  assert.equal(raisePointToCloud({ x: 0, z: 0 }, null, 30), null);
 });

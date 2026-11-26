@@ -7,7 +7,9 @@ import { CLOUD_COUNT, CLOUD_FIELD_RADIUS, CLOUD_SEED, cloudPositions,
   CLOUD_PHASE_OPACITY, cloudOpacity, CLOUD_BASE_COLOR, cloudColor,
   cloudSize, cloudDrift } from './clouds.js';
 import { MOONLIGHT_COLOR, moonlightIntensity, moonlightDirection } from './moonlight.js';
-import { cloudDapple } from './cloudshadow.js';
+import { cloudDapple, raisePointToCloud, CLOUD_SHADOW_STRENGTH } from './cloudshadow.js';
+import { passerFootprints, passerAltitude, passerDrift, passerOpacity }
+  from './cloudpassers.js';
 import { horizonRibbonArray, horizonRibbonColors, horizonTint, horizonOpacity,
   horizonFootTint } from './horizon.js';
 import { scatterPoints, SCATTER_SEED } from './scatter.js';
@@ -236,6 +238,141 @@ export function buildWorld(renderer) {
   }
   scene.add(cloudGroup);
 
+  // Round 98: the clouds that pass overhead. The dome layer above sits on a
+  // 118 m ring, so its true shadows land far outside a 34 m world -- that is
+  // why Round 89 could only dim the whole daylight by the layer's aggregate.
+  // These five clouds are nearer and smaller, so their shadows really do cross
+  // the plaza and the meadow. Each is drawn twice: a soft dark footprint on the
+  // ground, and a disc in the sky derived from that footprint by inverse
+  // projection (raisePointToCloud), so the sky cloud and its shadow are one
+  // object and can never disagree about where the cloud is.
+  const passerGroup = new THREE.Group();
+  passerGroup.name = 'sky-cloud-passers';
+  passerGroup.renderOrder = -1;
+  const passerData = [];
+  const passerFootprintList = passerFootprints();
+  for (let i = 0; i < passerFootprintList.length; i += 1) {
+    const footprint = passerFootprintList[i];
+    // The disc is a little broader than the footprint: a cloud's body is wider
+    // than the solid core of its shadow, and the extra width is what the soft
+    // rim of the ground decal fades into.
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(footprint.r * 1.3, 16),
+      new THREE.MeshBasicMaterial({
+        color: CLOUD_BASE_COLOR, fog: false, depthWrite: false,
+        transparent: true, opacity: 0, side: THREE.DoubleSide
+      })
+    );
+    disc.name = 'sky-cloud-passer';
+    disc.visible = false;
+    passerGroup.add(disc);
+    passerData.push({ footprint, altitude: passerAltitude(i), disc });
+  }
+  scene.add(passerGroup);
+
+  // The footprints are soft radial decals, the same texture and the same flat
+  // disc as the contact shadows, so the two kinds of ground darkening are the
+  // same material story. They sit a touch higher than the contact decals so a
+  // cloud's shade falls over a barrel's smudge rather than fighting it.
+  const passerShadowMaterial = new THREE.MeshBasicMaterial({
+    color: 0x1b2432, map: createContactShadowTexture(), transparent: true,
+    opacity: 0, depthWrite: false, fog: true
+  });
+  const passerShadowMesh = new THREE.InstancedMesh(
+    new THREE.CircleGeometry(0.5, 16), passerShadowMaterial,
+    Math.max(1, passerData.length)
+  );
+  passerShadowMesh.name = 'ground-cloud-shadows';
+  passerShadowMesh.count = passerData.length;
+  passerShadowMesh.frustumCulled = false;
+  passerShadowMesh.renderOrder = 2;
+  passerShadowMesh.visible = false;
+  scene.add(passerShadowMesh);
+
+  const _passerMatrix = new THREE.Matrix4();
+  const _passerPos = new THREE.Vector3();
+  const _passerScale = new THREE.Vector3();
+  const _passerQuat = new THREE.Quaternion();
+  _passerQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+  let passerTime = 0;
+
+  // PHASE_LOOKS authors the sun as a plain [x, y, z] triple (it is a table the
+  // unit suite reads, not a vector), while the cloud-shadow maths takes a
+  // point-shaped direction. This is the one conversion, so the array/object
+  // mismatch cannot quietly leave every sky disc unplaced.
+  function sunDirectionOf(position) {
+    if (!Array.isArray(position) || position.length < 3) return null;
+    const [x, y, z] = position;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+    return { x, y, z };
+  }
+
+  // Where the field stands at a given instant: footprints drifted from their
+  // starting centres, and the sky disc raised from each footprint along the
+  // sun's rays so the disc is exactly the cloud that casts that shadow.
+  function layoutPassers(sunPosition) {
+    const sunDir = sunDirectionOf(sunPosition);
+    for (let i = 0; i < passerData.length; i += 1) {
+      const entry = passerData[i];
+      const drift = passerDrift(i, passerTime);
+      const x = entry.footprint.x + drift.dx;
+      const z = entry.footprint.z + drift.dz;
+      _passerPos.set(x, 0.03, z);
+      _passerScale.set(entry.footprint.r * 2, entry.footprint.r * 2, 1);
+      _passerMatrix.compose(_passerPos, _passerQuat, _passerScale);
+      passerShadowMesh.setMatrixAt(i, _passerMatrix);
+      const raised = sunDir ? raisePointToCloud({ x, z }, sunDir, entry.altitude) : null;
+      // At dusk the sun is low, so the cloud that would cast this shadow is
+      // thrown a hundred metres sideways and would poke through the 118 m dome.
+      // Hide it rather than draw a disc on the wrong side of the sky; the
+      // shadow itself stays, which is the part the player is looking at.
+      if (!raised || Math.hypot(raised.x, raised.y, raised.z) > 112) {
+        entry.disc.visible = false;
+      } else {
+        entry.disc.position.set(raised.x, raised.y, raised.z);
+        entry.disc.lookAt(0, 0, 0);
+        entry.disc.visible = passerGroup.visible;
+      }
+    }
+    passerShadowMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // Place the field once at build time from the day's sun, so a scene that is
+  // photographed before its frame loop ticks still has its shadows down.
+  layoutPassers(PHASE_LOOKS.day.sunPosition);
+
+  function paintPassers(phaseId, tier = environment.quality) {
+    const opacity = passerOpacity(phaseId);
+    const on = opacity > 0 && tier !== 'low' && passerData.length > 0;
+    const colour = cloudColor(phaseId);
+    for (const entry of passerData) {
+      entry.disc.material.opacity = opacity;
+      entry.disc.material.color.setHex(colour);
+      entry.disc.visible = on;
+    }
+    passerGroup.visible = on;
+    passerShadowMaterial.opacity = opacity * CLOUD_SHADOW_STRENGTH;
+    passerShadowMesh.visible = on;
+  }
+  paintPassers('day', 'full');
+
+  function updatePassers(dt) {
+    // No per-frame work when the layer is off: on the low tier the draw calls
+    // are gone and at night the layer is transparent, so the loop is skipped
+    // rather than writing matrices nobody sees.
+    if (environment.quality === 'low' || passerOpacity(environment.phase) <= 0) return;
+    if (typeof dt !== 'number' || !Number.isFinite(dt) || dt <= 0) return;
+    // Same cap as the other drifting fields: a tab that was backgrounded for a
+    // minute must not teleport the shadows across the plaza in one frame.
+    passerTime += Math.min(dt, 0.1);
+    const look = PHASE_LOOKS[environment.phase];
+    if (!look || !look.sunPosition) {
+      passerGroup.visible = false;
+      return;
+    }
+    layoutPassers(look.sunPosition);
+  }
+
   let starTime = 0;
   let cloudTime = 0;
 
@@ -380,6 +517,7 @@ export function buildWorld(renderer) {
     new THREE.CircleGeometry(9, 48),
     plazaMaterial
   );
+  plaza.name = 'plaza-floor';
   plaza.rotation.x = -Math.PI / 2;
   plaza.position.y = 0.01;
   plaza.receiveShadow = true;
@@ -5427,6 +5565,18 @@ export function buildWorld(renderer) {
     get cloudDim() {
       return cloudDim;
     },
+    // Round 98: the near passer clouds. `passerGroup` holds the sky discs and
+    // `passerShadowMesh` the ground footprints, both findable by name;
+    // `paintPassers` is called from applyPhase and setQuality; `updatePassers`
+    // is the per-frame drift, skipped entirely when the layer is off.
+    passerGroup,
+    passerShadowMesh,
+    paintPassers(phaseId, tier) {
+      return paintPassers(phaseId, tier);
+    },
+    updatePassers(dt) {
+      return updatePassers(dt);
+    },
     // Round 90: the meadow. `meadow` is the group of four variant InstancedMeshes
     // so a browser check can count them and their instances; `paintMeadow` is
     // called from applyPhase; `updateMeadow` is the per-frame wind sway.
@@ -5748,6 +5898,10 @@ export function buildWorld(renderer) {
       if (environment.paintReeds) environment.paintReeds(environment.phase);
       if (environment.paintMoss) environment.paintMoss(environment.phase);
       if (environment.paintContactShadows) environment.paintContactShadows(environment.phase);
+      // Round 98: the passers are translucent quads plus a per-frame loop,
+      // both dropped on low; a tier flip must re-derive their visibility
+      // rather than leave the last tier's answer standing.
+      if (environment.paintPassers) environment.paintPassers(environment.phase);
       // Contact darkening rides on vertex colours; disable it on the low tier by
       // turning the attribute off on every dressed prop mesh.
       for (const { group } of propGroups) {
@@ -6057,6 +6211,7 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintReeds) environment.paintReeds(phaseId);
   if (environment.paintMoss) environment.paintMoss(phaseId);
   if (environment.paintContactShadows) environment.paintContactShadows(phaseId);
+  if (environment.paintPassers) environment.paintPassers(phaseId);
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,
   // night shows it full. The mesh itself keeps rendering (one draw call) so

@@ -2105,7 +2105,9 @@ try {
         reach = Math.max(reach, Math.abs(b.min.x), Math.abs(b.max.x), Math.abs(b.min.z), Math.abs(b.max.z));
       });
     }
-    const plaza = api.scene.children.find((o) => o.isMesh && o.geometry.type === 'CircleGeometry');
+    const plaza = api.scene.getObjectByName('plaza-floor') ||
+      api.scene.children.find((o) => o.isMesh && o.geometry.type === 'CircleGeometry' &&
+        o.name !== 'ground-cloud-shadows' && o.name !== 'contact-shadows');
     // The terrace stone: named in world.js so this check does not have to guess
     // which grey box is which. Two treads (slab + ramp deck) and the upright
     // kerb/parapet band.
@@ -3588,6 +3590,178 @@ try {
     JSON.stringify(sd.dims.map((d) => Number(d.toFixed(3)))));
   await capture(page, 'round89-sky-dressing.png');
 
+  // --- 28n5. Passing clouds (round 98) -------------------------------------
+  // Round 98 hangs five nearby cloud discs over the plaza and gives each one a
+  // soft footprint shadow on the ground, so a clear day has something drifting
+  // across it at walking pace. Both halves are driven by the same pure drift
+  // module. This block proves the layer is live on the booted scene: the discs
+  // stand overhead at the day opacity, the shadows sit on the ground inside the
+  // walkable world, the drift really moves them, the low tier drops the whole
+  // layer, and the night phase hides it until the clock returns to day.
+  const passers = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    // The layer only exists on the full tier, and this slow headless run may
+    // already have dropped to low, so pin full for the samples and restore the
+    // starting tier and adaptive flag afterwards.
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.set('full');
+    api.setClock(10);
+
+    const byName = (name) => {
+      let found = null;
+      api.scene.traverse((o) => { if (o.name === name) found = o; });
+      return found;
+    };
+    // The instance matrix is 16 floats per instance: columns 12..14 are the
+    // translation. The scale is not readable from single cells -- the disc is
+    // rotated flat about X, so the authored scale lands on different cells --
+    // so it is read as the length of each basis column instead, which is what a
+    // zero-scaled instance would collapse. Reading the raw buffer avoids needing
+    // a THREE.Matrix4 inside the page.
+    const readShadows = (mesh) => {
+      if (!mesh) return [];
+      const a = mesh.instanceMatrix.array;
+      const out = [];
+      for (let i = 0; i < mesh.count; i += 1) {
+        const b = i * 16;
+        const sx = Math.hypot(a[b], a[b + 1], a[b + 2]);
+        const sy = Math.hypot(a[b + 4], a[b + 5], a[b + 6]);
+        const sz = Math.hypot(a[b + 8], a[b + 9], a[b + 10]);
+        out.push({
+          x: a[b + 12],
+          y: a[b + 13],
+          z: a[b + 14],
+          sx,
+          sy,
+          sz,
+          zeroScaled: !(sx > 1e-6 && sy > 1e-6 && sz > 1e-6)
+        });
+      }
+      return out;
+    };
+
+    const group = byName('sky-cloud-passers');
+    const shadows = byName('ground-cloud-shadows');
+    const discs = [];
+    if (group) {
+      for (const child of group.children) {
+        discs.push({
+          name: child.name,
+          visible: child.visible,
+          y: child.position.y,
+          opacity: child.material ? child.material.opacity : null,
+          color: child.material && child.material.color
+            ? child.material.color.getHexString() : null
+        });
+      }
+    }
+    const instances = readShadows(shadows);
+    const day = {
+      groupVisible: group ? group.visible : null,
+      discCount: discs.length,
+      discs,
+      shadowVisible: shadows ? shadows.visible : null,
+      shadowCount: shadows ? shadows.count : null,
+      shadowOpacity: shadows && shadows.material ? shadows.material.opacity : null,
+      instances,
+      // The contract puts the footprints at y ~= 0.03 on the ground; recorded
+      // here so a regression in the height shows up in the evidence even though
+      // the check itself is about the walkable footprint.
+      nearGround: instances.every((inst) => Math.abs(inst.y - 0.03) < 1e-3)
+    };
+
+    // Advance the drift by a long step through the same updater the frame loop
+    // calls, so a change proves the shadows actually move rather than merely
+    // exist. Re-read the mesh by name afterwards for the same reason the tier
+    // flips re-read below: a re-derived layer must still be found by name.
+    // The updater caps a single step (a backgrounded tab must not teleport the
+    // shadows), so drive a few seconds of frames the way the loop would.
+    if (env.updatePassers) {
+      for (let k = 0; k < 120; k += 1) env.updatePassers(0.1);
+    }
+    const driftedShadows = byName('ground-cloud-shadows');
+    const drifted = readShadows(driftedShadows);
+
+    // Low tier: the draw calls are dropped, so both halves must go invisible.
+    api.quality.set('low');
+    const lowGroup = byName('sky-cloud-passers');
+    const lowShadows = byName('ground-cloud-shadows');
+    const low = {
+      groupVisible: lowGroup ? lowGroup.visible : null,
+      shadowVisible: lowShadows ? lowShadows.visible : null
+    };
+
+    // ...and both must come back when full quality re-derives the paint.
+    api.quality.set('full');
+    const fullGroup = byName('sky-cloud-passers');
+    const fullShadows = byName('ground-cloud-shadows');
+    const restored = {
+      groupVisible: fullGroup ? fullGroup.visible : null,
+      shadowVisible: fullShadows ? fullShadows.visible : null
+    };
+
+    // Night: the layer is hidden outright, then returns with the day.
+    api.setClock(150);
+    const nightGroup = byName('sky-cloud-passers');
+    const nightShadows = byName('ground-cloud-shadows');
+    const night = {
+      groupVisible: nightGroup ? nightGroup.visible : null,
+      shadowVisible: nightShadows ? nightShadows.visible : null,
+      discOpacity: nightGroup && nightGroup.children[0] && nightGroup.children[0].material
+        ? nightGroup.children[0].material.opacity : null
+    };
+    api.setClock(10);
+    const dayGroup = byName('sky-cloud-passers');
+    const dayShadows = byName('ground-cloud-shadows');
+    const backToDay = {
+      groupVisible: dayGroup ? dayGroup.visible : null,
+      shadowVisible: dayShadows ? dayShadows.visible : null
+    };
+
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    return { startTier, startAdaptive, day, drifted, low, restored, night, backToDay };
+  });
+
+  const pc = passers;
+  // How many of the five footprints moved between the two drift samples. A
+  // translation change in any axis counts; the drift is a slow lateral wander,
+  // so x and z are the ones expected to move.
+  const driftedCount = pc.day.instances.reduce((n, a, i) => {
+    const b = pc.drifted[i];
+    if (!b) return n;
+    const delta = Math.abs(b.x - a.x) + Math.abs(b.y - a.y) + Math.abs(b.z - a.z);
+    return n + (delta > 1e-6 ? 1 : 0);
+  }, 0);
+  checks.check('the passing cloud layer stands overhead at day on full',
+    pc.day.groupVisible === true && pc.day.discCount === 5 &&
+      pc.day.discs.every((d) => d.name === 'sky-cloud-passer' && d.visible !== false &&
+        Math.abs(d.opacity - 0.4) < 1e-6 && d.color === 'ffffff'),
+    JSON.stringify({ groupVisible: pc.day.groupVisible, count: pc.day.discCount,
+                     discs: pc.day.discs }));
+  checks.check('the passers throw five ground shadows inside the walkable world',
+    pc.day.shadowVisible === true && pc.day.shadowCount === 5 &&
+      pc.day.instances.length === 5 &&
+      Math.abs(pc.day.shadowOpacity - 0.14) <= 1e-6 &&
+      pc.day.instances.every((inst) => !inst.zeroScaled &&
+        Math.abs(inst.x) <= 26 && Math.abs(inst.z) <= 26),
+    JSON.stringify({ visible: pc.day.shadowVisible, count: pc.day.shadowCount,
+                     opacity: pc.day.shadowOpacity, nearGround: pc.day.nearGround,
+                     instances: pc.day.instances }));
+  checks.check('the passer drift moves the shadows and a low tier hides the whole layer',
+    driftedCount > 0 && pc.low.groupVisible === false && pc.low.shadowVisible === false &&
+      pc.restored.groupVisible === true && pc.restored.shadowVisible === true,
+    JSON.stringify({ drifted: driftedCount, low: pc.low, restored: pc.restored,
+                     before: pc.day.instances.map((i) => [i.x, i.y, i.z]),
+                     after: pc.drifted.map((i) => [i.x, i.y, i.z]) }));
+  checks.check('the passer layer follows the day cycle',
+    pc.night.groupVisible === false && pc.night.shadowVisible === false &&
+      pc.backToDay.groupVisible === true && pc.backToDay.shadowVisible === true,
+    JSON.stringify({ night: pc.night, day: pc.backToDay }));
+  await capture(page, 'round98-cloud-passers.png');
+
   // --- 28n3. The meadow (round 90) -----------------------------------------
   // Round 90 stands grass tufts on the ring so the lawn has a silhouette instead
   // of reading as a painted floor. The meadow is four InstancedMeshes (one per
@@ -4685,7 +4859,8 @@ try {
       // Contact-shadow decals carry a linear alpha falloff as their `map`, not
       // an albedo: tagging it sRGB would bend the gradient. It is not an albedo
       // map, so it is excluded from this albedo color-space check.
-      if (o.name === 'contact-shadows' || o.material.name === 'ContactShadow') return;
+      if (o.name === 'contact-shadows' || o.name === 'ground-cloud-shadows' ||
+        o.material.name === 'ContactShadow') return;
       for (const key of ['map', 'normalMap', 'roughnessMap']) {
         const t = o.material[key];
         if (!t) continue;
