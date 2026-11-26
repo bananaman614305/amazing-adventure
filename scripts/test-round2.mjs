@@ -372,7 +372,7 @@ try {
   const looks = await page.evaluate(() => {
     const { environment, setClock } = window.amazingAdventure;
     const sample = () => ({
-      sky: environment.scene.background.getHexString(),
+      sky: environment.scene.background?.getHexString?.(),
       sun: Number(environment.sun.intensity.toFixed(2)),
       lamps: Number(environment.lamps[0].light.intensity.toFixed(1)),
       phase: window.amazingAdventure.getClock().phase
@@ -2118,7 +2118,7 @@ try {
         normal: Boolean(m.normalMap),
         rough: Boolean(m.roughnessMap),
         repeat: m.map ? [m.map.repeat.x, m.map.repeat.y] : null,
-        color: m.color.getHexString(),
+        color: m.color?.getHexString?.(),
         metalness: m.metalness
       };
     };
@@ -2153,7 +2153,7 @@ try {
         normal: Boolean(plaza.material.normalMap),
         rough: Boolean(plaza.material.roughnessMap),
         repeat: plaza.material.map ? [plaza.material.map.repeat.x, plaza.material.map.repeat.y] : null,
-        color: plaza.material.color.getHexString()
+        color: plaza.material.color?.getHexString?.()
       } : null,
       terrace: {
         tread: describe(named('terrace-tread')),
@@ -2280,7 +2280,7 @@ try {
         normal: Boolean(m.normalMap),
         rough: Boolean(m.roughnessMap),
         repeat: m.map ? [m.map.repeat.x, m.map.repeat.y] : null,
-        color: m.color.getHexString(),
+        color: m.color?.getHexString?.(),
         metalness: m.metalness,
         roughness: Number(m.roughness.toFixed(3))
       };
@@ -2310,7 +2310,7 @@ try {
       // ~21% luma, so a multiplier in this band is a visible tone shift without
       // washing the map out; 255 would mean the two stones render identically.
       darkColorLuma: (() => {
-        const hex = found.FountainPlinthLower?.material?.color?.getHexString();
+        const hex = found.FountainPlinthLower?.material?.color?.getHexString?.();
         if (!hex) return null;
         const r = parseInt(hex.slice(0, 2), 16);
         const g = parseInt(hex.slice(2, 4), 16);
@@ -2410,8 +2410,8 @@ try {
         panes.push({
           mesh: o.name,
           material: name,
-          color: o.material.color.getHexString(),
-          emissive: o.material.emissive.getHexString(),
+          color: o.material.color?.getHexString?.(),
+          emissive: o.material.emissive?.getHexString?.(),
           glow: Number(Number(o.material.emissiveIntensity).toFixed(3)),
           metalness: Number(Number(o.material.metalness).toFixed(3)),
           roughness: Number(Number(o.material.roughness).toFixed(3)),
@@ -2583,7 +2583,7 @@ try {
         normal: Boolean(m.normalMap),
         rough: Boolean(m.roughnessMap),
         repeat: m.map ? [m.map.repeat.x, m.map.repeat.y] : null,
-        color: m.color.getHexString(),
+        color: m.color?.getHexString?.(),
         metalness: m.metalness
       };
     };
@@ -2676,7 +2676,7 @@ try {
       models,
       bulbs: bulbs.length,
       hiddenStandins,
-      emissive: bulbs[0] ? bulbs[0].material.emissive.getHexString() : null,
+      emissive: bulbs[0] ? bulbs[0].material.emissive?.getHexString?.() : null,
       intensity: bulbs[0] ? bulbs[0].material.emissiveIntensity : null,
       // Identity, not equality: two materials with the same numbers can still be
       // one object, and that sharing is what darkened the plaza posts.
@@ -3084,7 +3084,7 @@ try {
             key, family: /^Skin$/i.test(name) ? 'skin' : 'hair',
             maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
             hasUv: Boolean(uv),
-            tint: o.material.color.getHexString(),
+            tint: o.material.color ? o.material.color.getHexString() : null,
             roughness: Number(Number(o.material.roughness).toFixed(3)),
             metalness: Number(o.material.metalness).toFixed(3),
             image: o.material.map ? o.material.map.image.width : 0,
@@ -3175,7 +3175,7 @@ try {
           key: `${npc.id}/${o.name}`,
           maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
           hasUv: Boolean(uv),
-          tint: o.material.color.getHexString(),
+          tint: o.material.color ? o.material.color.getHexString() : null,
           roughness: Number(Number(o.material.roughness).toFixed(3)),
           metalness: Number(o.material.metalness).toFixed(3),
           image: o.material.map ? o.material.map.image.width : 0,
@@ -3230,7 +3230,7 @@ try {
           key: `${npc.id}/${o.name}`,
           maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
           hasUv: Boolean(uv),
-          tint: o.material.color.getHexString(),
+          tint: o.material.color ? o.material.color.getHexString() : null,
           roughness: Number(Number(o.material.roughness).toFixed(3)),
           metalness: Number(o.material.metalness).toFixed(3),
           image: o.material.map ? o.material.map.image.width : 0,
@@ -3284,7 +3284,7 @@ try {
         materialName: o.material.name,
         maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
         hasUv: Boolean(uv),
-        tint: o.material.color.getHexString(),
+        tint: o.material.color ? o.material.color.getHexString() : null,
         roughness: Number(Number(o.material.roughness).toFixed(3)),
         metalness: Number(o.material.metalness).toFixed(3),
         image: o.material.map ? o.material.map.image.width : 0,
@@ -3342,7 +3342,7 @@ try {
           key: `${npc.id}/${o.name}`,
           maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
           hasUv: Boolean(uv),
-          tint: o.material.color.getHexString(),
+          tint: o.material.color ? o.material.color.getHexString() : null,
           roughness: Number(Number(o.material.roughness).toFixed(3)),
           metalness: Number(o.material.metalness).toFixed(3),
           image: o.material.map ? o.material.map.image.width : 0,
@@ -3466,7 +3466,7 @@ try {
         for (const child of cloudGroup.children) {
           clouds.push({
             opacity: child.material.opacity,
-            color: child.material.color.getHexString(),
+            color: child.material.color?.getHexString?.(),
             y: child.position.y,
             rotY: child.rotation.y
           });
@@ -3508,7 +3508,7 @@ try {
         phase: api.getClock().phase,
         moonVisible: moonGroup ? moonGroup.visible : null,
         moonOpacity: moonCore ? moonCore.material.opacity : null,
-        moonColor: moonCore ? moonCore.material.color.getHexString() : null,
+        moonColor: moonCore ? moonCore.material.color?.getHexString?.() : null,
         cloudVisible: cloudGroup ? cloudGroup.visible : null,
         cloudCount: clouds.length,
         cloudOpacity: clouds.length ? clouds[0].opacity : null,
@@ -3522,7 +3522,7 @@ try {
         ridgeMinY,
         moonLight: env.moon
           ? { intensity: Number(env.moon.intensity.toFixed(3)), visible: env.moon.visible,
-              castsShadow: env.moon.castShadow, color: env.moon.color.getHexString() }
+              castsShadow: env.moon.castShadow, color: env.moon.color?.getHexString?.() }
           : null,
         sunIntensity: Number(env.sun.intensity.toFixed(3)),
         cloudDim: typeof env.cloudDim === 'number' ? Number(env.cloudDim.toFixed(3)) : null
@@ -3729,10 +3729,10 @@ try {
     api.quality.set('full');
     api.setClock(10);
     const dayTint = byName('meadow-tufts-0')
-      ? byName('meadow-tufts-0').material.color.getHexString() : null;
+      ? byName('meadow-tufts-0').material.color?.getHexString?.() : null;
     api.setClock(150);
     const nightTint = byName('meadow-tufts-0')
-      ? byName('meadow-tufts-0').material.color.getHexString() : null;
+      ? byName('meadow-tufts-0').material.color?.getHexString?.() : null;
 
     api.quality.set(startTier);
     if (startAdaptive) api.quality.setAdaptive(true);
@@ -4293,7 +4293,7 @@ try {
         materialName: o.material.name,
         maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
         hasUv: Boolean(uv),
-        tint: o.material.color.getHexString(),
+        tint: o.material.color ? o.material.color.getHexString() : null,
         roughness: Number(Number(o.material.roughness).toFixed(3)),
         metalness: Number(o.material.metalness).toFixed(3),
         image: o.material.map ? o.material.map.image.width : 0,
@@ -4350,7 +4350,7 @@ try {
         maps: ['map', 'normalMap', 'roughnessMap']
           .filter((k) => Boolean(o.material[k])).length,
         hasUv: Boolean(uv),
-        tint: o.material.color.getHexString(),
+        tint: o.material.color ? o.material.color.getHexString() : null,
         roughness: Number(Number(o.material.roughness).toFixed(3)),
         metalness: Number(Number(o.material.metalness).toFixed(3)),
         image: o.material.map ? o.material.map.image.width : null,
@@ -4950,7 +4950,7 @@ try {
       bulb.localToWorld(centre);
       bulbWorld = { x: Number(centre.x.toFixed(4)), y: Number(centre.y.toFixed(4)), z: Number(centre.z.toFixed(4)) };
     }
-    const emissive = bulb ? bulb.material.emissive.getHexString() : null;
+    const emissive = bulb ? bulb.material.emissive?.getHexString?.() : null;
     // The head is a state readout, not a lamp that burns all night: it must be
     // dark in daylight, dark at dusk before the round is walked, and lit only
     // once the lane is lit -- otherwise it advertises a job it has not done.
@@ -5082,7 +5082,7 @@ try {
           map: true,
           normal: Boolean(o.material.normalMap),
           rough: Boolean(o.material.roughnessMap),
-          color: o.material.color.getHexString(),
+          color: o.material.color?.getHexString?.(),
           repeat: [o.material.map.repeat.x, o.material.map.repeat.y]
         };
       }
