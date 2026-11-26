@@ -3722,6 +3722,10 @@ export function buildWorld(renderer) {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, size, size);
     const texture = new THREE.CanvasTexture(canvas);
+    // The puff is an albedo-style map, so it must be tagged sRGB or the
+    // browser suite's colour-space check sees two distinct values and the
+    // whole albedo family fails. Three does not default a CanvasTexture.
+    texture.colorSpace = THREE.SRGBColorSpace;
     texture.needsUpdate = true;
     return texture;
   }
