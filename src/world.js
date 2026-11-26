@@ -6,6 +6,10 @@ import { MOON_DISTANCE, MOON_CORE_RADIUS, MOON_GLOW_RADIUS, MOON_COLOR,
 import { CLOUD_COUNT, CLOUD_FIELD_RADIUS, CLOUD_SEED, cloudPositions,
   CLOUD_PHASE_OPACITY, cloudOpacity, CLOUD_BASE_COLOR, cloudColor,
   cloudSize, cloudDrift } from './clouds.js';
+import { MOONLIGHT_COLOR, moonlightIntensity, moonlightDirection } from './moonlight.js';
+import { cloudDapple } from './cloudshadow.js';
+import { horizonRibbonArray, horizonRibbonColors, horizonTint, horizonOpacity,
+  horizonFootTint } from './horizon.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -198,6 +202,47 @@ export function buildWorld(renderer) {
   let starTime = 0;
   let cloudTime = 0;
 
+  // Round 89: the distant ridge. Looking over the border wall, the world used to
+  // end where the haze began, with nothing between, which read as the inside of
+  // a box. A ring of low hills just inside the dome gives the eye a horizon.
+  // One unlit, unfogged mesh from the pure ribbon in src/horizon.js at a fixed
+  // vertex count, so the whole skyline is a single draw call with no lighting
+  // and no texture -- cheap enough to keep at every quality tier.
+  //
+  // Drawn after the other sky elements (renderOrder 1) so it occludes the stars
+  // and any low cloud behind it: the hills really are nearer than the dome. Its
+  // geometry is a ring whose object origin is the world centre, so the
+  // transparent sort cannot place it by distance; the explicit order is what
+  // keeps the layering right. The ridge crests 8-20 m above ground at 112 m out,
+  // i.e. roughly 4-10 degrees of elevation, so the sun and moon (which sit well
+  // above that) are never lost behind it except when they are setting into it,
+  // which is what should happen. Depth testing still stops it drawing over the
+  // wall and props.
+  const horizonGeometry = new THREE.BufferGeometry();
+  horizonGeometry.setAttribute(
+    'position', new THREE.BufferAttribute(horizonRibbonArray(), 3)
+  );
+  // Vertex colours carry the haze gradient (ridge line -> foot). With them the
+  // material's own colour stays white, so the gradient is the whole look.
+  const horizonColors = new THREE.BufferAttribute(horizonRibbonColors(), 3);
+  horizonGeometry.setAttribute('color', horizonColors);
+  const horizonMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff, vertexColors: true, fog: false, side: THREE.DoubleSide,
+    transparent: true, opacity: horizonOpacity('day'), depthWrite: false
+  });
+  const horizonRidge = new THREE.Mesh(horizonGeometry, horizonMaterial);
+  horizonRidge.name = 'sky-horizon';
+  horizonRidge.renderOrder = 1;
+  scene.add(horizonRidge);
+
+  function paintHorizon(phaseId) {
+    horizonMaterial.opacity = horizonOpacity(phaseId);
+    const colors = horizonRibbonColors(horizonTint(phaseId), horizonFootTint(phaseId));
+    horizonColors.array.set(colors);
+    horizonColors.needsUpdate = true;
+  }
+  paintHorizon('day');
+
   const zenithColor = new THREE.Color(0x6fa8dc);
   const horizonColor = new THREE.Color(0x9fc4e8);
   const hazeColor = new THREE.Color(0x9fc4e8);
@@ -250,6 +295,24 @@ export function buildWorld(renderer) {
       m.material.opacity = op;
     }
     cloudGroup.visible = op > 0;
+  }
+
+  // Round 89: the cloud layer's shadow on the daylight. The domed clouds never
+  // project onto the plaza (they are 100+ m out), so what the ground sees is the
+  // layer's aggregate dimming: a slow, smooth dapple driven by cloudDapple().
+  // This re-writes the sun's intensity from the phase's own base each time, so
+  // the dapple is a fraction of the authored light and never accumulates.
+  // Disabled on the low tier and at night, where the sun is already a night
+  // anchor and a drifting dim would read as a flickering bug.
+  const CLOUD_SHADOW_SEED = 0.37;
+  let cloudDim = 1;
+  function applyCloudDapple() {
+    // `environment` is declared further down; the first call arrives from the
+    // frame loop, long after it exists.
+    const allow = environment.quality !== 'low' && environment.phase !== 'night';
+    cloudDim = allow ? cloudDapple(cloudTime, CLOUD_SHADOW_SEED) : 1;
+    sun.intensity = sunBaseIntensity * cloudDim;
+    return cloudDim;
   }
 
   paintSky(0x6fa8dc, 0x9fc4e8);
@@ -1043,6 +1106,10 @@ export function buildWorld(renderer) {
   const sun = new THREE.DirectionalLight(0xfff1d0, 2.1);
   sun.position.set(16, 22, 10);
   sun.castShadow = true;
+  // Round 89: the sun's authored intensity, re-read by applyCloudDapple() so the
+  // dapple is always a fraction of the phase's own sun rather than a standing
+  // number that would drift if a phase were retuned.
+  let sunBaseIntensity = 2.1;
   sun.shadow.mapSize.set(2048, 2048);
   // The ortho box is derived from the areas' declared bounds, not hard-coded.
   // It used to be a fixed +-24 around the origin, which predated the market
@@ -1073,6 +1140,21 @@ export function buildWorld(renderer) {
   const fill = new THREE.DirectionalLight(0x9fb6d8, 0.35);
   fill.position.set(-14, 10, -12);
   scene.add(fill);
+
+  // Round 89: moonlight. A cool, weak directional light from the moon's side of
+  // the sky, switched on only once the sun has set. The existing `fill` is a
+  // constant cool rim at every phase; this one is phase-driven, so night gains a
+  // believable blue key on the roofs and the plaza stone rather than the sun's
+  // warm dusk colour left running at low intensity. It casts no shadow: the
+  // shadow-look of night comes from the sun's own shadow pass still running at
+  // its low night intensity, and a second shadow map would double the depth-pass
+  // cost for a light nobody can see the edge of.
+  const moon = new THREE.DirectionalLight(MOONLIGHT_COLOR, 0);
+  const moonDir = moonlightDirection();
+  moon.position.set(moonDir.x * 22, moonDir.y * 22, moonDir.z * 22);
+  moon.castShadow = false;
+  moon.visible = false;
+  scene.add(moon);
 
   // --- Key pickup (hidden until Halden sets the quest) --------------------
   const keyGroup = new THREE.Group();
@@ -3216,6 +3298,8 @@ export function buildWorld(renderer) {
     paintSun,
     paintMoon,
     paintClouds,
+    paintHorizon,
+    horizonRidge,
     sunDisc,
     starField,
     moonDisc,
@@ -3236,6 +3320,9 @@ export function buildWorld(renderer) {
         // rotate around Y axis by drift
         m.rotation.y = d;
       }
+      // Round 89: the same clock drives the ground dapple, so the dimming and
+      // the drift cannot disagree about how much time has passed.
+      applyCloudDapple();
     },
     // The palette for a phase, so the camera pipeline can derive its ambient
     // room from the same numbers the sky dome is painted with.
@@ -3243,6 +3330,21 @@ export function buildWorld(renderer) {
     hemi,
     sun,
     fill,
+    moon,
+    // Round 89: cloud dapple. The frame loop calls this once per frame so the
+    // sun dims and recovers smoothly with the drifting layer; the value is a
+    // fraction of the phase's authored sun, never a standing number.
+    updateCloudDapple() {
+      return applyCloudDapple();
+    },
+    setSunBase(value) {
+      if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+        sunBaseIntensity = value;
+      }
+    },
+    get cloudDim() {
+      return cloudDim;
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -3271,6 +3373,15 @@ export function buildWorld(renderer) {
       // renderer's own shadowMap setting stays under main.js's control and a
       // manual override cannot be silently undone here.
       sun.castShadow = !low;
+      // Round 89: the moonlight key is a whole extra light in the shader loop,
+      // so it goes with the point lights on the low tier. Its phase visibility
+      // is re-derived here rather than remembered, so flipping back to full
+      // restores exactly what applyPhase() would have set.
+      if (environment.moon) {
+        const moonLevel = moonlightIntensity(environment.phase);
+        environment.moon.intensity = low ? 0 : moonLevel;
+        environment.moon.visible = !low && moonLevel > 0;
+      }
       // Plaza AO only multiplies indirect light; drop it on the low tier so the
       // grounding cue costs nothing when the budget is tight.
       if (plazaMaterial) {
@@ -3555,6 +3666,9 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintClouds) {
     environment.paintClouds(phaseId);
   }
+  if (environment.paintHorizon) {
+    environment.paintHorizon(phaseId);
+  }
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,
   // night shows it full. The mesh itself keeps rendering (one draw call) so
@@ -3570,6 +3684,15 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   hemi.intensity = look.hemiIntensity;
   sun.color.setHex(look.sunColor);
   sun.intensity = look.sunIntensity;
+  // The dapple is a fraction of this, re-applied every frame from this base.
+  if (environment.setSunBase) environment.setSunBase(look.sunIntensity);
+  // Round 89: the moon is a cool key only once the sun is down. It is switched
+  // off (not merely dimmed) in daylight so it costs nothing at day.
+  if (environment.moon) {
+    const moonLevel = moonlightIntensity(phaseId);
+    environment.moon.intensity = moonLevel;
+    environment.moon.visible = moonLevel > 0;
+  }
   // The light is positioned relative to its target, so once the target sits at
   // the world centre (for the shadow box) the light has to carry the same
   // offset. PHASE_LOOKS.sunPosition is authored as a point around the origin;

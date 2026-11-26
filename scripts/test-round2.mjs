@@ -3434,6 +3434,160 @@ try {
     starInfo.day.opacity === 0 && starInfo.day.visible === false,
     JSON.stringify({ opacity: starInfo.day.opacity, visible: starInfo.day.visible }));
   await capture(page, 'round85-stars.png');
+
+  // --- 28n1. Round 89: moon disc, cloud layer, ridge and lighting ------------
+  // Four additions that together make the night read as a place: the moon disc,
+  // the drifting cloud layer, the distant ridge on the skyline, and the two
+  // lighting changes (a cool moonlight key at night, a slow cloud dapple on the
+  // daylight sun). All checked live, on the real booted scene.
+  const skyDressing = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    // The dapple is deliberately off on the low tier (it is a whole-scene
+    // lighting effect and the low tier exists to stop paying for those). This
+    // headless run is slow enough that adaptive quality may already have
+    // dropped, so pin full quality for the samples and restore it afterwards.
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.set('full');
+    const byName = (name) => {
+      let found = null;
+      api.scene.traverse((o) => { if (o.name === name) found = o; });
+      return found;
+    };
+    const sample = (phaseSeconds) => {
+      api.setClock(phaseSeconds);
+      const moonGroup = byName('sky-moon-group');
+      const moonCore = byName('sky-moon');
+      const cloudGroup = byName('sky-clouds');
+      const ridge = byName('sky-horizon');
+      const clouds = [];
+      if (cloudGroup) {
+        for (const child of cloudGroup.children) {
+          clouds.push({
+            opacity: child.material.opacity,
+            color: child.material.color.getHexString(),
+            y: child.position.y,
+            rotY: child.rotation.y
+          });
+        }
+      }
+      const ridgePos = ridge ? ridge.geometry.getAttribute('position') : null;
+      let ridgeMaxY = -Infinity;
+      let ridgeMinY = Infinity;
+      if (ridgePos) {
+        for (let i = 0; i < ridgePos.count; i += 1) {
+          const y = ridgePos.getY(i);
+          ridgeMaxY = Math.max(ridgeMaxY, y);
+          ridgeMinY = Math.min(ridgeMinY, y);
+        }
+      }
+      // The ridge is vertex-coloured (ridge line -> haze at the foot), so the
+      // material colour stays white and the per-phase tint lives in the buffer.
+      // Read the average of the ridge-line vertices, which is what the eye sees
+      // as the silhouette colour.
+      const ridgeColors = ridge ? ridge.geometry.getAttribute('color') : null;
+      let ridgeTint = null;
+      if (ridgeColors && ridgePos) {
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < ridgeColors.count; i += 1) {
+          // Vertex order per segment is [foot, foot, ridge, foot, ridge, ridge],
+          // so indices 2, 4 and 5 are the ridge line.
+          if (i % 6 < 2) continue;
+          r += ridgeColors.getX(i);
+          g += ridgeColors.getY(i);
+          b += ridgeColors.getZ(i);
+          n += 1;
+        }
+        if (n > 0) {
+          ridgeTint = [r / n, g / n, b / n]
+            .map((c) => Math.round(c * 255).toString(16).padStart(2, '0')).join('');
+        }
+      }
+      return {
+        phase: api.getClock().phase,
+        moonVisible: moonGroup ? moonGroup.visible : null,
+        moonOpacity: moonCore ? moonCore.material.opacity : null,
+        moonColor: moonCore ? moonCore.material.color.getHexString() : null,
+        cloudVisible: cloudGroup ? cloudGroup.visible : null,
+        cloudCount: clouds.length,
+        cloudOpacity: clouds.length ? clouds[0].opacity : null,
+        cloudColor: clouds.length ? clouds[0].color : null,
+        cloudsSitHigh: clouds.every((c) => c.y > 4),
+        ridgeVisible: ridge ? ridge.visible : null,
+        ridgeCount: ridgePos ? ridgePos.count : 0,
+        ridgeTint,
+        ridgeOpacity: ridge ? ridge.material.opacity : null,
+        ridgeMaxY,
+        ridgeMinY,
+        moonLight: env.moon
+          ? { intensity: Number(env.moon.intensity.toFixed(3)), visible: env.moon.visible,
+              castsShadow: env.moon.castShadow, color: env.moon.color.getHexString() }
+          : null,
+        sunIntensity: Number(env.sun.intensity.toFixed(3)),
+        cloudDim: typeof env.cloudDim === 'number' ? Number(env.cloudDim.toFixed(3)) : null
+      };
+    };
+    const day = sample(10);
+    const night = sample(150);
+    // The dapple moves on its own clock, and the whole cycle is minutes long, so
+    // sampling a second of wall clock would look flat. Drive the cloud clock
+    // directly instead: one call with a large step, then read what the sun did.
+    api.setClock(20);
+    const dims = [];
+    if (env.updateCloudDapple) {
+      for (let i = 0; i < 6; i += 1) {
+        dims.push(env.updateCloudDapple());
+        // Advance the layer's own clock through the private updater; the same
+        // function the frame loop calls, so this is the real path.
+        env.updateClouds(12);
+      }
+    }
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    return { day, night, dims, startTier, startAdaptive };
+  });
+
+  const sd = skyDressing;
+  checks.check('the moon disc is out at night and hidden by day',
+    sd.night.moonVisible === true && sd.night.moonOpacity === 1 &&
+      sd.day.moonVisible === false && sd.day.moonOpacity === 0,
+    JSON.stringify({ night: [sd.night.moonVisible, sd.night.moonOpacity],
+                     day: [sd.day.moonVisible, sd.day.moonOpacity] }));
+  checks.check('the moon is cool white, not the sun disc\'s warm tint',
+    sd.night.moonColor === 'd8e4ff' && sd.day.moonColor === 'd8e4ff',
+    JSON.stringify({ night: sd.night.moonColor, day: sd.day.moonColor }));
+  checks.check('the cloud layer is present, high on the dome, and dims by night',
+    sd.day.cloudVisible === true && sd.day.cloudCount === 14 && sd.day.cloudsSitHigh &&
+      sd.day.cloudOpacity > sd.night.cloudOpacity && sd.night.cloudVisible === true,
+    JSON.stringify({ count: sd.day.cloudCount, high: sd.day.cloudsSitHigh,
+                     day: sd.day.cloudOpacity, night: sd.night.cloudOpacity,
+                     nightVisible: sd.night.cloudVisible }));
+  // Geometry contract: the foot sits 30 m below ground (hidden behind the wall
+  // and the ground disc) and hilltops land 8-20 m above ground, clear of the
+  // 3.2 m border wall. The ribbon is two triangles per segment.
+  checks.check('the ridge ring is built, sits on the skyline and fades per phase',
+    sd.day.ridgeVisible === true && sd.day.ridgeCount === 96 * 2 * 3 &&
+      Math.abs(sd.day.ridgeMinY + 30) < 0.01 &&
+      sd.day.ridgeMaxY > 8 && sd.day.ridgeMaxY < 20 &&
+      sd.day.ridgeTint !== null && sd.day.ridgeTint !== sd.night.ridgeTint &&
+      sd.day.ridgeOpacity > 0 && sd.day.ridgeOpacity < 1 &&
+      sd.night.ridgeOpacity > 0 && sd.night.ridgeOpacity < 1,
+    JSON.stringify({ count: sd.day.ridgeCount, maxY: sd.day.ridgeMaxY,
+                     minY: sd.day.ridgeMinY, dayTint: sd.day.ridgeTint,
+                     nightTint: sd.night.ridgeTint, dayOpacity: sd.day.ridgeOpacity,
+                     nightOpacity: sd.night.ridgeOpacity }));
+  checks.check('the moonlight key lights the plaza at night and is off by day',
+    sd.night.moonLight.visible === true && sd.night.moonLight.intensity > 0.2 &&
+      sd.day.moonLight.visible === false && sd.day.moonLight.intensity === 0 &&
+      sd.night.moonLight.castsShadow === false,
+    JSON.stringify({ night: sd.night.moonLight, day: sd.day.moonLight }));
+  checks.check('the cloud dapple dims the daylight sun, but never past the cap',
+    sd.dims.every((d) => d <= 1 && d >= 0.8) &&
+      Math.max(...sd.dims) - Math.min(...sd.dims) > 0.001,
+    JSON.stringify(sd.dims.map((d) => Number(d.toFixed(3)))));
+  await capture(page, 'round89-sky-dressing.png');
+
   // --- 28n2. The lane rope's rope strand (round 86) -------------------------
   // The three LaneRope boxes (2 cm diameter, 1.92 m2 total) that span the
   // lane are dressed with the round 86 twisted-fibre rope maps at a 0.08 m
