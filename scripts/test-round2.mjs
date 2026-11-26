@@ -3780,6 +3780,252 @@ try {
     JSON.stringify({ day: md.dayTint, night: md.nightTint }));
   await capture(page, 'round90-meadow.png');
 
+  // --- 28n4. Cloth flutter, fireflies, the bird flock, chimney smoke ---------
+  // Rounds 91 and 92 added four per-frame instanced dressing passes: the cloth
+  // flutter on the bunting and banner, the night firefly field, the daytime bird
+  // flock overhead, and the chimney columns. Each is driven by a pure module and
+  // each is meant to be invisible at the wrong hour and frozen or hidden on the
+  // low tier, so this block proves all four properties live rather than trusting
+  // the modules alone.
+  const dressing = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+
+    const byName = (name) => {
+      let found = null;
+      api.scene.traverse((o) => { if (o.name === name) found = o; });
+      return found;
+    };
+    // The instance translation of instance `i` and its x-scale, read straight out
+    // of the matrix buffer (16 floats per instance) so no THREE object is needed.
+    const instanceAt = (mesh, i) => {
+      const a = mesh.instanceMatrix.array;
+      const b = i * 16;
+      return { x: a[b], y: a[b + 13], z: a[b + 14], sx: a[b] };
+    };
+    const matrixDiff = (mesh, i, other) => {
+      const a = mesh.instanceMatrix.array;
+      const b = other.instanceMatrix.array;
+      let diff = 0;
+      for (let k = 0; k < 16; k += 1) diff += Math.abs(a[i * 16 + k] - b[i * 16 + k]);
+      return diff;
+    };
+    const snapshot = (mesh) => ({ array: Float32Array.from(mesh.instanceMatrix.array) });
+
+    // --- Flutter ---------------------------------------------------------
+    const flags = [];
+    api.scene.traverse((o) => { if (o.name === 'BuntingFlag') flags.push(o); });
+    api.setClock(10);
+    let flutter = null;
+    if (flags.length && env.updateFlutter) {
+      env.updateFlutter(0.3);
+      const before = [flags[0].rotation.y, flags[0].rotation.z, flags[3].rotation.y];
+      env.updateFlutter(0.75);
+      const after = [flags[0].rotation.y, flags[0].rotation.z, flags[3].rotation.y];
+      // Two flags must not move in lockstep: each has its own seeded phase.
+      const phaseSpread = Math.abs((after[0] - before[0]) - (after[2] - before[2]));
+      flutter = {
+        flagCount: flags.length,
+        moved: Math.abs(after[0] - before[0]) + Math.abs(after[1] - before[1]) > 1e-5,
+        phaseSpread
+      };
+    }
+    // The banner canvas is the modelled mesh the flutter follows after the GLB
+    // upgrade; if the flutter lost it the banner would hang perfectly still.
+    let banner = null;
+    if (env.updateFlutter) {
+      const canvas = byName('BannerCanvas');
+      if (canvas) {
+        env.updateFlutter(0.2);
+        const y0 = canvas.rotation.y;
+        env.updateFlutter(0.65);
+        banner = { moved: Math.abs(canvas.rotation.y - y0) > 1e-6 };
+      } else {
+        banner = { moved: null };
+      }
+    }
+    // Low tier: no flutter at all.
+    let flutterLow = null;
+    if (flags.length && env.updateFlutter) {
+      api.quality.set('low');
+      env.updateFlutter(0.4);
+      const b = flags[0].rotation.y;
+      env.updateFlutter(0.9);
+      flutterLow = { still: Math.abs(flags[0].rotation.y - b) < 1e-12, on: env.flutterOn };
+      api.quality.set('full');
+    }
+
+    // --- Fireflies -------------------------------------------------------
+    const ff = byName('fireflies');
+    api.setClock(10);
+    const ffDay = ff ? { visible: ff.visible, count: ff.count } : null;
+    api.setClock(150);
+    let ffNight = null;
+    if (ff) {
+      const snap = snapshot(ff);
+      env.updateFireflies(0.4);
+      env.updateFireflies(0.9);
+      // A firefly that never blinks would leave the matrices identical.
+      let blink = 0;
+      for (let i = 0; i < ff.count; i += 1) {
+        blink = Math.max(blink, Math.abs(ff.instanceMatrix.array[i * 16] - snap.array[i * 16]));
+      }
+      ffNight = {
+        visible: ff.visible,
+        count: ff.count,
+        opacity: Number(ff.material.opacity.toFixed(3)),
+        blink
+      };
+    }
+    // Every firefly must sit above the ground and off the paving.
+    let ffPlacement = null;
+    if (ff) {
+      let low = 0;
+      let onPaving = 0;
+      for (let i = 0; i < ff.count; i += 1) {
+        const p = instanceAt(ff, i);
+        if (p.y < 0.2) low += 1;
+        const x = ff.instanceMatrix.array[i * 16 + 12];
+        const z = ff.instanceMatrix.array[i * 16 + 14];
+        if (Math.hypot(x, z) < 8) onPaving += 1;
+      }
+      ffPlacement = { low, onPaving };
+    }
+    let ffLow = null;
+    if (ff) {
+      api.quality.set('low');
+      const before = snapshot(ff);
+      env.updateFireflies(0.5);
+      ffLow = { frozen: matrixDiff(ff, 0, before) < 1e-9, visible: ff.visible };
+      api.quality.set('full');
+    }
+
+    // --- Birds -----------------------------------------------------------
+    api.setClock(10);
+    const wings = env.birdWings || [];
+    const birdDay = { count: env.birdCount, wings: wings.length,
+      visible: wings.map((w) => w.visible) };
+    let birdMotion = null;
+    if (wings.length) {
+      const before = snapshot(wings[0]);
+      env.updateBirds(0.4);
+      env.updateBirds(0.8);
+      // Height band: 15-23 m plus the 0.7 m bob, so above the roofs and below
+      // a comfortable upward glance.
+      let minY = Infinity;
+      let maxY = -Infinity;
+      let maxR = 0;
+      for (let i = 0; i < wings[0].count; i += 1) {
+        const p = instanceAt(wings[0], i);
+        minY = Math.min(minY, p.y);
+        maxY = Math.max(maxY, p.y);
+        maxR = Math.max(maxR, Math.hypot(p.x, p.z));
+      }
+      birdMotion = {
+        moved: matrixDiff(wings[0], 0, before) > 1e-6,
+        minY: Number(minY.toFixed(2)), maxY: Number(maxY.toFixed(2)),
+        maxR: Number(maxR.toFixed(2))
+      };
+    }
+    api.setClock(150);
+    const birdNight = { visible: wings.map((w) => w.visible) };
+    let birdLow = null;
+    if (wings.length) {
+      api.quality.set('low');
+      env.updateBirds(0.3);
+      birdLow = { visible: wings.map((w) => w.visible) };
+      api.quality.set('full');
+    }
+
+    // --- Chimney smoke ---------------------------------------------------
+    api.setClock(10);
+    const smoke = env.smoke;
+    let smokeDay = null;
+    if (smoke) {
+      const before = snapshot(smoke);
+      env.updateSmoke(0.5);
+      env.updateSmoke(1.0);
+      // The plume top must be well above the 3.2 m border wall; that is the
+      // whole point of siting the outer columns at ~4.5 m roof height.
+      let topY = -Infinity;
+      let baseY = Infinity;
+      for (let i = 0; i < smoke.count; i += 1) {
+        const y = smoke.instanceMatrix.array[i * 16 + 13];
+        topY = Math.max(topY, y);
+        baseY = Math.min(baseY, y);
+      }
+      smokeDay = {
+        count: smoke.count,
+        visible: smoke.visible,
+        opacity: Number(smoke.material.opacity.toFixed(3)),
+        moved: matrixDiff(smoke, 3, before) > 1e-6,
+        sites: (env.smokeSites || []).length,
+        topY: Number(topY.toFixed(2)),
+        baseY: Number(baseY.toFixed(2))
+      };
+    }
+    // The plumes read strongest at dusk, weakest at day, still present at night.
+    api.setClock(60);
+    const smokeDusk = smoke ? Number(smoke.material.opacity.toFixed(3)) : null;
+    api.setClock(150);
+    const smokeNight = smoke ? Number(smoke.material.opacity.toFixed(3)) : null;
+    api.setClock(10);
+    const smokeDayOpacity = smoke ? Number(smoke.material.opacity.toFixed(3)) : null;
+    let smokeLow = null;
+    if (smoke) {
+      api.quality.set('low');
+      smokeLow = { visible: smoke.visible };
+      api.quality.set('full');
+    }
+
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      flutter, banner, flutterLow,
+      ffDay, ffNight, ffPlacement, ffLow,
+      birdDay, birdMotion, birdNight, birdLow,
+      smokeDay, smokeDusk, smokeNight, smokeDayOpacity, smokeLow
+    };
+  });
+
+  const dr = dressing;
+  checks.check('the bunting flags flutter out of step on the full tier and hold still on low',
+    dr.flutter && dr.flutter.flagCount === 28 && dr.flutter.moved === true &&
+      dr.flutter.phaseSpread > 1e-4 && dr.flutterLow && dr.flutterLow.still === true &&
+      dr.flutterLow.on === false,
+    JSON.stringify({ flutter: dr.flutter, low: dr.flutterLow }));
+  checks.check('the flutter follows the modelled banner canvas, not the hidden stand-in',
+    dr.banner && dr.banner.moved === true,
+    JSON.stringify(dr.banner));
+  checks.check('the firefly field is off by day, lit and blinking at night, and frozen on low',
+    dr.ffDay && dr.ffDay.visible === false && dr.ffNight && dr.ffNight.visible === true &&
+      dr.ffNight.count === 64 && dr.ffNight.blink > 1e-4 && dr.ffLow && dr.ffLow.frozen === true,
+    JSON.stringify({ day: dr.ffDay, night: dr.ffNight, low: dr.ffLow }));
+  checks.check('every firefly floats above the meadow and off the paving',
+    dr.ffPlacement && dr.ffPlacement.low === 0 && dr.ffPlacement.onPaving === 0,
+    JSON.stringify(dr.ffPlacement));
+  checks.check('the bird flock flies overhead by day, hides at night and on low',
+    dr.birdDay && dr.birdDay.count === 8 && dr.birdDay.wings === 2 &&
+      dr.birdDay.visible.every(Boolean) && dr.birdMotion && dr.birdMotion.moved === true &&
+      dr.birdMotion.minY > 13 && dr.birdMotion.maxY < 25 && dr.birdMotion.maxR < 30 &&
+      dr.birdNight.visible.every((v) => v === false) &&
+      dr.birdLow.visible.every((v) => v === false),
+    JSON.stringify({ day: dr.birdDay, motion: dr.birdMotion, night: dr.birdNight, low: dr.birdLow }));
+  checks.check('the chimney columns climb above the wall and read strongest at dusk',
+    dr.smokeDay && dr.smokeDay.count === 28 && dr.smokeDay.sites === 4 &&
+      dr.smokeDay.visible === true && dr.smokeDay.moved === true &&
+      dr.smokeDay.topY > 4 && dr.smokeDay.baseY < 7 &&
+      dr.smokeDusk > dr.smokeDayOpacity && dr.smokeNight > dr.smokeDayOpacity &&
+      dr.smokeLow.visible === false,
+    JSON.stringify({ day: dr.smokeDay, dusk: dr.smokeDusk, night: dr.smokeNight, low: dr.smokeLow }));
+  await capture(page, 'round92-dressing.png');
+
   // --- 28n2. The lane rope's rope strand (round 86) -------------------------
   // The three LaneRope boxes (2 cm diameter, 1.92 m2 total) that span the
   // lane are dressed with the round 86 twisted-fibre rope maps at a 0.08 m

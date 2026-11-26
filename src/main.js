@@ -1881,6 +1881,10 @@ function frame() {
   if (environment.updateFlutter) environment.updateFlutter(dt);
   // Round 91: the night firefly field drifts and blinks once per frame.
   if (environment.updateFireflies) environment.updateFireflies(dt);
+  // Round 92: the daytime bird flock orbits and flaps, and the chimney columns
+  // climb. Both are instanced-quad passes and both stop on the low tier.
+  if (environment.updateBirds) environment.updateBirds(dt);
+  if (environment.updateSmoke) environment.updateSmoke(dt);
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
   maybeStartAmbient(dt);

@@ -15,9 +15,13 @@ import { windDirection, windPhase, windSway, windStrength } from './wind.js';
 import { tuftGeometry, tuftPhaseTint, tuftLeanAngle, tuftLeanAxis,
   TUFT_VARIANTS } from './tuft.js';
 import { flutterAmount, flutterPhase, flutterMotion, flutterEnabled,
-  FLUTTER_MAX_YAW, FLUTTER_MAX_ROLL, FLUTTER_MAX_BILLOW } from './flutter.js';
+  FLUTTER_SEED, FLUTTER_MAX_YAW, FLUTTER_MAX_ROLL, FLUTTER_MAX_BILLOW } from './flutter.js';
 import { fireflySpawns, fireflyGlowLevel, fireflyBlink, fireflyDrift,
   fireflyEnabled, FIREFLY_TINT, FIREFLY_COUNT, FIREFLY_MIN_RADIUS, FIREFLY_MAX_RADIUS } from './fireflies.js';
+import { birdFlock, birdFlight, birdHeading, birdGlowLevel, birdsEnabled,
+  BIRD_COUNT, BIRD_WING_AMPLITUDE } from './birds.js';
+import { chimneySpawns, smokePuff, smokeGlowLevel, chimneyEnabled,
+  CHIMNEY_PUFFS, CHIMNEY_MAX_OPACITY, CHIMNEY_SEED } from './chimney.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -636,6 +640,10 @@ export function buildWorld(renderer) {
       flag.position.set(x, strand.y - dip - 0.11, strand.z);
       flag.rotation.x = Math.PI;
       flag.castShadow = false;
+      // Named so the browser check can find the pennants by name instead of
+      // guessing at the lane's structure, and so the flutter pass has something
+      // reportable.
+      flag.name = 'BuntingFlag';
       scene.add(flag);
       buntingFlags.push(flag);
       buntingFlutter.push({ mesh: flag, phase: flutterPhase(buntingFlutter.length) });
@@ -1887,6 +1895,15 @@ export function buildWorld(renderer) {
           mesh.material = iron;
         }
         group.add(mesh);
+      }
+      // The cloth flutter followed the flat stand-in; once the modelled canvas
+      // exists the stand-in is hidden, so the flutter has to follow the real
+      // BannerCanvas or the banner would hang perfectly still. The base rotation
+      // captured for the stand-in is dropped with it.
+      const canvasMesh = group.getObjectByName('BannerCanvas');
+      if (canvasMesh) {
+        flutterBase.delete(bannerFlutter[0].mesh);
+        bannerFlutter[0] = { mesh: canvasMesh, phase: bannerFlutter[0].phase };
       }
       scene.add(group);
       propGroups.push({ group, tile: 1.5 });
@@ -3534,21 +3551,10 @@ export function buildWorld(renderer) {
     if (step === 0 && fireflyTime === 0 && fireflyInstances.length === 0) return;
     fireflyTime += step;
     const glow = fireflyGlowLevel(environment.phase);
-    for (let i = 0; i < fireflyInstances.length; i += 1) {
-      const inst = fireflyInstances[i];
-      const drift = fireflyDrift(fireflyTime, inst.spawn);
-      const blink = fireflyBlink(fireflyTime, inst.phase);
-      _ffPos.set(inst.baseX + drift.x, inst.baseY + drift.y, inst.baseZ + drift.z);
-      _ffMatrix.compose(_ffPos, _ffQuat, _ffScale);
-      fireflyMesh.setMatrixAt(i, _ffMatrix);
-      // Per-instance opacity is approximated via material opacity scaled by blink;
-      // individual brightness lives in the blink value, surfaced to tests via
-      // the mesh name and count. We store the last blink on userData for checks.
-    }
-    fireflyMesh.instanceMatrix.needsUpdate = true;
-    // Overall field opacity follows phase glow; blink modulates per instance via
-    // a uniform-ish scale trick: scale instances by blink so dark ones vanish.
-    // Re-compose with scale = blink (clamped) for the cheap on/off read.
+    // One pass, one setMatrixAt per instance: the drift moves the quad and the
+    // blink shrinks it toward nothing. Scaling is the cheap per-instance fade an
+    // InstancedMesh gives us without a custom shader — a firefly at scale ~0 is
+    // sub-pixel, so the eye reads it as dark while the GPU still draws a quad.
     for (let i = 0; i < fireflyInstances.length; i += 1) {
       const inst = fireflyInstances[i];
       const drift = fireflyDrift(fireflyTime, inst.spawn);
@@ -3567,6 +3573,254 @@ export function buildWorld(renderer) {
     const glow = fireflyGlowLevel(phaseId);
     fireflyMesh.visible = glow > 0 && fireflyInstances.length > 0;
     fireflyMaterial.opacity = Math.max(0.05, glow);
+  }
+
+  // --- Birds over the plaza ------------------------------------------------
+  // The daytime counterpart to the fireflies: a flock that circles overhead so
+  // an upward glance finds something moving. Two InstancedMeshes (left wing,
+  // right wing) draw the whole flock, and the flap is the instance matrix's own
+  // rotation rather than a morph target, so the per-frame pass is a few dozen
+  // trig calls and there is no second geometry to keep in step.
+  const birdSpawnsList = birdsEnabled('full') ? birdFlock({ count: BIRD_COUNT }) : [];
+  const birdMaterial = new THREE.MeshBasicMaterial({
+    // An unlit silhouette: at 15-23 m a bird is a dark shape against the sky,
+    // and lighting it would cost a shader branch for something no one can see.
+    color: 0x2b2f36,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 1,
+    fog: true
+  });
+  birdMaterial.name = 'BirdSilhouette';
+
+  // One swept triangle, pivot at the body. A second, mirrored instance mesh
+  // gives the other wing, so a flapping bird is still two draw calls; a body
+  // would be a third for a shape a few pixels wide, so the two triangles meet
+  // at the body and read as one bird.
+  const birdWingGeometry = new THREE.BufferGeometry();
+  birdWingGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    0, 0, 0,
+    0.34, 0, 0.09,
+    0.30, 0, -0.19
+  ]), 3));
+  birdWingGeometry.computeBoundingSphere();
+  const birdLeftMesh = new THREE.InstancedMesh(
+    birdWingGeometry, birdMaterial, Math.max(1, birdSpawnsList.length)
+  );
+  birdLeftMesh.name = 'bird-wings-left';
+  birdLeftMesh.count = birdSpawnsList.length;
+  birdLeftMesh.frustumCulled = false; // the flock is always overhead
+  const birdRightMesh = new THREE.InstancedMesh(
+    birdWingGeometry, birdMaterial, Math.max(1, birdSpawnsList.length)
+  );
+  birdRightMesh.name = 'bird-wings-right';
+  birdRightMesh.count = birdSpawnsList.length;
+  birdRightMesh.frustumCulled = false;
+  scene.add(birdLeftMesh, birdRightMesh);
+
+  const _birdMatrix = new THREE.Matrix4();
+  const _birdPos = new THREE.Vector3();
+  const _birdScale = new THREE.Vector3();
+  const _birdYaw = new THREE.Quaternion();
+  const _birdFlap = new THREE.Quaternion();
+  const _birdQuat = new THREE.Quaternion();
+  const _birdUp = new THREE.Vector3(0, 1, 0);
+  const _birdForward = new THREE.Vector3(0, 0, 1);
+  // A wingspan of ~0.7 m at 15-23 m: big enough to read as a bird, small
+  // enough that a flock of eight does not look like bats.
+  const BIRD_WING_SCALE = 1.05;
+
+  function paintBirds(phaseId) {
+    const glow = birdGlowLevel(phaseId);
+    birdMaterial.opacity = glow;
+    const show = glow > 0 && birdSpawnsList.length > 0;
+    birdLeftMesh.visible = show;
+    birdRightMesh.visible = show;
+  }
+
+  let birdTime = 0;
+  /** Places both wing instances for every bird at `time`. */
+  function placeBirds(time) {
+    for (let i = 0; i < birdSpawnsList.length; i += 1) {
+      const spawn = birdSpawnsList[i];
+      const flight = birdFlight(time, spawn);
+      const yaw = birdHeading(time, spawn);
+      _birdPos.set(flight.x, flight.y, flight.z);
+      _birdYaw.setFromAxisAngle(_birdUp, yaw);
+      // The flap is a rotation about the body's own forward axis, composed
+      // after the yaw so a bird on the far side of its circle still flaps
+      // about its own spine rather than about the world's z.
+      _birdFlap.setFromAxisAngle(_birdForward, flight.wing);
+      _birdQuat.copy(_birdYaw).multiply(_birdFlap);
+      // The right wing runs along local +x; the left is the same triangle with
+      // x mirrored, which also flips the sense of the flap, so it takes -wing.
+      _birdScale.set(BIRD_WING_SCALE, BIRD_WING_SCALE, BIRD_WING_SCALE);
+      _birdMatrix.compose(_birdPos, _birdQuat, _birdScale);
+      birdRightMesh.setMatrixAt(i, _birdMatrix);
+      _birdFlap.setFromAxisAngle(_birdForward, -flight.wing);
+      _birdQuat.copy(_birdYaw).multiply(_birdFlap);
+      _birdScale.set(-BIRD_WING_SCALE, BIRD_WING_SCALE, BIRD_WING_SCALE);
+      _birdMatrix.compose(_birdPos, _birdQuat, _birdScale);
+      birdLeftMesh.setMatrixAt(i, _birdMatrix);
+    }
+    birdRightMesh.instanceMatrix.needsUpdate = true;
+    birdLeftMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  function updateBirds(dt) {
+    if (!birdsEnabled(environment.quality)) return;
+    if (!birdSpawnsList.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    birdTime += step;
+    if (!birdLeftMesh.visible) return;
+    placeBirds(birdTime);
+  }
+  // Place the flock once at time 0 so the first frame (and any check that reads
+  // the matrices before stepping) sees birds on their orbits, not identity
+  // matrices stacked at the world origin.
+  placeBirds(0);
+
+  // --- Chimney smoke -------------------------------------------------------
+  // Thin columns from the roof lines: the house's own chimney, plus three that
+  // read as the village continuing past the border walls. Smoke is one of the
+  // cheapest ways to say "people live here", and the pure module in
+  // src/chimney.js decides where each puff sits, how it leans and how it fades.
+  //
+  // The sites are passed in rather than sampled, because the module cannot know
+  // where this world's roofs are. The first is the modelled house chimney
+  // (house-model at -10.5,-9 plus the model's own chimney at +2.2,+1.0, cap at
+  // 5.25 m). The other three stand outside the walls: the player's eye is at
+  // 1.6 m and the wall is 3.2 m, so a plume based at ~4.5 m 20 m out shows only
+  // its column above the wall line, which is exactly the depth cue wanted and
+  // costs no new geometry.
+  const smokeSites = [
+    { x: -8.3, z: -8.0, baseY: 5.3 },
+    { x: -22.0, z: -9.0, baseY: 4.6 },
+    { x: 20.5, z: -15.5, baseY: 4.2 },
+    { x: -4.0, z: 22.0, baseY: 4.8 }
+  ];
+  const smokeSpawnsList = chimneyEnabled('full')
+    ? chimneySpawns({ count: smokeSites.length, sites: smokeSites, seed: CHIMNEY_SEED })
+    : [];
+
+  // A soft radial puff, generated once. A canvas gradient is the cheapest way to
+  // get a soft edge without a texture fetch, and the same helper pattern as the
+  // plaza AO map in assets.js; a null canvas (no DOM) simply leaves the smoke
+  // with hard edges rather than throwing.
+  function createSmokeTexture(size = 64) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g.addColorStop(0.45, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.8, 'rgba(255,255,255,0.12)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  // Two quads crossed at 90 degrees rather than one camera-facing billboard.
+  // A crossed pair looks the same from every direction, so the smoke needs no
+  // camera and no per-frame rotation -- it is one geometry that can be turned
+  // into an InstancedMesh like any other.
+  function createCrossedQuadGeometry() {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      -0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0,
+      0, -0.5, -0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0, 0.5, -0.5
+    ]), 3));
+    geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([
+      0, 0, 1, 0, 1, 1, 0, 1,
+      0, 0, 1, 0, 1, 1, 0, 1
+    ]), 2));
+    geometry.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
+    geometry.computeBoundingSphere();
+    return geometry;
+  }
+
+  const smokeMaterial = new THREE.MeshBasicMaterial({
+    color: 0xcfd2d6,
+    map: createSmokeTexture(),
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: true
+  });
+  smokeMaterial.name = 'ChimneySmoke';
+  const smokeMesh = new THREE.InstancedMesh(
+    createCrossedQuadGeometry(),
+    smokeMaterial,
+    Math.max(1, smokeSpawnsList.length * CHIMNEY_PUFFS)
+  );
+  smokeMesh.name = 'chimney-smoke';
+  smokeMesh.count = smokeSpawnsList.length * CHIMNEY_PUFFS;
+  smokeMesh.visible = false;
+  smokeMesh.frustumCulled = false; // the columns are taller than the quad
+  smokeMesh.renderOrder = 2;
+  scene.add(smokeMesh);
+
+  // One flat list of (plume, slot) so the per-frame pass is a single loop with
+  // no nested arrays to chase; slot order is preserved so instance i of a plume
+  // always draws the same puff.
+  const smokeInstances = [];
+  for (let p = 0; p < smokeSpawnsList.length; p += 1) {
+    for (let slot = 0; slot < CHIMNEY_PUFFS; slot += 1) {
+      smokeInstances.push({ spawn: smokeSpawnsList[p], slot });
+    }
+  }
+
+  const _smokeMatrix = new THREE.Matrix4();
+  const _smokePos = new THREE.Vector3();
+  const _smokeScale = new THREE.Vector3();
+  const _smokeQuat = new THREE.Quaternion();
+
+  function paintSmoke(phaseId) {
+    const glow = smokeGlowLevel(phaseId);
+    smokeMaterial.opacity = CHIMNEY_MAX_OPACITY * glow;
+    smokeMesh.visible = glow > 0 && smokeInstances.length > 0;
+  }
+
+  let smokeTime = 0;
+  /** Writes every puff's transform for `time`. Returns the number placed. */
+  function placeSmoke(time) {
+    for (let i = 0; i < smokeInstances.length; i += 1) {
+      const { spawn, slot } = smokeInstances[i];
+      const puff = smokePuff(spawn, slot, time);
+      // The module's opacity is expressed as scale. An InstancedMesh shares one
+      // material, so a per-puff alpha would need a shader this project does not
+      // otherwise carry; scaling the quad instead is the same trick the
+      // fireflies use, and for smoke it reads as the column thinning out as it
+      // climbs. The square root keeps the visible thickness from collapsing
+      // too fast in the middle of the plume.
+      const fade = CHIMNEY_MAX_OPACITY > 0
+        ? Math.min(1, Math.max(0, puff.opacity / CHIMNEY_MAX_OPACITY))
+        : 0;
+      const s = puff.size * Math.sqrt(fade);
+      _smokePos.set(puff.x, puff.y, puff.z);
+      _smokeScale.set(s, s, s);
+      _smokeMatrix.compose(_smokePos, _smokeQuat, _smokeScale);
+      smokeMesh.setMatrixAt(i, _smokeMatrix);
+    }
+    smokeMesh.instanceMatrix.needsUpdate = true;
+    return smokeInstances.length;
+  }
+  placeSmoke(0);
+
+  function updateSmoke(dt) {
+    if (!chimneyEnabled(environment.quality)) return;
+    if (!smokeInstances.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    smokeTime += step;
+    if (!smokeMesh.visible) return;
+    placeSmoke(smokeTime);
   }
 
   // The per-instance scratch objects for the sway pass, allocated once so the
@@ -3613,6 +3867,7 @@ export function buildWorld(renderer) {
       }
       mesh.instanceMatrix.needsUpdate = true;
     }
+  }
 
   let flutterTime = 0;
   // Authored base rotations, captured lazily on first frame so the flutter pass
@@ -3641,7 +3896,6 @@ export function buildWorld(renderer) {
       m.rotation.y = base.y + motion.yaw;
       m.rotation.z = base.z + motion.roll;
     }
-  }
   }
 
   /** Paints the meadow for a phase. The baked colours are daylight; the phase
@@ -3743,6 +3997,36 @@ export function buildWorld(renderer) {
     get flutterOn() {
       return flutterEnabled(environment.quality);
     },
+    // Round 92: the daytime bird flock. Two InstancedMeshes (one per wing) so a
+    // browser check can count the flock by name; `paintBirds` is called from
+    // applyPhase; `updateBirds` is the per-frame orbit + flap.
+    birdWings: [birdLeftMesh, birdRightMesh],
+    birdCount: birdSpawnsList.length,
+    paintBirds(phaseId) {
+      paintBirds(phaseId);
+    },
+    updateBirds(dt) {
+      updateBirds(dt);
+    },
+    get birdsOn() {
+      return birdsEnabled(environment.quality);
+    },
+    // Round 92: the chimney smoke. `smoke` is the InstancedMesh, `smokeCount` is
+    // the number of puffs, `smokeSites` records where the plumes are based so a
+    // check can hold the columns to the roofs. `paintSmoke` is called from
+    // applyPhase; `updateSmoke` is the per-frame climb.
+    smoke: smokeMesh,
+    smokeCount: smokeInstances.length,
+    smokeSites,
+    paintSmoke(phaseId) {
+      paintSmoke(phaseId);
+    },
+    updateSmoke(dt) {
+      updateSmoke(dt);
+    },
+    get smokeOn() {
+      return chimneyEnabled(environment.quality);
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -3795,6 +4079,23 @@ export function buildWorld(renderer) {
       // keeps its visibility decision in applyPhase (paintFireflies). Re-derive
       // visibility from the current phase so a tier flip never leaves a stale field.
       if (environment.paintFireflies) environment.paintFireflies(environment.phase);
+      // Round 92: the bird flock and the chimney smoke are per-frame passes over
+      // instanced quads, so both stop on the low tier. Like the fireflies they
+      // re-derive their visibility from the current phase, so a flip can never
+      // leave a frozen bird or a still column on screen. Hiding them entirely
+      // rather than freezing them is deliberate: a bird stopped mid-flap in the
+      // sky is far more noticeable than one that is simply not there.
+      if (environment.paintBirds) {
+        const birdGlow = low ? 0 : birdGlowLevel(environment.phase);
+        birdMaterial.opacity = birdGlow;
+        birdLeftMesh.visible = birdGlow > 0 && birdSpawnsList.length > 0;
+        birdRightMesh.visible = birdLeftMesh.visible;
+      }
+      if (environment.paintSmoke) {
+        const smokeGlow = low ? 0 : smokeGlowLevel(environment.phase);
+        smokeMaterial.opacity = CHIMNEY_MAX_OPACITY * smokeGlow;
+        smokeMesh.visible = smokeGlow > 0 && smokeInstances.length > 0;
+      }
       // Contact darkening rides on vertex colours; disable it on the low tier by
       // turning the attribute off on every dressed prop mesh.
       for (const { group } of propGroups) {
@@ -4082,6 +4383,12 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   }
   if (environment.paintFireflies) {
     environment.paintFireflies(phaseId);
+  }
+  if (environment.paintBirds) {
+    environment.paintBirds(phaseId);
+  }
+  if (environment.paintSmoke) {
+    environment.paintSmoke(phaseId);
   }
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,
