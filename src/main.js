@@ -35,7 +35,7 @@ import {
   noteExchange,
   AMBIENT_CHANCE
 } from './ambient.js';
-import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
+import { phaseAt, clockLabel, wrapClock, nextPhaseStart, nightFraction } from './daynight.js';
 import { loadGlb } from './glb.js';
 import { createAdaptiveResolution, MIN_RATIO } from './perf.js';
 import { createQualityTier, QUALITY_LOW, QUALITY_FULL } from './quality.js';
@@ -607,6 +607,11 @@ function syncPhase(force = false) {
   // phase constant, and a harness that jumps the clock then reads the fog in
   // the same tick should see the blended value, not the constant.
   applyAtmosphere(environment, clockSeconds);
+  // Round 93: the lit windows need the clock, not just the phase, because a
+  // bedtime falls inside a phase. syncPhase() is what a harness's setClock()
+  // runs, so refining here makes a forced clock paint the right village at once
+  // rather than waiting for the next frame.
+  if (environment.updateWindows) environment.updateWindows(nightFraction(clockSeconds));
   setNPCRoutine(npcs, phase.id);
   clockPhase.textContent = phase.label;
   // The drone shifts root and level with the time of day.
@@ -1885,6 +1890,16 @@ function frame() {
   // climb. Both are instanced-quad passes and both stop on the low tier.
   if (environment.updateBirds) environment.updateBirds(dt);
   if (environment.updateSmoke) environment.updateSmoke(dt);
+  // Round 93: the daytime butterflies and the drifting dust motes are per-frame
+  // instanced passes; both stop on the low tier. The lit windows are not a
+  // per-frame pass -- their schedule only moves when a bedtime passes, so the
+  // call is cheap and the guard lives inside updateWindows.
+  if (environment.updateButterflies) environment.updateButterflies(dt);
+  if (environment.updateMotes) environment.updateMotes(dt);
+  if (environment.updateWindows) environment.updateWindows(nightFraction(clockSeconds));
+  if (environment.updateIvy) environment.updateIvy(dt);
+  if (environment.updateSpray) environment.updateSpray(dt);
+  if (environment.updateMist) environment.updateMist(dt);
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
   maybeStartAmbient(dt);
