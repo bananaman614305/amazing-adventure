@@ -42,7 +42,7 @@ const fakeTHREE = {
     computeBoundingSphere() {}
   },
   BufferAttribute: class { constructor(array, itemSize) { this.array = array; this.itemSize = itemSize; } },
-  Texture: class { constructor(image) { this.image = image; } }
+  Texture: class { constructor(image) { this.image = image; this.userData = {}; } }
 };
 
 const okResponse = (body) => ({ ok: true, status: 200, arrayBuffer: async () => body, blob: async () => body });
@@ -774,6 +774,22 @@ test('the lamp maps load through the shared texture pipeline', async () => {
   assert.equal(loaded.normalMap.colorSpace, loaded.roughnessMap.colorSpace);
   assert.notEqual(loaded.map.colorSpace, loaded.normalMap.colorSpace,
     'normal/rough maps must not be decoded as colour');
+});
+
+test('a loaded texture records its source url on userData', async () => {
+  // The plaza is dressed from an ImageBitmap, which has no src string of its
+  // own; without a loader-side record the only way to know which family a
+  // material actually got is the asset-state flag, which cannot distinguish
+  // v2 from the fallback set.
+  const loaded = await loadMaterialTextures({
+    THREE: fakeTHREE,
+    files: LAMP_TEXTURE_FILES,
+    createBitmap: async () => ({ width: 8, height: 8 }),
+    fetchImpl: async (url) => okResponse({})
+  });
+  assert.equal(loaded.map.userData.sourceUrl, LAMP_TEXTURE_FILES.map);
+  assert.equal(loaded.normalMap.userData.sourceUrl, LAMP_TEXTURE_FILES.normalMap);
+  assert.equal(loaded.roughnessMap.userData.sourceUrl, LAMP_TEXTURE_FILES.roughnessMap);
 });
 
 test('a missing lamp map degrades to the authored flat material', async () => {

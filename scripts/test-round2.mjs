@@ -2083,8 +2083,22 @@ try {
 
   // --- 28. The modelled fountain and stone textures --------------------------
   // Await the settle point rather than sleeping: assets are an upgrade loaded in
-  // the background, so timing is not something a test should guess at.
-  const assets = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+  // the background, so timing is not something a test should guess at. The plaza
+  // AO intensity is set when the floor is dressed, and a slow headless run may
+  // have already dropped adaptive quality to low by the time assetsReady() fires
+  // -- so pin full for the samples and restore afterwards, the same pattern the
+  // moon/cloud checks below already use.
+  const assets = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const restore = (() => {
+      const wasAdaptive = api.quality.adaptive;
+      const wasTier = api.quality.tier;
+      api.quality.setAdaptive(false);
+      api.quality.set('full');
+      return () => { api.quality.set(wasTier); if (wasAdaptive) api.quality.setAdaptive(true); };
+    })();
+    try {
+      return await api.assetsReady().then(() => {
     const api = window.amazingAdventure;
     const model = api.scene.getObjectByName('fountain-model');
     const standin = api.scene.getObjectByName('fountain-standin');
@@ -2167,13 +2181,14 @@ try {
       plazaAo: Boolean(plaza && plaza.material && plaza.material.aoMap),
       plazaAoIntensity: plaza && plaza.material ? plaza.material.aoMapIntensity : null,
       plazaUvSpan: plaza ? uvSpan(plaza) : null,
-      // Read the image source rather than trusting the asset-state flag: the flag
-      // only says the loader ran, the src says which file actually reached the
-      // GPU. A browser that exposes no src reports isV2 false so the check fails
-      // loudly instead of passing on a missing value.
+      // Read the loader's own record rather than the texture image: the plaza is
+      // dressed from an ImageBitmap (no src string survives on it), so the only
+      // way to know WHICH family actually reached the material is the
+      // userData.sourceUrl the loader wrote at load time. The asset-state flag
+      // only says the upgrade ran; this says which file won.
       plazaTextureSet: (() => {
-        const img = plaza && plaza.material && plaza.material.map && plaza.material.map.image;
-        const src = img && (img.currentSrc || img.src || '');
+        const t = plaza && plaza.material && plaza.material.map;
+        const src = (t && t.userData && t.userData.sourceUrl) || '';
         return { src: String(src).split('/').pop(), isV2: String(src).includes('plaza_floor_v2_albedo') };
       })(),
       terrace: {
@@ -2198,6 +2213,9 @@ try {
         parapetUvSpan: uvSpan(parapets[0])
       }
     };
+    } finally {
+      restore();
+    }
   }));
 
   checks.check('the modelled fountain replaces the procedural stand-in',
@@ -2237,10 +2255,9 @@ try {
     assets.plazaSet.maps && assets.plazaSet.maps.length === 3,
     JSON.stringify(assets.plazaSet));
 
-  // The AO map is dropped on the low tier by design, and a slow headless run on
-  // this GPU-less host may let adaptive quality fall mid-suite. So this is a
-  // check that the baked cue is present with a live intensity, not that it holds
-  // any particular value.
+  // The AO map is dropped on the low tier by design, so the check pins the full
+  // tier first. The assets evaluation restored the tier and adaptive flag it
+  // found, so nothing further is needed here.
   checks.check('the plaza keeps its baked AO cue on the full tier',
     assets.plazaAo === true && assets.plazaAoIntensity > 0,
     JSON.stringify({ ao: assets.plazaAo, intensity: assets.plazaAoIntensity }));
