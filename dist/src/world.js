@@ -34,6 +34,14 @@ import { spraySpawns, sprayGlowLevel, sprayDrop, sprayEnabled, SPRAY_COUNT,
   SPRAY_MAX_OPACITY } from './spray.js';
 import { mistSpawns, mistOpacity, mistDrift, mistEnabled, MIST_COUNT,
   MIST_MAX_OPACITY } from './mist.js';
+import { rippleSpawns, rippleRing, rippleGlowLevel, ripplesEnabled,
+  RIPPLE_COUNT, RIPPLE_RINGS_PER_SITE, RIPPLE_WATER_Y } from './ripples.js';
+import { mothSpawns, mothFlight, mothGlowLevel, mothsEnabled, MOTH_COUNT,
+  MOTH_FLUTTER_AMPLITUDE } from './moths.js';
+import { puddleSpawns, puddleGloss, puddleDarkness, puddleShimmer, puddlesEnabled,
+  PUDDLE_COUNT, PUDDLE_WATER_Y } from './puddles.js';
+import { shingleSpawns, shingleGlowLevel, shinglesEnabled, SHINGLE_SEED,
+  SHINGLE_COURSES_PER_PLANE } from './shingles.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -3946,7 +3954,13 @@ export function buildWorld(renderer) {
   function paintButterflies(phaseId) {
     const glow = butterflyGlowLevel(phaseId);
     butterflyMaterial.opacity = glow;
-    const show = glow > 0 && butterflySpawnsList.length > 0;
+    // The tier gate belongs here, not only in updateButterflies: a low tier that
+    // merely froze the field would leave two wing meshes on screen flapping
+    // never, which is more conspicuous than their absence and still costs the
+    // draw calls the tier exists to save. Hiding them keeps the quality contract
+    // (every per-frame pass and its meshes are dropped together).
+    const show = glow > 0 && butterflySpawnsList.length > 0
+      && butterfliesEnabled(environment.quality);
     butterflyLeftMesh.visible = show;
     butterflyRightMesh.visible = show;
   }
@@ -4085,7 +4099,7 @@ export function buildWorld(renderer) {
       const p = motePosition(spawn, time);
       _mPos.set(p.x, p.y, p.z);
       _mScale.setScalar(spawn.size);
-      _mMatrix.compose(_mPos, _mQuat, _mScale);
+      _mtMatrix.compose(_mtPos, _mtQuat, _mtScale);
       moteMesh.setMatrixAt(i, _mMatrix);
     }
     moteMesh.instanceMatrix.needsUpdate = true;
@@ -4381,6 +4395,263 @@ export function buildWorld(renderer) {
     placeMist(mistTime);
   }
 
+  // --- Fountain ripples -----------------------------------------------
+  // One InstancedMesh of flat rings lying RIPPLE_WATER_Y above the water disc,
+  // clustered around the jet (RIPPLE_SITE_RADIUS). Each site carries
+  // RIPPLE_RINGS_PER_SITE rings staggered through the life.
+  const rippleSpawnsList = ripplesEnabled('full')
+    ? rippleSpawns({ count: RIPPLE_COUNT })
+    : [];
+  const rippleGeometry = new THREE.RingGeometry(0.85, 1, 24);
+  const rippleMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: RIPPLE_MAX_OPACITY,
+    depthWrite: false, side: THREE.DoubleSide, fog: true
+  });
+  rippleMaterial.name = 'FountainRipple';
+  const rippleMesh = new THREE.InstancedMesh(
+    rippleGeometry, rippleMaterial, Math.max(1, rippleSpawnsList.length * RIPPLE_RINGS_PER_SITE)
+  );
+  rippleMesh.name = 'fountain-ripples';
+  rippleMesh.count = rippleSpawnsList.length * RIPPLE_RINGS_PER_SITE;
+  rippleMesh.frustumCulled = false;
+  rippleMesh.position.set(0, 0, 0);
+  scene.add(rippleMesh);
+
+  const _rMatrix = new THREE.Matrix4();
+  const _rPos = new THREE.Vector3();
+  const _rScale = new THREE.Vector3();
+  const _rQuat = new THREE.Quaternion();
+
+  // Flat list of (spawn, ringIndex) pairs so the instance buffer is contiguous.
+  const rippleInstances = [];
+  for (let i = 0; i < rippleSpawnsList.length; i += 1) {
+    for (let k = 0; k < RIPPLE_RINGS_PER_SITE; k += 1) {
+      rippleInstances.push({ spawn: rippleSpawnsList[i], ring: k });
+    }
+  }
+
+  function placeRipples(time) {
+    for (let i = 0; i < rippleInstances.length; i += 1) {
+      const { spawn, ring } = rippleInstances[i];
+      const r = rippleRing(spawn, ring, time);
+      _rPos.set(FOUNTAIN_SPOT.x + r.x, RIPPLE_WATER_Y + 0.001, FOUNTAIN_SPOT.z + r.z);
+      // Lay the ring flat on the water: RingGeometry lives in XY, so rotate
+      // -90 deg about X, then scale uniformly by the ring radius. The band
+      // thickness is baked into the 0.85..1 geometry, and `scale` (from the
+      // spawn size) modulates overall size on top of the radius.
+      _rQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+      const sc = (r.radius > 0 ? r.radius : 0.001) * (r.scale > 0 ? r.scale : 1);
+      _rScale.setScalar(sc);
+      _rMatrix.compose(_rPos, _rQuat, _rScale);
+      rippleMesh.setMatrixAt(i, _rMatrix);
+      const k = r.opacity > 0 ? r.opacity / (0.5) : 0;
+      // colour stays white; opacity via material is global, so store per-instance
+      // alpha in the colour channel is not available on MeshBasicMaterial without
+      // vertex colours. Keep instance colour white.
+    }
+    rippleMesh.instanceMatrix.needsUpdate = true;
+  }
+  placeRipples(0);
+
+  function paintRipples(phaseId) {
+    const glow = rippleGlowLevel(phaseId);
+    rippleMaterial.opacity = 0.5 * glow;
+    rippleMesh.visible = glow > 0 && rippleInstances.length > 0
+      && ripplesEnabled(environment.quality);
+  }
+  paintRipples('day');
+
+  let rippleTime = 0;
+  function updateRipples(dt) {
+    if (!ripplesEnabled(environment.quality)) return;
+    if (!rippleInstances.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    rippleTime += step;
+    if (!rippleMesh.visible) return;
+    placeRipples(rippleTime);
+  }
+
+  // --- Night moths around the lantern heads ----------------------------
+  const mothSpawnsList = mothsEnabled('full')
+    ? mothSpawns({ count: MOTH_COUNT })
+    : [];
+  // A small quad per wing; two wings per moth would double the draw call, so
+  // instead one quad whose x-scale is flipped per instance by the flap sign.
+  const mothGeometry = new THREE.PlaneGeometry(0.06, 0.04);
+  const mothMaterial = new THREE.MeshBasicMaterial({
+    color: 0xf2e8c8, transparent: true, opacity: 0, side: THREE.DoubleSide, fog: true
+  });
+  mothMaterial.name = 'MothWing';
+  const mothMesh = new THREE.InstancedMesh(
+    mothGeometry, mothMaterial, Math.max(1, mothSpawnsList.length)
+  );
+  mothMesh.name = 'night-moths';
+  mothMesh.count = mothSpawnsList.length;
+  mothMesh.frustumCulled = false;
+  scene.add(mothMesh);
+
+  const _mtMatrix = new THREE.Matrix4();
+  const _mtPos = new THREE.Vector3();
+  const _mtScale = new THREE.Vector3();
+  const _mtQuat = new THREE.Quaternion();
+  const _mtUp = new THREE.Vector3(0, 1, 0);
+
+  function placeMoths(time) {
+    for (let i = 0; i < mothSpawnsList.length; i += 1) {
+      const spawn = mothSpawnsList[i];
+      const f = mothFlight(spawn, time);
+      const angle = spawn.angle + time * spawn.speed;
+      _mtPos.set(f.x, f.y, f.z);
+      // Face along the tangent of the orbit so the moth leads with its head.
+      _mtQuat.setFromAxisAngle(_mtUp, angle + Math.PI / 2);
+      // Flap: squish the vertical scale with the wingbeat so a still moth reads
+      // as resting and a flying one as beating.
+      const flapScale = 0.6 + 0.4 * f.flap;
+      _mtScale.set(spawn.size, spawn.size * flapScale, spawn.size);
+      _mtMatrix.compose(_mtPos, _mtQuat, _mtScale);
+      mothMesh.setMatrixAt(i, _mtMatrix);
+    }
+    mothMesh.instanceMatrix.needsUpdate = true;
+  }
+  placeMoths(0);
+
+  function paintMoths(phaseId) {
+    const glow = mothGlowLevel(phaseId);
+    mothMaterial.opacity = glow;
+    mothMesh.visible = glow > 0 && mothSpawnsList.length > 0
+      && mothsEnabled(environment.quality);
+  }
+  paintMoths('day');
+
+  let mothTime = 0;
+  function updateMoths(dt) {
+    if (!mothsEnabled(environment.quality)) return;
+    if (!mothSpawnsList.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    mothTime += step;
+    if (!mothMesh.visible) return;
+    placeMoths(mothTime);
+  }
+
+  // --- Meadow puddles after rain ---------------------------------------
+  const puddleKeepOuts = [
+    { x: FOUNTAIN_SPOT.x, z: FOUNTAIN_SPOT.z, radius: PUDDLE_CLEAR_RADIUS },
+    ...LANE_PROPS.map((prop) => ({ x: prop.x, z: prop.z, radius: Math.max(prop.width, prop.depth) / 2 + 0.6 }))
+  ];
+  const puddleSpawnsList = puddlesEnabled('full')
+    ? puddleSpawns({ count: PUDDLE_COUNT, circles: puddleKeepOuts })
+    : [];
+  const puddleGeometry = new THREE.PlaneGeometry(1, 1);
+  const puddleMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff, transparent: true, opacity: 1, roughness: 0.05, metalness: 0.6,
+    side: THREE.DoubleSide, fog: true
+  });
+  puddleMaterial.name = 'Puddle';
+  const puddleMesh = new THREE.InstancedMesh(
+    puddleGeometry, puddleMaterial, Math.max(1, puddleSpawnsList.length)
+  );
+  puddleMesh.name = 'meadow-puddles';
+  puddleMesh.count = puddleSpawnsList.length;
+  puddleMesh.frustumCulled = false;
+  scene.add(puddleMesh);
+
+  const _pMatrix = new THREE.Matrix4();
+  const _pPos = new THREE.Vector3();
+  const _pScale = new THREE.Vector3();
+  const _pQuat = new THREE.Quaternion();
+  const _pFlat = new THREE.Quaternion();
+  _pFlat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+
+  function placePuddles(time) {
+    for (let i = 0; i < puddleSpawnsList.length; i += 1) {
+      const spawn = puddleSpawnsList[i];
+      const { wobble } = puddleShimmer(spawn, time);
+      _pPos.set(spawn.x, PUDDLE_WATER_Y, spawn.z);
+      const sc = spawn.size * (1 + wobble * 0.05);
+      _pScale.set(sc, 1, sc);
+      _pMatrix.compose(_pPos, _pFlat, _pScale);
+      puddleMesh.setMatrixAt(i, _pMatrix);
+    }
+    puddleMesh.instanceMatrix.needsUpdate = true;
+  }
+  placePuddles(0);
+
+  function paintPuddles(phaseId) {
+    const gloss = puddleGloss(phaseId);
+    const dark = puddleDarkness(phaseId);
+    puddleMaterial.roughness = 1 - gloss * 0.9;
+    puddleMaterial.color.setRGB(dark, dark, dark + 0.05);
+    puddleMesh.visible = puddleSpawnsList.length > 0 && puddlesEnabled(environment.quality);
+  }
+  paintPuddles('day');
+
+  let puddleTime = 0;
+  function updatePuddles(dt) {
+    if (!puddlesEnabled(environment.quality)) return;
+    if (!puddleSpawnsList.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    puddleTime += step;
+    if (!puddleMesh.visible) return;
+    placePuddles(puddleTime);
+  }
+
+  // --- Roof shingles ---------------------------------------------------
+  const roofPlanes = [
+    { x: -10.5, z: -9, y: 3.3 + 0.3, width: 8, depth: 6, yaw: 0, pitch: 0 },
+    { x: 11, z: -3, y: 2.2 + 0.15, width: 4.4, depth: 2.6, yaw: 0, pitch: 0 },
+    { x: -11, z: 6, y: 1.7 + 0.15, width: 3.4, depth: 2.2, yaw: 0, pitch: 0 }
+  ];
+  const shingleSpawnsList = shinglesEnabled('full')
+    ? shingleSpawns({ planes: roofPlanes })
+    : [];
+  const shingleGeometry = new THREE.BoxGeometry(1, 0.012, 1);
+  const shingleMaterial = new THREE.MeshStandardMaterial({
+    color: 0x6d3a2c, roughness: 0.85, metalness: 0, fog: true
+  });
+  shingleMaterial.name = 'RoofShingle';
+  const shingleMesh = new THREE.InstancedMesh(
+    shingleGeometry, shingleMaterial, Math.max(1, shingleSpawnsList.length)
+  );
+  shingleMesh.name = 'roof-shingles';
+  shingleMesh.count = shingleSpawnsList.length;
+  shingleMesh.frustumCulled = false;
+  scene.add(shingleMesh);
+
+  const _shMatrix = new THREE.Matrix4();
+  const _shPos = new THREE.Vector3();
+  const _shScale = new THREE.Vector3();
+  const _shQuat = new THREE.Quaternion();
+
+  // Per-instance tone via instance colour.
+  const _shColor = new THREE.Color();
+  for (let i = 0; i < shingleSpawnsList.length; i += 1) {
+    _shColor.setHex(0x6d3a2c);
+    _shColor.multiplyScalar(shingleSpawnsList[i].tone);
+    shingleMesh.setColorAt(i, _shColor);
+  }
+  if (shingleMesh.instanceColor) shingleMesh.instanceColor.needsUpdate = true;
+
+  function placeShingles() {
+    for (let i = 0; i < shingleSpawnsList.length; i += 1) {
+      const sp = shingleSpawnsList[i];
+      _shPos.set(sp.x, sp.y, sp.z);
+      _shQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), sp.yaw);
+      _shScale.set(sp.width, 1, sp.depth);
+      _shMatrix.compose(_shPos, _shQuat, _shScale);
+      shingleMesh.setMatrixAt(i, _shMatrix);
+    }
+    shingleMesh.instanceMatrix.needsUpdate = true;
+  }
+  placeShingles();
+
+  function paintShingles(phaseId) {
+    const glow = shingleGlowLevel(phaseId);
+    shingleMaterial.color.setHex(0x6d3a2c);
+    shingleMaterial.color.multiplyScalar(glow);
+    shingleMesh.visible = shingleSpawnsList.length > 0 && shinglesEnabled(environment.quality);
+  }
+  paintShingles('day');
+
   // The per-instance scratch objects for the sway pass, allocated once so the
   // frame loop does no allocation.
   const swayMatrix = new THREE.Matrix4();
@@ -4619,6 +4890,51 @@ export function buildWorld(renderer) {
     get mistOn() {
       return mistEnabled(environment.quality);
     },
+    // Round 94: fountain ripples.
+    ripples: rippleMesh,
+    rippleCount: rippleInstances.length,
+    paintRipples(phaseId) {
+      paintRipples(phaseId);
+    },
+    updateRipples(dt) {
+      updateRipples(dt);
+    },
+    get ripplesOn() {
+      return ripplesEnabled(environment.quality);
+    },
+    // Round 94: night moths around the lantern heads.
+    moths: mothMesh,
+    mothCount: mothSpawnsList.length,
+    paintMoths(phaseId) {
+      paintMoths(phaseId);
+    },
+    updateMoths(dt) {
+      updateMoths(dt);
+    },
+    get mothsOn() {
+      return mothsEnabled(environment.quality);
+    },
+    // Round 94: meadow puddles.
+    puddles: puddleMesh,
+    puddleCount: puddleSpawnsList.length,
+    paintPuddles(phaseId) {
+      paintPuddles(phaseId);
+    },
+    updatePuddles(dt) {
+      updatePuddles(dt);
+    },
+    get puddlesOn() {
+      return puddlesEnabled(environment.quality);
+    },
+    // Round 94: roof shingles.
+    shingles: shingleMesh,
+    shingleCount: shingleSpawnsList.length,
+    paintShingles(phaseId) {
+      paintShingles(phaseId);
+    },
+    get shinglesOn() {
+      return shinglesEnabled(environment.quality);
+    },
     // Round 93: the daytime butterfly field.
     butterflyWings: [butterflyLeftMesh, butterflyRightMesh],
     butterflyCount: butterflySpawnsList.length,
@@ -4744,6 +5060,10 @@ export function buildWorld(renderer) {
       if (environment.paintIvy) environment.paintIvy(environment.phase);
       if (environment.paintSpray) environment.paintSpray(environment.phase);
       if (environment.paintMist) environment.paintMist(environment.phase);
+      if (environment.paintRipples) environment.paintRipples(environment.phase);
+      if (environment.paintMoths) environment.paintMoths(environment.phase);
+      if (environment.paintPuddles) environment.paintPuddles(environment.phase);
+      if (environment.paintShingles) environment.paintShingles(environment.phase);
       // Contact darkening rides on vertex colours; disable it on the low tier by
       // turning the attribute off on every dressed prop mesh.
       for (const { group } of propGroups) {
@@ -5045,6 +5365,10 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintIvy) environment.paintIvy(phaseId);
   if (environment.paintSpray) environment.paintSpray(phaseId);
   if (environment.paintMist) environment.paintMist(phaseId);
+  if (environment.paintRipples) environment.paintRipples(phaseId);
+  if (environment.paintMoths) environment.paintMoths(phaseId);
+  if (environment.paintPuddles) environment.paintPuddles(phaseId);
+  if (environment.paintShingles) environment.paintShingles(phaseId);
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,
   // night shows it full. The mesh itself keeps rendering (one draw call) so
