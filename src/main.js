@@ -1900,6 +1900,11 @@ function frame() {
   if (environment.updateIvy) environment.updateIvy(dt);
   if (environment.updateSpray) environment.updateSpray(dt);
   if (environment.updateMist) environment.updateMist(dt);
+  // Round 94: fountain ripples travel, night moths orbit the lantern heads, puddles
+  // shimmer and roof shingles are static (paint only).
+  if (environment.updateRipples) environment.updateRipples(dt);
+  if (environment.updateMoths) environment.updateMoths(dt);
+  if (environment.updatePuddles) environment.updatePuddles(dt);
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
   maybeStartAmbient(dt);

@@ -4033,6 +4033,136 @@ try {
     JSON.stringify({ day: dr.smokeDay, dusk: dr.smokeDusk, night: dr.smokeNight, low: dr.smokeLow }));
   await capture(page, 'round92-dressing.png');
 
+  // --- Round 93: butterflies, windows, litter, motes, ivy, spray, mist ----
+  const r93 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    api.setClock(10); // day
+    const bfL = byName('butterfly-wings-left');
+    const bfR = byName('butterfly-wings-right');
+    const windows = byName('cottage-windows');
+    const litter = []; api.scene.traverse((o) => { if (/^meadow-litter-/.test(o.name)) litter.push(o); });
+    const motes = byName('dust-motes');
+    const ivy = []; api.scene.traverse((o) => { if (o.name === 'ivy-patch') ivy.push(o); });
+    const spray = byName('fountain-spray');
+    const mist = byName('ground-mist');
+    // windows night
+    api.setClock(150);
+    const winNightVisible = windows ? windows.visible : null;
+    const winNightOpacity = windows ? Number(windows.material.opacity.toFixed(3)) : null;
+    // low tier
+    api.quality.set('low');
+    const lowBf = bfL ? bfL.visible : null;
+    const lowWin = windows ? windows.visible : null;
+    const lowMotes = motes ? motes.visible : null;
+    api.quality.set('full');
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      butterflies: { count: bfL ? bfL.count : 0, visibleDay: bfL ? bfL.visible : null },
+      windows: { count: windows ? windows.count : 0, nightVisible: winNightVisible, nightOpacity: winNightOpacity },
+      litter: { count: litter.length },
+      motes: { count: motes ? motes.count : 0, visibleDay: motes ? motes.visible : null },
+      ivy: { count: ivy.length },
+      spray: { count: spray ? spray.count : 0 },
+      mist: { count: mist ? mist.count : 0 },
+      low: { butterflies: lowBf, windows: lowWin, motes: lowMotes }
+    };
+  });
+  checks.check('daytime butterflies exist',
+    r93.butterflies.count > 0,
+    JSON.stringify(r93.butterflies));
+  checks.check('cottage windows light up at night',
+    r93.windows.nightVisible === true && r93.windows.nightOpacity > 0,
+    JSON.stringify(r93.windows));
+  checks.check('fallen leaves scatter exists',
+    r93.litter.count > 0,
+    JSON.stringify(r93.litter));
+  checks.check('dust motes exist',
+    r93.motes.count > 0,
+    JSON.stringify(r93.motes));
+  checks.check('ivy patches exist',
+    r93.ivy.count > 0,
+    JSON.stringify(r93.ivy));
+  checks.check('fountain spray exists',
+    r93.spray.count > 0,
+    JSON.stringify(r93.spray));
+  checks.check('ground mist exists',
+    r93.mist.count > 0,
+    JSON.stringify(r93.mist));
+  checks.check('butterflies, windows and motes drop on the low tier',
+    r93.low.butterflies === false && r93.low.windows === false && r93.low.motes === false,
+    JSON.stringify(r93.low));
+  await capture(page, 'round93-dressing.png');
+
+  // --- Round 94: ripples, moths, puddles, shingles -----------------------
+  const r94 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    api.setClock(10);
+    const ripples = byName('fountain-ripples');
+    const moths = byName('night-moths');
+    const puddles = byName('meadow-puddles');
+    const shingles = byName('roof-shingles');
+    // ripples travel
+    let rippleMoved = false;
+    if (ripples && env.updateRipples) {
+      const before = Float32Array.from(ripples.instanceMatrix.array);
+      env.updateRipples(0.5);
+      for (let k = 0; k < ripples.instanceMatrix.array.length; k += 1) {
+        if (Math.abs(ripples.instanceMatrix.array[k] - before[k]) > 1e-9) { rippleMoved = true; break; }
+      }
+    }
+    // tier gating
+    api.quality.set('low');
+    const lowRipples = ripples ? ripples.visible : null;
+    const lowMoths = moths ? moths.visible : null;
+    const lowPuddles = puddles ? puddles.visible : null;
+    const lowShingles = shingles ? shingles.visible : null;
+    api.quality.set('full');
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      ripples: ripples ? { count: ripples.count, visible: ripples.visible } : null,
+      moths: moths ? { count: moths.count } : null,
+      puddles: puddles ? { count: puddles.count } : null,
+      shingles: shingles ? { count: shingles.count } : null,
+      rippleMoved,
+      low: { ripples: lowRipples, moths: lowMoths, puddles: lowPuddles, shingles: lowShingles }
+    };
+  });
+  checks.check('fountain ripples exist and travel',
+    r94.ripples && r94.ripples.count > 0 && r94.rippleMoved === true,
+    JSON.stringify(r94.ripples));
+  checks.check('night moths exist',
+    r94.moths && r94.moths.count === 30,
+    JSON.stringify(r94.moths));
+  checks.check('meadow puddles exist',
+    r94.puddles && r94.puddles.count === 18,
+    JSON.stringify(r94.puddles));
+  checks.check('roof shingles exist',
+    r94.shingles && r94.shingles.count > 0,
+    JSON.stringify(r94.shingles));
+  checks.check('the four new fields drop on the low tier',
+    r94.low.ripples === false && r94.low.moths === false &&
+      r94.low.puddles === false && r94.low.shingles === false,
+    JSON.stringify(r94.low));
+  await capture(page, 'round94-dressing.png');
+
   // --- 28n2. The lane rope's rope strand (round 86) -------------------------
   // The three LaneRope boxes (2 cm diameter, 1.92 m2 total) that span the
   // lane are dressed with the round 86 twisted-fibre rope maps at a 0.08 m
