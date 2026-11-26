@@ -12,7 +12,28 @@
 
 ## Current task
 
-**Round 92: daytime bird flock + chimney smoke columns -- IN PROGRESS (desktop suite running).**
+**Round 92: daytime bird flock + chimney smoke columns -- VERIFIED.**
+
+Desktop suite: **319/319 PASS, 0 FAIL** (f80e5da), including all 6 new
+dressing checks: bunting flutter moved (28 flags, phaseSpread 0.0037), banner
+canvas moved, fireflies 64 (off by day, lit night blink 0.997, frozen low),
+birds 8 (both wings visible day, moved minY 15.78 maxY 21.82 maxR 17.26, hidden
+night and low), chimney smoke 28 puffs / 4 sites (day opacity 0.138, dusk 0.55,
+night 0.44, moved, topY 11.74, hidden low). No console errors.
+
+Unit suite: 1072/1072 pass. Mobile suite: attempted, host cannot boot under
+SwiftShader mobile emulation (infrastructure limit). dist restamped at f80e5da.
+Commits: 86d28be (sources), d034d5e (fixes: smoke sRGB tag, matrixDiff snapshot,
+dusk clock 80), 637b33b (checkpoint), f80e5da (dist).
+
+Parallel split (standing `parallel-build-20261125b`): previous cycle launched
+birds + chimney subagents; this cycle integrated them and added browser checks,
+which touch world.js and cannot be split, so done alone.
+
+Pending: publish via /worker/state/outbox/publish.json bundling Rounds 89-92;
+mobile suite infrastructure limit noted.
+
+
 
 Pure modules: `src/birds.js` (subagent, BIRD_COUNT 8, orbit 15-23 m, flap 0.5 rad / 0.62 s, PHASE_GLOW day 1 / dusk 0.5 / night 0) and `src/chimney.js` (subagent, CHIMNEY_COUNT 4 plumes x CHIMNEY_PUFFS 7 puffs = 28 billboards, phase glow dusk 1 / night 0.8 / day 0.25). Both reviewed line by line; added `birdHeading` (tangent) and `chimneySpawns({sites})` (real roofs) with focused tests. Unit tests: birds 48 + chimney 51 = 99, all pass.
 
@@ -23,10 +44,9 @@ Subagent split recorded per `parallel-build-20261125b`: this cycle launched two 
 Pending: desktop browser suite run; mobile suite retry; dist restamp; publish.
 
 ## Next steps
-1. Run desktop browser suite on the Round 91 tree; add browser checks for fireflies and flutter if needed.
-2. Run mobile browser suite (host permitting).
-3. Publish via /worker/state/outbox/publish.json bundling Rounds 89-91.
-4. Next graphics milestone: moon lighting influence on materials, cloud shadows on ground disc, or Blender geometry work.
+1. Publish via /worker/state/outbox/publish.json with head f80e5dac8e8d8d67442220601706629f7d9fa96d (Round 89-92).
+2. Next graphics milestone: integrate butterflies.js + windows.js (both committed but not yet in world.js); or Blender geometry work.
+3. Run desktop + mobile suites once per round; record results.
 
 ## Round 89 complete (historical)
 
