@@ -12,7 +12,7 @@
 
 ## Current task
 
-**Round 92: daytime bird flock + chimney smoke columns -- IN PROGRESS.**
+**Round 92: daytime bird flock + chimney smoke columns -- IN PROGRESS (desktop suite running).**
 
 Pure modules: `src/birds.js` (subagent, BIRD_COUNT 8, orbit 15-23 m, flap 0.5 rad / 0.62 s, PHASE_GLOW day 1 / dusk 0.5 / night 0) and `src/chimney.js` (subagent, CHIMNEY_COUNT 4 plumes x CHIMNEY_PUFFS 7 puffs = 28 billboards, phase glow dusk 1 / night 0.8 / day 0.25). Both reviewed line by line; added `birdHeading` (tangent) and `chimneySpawns({sites})` (real roofs) with focused tests. Unit tests: birds 48 + chimney 51 = 99, all pass.
 
