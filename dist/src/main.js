@@ -1872,6 +1872,8 @@ function frame() {
   // Round 85: the star field twinkles once per frame, next to the water it
   // shares the sky with.
   if (environment.updateStars) environment.updateStars(dt);
+  // Round 88: the cloud layer drifts once per frame.
+  if (environment.updateClouds) environment.updateClouds(dt);
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
   maybeStartAmbient(dt);
