@@ -241,10 +241,11 @@ its procedural stand-in or flat colour and stays fully playable.
   (Tesla T4, CuPy backend). A tile family for the procedural roof shingles:
   the `roof-shingles` InstancedMesh lays 1 x 1 m boxes across three pitched
   planes, and the authored 0..1 UVs carry the map once per metre, so a 1 m tile
-  is one repeat across every instance. A value albedo (joint shadow, per-course
-  grain, nail dots, damp and valley fields) so the authored 0x6d3a2c shingle
+  is one repeat across every instance. A value albedo (joint shadow, fine
+  grain, nail dots, damp field) so the authored 0x6d3a2c shingle
   colour and the per-phase glow keep supplying hue and brightness; a shallow
-  lap-relief normal, and a near-flat matte roughness so the roof reads as
+  lap-relief normal (periodic roll-based gradient, wrapped edges pinned for
+  exact tileability), and a near-flat matte roughness so the roof reads as
   timber shingling rather than painted iron. Albedo/normal/roughness 1024x1024,
   seam ratios albedo, normal and rough all well under 3 = no visible seam.
   Shipped as lossless WebP. Applied by `upgradeShingles()` with the shingle base
