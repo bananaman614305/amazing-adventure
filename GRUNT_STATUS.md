@@ -12,22 +12,30 @@
 
 ## Current task
 
-**Round 96 complete: contact-shadow decals, ripple band/alpha, terrace-detail GLB.**
+**Round 97 in progress: dress the terrace furniture's timber and stone.**
 
-All three pieces shipped and verified. Contact-shadow pure module
-`src/contactshadows.js` (14 tests) + world integration (InstancedMesh
-`contact-shadows`, 28 decals, repainted per phase, dropped on low tier).
-Ripple module exports `RIPPLE_MIN_BAND`/`RIPPLE_BAND_BIRTH` and per-ring
-`band`/`alpha`; world ShaderMaterial mapping fixed (`(band*0.5)/span`,
-`span=radius/RIPPLE_RING_AT`). Terrace-detail GLB (pergola + 2 planters,
-168 tris) integrated as `upgradeTerraceDetail()` on the terrace slab at y=1.2.
-Loader `loadTerraceDetail` and browser checks landed. Verified: unit suite
-1420/1420, desktop browser 344/344, mobile 184/184. Dist restamped (commit
-a5b83bb). Published via publish.json fallback (PR-only, no merge authority).
+Widened the wood family test to `/wood|timber/i` and the stone family test to
+`/housestone|terracestone/i` in `src/assets.js`, so the Round 96 terrace GLB's
+`TerraceTimber`/`TerraceTimberDark` members join the wood family and
+`TerraceStone` joins the house-trim stone family. `TerraceSoil` stays flat by
+design (added to the must-stay-flat list in `tests/assets.test.mjs`).
+`upgradeTerraceDetail()` already pushes its group into `propGroups` with tile 1.5
+and `upgradePropFamilies()` already runs after it in `loadAssets()`, so no
+world.js change was needed. Unit tests pin the three new mappings plus the
+no-shadow invariants. Browser check added to `scripts/test-round2.mjs`
+(round97-terrace-dress.png): 4 dressed meshes carry the three maps with repeat
+1:1, 2 soil meshes stay flat. Dist restamped (commit f87cd1c). Desktop browser
+suite 348/348 PASS with the new check. Mobile suite ran to completion (4
+profiles, screenshots present) -- output was buffered to 0 bytes by the
+background runner; re-running with captured output to confirm the count.
 
 ## Next steps
-1. Await publish-result.json for Round 96 PR.
-2. Next graphics milestone: house/terrace detail geometry or contact-shadow decals under the existing sun shadow map.
+1. Re-run the mobile suite with output captured to a file and record the pass
+   count (target 184/184 or higher).
+2. Publish Round 97 via publish.json with exact HEAD after the mobile count is
+   confirmed; refresh needs-supervision.json.
+3. Next graphics milestone: house/terrace detail geometry or contact-shadow
+   decals under the existing sun shadow map.
 
 ## Round 89 complete (historical)
 
