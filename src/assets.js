@@ -86,6 +86,21 @@ export const BENCH_ASSET = 'assets/bench.glb';
 /** Authored size of the bench model. */
 export const BENCH_MODEL_SIZE = { width: 2.2, depth: 0.7, height: 1.05 };
 
+/**
+ * The north terrace's furniture: a timber pergola with top beams and cross
+ * slats, plus two stone planters with inset soil tops. The terrace was a bare
+ * slab until this asset gave it a silhouette someone built and uses, so the
+ * north end reads as a place rather than as ground.
+ *
+ * Authored around the footprint centre with the ground at y = 0 and the front
+ * facing glTF +Z (the plaza), so world.js sets position only, no rotation.
+ */
+export const TERRACE_DETAIL_ASSET = 'assets/terrace-detail.glb';
+
+/** Authored size of the terrace furniture: the pergola's footprint and height.
+ *  The planters sit inside it, so they need no separate extent. */
+export const TERRACE_DETAIL_MODEL_SIZE = { width: 3.4, depth: 2.6, height: 2.7 };
+
 export const NOTICE_ASSET = 'assets/notice.glb';
 
 /** Authored size of the notice board model. */
@@ -1393,6 +1408,40 @@ export async function loadHouse({ THREE, loadGlb, url = HOUSE_ASSET, fetchImpl =
         reachZ > HOUSE_MODEL_SIZE.depth / 2 + 0.05 ||
         footprint.minY < -0.01) {
       return { ok: false, reason: 'house trim exceeds its span', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
+/**
+ * Loads the terrace-detail GLB. Same contract as the others: never throws,
+ * refuses a model whose footprint exceeds the authored box (3.4 x 2.6 x 2.7)
+ * or whose geometry sinks below the ground plane. The posts carry colliders at
+ * fixed offsets in world.js, so a model that outgrew its box would silently
+ * stand outside its own collision boxes -- the footprint check is what keeps
+ * the asset honest against the collider.
+ */
+export async function loadTerraceDetail({ THREE, loadGlb, url = TERRACE_DETAIL_ASSET, fetchImpl = fetch } = {}) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const footprint = fountainFootprint(meshes);
+    if (!footprint) {
+      return { ok: false, reason: 'no geometry', url };
+    }
+    const reachX = Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX));
+    const reachZ = Math.max(Math.abs(footprint.minZ), Math.abs(footprint.maxZ));
+    if (reachX > TERRACE_DETAIL_MODEL_SIZE.width / 2 + 0.05 ||
+        reachZ > TERRACE_DETAIL_MODEL_SIZE.depth / 2 + 0.05 ||
+        footprint.minY < -0.01 ||
+        footprint.maxY > TERRACE_DETAIL_MODEL_SIZE.height + 0.05) {
+      return { ok: false, reason: 'terrace detail exceeds its footprint', footprint, url };
     }
     return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
   } catch (error) {

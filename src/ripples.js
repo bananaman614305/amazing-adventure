@@ -31,8 +31,14 @@
 //    at the top rather than left to approach it asymptotically.
 //
 // 4. Rings thin as they widen. A ripple spreads its energy around a larger
-//    circumference as it grows, so the band gets narrower, not wider; the spawn's
-//    `size` is the thickness at birth and RIPPLE_THIN shaves it down over the life.
+//    circumference as it grows, so the band gets narrower, not wider. `rippleRing`
+//    therefore returns `band`, a world-unit band thickness (metres) that starts at
+//    a birth thickness and RIPPLE_THIN shaves it down over the life, never below
+//    RIPPLE_MIN_BAND. It also returns `alpha`, the per-instance opacity (including
+//    the exact-zero fade tail) so `world.js` can drive an instanced attribute
+//    instead of a global material opacity. `opacity` and `scale` are kept
+//    unchanged for callers that still read them; the world should use `band` and
+//    `alpha` for the ring geometry and per-instance fade.
 //
 // Everything here is seeded (mulberry32, copied rather than imported so the module
 // stands alone) and pure: no Three.js, no DOM, no clock, no Math.random. Two
@@ -98,6 +104,20 @@ export const RIPPLE_FADE_TAIL = 0.02;
 /** How much of a ring's thickness it sheds over its life. 0.35 leaves a ring
  *  noticeably thinner at the rim without it vanishing to a hairline. */
 export const RIPPLE_THIN = 0.35;
+
+/** The thinnest a ripple's band may become, in metres. A ring that thinned to a
+ *  hairline would alias into a dotted line in software rasterisation, so the
+ *  band is floored here rather than allowed to reach zero. Just under two
+ *  centimetres matches the width the rings read at from the fountain's edge;
+ *  wider and the rings look like painted hoops rather than water. */
+export const RIPPLE_MIN_BAND = 0.018;
+
+/** The band thickness of a newborn ring before its spawn size is applied, in
+ *  metres. The spawn's `size` multiplier (RIPPLE_MIN_SIZE..RIPPLE_MAX_SIZE)
+ *  scales it, so the true birth thickness runs from 2.5 cm to 5.5 cm. Chosen so
+ *  the thinnest spawn (0.5) is still above RIPPLE_MIN_BAND at birth, keeping the
+ *  [RIPPLE_MIN_BAND, birth] clamp interval non-empty for every spawn. */
+export const RIPPLE_BAND_BIRTH = 0.05;
 
 /** The band a per-site speed multiplier is drawn from, and the band a
  *  caller-supplied speed is clamped into. A little variation keeps the sites from
@@ -194,7 +214,8 @@ export function rippleSpawns(options = {}) {
 }
 
 /**
- * One ring of one centre at `time`, as `{ x, y, z, radius, opacity, scale }`.
+ * One ring of one centre at `time`, as
+ * `{ x, y, z, radius, opacity, scale, band, alpha }`.
  *
  * `index` is the ring's slot within its site: 0 is the youngest of the
  * RIPPLE_RINGS_PER_SITE rings, the last is the oldest. The slot is folded into
@@ -210,15 +231,31 @@ export function rippleSpawns(options = {}) {
  * shrinks from the spawn's size by RIPPLE_THIN over the life. The ring lies at a
  * constant RIPPLE_WATER_Y above the water. All values are finite and bounded.
  *
+ * Two fields are added for the world's per-instance shader:
+ *   - `band` is the ring's band thickness in world metres. It is born at
+ *     RIPPLE_BAND_BIRTH * size and shed by RIPPLE_THIN over the life, clamped to
+ *     [RIPPLE_MIN_BAND, birth], so the band narrows as the ring widens instead of
+ *     keeping a constant *relative* width (which would make the rim ring four
+ *     times as thick as a newborn one).
+ *   - `alpha` is the per-instance opacity in [0, RIPPLE_MAX_OPACITY], the same
+ *     value as `opacity` including the exact-zero fade tail. It exists so the
+ *     world can feed an instanced attribute and keep each ring's own fade instead
+ *     of averaging them into one global material opacity. `opacity` and `scale`
+ *     are retained unchanged for existing callers.
+ *
  * Junk is handled rather than thrown at: a spawn that is not a plain object yields
- * an invisible ring at the origin with the minimum scale; individual non-finite
- * spawn fields fall back to safe values; a non-finite `time` reads as 0; and a
- * non-finite `index` reads as slot 0, with a finite out-of-range index clamped
- * into the slots.
+ * an invisible ring at the origin with the minimum scale and band; individual
+ * non-finite spawn fields fall back to safe values; a non-finite `time` reads as
+ * 0; and a non-finite `index` reads as slot 0, with a finite out-of-range index
+ * clamped into the slots.
  */
 export function rippleRing(spawn, index, time) {
   if (!isDescriptor(spawn)) {
-    return { x: 0, y: RIPPLE_WATER_Y, z: 0, radius: 0, opacity: 0, scale: RIPPLE_MIN_SIZE };
+    const birthBand = RIPPLE_BAND_BIRTH * RIPPLE_MIN_SIZE;
+    return {
+      x: 0, y: RIPPLE_WATER_Y, z: 0, radius: 0, opacity: 0, scale: RIPPLE_MIN_SIZE,
+      band: Math.min(birthBand, Math.max(RIPPLE_MIN_BAND, birthBand)), alpha: 0
+    };
   }
 
   const x0 = finiteNumber(spawn.x) ? spawn.x : 0;
@@ -251,7 +288,13 @@ export function rippleRing(spawn, index, time) {
     ? 0
     : clampNumber(RIPPLE_MAX_OPACITY * (1 - progress), 0, RIPPLE_MAX_OPACITY, 0);
 
-  return { x: x0, y: RIPPLE_WATER_Y, z: z0, radius, opacity, scale };
+  // The band is a world thickness, not a scale, so it can narrow independently of
+  // the radius. It starts at the spawn's birth thickness and sheds RIPPLE_THIN of
+  // it over the life, floored so it never aliases to a hairline.
+  const birthBand = RIPPLE_BAND_BIRTH * size;
+  const band = Math.min(birthBand, Math.max(RIPPLE_MIN_BAND, birthBand * (1 - RIPPLE_THIN * progress)));
+
+  return { x: x0, y: RIPPLE_WATER_Y, z: z0, radius, opacity, scale, band, alpha: opacity };
 }
 
 /** Whether the ripple field runs at this quality tier. The low tier drops the

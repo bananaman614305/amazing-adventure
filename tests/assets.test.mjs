@@ -19,8 +19,11 @@ import {
   CLOTH_TEXTURE_FILES, FELT_TEXTURE_FILES, FELT_FAMILY, BUNTING_TILE_METERS,
   WATER_TEXTURE_FILES, WATER_TILE_METERS,
   PLAZA_AO_MAP_CHANNEL, plazaAoMapIntensity, plazaAoMapIntensityForQuality,
-  createPlazaAoTexture, contactDarkeningColors, applyContactDarkeningGeometry
+  createPlazaAoTexture, contactDarkeningColors, applyContactDarkeningGeometry,
+  TERRACE_DETAIL_ASSET, TERRACE_DETAIL_MODEL_SIZE, loadTerraceDetail
 } from '../src/assets.js';
+import { parseGlb, glbToMeshes } from '../src/glb.js';
+import { TERRACE } from '../src/terrain.js';
 
 // Minimal fake Three.js: only what these functions touch.
 const ROOT = resolve(import.meta.dirname, '..');
@@ -1300,4 +1303,187 @@ test('applyContactDarkeningGeometry writes a color attribute sized to the mesh',
   assert.equal(applyContactDarkeningGeometry({ THREE: fakeTHREE, geometry: null }), 0);
   const empty = new fakeTHREE.BufferGeometry();
   assert.equal(applyContactDarkeningGeometry({ THREE: fakeTHREE, geometry: empty }), 0);
+});
+
+// The terrace furniture loader is a second footprint-checked asset, but unlike
+// the fountain it has no collider of its own: world.js places the pergola posts
+// at fixed offsets and registers their colliders by hand. So the check that
+// matters here is against the authored box and against the slab the furniture
+// stands on -- a re-authored model that outgrows either would silently stand
+// outside its collision and clip the terrace lip.
+test('the terrace furniture is authored to fit the north terrace slab', () => {
+  assert.equal(TERRACE_DETAIL_ASSET, 'assets/terrace-detail.glb');
+  assert.deepEqual(TERRACE_DETAIL_MODEL_SIZE, { width: 3.4, depth: 2.6, height: 2.7 });
+
+  // The north terrace is a 12 x 3.3 slab (TERRACE spans x -6..6, z -16.5..-13.2).
+  // Asserting the model against those numbers, not just against 3.4 x 2.6, is
+  // what makes a future re-authoring that outgrows the terrace fail here rather
+  // than in a browser at the lip.
+  // Rounded to the centimetre: 3.3 stored as a difference of two doubles is
+  // 3.3000000000000007, and the oddity of the mantissa is not the point.
+  assert.equal(Math.round((TERRACE.maxX - TERRACE.minX) * 100) / 100, 12);
+  assert.equal(Math.round((TERRACE.maxZ - TERRACE.minZ) * 100) / 100, 3.3);
+  assert.ok(TERRACE_DETAIL_MODEL_SIZE.width <= TERRACE.maxX - TERRACE.minX,
+    'the pergola is narrower than the terrace');
+  assert.ok(TERRACE_DETAIL_MODEL_SIZE.depth <= TERRACE.maxZ - TERRACE.minZ,
+    'and shallower, so it sits inside the slab rather than overhanging it');
+  // It must also clear the terrace height, since it stands on the slab and the
+  // player's head still has to pass under the slats at the far edge.
+  assert.ok(TERRACE_DETAIL_MODEL_SIZE.height > TERRACE.height);
+});
+
+// The real asset's extents, read off the committed GLB. Held here so the fake
+// meshes below describe the same model the shipped file does, and so a test that
+// drifts from the asset is visible as a number, not a mystery failure.
+const TERRACE_MESH_BOXES = {
+  TerracePergola: { min: { x: -1.7, y: 0, z: -1.3 }, max: { x: 1.7, y: 2.58, z: 1.3 } },
+  TerracePergolaSlats: { min: { x: -1.26, y: 2.58, z: -1.3 }, max: { x: 1.26, y: 2.7, z: 1.3 } },
+  TerracePlanterA: { min: { x: -1.45, y: 0, z: -1.15 }, max: { x: -0.55, y: 0.44, z: -0.65 } },
+  TerracePlanterASoil: { min: { x: -1.4, y: 0.44, z: -1.1 }, max: { x: -0.6, y: 0.5, z: -0.7 } },
+  TerracePlanterB: { min: { x: 0.55, y: 0, z: -1.15 }, max: { x: 1.45, y: 0.44, z: -0.65 } },
+  TerracePlanterBSoil: { min: { x: 0.6, y: 0.44, z: -1.1 }, max: { x: 1.4, y: 0.5, z: -0.7 } }
+};
+
+const terraceMeshes = (boxes = TERRACE_MESH_BOXES) =>
+  Object.entries(boxes).map(([name, box]) => ({ name, geometry: { boundingBox: box } }));
+
+test('a successful terrace-detail load reports its real footprint and size', async () => {
+  const result = await loadTerraceDetail({
+    THREE: fakeTHREE,
+    loadGlb: () => terraceMeshes(),
+    fetchImpl: async () => okResponse(new ArrayBuffer(13388))
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.bytes, 13388);
+  assert.equal(result.url, TERRACE_DETAIL_ASSET);
+  // The reported footprint is the pergola's footprint, so it must match the
+  // authored box to the centimetre -- rounding rather than an exact equality
+  // keeps the check about the numbers, not about float noise in a fake.
+  const round2 = (v) => Math.round(v * 100) / 100;
+  assert.equal(round2(result.footprint.width), TERRACE_DETAIL_MODEL_SIZE.width);
+  assert.equal(round2(result.footprint.depth), TERRACE_DETAIL_MODEL_SIZE.depth);
+  assert.equal(round2(result.footprint.height), TERRACE_DETAIL_MODEL_SIZE.height);
+  assert.equal(result.meshes.length, 6, 'all six parts are handed back to the world');
+});
+
+test('a terrace model that outgrows its footprint is refused rather than clipping', async () => {
+  const cases = {
+    // Wider than 3.4: the posts would stand outside their fixed colliders.
+    wider: { ...TERRACE_MESH_BOXES, TerracePergola: { min: { x: -2, y: 0, z: -1.3 }, max: { x: 2, y: 2.58, z: 1.3 } } },
+    // Deeper than 2.6: it would overhang the terrace lip.
+    deeper: { ...TERRACE_MESH_BOXES, TerracePergola: { min: { x: -1.7, y: 0, z: -1.6 }, max: { x: 1.7, y: 2.58, z: 1.6 } } },
+    // Sunk below the ground plane: the slab would z-fight or bury the planters.
+    sunk: { ...TERRACE_MESH_BOXES, TerracePlanterA: { min: { x: -1.45, y: -0.2, z: -1.15 }, max: { x: -0.55, y: 0.44, z: -0.65 } } },
+    // Taller than 2.7: the slats would foul the headroom the terrace assumes.
+    taller: { ...TERRACE_MESH_BOXES, TerracePergolaSlats: { min: { x: -1.26, y: 2.58, z: -1.3 }, max: { x: 1.26, y: 3.2, z: 1.3 } } }
+  };
+  for (const [label, boxes] of Object.entries(cases)) {
+    const result = await loadTerraceDetail({
+      THREE: fakeTHREE,
+      loadGlb: () => terraceMeshes(boxes),
+      fetchImpl: async () => okResponse(new ArrayBuffer(64))
+    });
+    assert.equal(result.ok, false, `${label} is refused`);
+    assert.match(result.reason, /exceeds its footprint/, `${label} says why`);
+  }
+});
+
+test('a failed terrace-detail load reports why, and never throws', async () => {
+  const missing = await loadTerraceDetail({
+    THREE: fakeTHREE, loadGlb: () => [],
+    fetchImpl: async () => failResponse(404)
+  });
+  assert.equal(missing.ok, false);
+  assert.match(missing.reason, /404/);
+
+  // A parser that throws must surface its own message, not swallow it: a corrupt
+  // GLB and an offline fetch are different bugs and the log should say which.
+  const corrupt = await loadTerraceDetail({
+    THREE: fakeTHREE, loadGlb: () => { throw new Error('not a GLB file'); },
+    fetchImpl: async () => okResponse(new ArrayBuffer(8))
+  });
+  assert.equal(corrupt.ok, false);
+  assert.match(corrupt.reason, /not a GLB/);
+
+  // An empty mesh list has no footprint at all, so the loader must say so rather
+  // than divide by an empty extent.
+  const empty = await loadTerraceDetail({
+    THREE: fakeTHREE, loadGlb: () => [],
+    fetchImpl: async () => okResponse(new ArrayBuffer(8))
+  });
+  assert.equal(empty.ok, false);
+  assert.match(empty.reason, /no geometry/);
+});
+
+test('the shipped terrace-detail GLB parses and matches the authored box', async () => {
+  const file = join(ROOT, 'assets/terrace-detail.glb');
+  assert.ok(existsSync(file), 'the asset is committed');
+  const bytes = readFileSync(file);
+  assert.ok(bytes.byteLength >= 8 * 1024, `the file is real geometry (${bytes.byteLength} bytes)`);
+
+  // A local, slightly richer fake: the shared one stubs computeBoundingBox, and
+  // this test needs the real bounds the GLB describes. Extended here rather than
+  // in the shared object so the other tests keep their no-op stub.
+  class BoundsGeometry {
+    constructor() { this.attributes = {}; }
+    setAttribute(n, a) { this.attributes[n] = a; }
+    setIndex(a) { this.index = a; }
+    computeVertexNormals() {}
+    computeBoundingBox() {
+      const p = this.attributes.position.array;
+      const min = { x: Infinity, y: Infinity, z: Infinity };
+      const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+      for (let i = 0; i < p.length; i += 3) {
+        min.x = Math.min(min.x, p[i]); max.x = Math.max(max.x, p[i]);
+        min.y = Math.min(min.y, p[i + 1]); max.y = Math.max(max.y, p[i + 1]);
+        min.z = Math.min(min.z, p[i + 2]); max.z = Math.max(max.z, p[i + 2]);
+      }
+      this.boundingBox = { min, max };
+    }
+    computeBoundingSphere() {}
+  }
+  const extendedFake = { ...fakeTHREE, BufferGeometry: BoundsGeometry };
+
+  // Copy into a standalone ArrayBuffer: readFileSync hands back a Buffer whose
+  // backing store may be shared, and parseGlb takes a DataView over it.
+  const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const parsed = parseGlb(arrayBuffer);
+  const meshes = glbToMeshes(parsed, extendedFake);
+
+  assert.deepEqual(
+    meshes.map((m) => m.name),
+    ['TerracePergola', 'TerracePergolaSlats', 'TerracePlanterA',
+      'TerracePlanterASoil', 'TerracePlanterB', 'TerracePlanterBSoil'],
+    'the six authored parts are present and named'
+  );
+
+  let triangles = 0;
+  for (const mesh of meshes) {
+    assert.ok(mesh.material && typeof mesh.material.name === 'string' && mesh.material.name.length > 0,
+      `${mesh.name} carries a named material so a texture family can find it`);
+    assert.ok(mesh.geometry.index, `${mesh.name} is indexed`);
+    triangles += mesh.geometry.index.array.length / 3;
+  }
+  assert.ok(triangles < 400, `the furniture stays low-poly (${triangles} triangles)`);
+
+  // The combined footprint must fit the authored box: this is the same check the
+  // loader makes at runtime, held against the file actually on disk.
+  const footprint = fountainFootprint(meshes);
+  assert.ok(footprint.width <= TERRACE_DETAIL_MODEL_SIZE.width + 0.01,
+    `width ${footprint.width} fits ${TERRACE_DETAIL_MODEL_SIZE.width}`);
+  assert.ok(footprint.depth <= TERRACE_DETAIL_MODEL_SIZE.depth + 0.01,
+    `depth ${footprint.depth} fits ${TERRACE_DETAIL_MODEL_SIZE.depth}`);
+  assert.ok(footprint.height <= TERRACE_DETAIL_MODEL_SIZE.height + 0.01,
+    `height ${footprint.height} fits ${TERRACE_DETAIL_MODEL_SIZE.height}`);
+  assert.ok(footprint.minY >= -0.01, 'nothing sinks below the ground plane');
+
+  // And the loader itself accepts the real file, so the two halves agree.
+  const result = await loadTerraceDetail({
+    THREE: extendedFake,
+    loadGlb: (buf) => glbToMeshes(parseGlb(buf), extendedFake),
+    fetchImpl: async () => okResponse(arrayBuffer)
+  });
+  assert.equal(result.ok, true, `the shipped asset loads (${result.reason || 'ok'})`);
+  assert.equal(result.bytes, bytes.byteLength);
+  assert.equal(result.url, TERRACE_DETAIL_ASSET);
 });

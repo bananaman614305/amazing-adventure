@@ -12,78 +12,22 @@
 
 ## Current task
 
-**Round 95: meadow wildflowers, reed clumps and courtyard moss (sources at 46067e5).**
+**Round 96 in progress: contact-shadow decals (done), ripple band/alpha (done), terrace-detail GLB (integrated).**
 
-Three new pure modules from the parallel subagents were reviewed, fixed and
-integrated into `src/world.js` (single InstancedMesh each, uniform
-paintX/updateX + quality gating, `setQuality` and `applyPhase` re-derive all
-three; `src/main.js` frame loop calls updateWildflowers/updateReeds). Review
-fixes: the cross-quad geometry in `crossQuadGeometry` now emits both windings so
-the up normal is never flipped by three's DoubleSide back-face handling, and
-`wildflowerMaterial`, `wildflowerStemMaterial` and `reedMaterial` switched from
-DoubleSide to FrontSide — reed stems went from 46 near-black pixels to 0 in
-the per-field pixel probe (mean luma 55.9 → 70.1 vs 66.6 ground behind).
-Moss gained wall-hugging placement, seam strips, keep-out circles, and the
-plaza-only filter; `tests/moss.test.mjs` (23 tests) was rewritten to use the
-axis-parallel angle as the tell for wall placement. Manifest gained the three
-new modules (146 required files, regenerated). Round 95 browser checks added to
-`scripts/test-round2.mjs` (wildflowers exist+sway, reeds exist+sway, moss flat,
-all five drop on low). Unit suite at 46067e5: 1397 tests, 1397 pass, 0 fail.
-Desktop browser suite at 46067e5: 338/338 PASS, 0 FAIL, no console errors.
-Mobile suite at 46067e5: 184/184 PASS across 4 phone profiles, no console errors.
-
-Known limitation, carried from Round 94: ripple rings use RingGeometry(0.85, 1, 24)
-scaled by radius, so band thickness grows with the ring instead of thinning per
-RIPPLE_THIN; and rippleRing's per-instance opacity (with its exact-zero fade
-tail) is computed but discarded, since MeshBasicMaterial opacity is global. The
-ripple rings are a ShaderMaterial with no `.color`, so the browser check uses
-optional chaining; that is a test-only accommodation, not a game change.
-
-Parallel split (standing `parallel-build-20261125b`): prior cycles launched
-subagents for wildflowers, reeds and moss; this cycle reviewed and integrated
-all three. The world.js integration touches one shared file, so it was done
-alone — recorded here as required. The desktop test-script guard fix
-(optional chaining on `.color`/`.emissive`/`.background`) was done alone because
-it is a one-file edit with no independent parts.
-
-Four new pure modules from the parallel subagents were reviewed, fixed and
-integrated into `src/world.js` (single InstancedMesh each, uniform
-paintX/updateX + quality gating, `setQuality` and `applyPhase` re-derive all
-four; `src/main.js` frame loop calls updateRipples/updateMoths/updatePuddles).
-Review fixes: `src/moths.js` MOTH_SITES replaced with the real lamp heads (plaza
-bulbs ±7/±7 y 3.15, lane lantern 8.3/−21.6) instead of invented coordinates, and
-its test's world bound widened to 30 for the lane; `puddleShimmer` now clamps to
-±PUDDLE_SHIMMER_AMPLITUDE as documented (was ±1, made a bound test
-non-deterministic); manifest gained the three new modules (143 required files,
-regenerated). Round 93's browser checks (never written last round) plus Round
-94's checks were added to `scripts/test-round2.mjs` (ripples travel, moths 30,
-puddles 18, shingles > 0, all four invisible on low). Unit suite at 7523100:
-1313 tests, 1312 pass, 1 fail — only "dist/ is stale" (expected: world.js/main.js
-changed after the last restamp; rebuild next).
-
-Known limitation, to fix next: ripple rings use RingGeometry(0.85, 1, 24) scaled
-by radius, so band thickness grows with the ring instead of thinning per
-RIPPLE_THIN; and rippleRing's per-instance opacity (with its exact-zero fade
-tail) is computed but discarded, since MeshBasicMaterial opacity is global.
-
-Parallel split (standing `parallel-build-20261125b`): prior cycles launched
-subagents for ripples (27 tests at spawn time), moths, puddles and shingles;
-this cycle reviewed and integrated all four. The world.js integration touches
-one shared file, so it was done alone — recorded here as required.
-
-Pending: restamp dist/ and commit; rerun unit suite (expect 1313/1313); desktop
-browser suite once; mobile suite once (SwiftShader-limited host);
-publish via publish.json.
+Round 96 now has all three pieces in world.js: contact-shadow InstancedMesh
+`contact-shadows` (127 lines, repainted per phase, dropped on low tier), the
+ripple ShaderMaterial mapping fixed (`(band*0.5)/span`, `span=radius/RIPPLE_RING_AT`),
+and `upgradeTerraceDetail()` wired into `loadAssets()` (group `terrace-furniture-model`
+on the terrace slab at y=1.2, 6 mesh names, contact-shadow anchor for the pergola).
+Loader `loadTerraceDetail` and browser checks landed via subagents. Unit suite
+passes 1419/1420 (only the expected stale-dist check). Browser + mobile suites
+not yet run this cycle.
 
 ## Next steps
-1. Commit the test-script guard fix (optional chaining on `.color`/`.emissive`/
-   `.background`) on top of 46067e5, then rebuild dist/ via
-   `node scripts/build-preview.mjs` and commit the restamp, then rerun the unit
-   suite (expect 1397/1397).
-2. Publish via /worker/state/outbox/publish.json with exact HEAD SHA (PR-only
-   fallback; grunt-release is blocked_infrastructure).
-3. Next graphics milestone: Blender geometry work (house/terrace detail) or
-   contact-shadow decals under the existing sun shadow map.
+1. Commit sources, run `node scripts/build-preview.mjs`, commit dist restamp; rerun unit suite (expect 1420/1420).
+2. Run `npm run test:browser` once, then `npm run test:mobile` once; fix any failures.
+3. Update CREDITS.md mesh names already done; finalise GRUNT_STATUS checkpoint.
+4. Publish via /worker/state/outbox/publish.json with exact HEAD SHA (PR-only fallback; grunt-release blocked_infrastructure).
 
 ## Round 89 complete (historical)
 

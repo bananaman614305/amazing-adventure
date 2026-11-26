@@ -4273,6 +4273,126 @@ try {
     JSON.stringify({ low: r95.low, full: r95.full }));
   await capture(page, 'round95-dressing.png');
 
+  // --- Round 96: contact shadows, terrace furniture, ripple bands ----------
+  // Three independent pieces of dressing need the live scene: the contact
+  // shadow decals under the upright props (one InstancedMesh, repainted per
+  // phase, dropped on the low tier), the terrace furniture GLB standing on the
+  // terrace slab, and the per-ring band/alpha buffers that give each fountain
+  // ripple its own thickness and fade. The decals are read straight out of
+  // their instance matrices, the furniture through its authored mesh names, and
+  // the ripple attributes off the geometry, so a regression in any one of them
+  // is a named number in the evidence rather than a mystery.
+  const r96 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    api.setClock(10); // day
+    // The decal field: count, material state, and the y translation of every
+    // instance matrix (element [12+1] of each 16-float row), which is where the
+    // "just above the ground" height lives.
+    const contact = byName('contact-shadows');
+    const contactInfo = contact ? {
+      count: contact.count,
+      visible: contact.visible,
+      transparent: contact.material.transparent,
+      materialName: contact.material.name || null
+    } : null;
+    let firstY = null, minY = null, maxY = null;
+    if (contact && contact.instanceMatrix && contact.instanceMatrix.array) {
+      const arr = contact.instanceMatrix.array;
+      const n = Math.floor(arr.length / 16);
+      for (let i = 0; i < n; i += 1) {
+        const y = arr[i * 16 + 13];
+        if (i === 0) firstY = y;
+        minY = minY === null ? y : Math.min(minY, y);
+        maxY = maxY === null ? y : Math.max(maxY, y);
+      }
+    }
+    // Phase strength: the repaint is driven directly, so the opacity numbers
+    // are read off the material after each call.
+    let nightOpacity = null, dayOpacity = null;
+    if (env.paintContactShadows) {
+      env.paintContactShadows('night');
+      nightOpacity = contact ? Number(contact.material.opacity) : null;
+      env.paintContactShadows('day');
+      dayOpacity = contact ? Number(contact.material.opacity) : null;
+    }
+    // Tier gating: on low the decals must vanish and the boolean must say so;
+    // back on full they must come back.
+    api.quality.set('low');
+    const lowVisible = contact ? contact.visible : null;
+    const lowOn = env.contactShadowsOn === undefined ? null : env.contactShadowsOn;
+    api.quality.set('full');
+    const fullVisible = contact ? contact.visible : null;
+    // The terrace furniture: the group, its authored mesh names, its slab
+    // height, and what the asset state says actually loaded.
+    await api.assetsReady();
+    const furniture = byName('terrace-furniture-model');
+    const furnitureMeshes = [];
+    if (furniture) furniture.traverse((o) => { if (o.isMesh) furnitureMeshes.push(o.name); });
+    const st = typeof api.assetState === 'function' ? api.assetState() : api.assetState;
+    const furnitureState = st && st.terraceFurniture !== undefined ? st.terraceFurniture : null;
+    // Per-ring band/alpha: both instanced attributes must exist with itemSize 1
+    // and carry at least one live value.
+    const ripples = byName('fountain-ripples');
+    let band = null, alpha = null;
+    if (ripples && ripples.geometry) {
+      const read = (name) => {
+        const a = ripples.geometry.getAttribute(name);
+        return a ? { itemSize: a.itemSize, count: a.count, positive: Array.from(a.array).some((v) => v > 0) } : null;
+      };
+      band = read('aBand');
+      alpha = read('aAlpha');
+    }
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      contact: contactInfo,
+      envCount: env.contactCount === undefined ? null : env.contactCount,
+      ys: { first: firstY, min: minY, max: maxY },
+      phase: { day: dayOpacity, night: nightOpacity },
+      low: { visible: lowVisible, on: lowOn },
+      fullVisible,
+      furniture: { state: furnitureState, y: furniture ? Number(furniture.position.y) : null, meshes: furnitureMeshes },
+      ripples: { band, alpha }
+    };
+  });
+  checks.check('contact shadow decals exist under the props',
+    r96.contact && r96.contact.count > 0 && r96.contact.visible === true &&
+      r96.contact.transparent === true,
+    JSON.stringify({ mesh: r96.contact, envCount: r96.envCount }));
+  checks.check('contact shadow decals sit on the ground',
+    r96.contact && r96.contact.count === r96.envCount &&
+      r96.ys.min !== null && r96.ys.min >= 0.005 && r96.ys.max <= 0.03,
+    JSON.stringify({ count: r96.contact ? r96.contact.count : null, envCount: r96.envCount, ys: r96.ys }));
+  checks.check('contact shadow strength follows the phase',
+    r96.phase.day !== null && r96.phase.night !== null &&
+      Math.abs(r96.phase.day - 0.30) <= 1e-6 && Math.abs(r96.phase.night - 0.12) <= 1e-6,
+    JSON.stringify(r96.phase));
+  checks.check('contact shadows drop on the low tier',
+    r96.low.visible === false && r96.low.on === false && r96.fullVisible === true,
+    JSON.stringify({ low: r96.low, fullVisible: r96.fullVisible }));
+  checks.check('the terrace furniture model is in the scene',
+    r96.furniture.state === 'model' && r96.furniture.y !== null &&
+      Math.abs(r96.furniture.y - 1.2) <= 0.01 &&
+      ['TerracePergola', 'TerracePergolaSlats', 'TerracePlanterA',
+        'TerracePlanterASoil', 'TerracePlanterB', 'TerracePlanterBSoil']
+        .every((n) => r96.furniture.meshes.includes(n)),
+    JSON.stringify(r96.furniture));
+  checks.check('ripple rings carry a per-instance band and alpha',
+    r96.ripples.band && r96.ripples.alpha &&
+      r96.ripples.band.itemSize === 1 && r96.ripples.alpha.itemSize === 1 &&
+      r96.ripples.band.count > 0 && r96.ripples.alpha.count > 0 &&
+      r96.ripples.band.positive === true && r96.ripples.alpha.positive === true,
+    JSON.stringify(r96.ripples));
+  await capture(page, 'round96-dressing.png');
+
   // --- 28n2. The lane rope's rope strand (round 86) -------------------------
   // The three LaneRope boxes (2 cm diameter, 1.92 m2 total) that span the
   // lane are dressed with the round 86 twisted-fibre rope maps at a 0.08 m
@@ -4501,6 +4621,10 @@ try {
     const byKind = {};
     api.scene.traverse((o) => {
       if (!o.isMesh || !o.material) return;
+      // Contact-shadow decals carry a linear alpha falloff as their `map`, not
+      // an albedo: tagging it sRGB would bend the gradient. It is not an albedo
+      // map, so it is excluded from this albedo color-space check.
+      if (o.name === 'contact-shadows' || o.material.name === 'ContactShadow') return;
       for (const key of ['map', 'normalMap', 'roughnessMap']) {
         const t = o.material[key];
         if (!t) continue;

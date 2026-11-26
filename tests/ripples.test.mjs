@@ -16,6 +16,7 @@ import {
   RIPPLE_MIN_SIZE, RIPPLE_MAX_SIZE, RIPPLE_LIFE, RIPPLE_MAX_OPACITY,
   RIPPLE_PHASE_GLOW, RIPPLE_RINGS_PER_SITE, RIPPLE_WATER_Y,
   RIPPLE_FADE_TAIL, RIPPLE_THIN, RIPPLE_SPEED_MIN, RIPPLE_SPEED_MAX,
+  RIPPLE_MIN_BAND, RIPPLE_BAND_BIRTH,
   rippleGlowLevel, rippleSpawns, rippleRing, ripplesEnabled
 } from '../src/ripples.js';
 
@@ -39,6 +40,8 @@ test('the authored constants are the ones the world relies on', () => {
   assert.ok(RIPPLE_SITE_RADIUS + RIPPLE_MAX_RADIUS <= RIPPLE_BASIN_RADIUS + 1e-9);
   // A count above the default but within the cap is allowed; the cap is real.
   assert.ok(RIPPLE_MAX_COUNT >= RIPPLE_COUNT);
+  assert.equal(RIPPLE_MIN_BAND, 0.018);
+  assert.equal(RIPPLE_BAND_BIRTH, 0.05);
 });
 
 test('the phase glow table is frozen with dusk strongest and night weakest', () => {
@@ -137,7 +140,7 @@ test('rippleRing returns finite, bounded values across a long sweep', () => {
     for (let i = 0; i < RIPPLE_RINGS_PER_SITE; i += 1) {
       for (let t = 0; t < 60; t += 0.29) {
         const r = rippleRing(s, i, t);
-        for (const key of ['x', 'y', 'z', 'radius', 'opacity', 'scale']) {
+        for (const key of ['x', 'y', 'z', 'radius', 'opacity', 'scale', 'band', 'alpha']) {
           assert.ok(Number.isFinite(r[key]), `${key} not finite at i=${i}, t=${t}`);
         }
         assert.ok(r.radius >= 0 && r.radius <= RIPPLE_MAX_RADIUS + 1e-9, `radius ${r.radius} out of band`);
@@ -224,7 +227,7 @@ test('a finite out-of-range index clamps into the slots', () => {
 test('a junk spawn yields a finite, invisible ring rather than throwing', () => {
   for (const junk of [undefined, null, 42, 'x', NaN, []]) {
     const r = rippleRing(junk, 0, 1);
-    for (const key of ['x', 'y', 'z', 'radius', 'opacity', 'scale']) {
+    for (const key of ['x', 'y', 'z', 'radius', 'opacity', 'scale', 'band', 'alpha']) {
       assert.ok(Number.isFinite(r[key]), `${key} not finite for junk spawn`);
     }
     assert.equal(r.opacity, 0);
@@ -237,7 +240,7 @@ test('a spawn with non-finite fields still yields finite rings', () => {
   const broken = { x: NaN, z: Infinity, phase: 'x', speed: -Infinity, size: undefined };
   for (let i = 0; i < RIPPLE_RINGS_PER_SITE; i += 1) {
     const r = rippleRing(broken, i, 2);
-    for (const key of ['x', 'y', 'z', 'radius', 'opacity', 'scale']) {
+    for (const key of ['x', 'y', 'z', 'radius', 'opacity', 'scale', 'band', 'alpha']) {
       assert.ok(Number.isFinite(r[key]), `${key} not finite for broken spawn`);
     }
     assert.ok(r.radius >= 0 && r.radius <= RIPPLE_MAX_RADIUS + 1e-9);
@@ -268,7 +271,7 @@ test('a finite-but-enormous time still yields a finite ring', () => {
   const s = craft();
   for (const t of [Number.MAX_VALUE, 1e308, -1e308]) {
     const r = rippleRing(s, 0, t);
-    for (const key of ['x', 'y', 'z', 'radius', 'opacity', 'scale']) {
+    for (const key of ['x', 'y', 'z', 'radius', 'opacity', 'scale', 'band', 'alpha']) {
       assert.ok(Number.isFinite(r[key]), `${key} not finite at t=${t}`);
     }
   }
@@ -280,10 +283,64 @@ test('no call produces NaN or Infinity across a sweep of every site and slot', (
     for (let i = -1; i <= RIPPLE_RINGS_PER_SITE; i += 1) {
       for (let t = -10; t < 30; t += 0.61) {
         const r = rippleRing(s, i, t);
-        for (const key of ['x', 'y', 'z', 'radius', 'opacity', 'scale']) {
+        for (const key of ['x', 'y', 'z', 'radius', 'opacity', 'scale', 'band', 'alpha']) {
           assert.ok(Number.isFinite(r[key]), `${key} not finite at i=${i}, t=${t}`);
         }
       }
     }
+  }
+});
+
+test('band thins as the ring expands but never drops below RIPPLE_MIN_BAND', () => {
+  const s = craft();
+  const birthBand = RIPPLE_BAND_BIRTH * s.size;
+  let previous = Infinity;
+  for (let t = 0; t < RIPPLE_LIFE * 0.98; t += 0.02) {
+    const band = rippleRing(s, 0, t).band;
+    assert.ok(Number.isFinite(band));
+    assert.ok(band <= birthBand + 1e-12, `band ${band} grew above birth at t=${t}`);
+    assert.ok(band >= RIPPLE_MIN_BAND - 1e-12, `band ${band} below floor at t=${t}`);
+    assert.ok(band <= previous + 1e-12, `band ${band} grew at t=${t}`);
+    previous = band;
+  }
+});
+
+test('alpha is exactly 0 at the fade tail and equals opacity otherwise', () => {
+  const s = craft();
+  for (const t of [RIPPLE_LIFE * 0.99, RIPPLE_LIFE * 0.999, RIPPLE_LIFE * (1 - 1e-9)]) {
+    assert.equal(rippleRing(s, 0, t).alpha, 0, `alpha not zero at t=${t}`);
+  }
+  assert.equal(rippleRing(s, 0, 0).alpha, rippleRing(s, 0, 0).opacity);
+  for (let t = 0; t < RIPPLE_LIFE * 0.97; t += 0.05) {
+    const r = rippleRing(s, 0, t);
+    assert.equal(r.alpha, r.opacity);
+    assert.ok(r.alpha >= 0 && r.alpha <= RIPPLE_MAX_OPACITY + 1e-9);
+  }
+});
+
+test('band and alpha stay finite and in range across a sweep', () => {
+  const spawns = rippleSpawns({ count: RIPPLE_MAX_COUNT });
+  for (const s of spawns) {
+    for (let i = 0; i < RIPPLE_RINGS_PER_SITE; i += 1) {
+      for (let t = -5; t < 20; t += 0.37) {
+        const r = rippleRing(s, i, t);
+        assert.ok(Number.isFinite(r.band));
+        assert.ok(Number.isFinite(r.alpha));
+        assert.ok(r.band >= RIPPLE_MIN_BAND - 1e-12);
+        assert.ok(r.alpha >= 0 && r.alpha <= RIPPLE_MAX_OPACITY + 1e-9);
+      }
+    }
+  }
+});
+
+test('junk spawn yields band and alpha fields', () => {
+  for (const junk of [undefined, null, 42, 'x', NaN, []]) {
+    const r = rippleRing(junk, 0, 1);
+    assert.ok(Number.isFinite(r.band));
+    assert.ok(Number.isFinite(r.alpha));
+    assert.equal(r.alpha, 0);
+    const birthBand = RIPPLE_BAND_BIRTH * RIPPLE_MIN_SIZE;
+    const expected = Math.min(birthBand, Math.max(RIPPLE_MIN_BAND, birthBand));
+    assert.equal(r.band, expected);
   }
 });

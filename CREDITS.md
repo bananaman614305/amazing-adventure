@@ -377,3 +377,11 @@ its procedural stand-in or flat colour and stays fully playable.
   to within 2% of its own projection plane, all four split meshes unindexed with
   exactly one corner per triangle slot, and the lane sacks tiling uniformly at
   1.2 m with zero spread (was 0.53).
+
+### Round 96 additions
+
+- **assets/terrace-detail.glb** — timber pergola (four square posts, two top
+  beams, four cross slats) plus two stone planters with inset soil tops, giving
+  the north terrace a readable silhouette. Authored by `art/blender/make_terrace_detail.py`
+  (168 triangles), flat Principled materials `TerraceTimber`, `TerraceTimberDark`,
+  `TerraceStone`, `TerraceSoil`; no outside images or models, no textures.
