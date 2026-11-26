@@ -12,27 +12,17 @@
 
 ## Current task
 
-**Round 101 in progress: roof shingle tile family.**
-
-Integration code landed (uncommitted): src/assets.js adds ROOF_SHINGLE_TEXTURE_FILES;
-src/world.js adds upgradeShingles() (loads the family, falls back to the flat
-0x6d3a2c material, records assetState.shingle/shingleDetail); the shingle
-material is dressed with a 1 m tile; assetState gains shingle/shingleDetail;
-upgradeShingles() added to the loadAssets() Promise.all. tests/assets.test.mjs
-gains 2 tests (family shape + load/clone); scripts/test-round2.mjs gains the
-"the roof shingles wear the new tile family" check; manifest +3 files; CREDITS
-updated. Unit suite: 86 asset tests PASS (last run).
-
-Texture generator: art/kaggle/roof_shingle_textures.py authored. The height
-field was reworked to one shingle per tile (butt at bottom, joint at top, crown
-in the middle) so the tile is perfectly periodic in both directions. The albedo
-is a value map (joint shadow, grain, nails, damp, valley) so the authored
-0x6d3a2c colour and per-phase glow are not tinted twice. Local validation
-blocked on the host venv disappearing between commands; the venv will be placed
-in /worker/state for persistence. Kaggle submission v44 ERRORED; resubmit once
-local validation passes.
+**Round 101 committed, browser verification in flight.** Commits ffeb17f
+(texture family + integration), 8ade987 (release manifest), ffeb17f (dist).
+Generator fixed and validated: periodic roll-based central-difference normals
+plus exact tileability pins on H and normal_rgb; Kaggle job v45 COMPLETE on
+Tesla T4 with seam_ratio albedo [0.804, 0.247], normal [0.0, 0.0], rough
+[0.987, 0.956], normal green mean 0.5, albedo std 0.14. PNGs converted to
+lossless WebP at assets/textures/roof_shingle_{albedo,normal,rough}.webp;
+converted WebPs re-verified (seams < 1, 1024x1024, expected means). Unit suite
+1452/1452 PASS. Desktop browser suite RUNNING in background; mobile suite and
+publish.json pending its result.
 
 ## Next steps
-1. Place the venv in /worker/state, run the generator, inspect seam ratios and normal green mean, fix any failure, then submit to Kaggle and download the PNGs.
-2. Convert the PNGs to WebP at assets/textures/roof_shingle_{albedo,normal,rough}.webp, verify dimensions/content, commit sources + assets.
-3. Run npm test and npm run test:browser once to confirm the new check passes; update GRUNT_STATUS with evidence and write publish.json.
+1. Confirm desktop browser suite passes (incl. the new shingles check), then run the mobile suite once.
+2. Update GRUNT_STATUS with evidence and write publish.json at exact HEAD.
