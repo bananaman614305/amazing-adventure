@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 
 import {
   TUFT_SEED, TUFT_BLADES, TUFT_VARIANTS, TUFT_BASE_TINT, TUFT_TIP_TINT,
-  TUFT_PHASE_TINT, TUFT_MAX_LEAN,
+  TUFT_PHASE_TINT, TUFT_MAX_LEAN, TUFT_RADIUS,
   mulberry32, tuftBlades, tuftGeometry, tuftPhaseTint, tuftLeanAngle, tuftLeanAxis
 } from '../src/tuft.js';
 
@@ -134,6 +134,22 @@ test('every tuft stands above its footprint and tops out near TUFT_HEIGHT', () =
     let maxY = -Infinity;
     for (let i = 1; i < geo.positions.length; i += 3) maxY = Math.max(maxY, geo.positions[i]);
     assert.ok(Math.abs(maxY - geo.height) < 1e-6);
+  }
+});
+
+test('no blade tip strays outside the clump radius', () => {
+  // TUFT_RADIUS is the authored footprint. A tip past it would mean the clump
+  // spreads wider than it claims, which is the difference between one plant and
+  // a patch of grass; the lean term must stay inside the remaining radius.
+  for (let variant = 0; variant < TUFT_VARIANTS; variant += 1) {
+    const { positions } = tuftGeometry(variant);
+    for (let i = 0; i < positions.length; i += 9) {
+      // Corner 2 of each blade is the tip: vertices [0,1,2] per blade.
+      const tx = positions[i + 6];
+      const tz = positions[i + 8];
+      const reach = Math.hypot(tx, tz);
+      assert.ok(reach <= TUFT_RADIUS + 1e-6, `tip reach ${reach} exceeded TUFT_RADIUS`);
+    }
   }
 });
 

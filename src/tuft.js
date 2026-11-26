@@ -158,8 +158,10 @@ export function tuftBlades(variant, seed = TUFT_SEED) {
     const height = TUFT_HEIGHT * (0.55 + rng() * 0.45);
     const width = TUFT_BLADE_WIDTH * (0.7 + rng() * 0.6);
     // Outward lean, in metres at the tip. A tuft whose blades all leave the
-    // same point reads as a star; splayed roots and tips read as a plant.
-    const lean = TUFT_RADIUS * (0.25 + rng() * 0.75);
+    // same point reads as a star; splayed roots and tips read as a plant. Kept
+    // to a fraction of the clump radius so root plus lean never pushes a tip
+    // past TUFT_RADIUS -- a clump that spreads wider stops reading as one plant.
+    const lean = TUFT_RADIUS * (0.1 + rng() * 0.3);
     // Per-blade shade breaks the clump into lit and shaded leaves rather than
     // one flat green fan.
     const shade = 0.82 + rng() * 0.18;
@@ -217,10 +219,13 @@ export function tuftGeometry(variant) {
     const perpX = -sin;
     const perpZ = cos;
     // Tip: further out than the root by the blade's outward lean, and up by its
-    // height. Composing the lean in the ground plane keeps the tip's y a clean
-    // function of height, which the tests assert.
-    const tipX = rootX + cos * (blade.radius + blade.lean);
-    const tipZ = rootZ + sin * (blade.radius + blade.lean);
+    // height. The lean is measured *from the root*, so it must not add the root
+    // radius a second time -- rootX already carries it, and double-counting
+    // spread every clump past TUFT_RADIUS (0.278 m against a claimed 0.16 m),
+    // which turned one plant into a patch. Composing the lean in the ground
+    // plane keeps the tip's y a clean function of height, which the tests assert.
+    const tipX = rootX + cos * blade.lean;
+    const tipZ = rootZ + sin * blade.lean;
     const tipY = blade.height;
     if (tipY > top) top = tipY;
 

@@ -3331,18 +3331,39 @@ export function buildWorld(renderer) {
     ...[[7, 7], [-7, 7], [7, -7], [-7, -7]].map(([x, z]) => ({ x, z, radius: 0.45 })),
     ...[[-5, 9], [-6.2, 9.4], [3, -7.5]].map(([x, z]) => ({ x, z, radius: 0.7 }))
   ];
+  // Footprints for the market stalls and the crates are read off the stand-in
+  // boxes the world already built, not copied by hand. The first version of this
+  // list was a hand-written copy, and it had drifted twice: the west stall's
+  // keep-out sat at the east stall's mirrored z (-5 instead of +6), so grass grew
+  // through the west stall while a patch of empty lawn was kept bare, and the
+  // three crates were missing entirely. Deriving the rects from the meshes means
+  // a stall or crate that moves takes its keep-out with it.
+  const propFootprints = [];
+  scene.traverse((node) => {
+    const data = node.userData;
+    if (!data || !node.geometry || !node.geometry.parameters) return;
+    if (!data.marketStallStandin && !data.crateStandin) return;
+    const { width, depth } = node.geometry.parameters;
+    if (!(width > 0) || !(depth > 0)) return;
+    propFootprints.push({
+      minX: node.position.x - width / 2,
+      maxX: node.position.x + width / 2,
+      minZ: node.position.z - depth / 2,
+      maxZ: node.position.z + depth / 2
+    });
+  });
+
   const meadowRects = [
-    // The lane floor, the house, the bench, the terrace, the market stalls and
-    // the boards are all rectangles of owned ground.
+    // The lane floor, the house, the bench, the terrace and the boards are all
+    // rectangles of owned ground.
     { minX: LANE.minX - 0.4, maxX: LANE.maxX + 0.4, minZ: LANE.minZ - 0.4, maxZ: LANE.maxZ + 0.4 },
     { minX: -14.5, maxX: -6.5, minZ: -12, maxZ: -6 },
     { minX: BENCH.x - 1.3, maxX: BENCH.x + 1.3, minZ: BENCH.z - 0.7, maxZ: BENCH.z + 0.7 },
     { minX: TERRACE.minX - 0.3, maxX: TERRACE.maxX + 0.3, minZ: TERRACE.minZ - 0.3, maxZ: TERRACE.maxZ + 0.3 },
-    { minX: 8.5, maxX: 13.5, minZ: -5.2, maxZ: -0.8 },
-    { minX: -13.5, maxX: -8.5, minZ: -5.2, maxZ: -0.8 },
     // The job board and the notice board own a strip each.
     { minX: JOB_BOARD.x - 0.9, maxX: JOB_BOARD.x + 0.9, minZ: JOB_BOARD.z - 0.5, maxZ: JOB_BOARD.z + 0.5 },
-    { minX: NOTICE_BOARD.x - 0.9, maxX: NOTICE_BOARD.x + 0.9, minZ: NOTICE_BOARD.z - 0.5, maxZ: NOTICE_BOARD.z + 0.5 }
+    { minX: NOTICE_BOARD.x - 0.9, maxX: NOTICE_BOARD.x + 0.9, minZ: NOTICE_BOARD.z - 0.5, maxZ: NOTICE_BOARD.z + 0.5 },
+    ...propFootprints
   ];
 
   // One InstancedMesh per variant, not one mesh of mixed shapes: an InstancedMesh

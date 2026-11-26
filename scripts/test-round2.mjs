@@ -3654,6 +3654,46 @@ try {
       }
     }
 
+    // Nothing should grow through a prop. The stall and crate footprints are
+    // read off the live scene the same way world.js derives them, so a stall
+    // that moves takes this check with it instead of silently passing. This is
+    // the regression for the hand-copied list that had the west stall at the
+    // wrong z and no crates at all.
+    const propRects = [];
+    api.scene.traverse((node) => {
+      const data = node.userData;
+      if (!data || !node.geometry || !node.geometry.parameters) return;
+      if (!data.marketStallStandin && !data.crateStandin) return;
+      const { width, depth } = node.geometry.parameters;
+      if (!(width > 0) || !(depth > 0)) return;
+      propRects.push({
+        minX: node.position.x - width / 2, maxX: node.position.x + width / 2,
+        minZ: node.position.z - depth / 2, maxZ: node.position.z + depth / 2
+      });
+    });
+    let insideProp = 0;
+    let propProbes = 0;
+    for (const v of variants) {
+      const mesh = byName(v.name);
+      if (!mesh) continue;
+      const e = mesh.instanceMatrix.array;
+      for (let i = 0; i < mesh.count; i += 1) {
+        const x = e[i * 16 + 12];
+        const z = e[i * 16 + 14];
+        for (const r of propRects) {
+          if (x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ) insideProp += 1;
+        }
+      }
+      propProbes += mesh.count;
+    }
+    // The west stall really is at +z and the crates really are south-east; if
+    // the derivation returned nothing the check would pass vacuously, so record
+    // how many footprints it found and where they are.
+    const stallRects = propRects.map((r) => [
+      Math.round((r.minX + r.maxX) / 2 * 10) / 10,
+      Math.round((r.minZ + r.maxZ) / 2 * 10) / 10
+    ]);
+
     // Sway: sample one instance's matrix at two different wind times and see it
     // change. `updateMeadow` advances its own clock, so two calls with a real dt
     // must move the blades.
@@ -3706,6 +3746,10 @@ try {
       offGround,
       onPaving,
       outside,
+      propRects: propRects.length,
+      propProbes,
+      insideProp,
+      stallRects,
       swayMoved,
       lowFrozen,
       dayTint,
@@ -3723,6 +3767,11 @@ try {
     md.sampled > 100 && md.offGround === 0 && md.onPaving === 0 && md.outside === 0,
     JSON.stringify({ sampled: md.sampled, offGround: md.offGround,
                      onPaving: md.onPaving, outside: md.outside }));
+  checks.check('no tuft grows through a market stall or a crate',
+    md.propRects >= 8 && md.propProbes > 500 && md.insideProp === 0 &&
+      md.stallRects.some(([x, z]) => Math.abs(x + 11) < 0.6 && Math.abs(z - 6) < 0.6),
+    JSON.stringify({ rects: md.propRects, probes: md.propProbes,
+                     insideProp: md.insideProp, centres: md.stallRects }));
   checks.check('the wind sways the meadow on the full tier and stills it on low',
     md.swayMoved === true && md.lowFrozen === true,
     JSON.stringify({ swayMoved: md.swayMoved, lowFrozen: md.lowFrozen }));
