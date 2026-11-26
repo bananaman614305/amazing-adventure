@@ -3808,9 +3808,15 @@ try {
       const b = i * 16;
       return { x: a[b], y: a[b + 13], z: a[b + 14], sx: a[b] };
     };
+    // Accepts either a live mesh or a snapshot object ({ array }) on either side,
+    // so a before/after comparison does not need two live meshes.
+    const arrayFor = (m) => (m && m.instanceMatrix && m.instanceMatrix.array)
+      ? m.instanceMatrix.array
+      : (m && m.array) ? m.array : null;
     const matrixDiff = (mesh, i, other) => {
-      const a = mesh.instanceMatrix.array;
-      const b = other.instanceMatrix.array;
+      const a = arrayFor(mesh);
+      const b = arrayFor(other);
+      if (!a || !b) return 0;
       let diff = 0;
       for (let k = 0; k < 16; k += 1) diff += Math.abs(a[i * 16 + k] - b[i * 16 + k]);
       return diff;
@@ -3970,7 +3976,8 @@ try {
       };
     }
     // The plumes read strongest at dusk, weakest at day, still present at night.
-    api.setClock(60);
+    // Dusk begins at clock 70, so 80 is safely inside it (clock 60 is still day).
+    api.setClock(80);
     const smokeDusk = smoke ? Number(smoke.material.opacity.toFixed(3)) : null;
     api.setClock(150);
     const smokeNight = smoke ? Number(smoke.material.opacity.toFixed(3)) : null;
