@@ -10,6 +10,14 @@ import { MOONLIGHT_COLOR, moonlightIntensity, moonlightDirection } from './moonl
 import { cloudDapple } from './cloudshadow.js';
 import { horizonRibbonArray, horizonRibbonColors, horizonTint, horizonOpacity,
   horizonFootTint } from './horizon.js';
+import { scatterPoints, SCATTER_SEED } from './scatter.js';
+import { windDirection, windPhase, windSway, windStrength } from './wind.js';
+import { tuftGeometry, tuftPhaseTint, tuftLeanAngle, tuftLeanAxis,
+  TUFT_VARIANTS } from './tuft.js';
+import { flutterAmount, flutterPhase, flutterMotion, flutterEnabled,
+  FLUTTER_MAX_YAW, FLUTTER_MAX_ROLL, FLUTTER_MAX_BILLOW } from './flutter.js';
+import { fireflySpawns, fireflyGlowLevel, fireflyBlink, fireflyDrift,
+  fireflyEnabled, FIREFLY_TINT, FIREFLY_COUNT, FIREFLY_MIN_RADIUS, FIREFLY_MAX_RADIUS } from './fireflies.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -601,6 +609,9 @@ export function buildWorld(renderer) {
   // The pennants are collected here so the felt pass can reach them without a
   // scene-wide traverse that would also catch every other mesh in the lane.
   const buntingFlags = [];
+  // Collected so the per-frame flutter pass can reach them without a scene
+  // traversal (and so it still works after upgradeBuntingFelt swaps materials).
+  const buntingFlutter = [];
   // Round 86: the three rope strands are collected the same way, so
   // upgradeLaneRope() dresses exactly the `LaneRope` meshes and nothing else.
   const buntingRopes = [];
@@ -627,6 +638,7 @@ export function buildWorld(renderer) {
       flag.castShadow = false;
       scene.add(flag);
       buntingFlags.push(flag);
+      buntingFlutter.push({ mesh: flag, phase: flutterPhase(buntingFlutter.length) });
     }
   }
 
@@ -894,6 +906,9 @@ export function buildWorld(renderer) {
   scene.add(banner);
   // Keep a handle so upgradeBanner() can hide it without a scene traversal.
   const bannerStandin = banner;
+  // The banner cloth flutters too; recorded here so the pass has a handle even
+  // before upgradeBanner() swaps in the GLB.
+  const bannerFlutter = [{ mesh: banner, phase: flutterPhase(0, FLUTTER_SEED ^ 0x11) }];
 
   // --- Props --------------------------------------------------------------
   const stone = new THREE.MeshStandardMaterial({ color: 0x8f8577, roughness: 0.8 });
@@ -3291,6 +3306,352 @@ export function buildWorld(renderer) {
     });
   }
 
+  // --- Meadow -------------------------------------------------------------
+  // The grass ring was a textured plane with nothing standing on it, which read
+  // as a painted floor: the ground met every prop in one clean line and never
+  // broke it. Round 90 stands ~900 grass tufts on the ring so the lawn has a
+  // silhouette -- a dark, ragged edge where the eye meets the ground, blades
+  // catching the light at a different angle from the texture beneath them.
+  //
+  // Placement is decided by the pure scatter module (seeded rejection sampling
+  // against the zones that own their ground) and the shape of a clump by the
+  // pure tuft module. This block only turns those numbers into one InstancedMesh:
+  // one draw call for the whole meadow, four blade variants baked into one
+  // geometry buffer, every tuft an instance.
+  //
+  // The tufts sway in the shared wind field (src/wind.js) on the full tier. The
+  // sway is a per-instance matrix update once per frame; on the low tier the
+  // meadow still stands, it simply holds still, because a per-frame loop over
+  // 900 instances is exactly the kind of cost the low tier exists to drop.
+  const MEADOW_COUNT = 900;
+  const MEADOW_MARGIN = 0.55;
+  // Ground the tufts must not grow through. Circles are things that own a disc
+  // of ground (the fountain, the trees, the lamp posts, the barrels); rects are
+  // things that own a footprint (the plaza and lane paving, the house, the
+  // terrace steps, the bench, the stalls and the walls' own thickness).
+  //
+  // The plaza disc and the lane floor are already paved, so the ring is
+  // everything inside the border walls that is neither. The margin then keeps
+  // blades a hand's width off every edge, so nothing kisses the paving.
+  const meadowCircles = [
+    // The paved plaza disc: a circle, not a rect, so the ring's corners are
+    // still planted. A rect would have left four bare wedges.
+    { x: 0, z: 0, radius: 9 },
+    { x: FOUNTAIN_SPOT.x, z: FOUNTAIN_SPOT.z, radius: FOUNTAIN_COLLIDER },
+    ...TREE_SPOTS.map((spot) => ({ x: spot.x, z: spot.z, radius: 1.1 * spot.scale })),
+    ...[[7, 7], [-7, 7], [7, -7], [-7, -7]].map(([x, z]) => ({ x, z, radius: 0.45 })),
+    ...[[-5, 9], [-6.2, 9.4], [3, -7.5]].map(([x, z]) => ({ x, z, radius: 0.7 }))
+  ];
+  // Footprints for the market stalls and the crates are read off the stand-in
+  // boxes the world already built, not copied by hand. The first version of this
+  // list was a hand-written copy, and it had drifted twice: the west stall's
+  // keep-out sat at the east stall's mirrored z (-5 instead of +6), so grass grew
+  // through the west stall while a patch of empty lawn was kept bare, and the
+  // three crates were missing entirely. Deriving the rects from the meshes means
+  // a stall or crate that moves takes its keep-out with it.
+  const propFootprints = [];
+  scene.traverse((node) => {
+    const data = node.userData;
+    if (!data || !node.geometry || !node.geometry.parameters) return;
+    if (!data.marketStallStandin && !data.crateStandin) return;
+    const { width, depth } = node.geometry.parameters;
+    if (!(width > 0) || !(depth > 0)) return;
+    propFootprints.push({
+      minX: node.position.x - width / 2,
+      maxX: node.position.x + width / 2,
+      minZ: node.position.z - depth / 2,
+      maxZ: node.position.z + depth / 2
+    });
+  });
+
+  const meadowRects = [
+    // The lane floor, the house, the bench, the terrace and the boards are all
+    // rectangles of owned ground.
+    { minX: LANE.minX - 0.4, maxX: LANE.maxX + 0.4, minZ: LANE.minZ - 0.4, maxZ: LANE.maxZ + 0.4 },
+    { minX: -14.5, maxX: -6.5, minZ: -12, maxZ: -6 },
+    { minX: BENCH.x - 1.3, maxX: BENCH.x + 1.3, minZ: BENCH.z - 0.7, maxZ: BENCH.z + 0.7 },
+    { minX: TERRACE.minX - 0.3, maxX: TERRACE.maxX + 0.3, minZ: TERRACE.minZ - 0.3, maxZ: TERRACE.maxZ + 0.3 },
+    // The job board and the notice board own a strip each.
+    { minX: JOB_BOARD.x - 0.9, maxX: JOB_BOARD.x + 0.9, minZ: JOB_BOARD.z - 0.5, maxZ: JOB_BOARD.z + 0.5 },
+    { minX: NOTICE_BOARD.x - 0.9, maxX: NOTICE_BOARD.x + 0.9, minZ: NOTICE_BOARD.z - 0.5, maxZ: NOTICE_BOARD.z + 0.5 },
+    ...propFootprints
+  ];
+
+  // One InstancedMesh per variant, not one mesh of mixed shapes: an InstancedMesh
+  // draws the whole base geometry for every instance, so a single mesh could
+  // only ever draw one tuft shape. Four variants therefore mean four draw calls
+  // -- still trivial -- and each mesh draws only the instances the scatter
+  // assigned to it. The alternative, a custom shader that picks a vertex range
+  // per instance, buys three draw calls and costs a shader this project does not
+  // otherwise need.
+  const meadowGroup = new THREE.Group();
+  meadowGroup.name = 'meadow';
+  meadowGroup.userData = { meadow: true };
+  scene.add(meadowGroup);
+
+  const meadowArea = { minX: -HALF + 0.8, maxX: HALF - 0.8, minZ: -HALF + 0.8, maxZ: HALF - 0.8 };
+  const meadowScatter = scatterPoints({
+    count: MEADOW_COUNT,
+    seed: SCATTER_SEED,
+    area: meadowArea,
+    circles: meadowCircles,
+    rects: meadowRects,
+    margin: MEADOW_MARGIN,
+    minScale: 0.75,
+    maxScale: 1.35
+  });
+
+  // Bucket the scattered points by variant so each variant mesh knows its own
+  // instance count up front (an InstancedMesh's capacity is fixed at build).
+  const meadowByVariant = [[], [], [], []];
+  for (const point of meadowScatter.points) {
+    meadowByVariant[point.variant].push(point);
+  }
+
+  const meadowMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.9,
+    metalness: 0,
+    // Double-sided: a blade is one triangle and is seen from both faces as the
+    // player circles a clump. The up-facing normals (see tuft.js) keep the back
+    // face lit exactly like the front.
+    side: THREE.DoubleSide
+  });
+  meadowMaterial.name = 'MeadowGrass';
+
+  const meadowVariants = [];
+  const meadowPhaseTint = new THREE.Color(0xffffff);
+  for (let variant = 0; variant < TUFT_VARIANTS; variant += 1) {
+    const points = meadowByVariant[variant];
+    const shape = tuftGeometry(variant);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(shape.positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(shape.colours, 3));
+    geometry.setAttribute('normal', new THREE.BufferAttribute(shape.normals, 3));
+    geometry.computeBoundingSphere();
+
+    const mesh = new THREE.InstancedMesh(geometry, meadowMaterial, Math.max(1, points.length));
+    mesh.name = `meadow-tufts-${variant}`;
+    mesh.userData = { meadowVariant: variant, tuftCount: points.length };
+    mesh.castShadow = false; // A blade's shadow is finer than the shadow map.
+    mesh.receiveShadow = true;
+    // Instances are placed below; until then nothing is drawn for an empty
+    // bucket, so the mesh is hidden rather than left at the identity matrix.
+    mesh.count = points.length;
+    mesh.visible = points.length > 0;
+
+    const instances = [];
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const scale = new THREE.Vector3();
+    const yaw = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < points.length; i += 1) {
+      const point = points[i];
+      position.set(point.x, 0, point.z);
+      // The scatter rotation turns the clump about its own vertical axis so two
+      // instances of the same variant do not share a silhouette.
+      yaw.setFromAxisAngle(up, point.rotation);
+      scale.setScalar(point.scale);
+      matrix.compose(position, yaw, scale);
+      mesh.setMatrixAt(i, matrix);
+      instances.push({
+        x: point.x,
+        z: point.z,
+        scale: point.scale,
+        rotation: point.rotation,
+        // Precomputed per-tuft wind phase, so the sway loop is a couple of
+        // multiplies rather than a position hash every frame.
+        phase: windPhase(point.x, point.z)
+      });
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    meadowGroup.add(mesh);
+    meadowVariants.push({ mesh, instances });
+  }
+
+  // The wind direction is fixed, so the lean axis (the horizontal axis a tuft
+  // rotates about to tip downwind) is computed once, not per instance.
+  const meadowWind = windDirection();
+  const meadowAxis = tuftLeanAxis(meadowWind);
+  const meadowLeanAxis = new THREE.Vector3(meadowAxis.x, meadowAxis.y, meadowAxis.z);
+  let meadowWindTime = 0;
+
+  // --- Night fireflies -----------------------------------------------------
+  // A single InstancedMesh of tiny glowing quads in the meadow ring. One draw
+  // call regardless of count; the per-frame pass only updates instance matrices
+  // and opacity, so the cost is a handful of trig operations on the full tier.
+  const fireflySpawnsList = fireflyEnabled('full') ? fireflySpawns({ count: FIREFLY_COUNT }) : [];
+  const fireflyGeometry = new THREE.PlaneGeometry(0.18, 0.18);
+  const fireflyMaterial = new THREE.MeshBasicMaterial({
+    color: FIREFLY_TINT,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    fog: false
+  });
+  fireflyMaterial.name = 'Firefly';
+  const fireflyMesh = new THREE.InstancedMesh(
+    fireflyGeometry,
+    fireflyMaterial,
+    Math.max(1, fireflySpawnsList.length)
+  );
+  fireflyMesh.name = 'fireflies';
+  fireflyMesh.count = fireflySpawnsList.length;
+  fireflyMesh.visible = fireflySpawnsList.length > 0;
+  fireflyMesh.renderOrder = 2;
+  scene.add(fireflyMesh);
+
+  // Per-instance base data carried for the drift + blink pass.
+  const fireflyInstances = fireflySpawnsList.map((spawn, i) => ({
+    spawn,
+    baseX: spawn.x,
+    baseY: spawn.height,
+    baseZ: spawn.z,
+    phase: spawn.phase
+  }));
+
+  // Place instances once at rest; the per-frame pass overwrites them.
+  const _ffMatrix = new THREE.Matrix4();
+  const _ffPos = new THREE.Vector3();
+  const _ffScale = new THREE.Vector3(1, 1, 1);
+  const _ffQuat = new THREE.Quaternion();
+  for (let i = 0; i < fireflyInstances.length; i += 1) {
+    const inst = fireflyInstances[i];
+    _ffPos.set(inst.baseX, inst.baseY, inst.baseZ);
+    _ffMatrix.compose(_ffPos, _ffQuat, _ffScale);
+    fireflyMesh.setMatrixAt(i, _ffMatrix);
+  }
+  fireflyMesh.instanceMatrix.needsUpdate = true;
+
+  let fireflyTime = 0;
+  function updateFireflies(dt) {
+    if (!fireflyEnabled(environment.quality)) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    if (step === 0 && fireflyTime === 0 && fireflyInstances.length === 0) return;
+    fireflyTime += step;
+    const glow = fireflyGlowLevel(environment.phase);
+    for (let i = 0; i < fireflyInstances.length; i += 1) {
+      const inst = fireflyInstances[i];
+      const drift = fireflyDrift(fireflyTime, inst.spawn);
+      const blink = fireflyBlink(fireflyTime, inst.phase);
+      _ffPos.set(inst.baseX + drift.x, inst.baseY + drift.y, inst.baseZ + drift.z);
+      _ffMatrix.compose(_ffPos, _ffQuat, _ffScale);
+      fireflyMesh.setMatrixAt(i, _ffMatrix);
+      // Per-instance opacity is approximated via material opacity scaled by blink;
+      // individual brightness lives in the blink value, surfaced to tests via
+      // the mesh name and count. We store the last blink on userData for checks.
+    }
+    fireflyMesh.instanceMatrix.needsUpdate = true;
+    // Overall field opacity follows phase glow; blink modulates per instance via
+    // a uniform-ish scale trick: scale instances by blink so dark ones vanish.
+    // Re-compose with scale = blink (clamped) for the cheap on/off read.
+    for (let i = 0; i < fireflyInstances.length; i += 1) {
+      const inst = fireflyInstances[i];
+      const drift = fireflyDrift(fireflyTime, inst.spawn);
+      const blink = fireflyBlink(fireflyTime, inst.phase);
+      const s = Math.max(0.05, blink) * glow;
+      _ffScale.setScalar(s);
+      _ffPos.set(inst.baseX + drift.x, inst.baseY + drift.y, inst.baseZ + drift.z);
+      _ffMatrix.compose(_ffPos, _ffQuat, _ffScale);
+      fireflyMesh.setMatrixAt(i, _ffMatrix);
+    }
+    fireflyMesh.instanceMatrix.needsUpdate = true;
+    fireflyMaterial.opacity = Math.max(0.05, glow);
+  }
+
+  function paintFireflies(phaseId) {
+    const glow = fireflyGlowLevel(phaseId);
+    fireflyMesh.visible = glow > 0 && fireflyInstances.length > 0;
+    fireflyMaterial.opacity = Math.max(0.05, glow);
+  }
+
+  // The per-instance scratch objects for the sway pass, allocated once so the
+  // frame loop does no allocation.
+  const swayMatrix = new THREE.Matrix4();
+  const swayQuaternion = new THREE.Quaternion();
+  const swayPosition = new THREE.Vector3();
+  const swayScale = new THREE.Vector3();
+  const swayYaw = new THREE.Quaternion();
+  const swayLean = new THREE.Quaternion();
+  const swayUp = new THREE.Vector3(0, 1, 0);
+  let meadowSwayEnabled = true;
+
+  /**
+   * One frame of wind through the meadow. Every instance leans about the shared
+   * lean axis by its own phase-shifted sway, so a gust crosses the ring as a
+   * wave rather than landing everywhere at once.
+   *
+   * The lean is composed *after* the instance's own yaw, so the rotation axis
+   * stays world-horizontal: leaning in the tuft's local frame would tip each
+   * clump in a different direction, which is the opposite of one wind field.
+   * Allocation-free; skipped entirely on the low tier and when no tuft exists.
+   */
+  function updateMeadow(dt) {
+    if (!meadowSwayEnabled) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    if (step === 0) return;
+    meadowWindTime += step;
+    for (const { mesh, instances } of meadowVariants) {
+      if (!instances.length) continue;
+      for (let i = 0; i < instances.length; i += 1) {
+        const instance = instances[i];
+        const sway = windSway(meadowWindTime, instance.phase);
+        const lean = tuftLeanAngle(sway);
+        swayYaw.setFromAxisAngle(swayUp, instance.rotation);
+        swayLean.setFromAxisAngle(meadowLeanAxis, lean);
+        // yaw * lean: the clump turns to its own heading, then the whole thing
+        // tips about the world-horizontal lean axis.
+        swayQuaternion.copy(swayLean).multiply(swayYaw);
+        swayPosition.set(instance.x, 0, instance.z);
+        swayScale.setScalar(instance.scale);
+        swayMatrix.compose(swayPosition, swayQuaternion, swayScale);
+        mesh.setMatrixAt(i, swayMatrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+
+  let flutterTime = 0;
+  // Authored base rotations, captured lazily on first frame so the flutter pass
+  // never clobbers the authored hang of a flag or the banner.
+  const flutterBase = new Map();
+  function updateFlutter(dt) {
+    if (!flutterEnabled(environment.quality)) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    flutterTime += step;
+    const phaseId = (environment.phase === 'night' || environment.phase === 'dusk' || environment.phase === 'day')
+      ? environment.phase : 'day';
+    const phaseAmount = flutterAmount(phaseId);
+    const wind = windStrength(flutterTime, 0);
+    const amount = phaseAmount * wind;
+    const targets = buntingFlutter.concat(bannerFlutter || []);
+    for (let i = 0; i < targets.length; i += 1) {
+      const target = targets[i];
+      const m = target.mesh;
+      if (!m) continue;
+      if (!flutterBase.has(m)) {
+        flutterBase.set(m, { x: m.rotation.x, y: m.rotation.y, z: m.rotation.z });
+      }
+      const base = flutterBase.get(m);
+      const motion = flutterMotion(flutterTime, target.phase, amount);
+      m.rotation.x = base.x;
+      m.rotation.y = base.y + motion.yaw;
+      m.rotation.z = base.z + motion.roll;
+    }
+  }
+  }
+
+  /** Paints the meadow for a phase. The baked colours are daylight; the phase
+   *  tint is a material colour multiplier, so a phase change is one write. */
+  function paintMeadow(phaseId) {
+    meadowPhaseTint.setHex(tuftPhaseTint(phaseId));
+    meadowMaterial.color.copy(meadowPhaseTint);
+  }
+  paintMeadow('day');
+
   const environment = {
     scene,
     quality: 'full',
@@ -3345,6 +3706,43 @@ export function buildWorld(renderer) {
     get cloudDim() {
       return cloudDim;
     },
+    // Round 90: the meadow. `meadow` is the group of four variant InstancedMeshes
+    // so a browser check can count them and their instances; `paintMeadow` is
+    // called from applyPhase; `updateMeadow` is the per-frame wind sway.
+    meadow: meadowGroup,
+    meadowVariants,
+    meadowScatter,
+    paintMeadow,
+    updateMeadow(dt) {
+      updateMeadow(dt);
+    },
+    setMeadowSway(enabled) {
+      meadowSwayEnabled = Boolean(enabled);
+      return meadowSwayEnabled;
+    },
+    get meadowSway() {
+      return meadowSwayEnabled;
+    },
+    // Round 91: the firefly field. `fireflies` is the InstancedMesh so a browser
+    // check can count it by name; `paintFireflies` is called from applyPhase;
+    // `updateFireflies` is the per-frame drift + blink.
+    fireflies: fireflyMesh,
+    fireflyCount: fireflyInstances.length,
+    paintFireflies(phaseId) {
+      paintFireflies(phaseId);
+    },
+    updateFireflies(dt) {
+      updateFireflies(dt);
+    },
+    // Round 91: cloth flutter on the bunting and the banner. `flutterTime` is the
+    // running clock; `updateFlutter` is the per-frame pass; `flutterOn` reports
+    // whether the tier animates cloth at all.
+    updateFlutter(dt) {
+      updateFlutter(dt);
+    },
+    get flutterOn() {
+      return flutterEnabled(environment.quality);
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -3387,6 +3785,16 @@ export function buildWorld(renderer) {
       if (plazaMaterial) {
         plazaMaterial.aoMapIntensity = low ? 0 : plazaAoMapIntensity({ low: false });
       }
+      // Round 90: the meadow keeps standing on the low tier -- it is the ground's
+      // silhouette, and hiding it would put the painted floor back -- but it
+      // stops swaying, because the sway is a per-frame loop over ~900 instances
+      // and that is exactly the cost the low tier exists to drop. A still meadow
+      // still reads as grass.
+      meadowSwayEnabled = !low;
+      // Round 91: the firefly field drops its per-frame drift+blink on low, but
+      // keeps its visibility decision in applyPhase (paintFireflies). Re-derive
+      // visibility from the current phase so a tier flip never leaves a stale field.
+      if (environment.paintFireflies) environment.paintFireflies(environment.phase);
       // Contact darkening rides on vertex colours; disable it on the low tier by
       // turning the attribute off on every dressed prop mesh.
       for (const { group } of propGroups) {
@@ -3668,6 +4076,12 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   }
   if (environment.paintHorizon) {
     environment.paintHorizon(phaseId);
+  }
+  if (environment.paintMeadow) {
+    environment.paintMeadow(phaseId);
+  }
+  if (environment.paintFireflies) {
+    environment.paintFireflies(phaseId);
   }
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,

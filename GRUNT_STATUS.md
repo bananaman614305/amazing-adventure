@@ -29,7 +29,7 @@ with the heavier meadow scene, not a code defect — desktop suite passes. Will
 retry after dist restamp.
 
 **Round 91: cloth flutter (bunting flags + terrace banner) + night firefly
-field -- INTEGRATION IN PROGRESS (manifest regenerated, 130 files).**
+field -- INTEGRATION IN PROGRESS (manifest regenerated, 130 files; dist pending).**
 
 Parallel split (standing owner request `parallel-build-20261125b`): two
 independent pure modules launched together as subagents.
