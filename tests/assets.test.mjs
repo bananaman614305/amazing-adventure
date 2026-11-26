@@ -784,6 +784,12 @@ test('propFamilyFor picks the family from the authored material name', () => {
   // families, dressed from the committed brick and stone wall maps.
   assert.equal(propFamilyFor('HouseBrick').id, 'brick');
   assert.equal(propFamilyFor('HouseStone').id, 'stone');
+  // Round 97: the terrace furniture's timber members join the wood family and
+  // its planter stone joins the house trim stone family. The GLB is unchanged;
+  // only the family tests widen.
+  assert.equal(propFamilyFor('TerraceTimber').id, 'wood');
+  assert.equal(propFamilyFor('TerraceTimberDark').id, 'wood');
+  assert.equal(propFamilyFor('TerraceStone').id, 'stone');
   // Round 70: the painted-iron prop family. Every iron name the shipped GLBs
   // carry, except the lane lantern (already dressed by upgradeLaneLamp()).
   for (const name of ['BarrelIron', 'BenchIron', 'CrateIron', 'DoorIron',
@@ -817,6 +823,10 @@ test('material names that are not props stay flat', () => {
     // collapse six unrelated surfaces into one 10.65 m2 row). Naming them is
     // also a claim that they are deliberately flat: each matches no family.
     'LanternHousing', 'LanternBulb',
+    // Round 97: the terrace planter's soil top is intentionally left flat --
+    // 1.57 m2 of dark soil reads fine as authored colour and dressing it
+    // would smear plank grain across a 0.06 m disc.
+    'TerraceSoil',
     // Round 83 dresses the job board's BoardFace and BoardPaper with the paper
     // family (src/paper.js), so they are no longer in the must-stay-flat list.
     'NoticeFaceLane', 'NpcMarker',

@@ -4393,6 +4393,67 @@ try {
     JSON.stringify(r96.ripples));
   await capture(page, 'round96-dressing.png');
 
+  // --- Round 97: dress the terrace furniture ---------------------------------
+  // The terrace GLB's timber members and planter stone join the existing wood
+  // and house-stone families (only the family tests widen -- the GLB is
+  // untouched), so the pergola reads as planked timber and the planters as
+  // dressed stone. The soil top stays flat by design. Checked live: each mesh
+  // must carry the three maps (or none, for soil), with metre-space repeat 1:1
+  // and the authored tint preserved on the timber (keepTint false -> white) and
+  // the soil left untinted.
+  const terraceDress = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const rows = [];
+    const materials = new Set();
+    const soilMaterials = new Set();
+    api.scene.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      if (!/^Terrace(Pergola|PergolaSlats|PlanterA|PlanterB|PlanterASoil|PlanterBSoil)$/i.test(o.name)) return;
+      const uv = o.geometry.getAttribute('uv');
+      const name = o.material.name || '';
+      const isSoil = /Soil/i.test(o.name);
+      if (isSoil) soilMaterials.add(o.material.uuid);
+      else materials.add(o.material.uuid);
+      rows.push({
+        mesh: o.name,
+        materialName: name,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+        hasUv: Boolean(uv),
+        tint: o.material.color ? o.material.color.getHexString() : null,
+        roughness: Number(Number(o.material.roughness).toFixed(3)),
+        image: o.material.map ? o.material.map.image.width : 0,
+        repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+        wrapped: o.material.map ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+        propFamily: o.userData.propFamily || null
+      });
+    });
+    const st = typeof api.assetState === 'function' ? api.assetState() : api.assetState;
+    return { rows, materials: materials.size, soilMaterials: soilMaterials.size,
+      assetState: st && st.propWood, detail: st && st.propWoodDetail };
+  });
+  const td = (v) => (typeof v === 'string' ? v : JSON.stringify(v ?? null));
+  const tdNum = (text, key, val) => new RegExp(
+    key + '["\']?\\s*[:=]?\\s*' + String(val).replace('.', '\\.') + '(?![\\d.])').test(text);
+  checks.check('terrace timber and stone meshes carry the three maps',
+    terraceDress.rows.length === 6 &&
+      terraceDress.rows.filter((r) => !/Soil/i.test(r.mesh)).every((r) => r.maps === 3 && r.hasUv && r.wrapped
+        && r.repeat[0] === 1 && r.repeat[1] === 1),
+    JSON.stringify({ rows: terraceDress.rows.length,
+      dressed: terraceDress.rows.filter((r) => r.maps === 3).length,
+      repeats: [...new Set(terraceDress.rows.map((r) => JSON.stringify(r.repeat)))] }));
+  checks.check('terrace timber and stone keep their family tints (wood white, stone white)',
+    terraceDress.rows.filter((r) => !/Soil/i.test(r.mesh)).every((r) => r.tint === 'ffffff'),
+    JSON.stringify([...new Set(terraceDress.rows.filter((r) => !/Soil/i.test(r.mesh)).map((r) => r.tint))]));
+  checks.check('terrace soil stays flat (no maps, authored colour)',
+    terraceDress.rows.filter((r) => /Soil/i.test(r.mesh)).every((r) => r.maps === 0),
+    JSON.stringify(terraceDress.rows.filter((r) => /Soil/i.test(r.mesh)).map((r) => ({ m: r.mesh, maps: r.maps }))));
+  checks.check('terrace dressing reports wood and stone families in propWoodDetail',
+    terraceDress.assetState === 'textured' &&
+      td(terraceDress.detail).includes('wood') && td(terraceDress.detail).includes('stone'),
+    JSON.stringify({ assetState: terraceDress.assetState, detail: terraceDress.detail }));
+  await capture(page, 'round97-terrace-dress.png');
+
   // --- 28n2. The lane rope's rope strand (round 86) -------------------------
   // The three LaneRope boxes (2 cm diameter, 1.92 m2 total) that span the
   // lane are dressed with the round 86 twisted-fibre rope maps at a 0.08 m

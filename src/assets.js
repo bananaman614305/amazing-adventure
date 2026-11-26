@@ -410,7 +410,13 @@ export const PROP_FAMILIES = [
   },
   {
     id: 'wood',
-    test: /wood/i,
+    // Round 97: the terrace furniture's timber members
+    // (TerraceTimber, TerraceTimberDark) join the plank family. `timber` is added
+    // to the pattern rather than a new family, because the pergola reads as the
+    // same workshop timber as the crates and benches. Tested after `bark` so a
+    // future `BarkTimber` (none exists today) would still win bark; `BarkWood`
+    // contains `Wood` but not `Timber`, so the ordering is unchanged in practice.
+    test: /wood|timber/i,
     files: WOOD_TEXTURE_FILES,
     tileMeters: 1.5,
     roughness: 0.78
@@ -432,7 +438,12 @@ export const PROP_FAMILIES = [
     // name. The tile matches TERRACE_TEXTURE_TILE_METERS, which is declared
     // further down this file, hence the literal.
     id: 'stone',
-    test: /housestone/i,
+    // Round 97: the terrace planters' stone (TerraceStone) joins the house
+    // trim family. The pattern stays anchored (`housestone` OR `terracestone`)
+    // rather than a broad /stone/, so the fountain's `Stone`/`StoneDark` and any
+    // future `Stone*` material keep their own tinted pass -- see the test that
+    // pins StoneDark as flat.
+    test: /housestone|terracestone/i,
     files: STONE_TEXTURE_FILES,
     tileMeters: 1.6,
     roughness: 0.9
