@@ -69,7 +69,9 @@ import {
   GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
   HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse, HOUSE_DETAIL_ASSET, HOUSE_DETAIL_MODEL_SIZE, loadHouseDetail,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
-  COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, PLAZA_FLOOR_TEXTURE_FILES, projectBoxGeometry,
+  COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, PLAZA_FLOOR_TEXTURE_FILES,
+  PLAZA_FLOOR_V2_TEXTURE_FILES, plazaFloorRepeat,
+  PLAZA_TEXTURE_SPAN_METERS, PLAZA_TEXTURE_TILE_METERS, projectBoxGeometry,
   TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES, LAMP_TEXTURE_FILES,
   CLOTH_TEXTURE_FILES,
   PLAZA_AO_MAP_CHANNEL, plazaAoMapIntensity, createPlazaAoTexture,
@@ -3499,33 +3501,57 @@ export function buildWorld(renderer) {
       assetState.plazaFloor = 'unavailable';
       return Promise.resolve(assetState);
     }
-    return loadMaterialTextures({ THREE, files: PLAZA_FLOOR_TEXTURE_FILES }).then((textures) => {
+    return loadMaterialTextures({ THREE, files: PLAZA_FLOOR_V2_TEXTURE_FILES }).then((textures) => {
       if (!textures.anyLoaded) {
-        assetState.plazaFloor = 'flat';
-        return assetState;
+        // The second-generation set is the plaza's now; the round-61 set is kept
+        // only as a documented fallback so a missing v2 file degrades to the old
+        // flagstones rather than to a flat colour.
+        return loadMaterialTextures({ THREE, files: PLAZA_FLOOR_TEXTURE_FILES }).then((fallback) => {
+          if (!fallback.anyLoaded) {
+            assetState.plazaFloor = 'flat';
+            return assetState;
+          }
+          dressPlaza(fallback, 'v1');
+          return assetState;
+        });
       }
-      // The plaza is a 9 m radius disc; the flagstone tile is 3 x 3 m, so a
-      // 6 x 6 repeat covers it with slabs a little under a metre across.
-      applyTextureFamily(plazaMaterial, textures, 18, 18, 3);
-      // Cheap baked AO for grazing angles: a single channel-0 texture on the
-      // same UVs as the flagstone map. Only indirect light is multiplied, so
-      // this is a grounding cue, not a shadow.
-      const aoTexture = createPlazaAoTexture({ THREE });
-      if (aoTexture) {
-        plazaMaterial.aoMap = aoTexture;
-        // The plaza upgrade can land after the adaptive loop has already dropped
-        // to the low tier, so the intensity follows the tier that is current now
-        // rather than assuming full quality.
-        plazaMaterial.aoMapIntensity = plazaAoMapIntensity({ low: environment.quality === 'low' });
-        plazaMaterial.aoMap.channel = PLAZA_AO_MAP_CHANNEL;
-      }
-      assetState.plazaFloor = 'textured';
-      assetState.plazaFloorDetail = {
-        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
-        aoMap: Boolean(aoTexture)
-      };
+      dressPlaza(textures, 'v2');
       return assetState;
     });
+  }
+
+  // Shared dressing for both flagstone generations. Kept as a closure so the
+  // repeat, the AO cue and the assetState record cannot drift between the v2 path
+  // and its fallback.
+  function dressPlaza(textures, set) {
+    // The plaza is a 9 m radius disc; plazaFloorRepeat() is the single source of
+    // truth for the span/tile split, so the browser check and this call agree.
+    // applyTextureFamily takes metres rather than a repeat object, so the same
+    // split is spelled out with the two named constants.
+    const repeat = plazaFloorRepeat();
+    applyTextureFamily(plazaMaterial, textures,
+      PLAZA_TEXTURE_SPAN_METERS, PLAZA_TEXTURE_SPAN_METERS, PLAZA_TEXTURE_TILE_METERS);
+    // Cheap baked AO for grazing angles: a single channel-0 texture on the
+    // same UVs as the flagstone map. Only indirect light is multiplied, so
+    // this is a grounding cue, not a shadow.
+    const aoTexture = createPlazaAoTexture({ THREE });
+    if (aoTexture) {
+      plazaMaterial.aoMap = aoTexture;
+      // The plaza upgrade can land after the adaptive loop has already dropped
+      // to the low tier, so the intensity follows the tier that is current now
+      // rather than assuming full quality.
+      plazaMaterial.aoMapIntensity = plazaAoMapIntensity({ low: environment.quality === 'low' });
+      plazaMaterial.aoMap.channel = PLAZA_AO_MAP_CHANNEL;
+    }
+    assetState.plazaFloor = 'textured';
+    assetState.plazaFloorDetail = {
+      maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+      aoMap: Boolean(aoTexture),
+      set,
+      tileMeters: PLAZA_TEXTURE_TILE_METERS,
+      repeat: [repeat.repeatX, repeat.repeatY]
+    };
+    return assetState;
   }
 
   function upgradeWoodBrick() {

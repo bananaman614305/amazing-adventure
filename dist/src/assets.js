@@ -44,6 +44,23 @@ export const PLAZA_FLOOR_TEXTURE_FILES = {
   roughnessMap: 'assets/textures/plaza_floor_rough.webp'
 };
 
+/**
+ * The second-generation plaza flagstone family (round 100).
+ *
+ * This is the same plaza paving read as PLAZA_FLOOR_TEXTURE_FILES, re-authored
+ * with staggered joints, a per-stone warm/cool tint and deeper relief so the
+ * floor no longer reads as one regular grid underfoot. It is deliberately a
+ * separate set of files rather than a replacement: keeping the round-61 maps in
+ * place means that first set stays reproducible, and the browser check can tell
+ * the two generations apart (and prove the v2 set actually loaded) instead of
+ * seeing one silently overwrite the other.
+ */
+export const PLAZA_FLOOR_V2_TEXTURE_FILES = {
+  map: 'assets/textures/plaza_floor_v2_albedo.webp',
+  normalMap: 'assets/textures/plaza_floor_v2_normal.webp',
+  roughnessMap: 'assets/textures/plaza_floor_v2_rough.webp'
+};
+
 export const GRASS_TEXTURE_FILES = {
   map: 'assets/textures/grass_albedo.webp',
   normalMap: 'assets/textures/grass_normal.webp',
@@ -855,6 +872,45 @@ export function plazaFloorMaterialParams(texturesLoaded) {
  * stonework ends up with one texel density.
  */
 export const TERRACE_TEXTURE_TILE_METERS = 1.6;
+
+/**
+ * Metres covered by one plaza-floor texture tile.
+ *
+ * The plaza is a CircleGeometry disc of radius 9 m, so it is 18 m across. A 3 m
+ * tile laid over that 18 m span gives 6 repeats in each direction, which is the
+ * density the flagstones are authored for: each slab ends up a little under a
+ * metre across once the tile's own courses are counted. Kept as a named constant
+ * next to TERRACE_TEXTURE_TILE_METERS so the world and the browser check project
+ * the plaza at one agreed scale rather than each re-deriving it.
+ */
+export const PLAZA_TEXTURE_TILE_METERS = 3;
+
+/**
+ * Metres of plaza floor the texture family spans, in each direction.
+ *
+ * This is the disc's full width -- 18 m across, from the 9 m radius -- and it is
+ * what plazaFloorRepeat() divides by PLAZA_TEXTURE_TILE_METERS to get the 6x6
+ * repeat. Naming the span (rather than passing 18 at the call site) keeps the
+ * "18 m disc, 3 m tile, 6 repeats" relationship written down in one place.
+ */
+export const PLAZA_TEXTURE_SPAN_METERS = 18;
+
+/**
+ * The texture repeat the plaza floor uses, as { repeatX, repeatY }.
+ *
+ * The single source of truth both the world's upgradePlazaFloor() and the browser
+ * check read, so the disc is dressed at 6x6 by construction rather than by two
+ * hand-written numbers that could drift. Pure and dependency-free: it delegates
+ * to textureRepeat(), which guards non-finite input, and the default argument
+ * keeps it total when called with no argument.
+ */
+export function plazaFloorRepeat() {
+  return textureRepeat(
+    PLAZA_TEXTURE_SPAN_METERS,
+    PLAZA_TEXTURE_SPAN_METERS,
+    PLAZA_TEXTURE_TILE_METERS
+  );
+}
 
 /**
  * Material settings for the north terrace's built stone.
