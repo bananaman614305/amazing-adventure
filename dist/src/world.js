@@ -35,13 +35,16 @@ import { spraySpawns, sprayGlowLevel, sprayDrop, sprayEnabled, SPRAY_COUNT,
 import { mistSpawns, mistOpacity, mistDrift, mistEnabled, MIST_COUNT,
   MIST_MAX_OPACITY } from './mist.js';
 import { rippleSpawns, rippleRing, rippleGlowLevel, ripplesEnabled,
-  RIPPLE_COUNT, RIPPLE_RINGS_PER_SITE, RIPPLE_WATER_Y } from './ripples.js';
-import { mothSpawns, mothFlight, mothGlowLevel, mothsEnabled, MOTH_COUNT,
-  MOTH_FLUTTER_AMPLITUDE } from './moths.js';
+  RIPPLE_COUNT, RIPPLE_RINGS_PER_SITE, RIPPLE_WATER_Y, RIPPLE_MAX_OPACITY } from './ripples.js';
+import { mothSpawns, mothFlight, mothGlowLevel, mothsEnabled, MOTH_COUNT } from './moths.js';
 import { puddleSpawns, puddleGloss, puddleDarkness, puddleShimmer, puddlesEnabled,
-  PUDDLE_COUNT, PUDDLE_WATER_Y } from './puddles.js';
-import { shingleSpawns, shingleGlowLevel, shinglesEnabled, SHINGLE_SEED,
-  SHINGLE_COURSES_PER_PLANE } from './shingles.js';
+  PUDDLE_COUNT, PUDDLE_WATER_Y, PUDDLE_CLEAR_RADIUS } from './puddles.js';
+import { shingleSpawns, shingleGlowLevel, shinglesEnabled } from './shingles.js';
+import { wildflowerSpawns, wildflowerSway, wildflowerGlowLevel, wildflowersEnabled,
+  WILDFLOWER_COUNT } from './wildflowers.js';
+import { reedSpawns, reedStemSway, reedGlowLevel, reedsEnabled, REED_COUNT } from './reeds.js';
+import { mossSpawns, mossDarkness, mossGlowLevel, mossEnabled,
+  MOSS_SEAM_WIDTH } from './moss.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -4099,7 +4102,7 @@ export function buildWorld(renderer) {
       const p = motePosition(spawn, time);
       _mPos.set(p.x, p.y, p.z);
       _mScale.setScalar(spawn.size);
-      _mtMatrix.compose(_mtPos, _mtQuat, _mtScale);
+      _mMatrix.compose(_mPos, _mQuat, _mScale);
       moteMesh.setMatrixAt(i, _mMatrix);
     }
     moteMesh.instanceMatrix.needsUpdate = true;
@@ -4182,12 +4185,18 @@ export function buildWorld(renderer) {
   /** Writes every pane's transform and per-instance colour for `night`. */
   let windowNight = 0;
 
-  function paintWindows(phaseId, night) {
+  // The tier is a parameter with a build-time default, not a direct read of
+  // `environment.quality`: paintWindows runs once during construction, before
+  // the environment handle is initialised, and reading it there throws a TDZ
+  // ReferenceError that stops the whole game booting (caught by the headless
+  // smoke run). Later calls arrive from applyPhase/setQuality with the handle
+  // live, so the default applies only at build time.
+  function paintWindows(phaseId, night, tier = 'full') {
     const coarse = (phaseId === 'dusk' ? 0.18 : phaseId === 'night' ? 0.62 : 0);
     if (!Number.isFinite(night)) night = coarse;
     windowNight = Number.isFinite(night) ? Math.min(1, Math.max(0, night)) : 0;
     const level = windowGlowLevel(phaseId);
-    const enabled = windowsEnabled(environment.quality);
+    const enabled = windowsEnabled(tier);
     let anyLit = false;
     const colour = new THREE.Color();
     for (let i = 0; i < windowSpawnsList.length; i += 1) {
@@ -4260,11 +4269,14 @@ export function buildWorld(renderer) {
       entry.mesh.material.opacity = brightness * ivyGlowLevel(environment.phase);
     }
   }
-  placeIvy();
+  // placeIvy is not called at build time: it reads environment.phase, which does
+  // not exist yet inside buildWorld. paintIvy('day') below sets the initial look.
 
-  function paintIvy(phaseId) {
+  // `tier` defaults to full so the build-time call is safe before the handle
+  // exists; every later call passes environment.quality explicitly.
+  function paintIvy(phaseId, tier = 'full') {
     const glow = ivyGlowLevel(phaseId);
-    const on = glow > 0 && ivyEnabled(environment.quality);
+    const on = glow > 0 && ivyEnabled(tier);
     for (const entry of ivyPatches) {
       entry.mesh.visible = on;
       if (on) entry.mesh.material.opacity = glow;
@@ -4323,11 +4335,11 @@ export function buildWorld(renderer) {
   }
   placeSpray(0);
 
-  function paintSpray(phaseId) {
+  function paintSpray(phaseId, tier = 'full') {
     const glow = sprayGlowLevel(phaseId);
     sprayMaterial.opacity = glow;
     sprayMesh.visible = glow > 0 && spraySpawnsList.length > 0
-      && sprayEnabled(environment.quality);
+      && sprayEnabled(tier);
   }
   paintSpray('day');
 
@@ -4377,11 +4389,11 @@ export function buildWorld(renderer) {
   }
   placeMist(0);
 
-  function paintMist(phaseId) {
+  function paintMist(phaseId, tier = 'full') {
     const glow = mistOpacity(phaseId);
     mistMaterial.opacity = MIST_MAX_OPACITY * glow;
     mistMesh.visible = glow > 0 && mistSpawnsList.length > 0
-      && mistEnabled(environment.quality);
+      && mistEnabled(tier);
   }
   paintMist('day');
 
@@ -4399,20 +4411,83 @@ export function buildWorld(renderer) {
   // One InstancedMesh of flat rings lying RIPPLE_WATER_Y above the water disc,
   // clustered around the jet (RIPPLE_SITE_RADIUS). Each site carries
   // RIPPLE_RINGS_PER_SITE rings staggered through the life.
+  //
+  // The ring is drawn by a tiny fragment shader on a unit quad rather than by
+  // scaling a RingGeometry. A scaled ring would keep its *relative* band width,
+  // so a ring at the rim would be four times as thick as a newborn one and the
+  // basin would read as concentric hoops rather than ripples. A shader can put
+  // the band at a constant world thickness while the radius grows, and it also
+  // gives each instance its own alpha, so `rippleRing`'s exact-zero fade tail
+  // survives instead of being averaged away by one global material opacity.
   const rippleSpawnsList = ripplesEnabled('full')
     ? rippleSpawns({ count: RIPPLE_COUNT })
     : [];
-  const rippleGeometry = new THREE.RingGeometry(0.85, 1, 24);
-  const rippleMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, opacity: RIPPLE_MAX_OPACITY,
-    depthWrite: false, side: THREE.DoubleSide, fog: true
+  const rippleInstanceCount = rippleSpawnsList.length * RIPPLE_RINGS_PER_SITE;
+  const rippleGeometry = new THREE.PlaneGeometry(1, 1);
+  // Per-instance band width (uv units, so it follows the instance scale) and
+  // per-instance alpha (0..1, normalised by RIPPLE_MAX_OPACITY).
+  const rippleBandArray = new Float32Array(Math.max(1, rippleInstanceCount));
+  const rippleAlphaArray = new Float32Array(Math.max(1, rippleInstanceCount));
+  const rippleBandAttr = new THREE.InstancedBufferAttribute(rippleBandArray, 1);
+  const rippleAlphaAttr = new THREE.InstancedBufferAttribute(rippleAlphaArray, 1);
+  rippleBandAttr.setUsage(THREE.DynamicDrawUsage);
+  rippleAlphaAttr.setUsage(THREE.DynamicDrawUsage);
+  rippleGeometry.setAttribute('aBand', rippleBandAttr);
+  rippleGeometry.setAttribute('aAlpha', rippleAlphaAttr);
+
+  // The ring sits at this fraction of the quad, so the outer edge of the band is
+  // not clipped by the quad's own boundary; the instance scale divides by it so
+  // the visible ring still lands exactly on `radius`.
+  const RIPPLE_RING_AT = 0.85;
+  // Half-thickness of the band in world metres at birth.
+  const RIPPLE_BAND_HALF = 0.012;
+
+  const rippleMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(0xffffff) },
+      uGlow: { value: 1 },
+      uRingAt: { value: RIPPLE_RING_AT }
+    },
+    vertexShader: [
+      'attribute float aBand;',
+      'attribute float aAlpha;',
+      'varying vec2 vUv;',
+      'varying float vBand;',
+      'varying float vAlpha;',
+      'void main() {',
+      '  vUv = uv;',
+      '  vBand = aBand;',
+      '  vAlpha = aAlpha;',
+      '  vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);',
+      '  gl_Position = projectionMatrix * mvPosition;',
+      '}'
+    ].join('\n'),
+    fragmentShader: [
+      'uniform vec3 uColor;',
+      'uniform float uGlow;',
+      'uniform float uRingAt;',
+      'varying vec2 vUv;',
+      'varying float vBand;',
+      'varying float vAlpha;',
+      'void main() {',
+      '  float d = length(vUv - vec2(0.5)) * 2.0;',
+      '  float band = max(vBand, 0.0005);',
+      '  float a = 1.0 - smoothstep(band * 0.5, band, abs(d - uRingAt));',
+      '  a *= vAlpha * uGlow;',
+      '  if (a <= 0.002) discard;',
+      '  gl_FragColor = vec4(uColor, a);',
+      '}'
+    ].join('\n'),
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide
   });
   rippleMaterial.name = 'FountainRipple';
   const rippleMesh = new THREE.InstancedMesh(
-    rippleGeometry, rippleMaterial, Math.max(1, rippleSpawnsList.length * RIPPLE_RINGS_PER_SITE)
+    rippleGeometry, rippleMaterial, Math.max(1, rippleInstanceCount)
   );
   rippleMesh.name = 'fountain-ripples';
-  rippleMesh.count = rippleSpawnsList.length * RIPPLE_RINGS_PER_SITE;
+  rippleMesh.count = rippleInstanceCount;
   rippleMesh.frustumCulled = false;
   rippleMesh.position.set(0, 0, 0);
   scene.add(rippleMesh);
@@ -4421,6 +4496,7 @@ export function buildWorld(renderer) {
   const _rPos = new THREE.Vector3();
   const _rScale = new THREE.Vector3();
   const _rQuat = new THREE.Quaternion();
+  _rQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
 
   // Flat list of (spawn, ringIndex) pairs so the instance buffer is contiguous.
   const rippleInstances = [];
@@ -4435,31 +4511,39 @@ export function buildWorld(renderer) {
       const { spawn, ring } = rippleInstances[i];
       const r = rippleRing(spawn, ring, time);
       _rPos.set(FOUNTAIN_SPOT.x + r.x, RIPPLE_WATER_Y + 0.001, FOUNTAIN_SPOT.z + r.z);
-      // Lay the ring flat on the water: RingGeometry lives in XY, so rotate
-      // -90 deg about X, then scale uniformly by the ring radius. The band
-      // thickness is baked into the 0.85..1 geometry, and `scale` (from the
-      // spawn size) modulates overall size on top of the radius.
-      _rQuat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-      const sc = (r.radius > 0 ? r.radius : 0.001) * (r.scale > 0 ? r.scale : 1);
-      _rScale.setScalar(sc);
+      // Scale so the visible ring lands on `radius`; the quad itself is larger so
+      // the band's outer edge stays inside the geometry.
+      const radius = r.radius > 0.0001 ? r.radius : 0.0001;
+      const half = radius / RIPPLE_RING_AT;
+      _rScale.setScalar(half * 2);
       _rMatrix.compose(_rPos, _rQuat, _rScale);
       rippleMesh.setMatrixAt(i, _rMatrix);
-      const k = r.opacity > 0 ? r.opacity / (0.5) : 0;
-      // colour stays white; opacity via material is global, so store per-instance
-      // alpha in the colour channel is not available on MeshBasicMaterial without
-      // vertex colours. Keep instance colour white.
+      // Constant world thickness, modulated by the spawn size factor: the band
+      // never thickens as the ring widens, which is what RIPPLE_THIN describes.
+      // `d` runs 0..1 across the quad, whose half-extent is radius/RIPPLE_RING_AT,
+      // so one d unit is (radius/RIPPLE_RING_AT) metres.
+      const thickness = RIPPLE_BAND_HALF * (r.scale > 0 ? r.scale : 1);
+      rippleBandArray[i] = Math.min(0.5, (thickness * RIPPLE_RING_AT) / radius);
+      rippleAlphaArray[i] = r.opacity > 0 ? Math.min(1, r.opacity / RIPPLE_MAX_OPACITY) : 0;
     }
     rippleMesh.instanceMatrix.needsUpdate = true;
+    rippleBandAttr.needsUpdate = true;
+    rippleAlphaAttr.needsUpdate = true;
   }
   placeRipples(0);
 
-  function paintRipples(phaseId) {
+  // The tier is a parameter, not a direct read of `environment.quality`: this
+  // paint runs once during the build, before the environment handle exists, and
+  // reading it there throws a TDZ ReferenceError that kills the whole boot
+  // (found by the headless smoke run). Construction passes 'full' explicitly;
+  // every applyPhase/setQuality call arrives with environment already live.
+  function paintRipples(phaseId, tier = environment.quality) {
     const glow = rippleGlowLevel(phaseId);
-    rippleMaterial.opacity = 0.5 * glow;
+    rippleMaterial.uniforms.uGlow.value = glow;
     rippleMesh.visible = glow > 0 && rippleInstances.length > 0
-      && ripplesEnabled(environment.quality);
+      && ripplesEnabled(tier);
   }
-  paintRipples('day');
+  paintRipples('day', 'full');
 
   let rippleTime = 0;
   function updateRipples(dt) {
@@ -4515,13 +4599,15 @@ export function buildWorld(renderer) {
   }
   placeMoths(0);
 
-  function paintMoths(phaseId) {
+  // Same tier-as-parameter pattern as paintRipples: the build-time call comes
+  // before the environment handle is initialised.
+  function paintMoths(phaseId, tier = environment.quality) {
     const glow = mothGlowLevel(phaseId);
     mothMaterial.opacity = glow;
     mothMesh.visible = glow > 0 && mothSpawnsList.length > 0
-      && mothsEnabled(environment.quality);
+      && mothsEnabled(tier);
   }
-  paintMoths('day');
+  paintMoths('day', 'full');
 
   let mothTime = 0;
   function updateMoths(dt) {
@@ -4576,14 +4662,16 @@ export function buildWorld(renderer) {
   }
   placePuddles(0);
 
-  function paintPuddles(phaseId) {
+  // Same tier-as-parameter pattern as paintRipples: the build-time call comes
+  // before the environment handle is initialised.
+  function paintPuddles(phaseId, tier = environment.quality) {
     const gloss = puddleGloss(phaseId);
     const dark = puddleDarkness(phaseId);
     puddleMaterial.roughness = 1 - gloss * 0.9;
     puddleMaterial.color.setRGB(dark, dark, dark + 0.05);
-    puddleMesh.visible = puddleSpawnsList.length > 0 && puddlesEnabled(environment.quality);
+    puddleMesh.visible = puddleSpawnsList.length > 0 && puddlesEnabled(tier);
   }
-  paintPuddles('day');
+  paintPuddles('day', 'full');
 
   let puddleTime = 0;
   function updatePuddles(dt) {
@@ -4594,6 +4682,384 @@ export function buildWorld(renderer) {
     if (!puddleMesh.visible) return;
     placePuddles(puddleTime);
   }
+
+  // --- Round 95: meadow wildflowers, reeds and courtyard moss ------------
+  //
+  // Three instanced fields, each one draw call (or two where a bloom needs a
+  // separate stem), all decided by a pure module and all dropped on the low
+  // tier because their quads are translucent and cover real screen area.
+  //
+  // A crossQuad helper first: a single quad seen edge-on vanishes, so every
+  // blade-like instance is two quads crossed at right angles. Both quads share
+  // one geometry and one instance, so the cost is twelve triangles rather than a
+  // second draw call.
+  //
+  // The normals all point straight up, which is the same trick src/tuft.js uses
+  // for grass blades and for the same reason: a paper-thin quad lit by its true
+  // normal turns black the moment it faces away from the sun, so a stem or a
+  // bloom would strobe as the camera circles it. An up-facing normal makes the
+  // quad catch the sky and sun exactly as the ground beneath it does, which is
+  // what reads as a lit plant rather than a dark cut-out.
+  //
+  // Both windings are emitted and the material is single-sided on purpose. With
+  // `DoubleSide` three flips the normal on a back face (`normal *= gl_FrontFacing
+  // ? 1 : -1`), so a vertical quad seen from behind would be lit by a normal
+  // pointing at the ground and render near-black -- which is exactly what the
+  // pixel probe caught on the reeds. Emitting each triangle twice, the second
+  // copy wound the other way, gives both faces a front face and leaves the up
+  // normal alone; six extra triangles are cheaper than a foliage material that
+  // strobes.
+  function crossQuadGeometry(width, height) {
+    const hw = width / 2;
+    const hh = height / 2;
+    const quads = [
+      // The z = 0 quad, then the x = 0 quad.
+      [[-hw, -hh, 0], [hw, -hh, 0], [hw, hh, 0], [-hw, hh, 0]],
+      [[0, -hh, -hw], [0, -hh, hw], [0, hh, hw], [0, hh, -hw]]
+    ];
+    const positions = [];
+    for (const [a, b, c, d] of quads) {
+      positions.push(...a, ...b, ...c, ...a, ...c, ...d);
+      // The reverse winding, so the face is front-facing from behind too.
+      positions.push(...a, ...c, ...b, ...a, ...d, ...c);
+    }
+    const count = positions.length / 3;
+    const normals = new Float32Array(count * 3);
+    for (let v = 0; v < count; v += 1) normals[v * 3 + 1] = 1;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+    geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    geometry.computeBoundingSphere();
+    return geometry;
+  }
+
+  // The meadow keep-outs are the same discs the grass scatter uses, plus a
+  // bounding circle for every rectangle (the lane floor, the house, the stalls),
+  // because the pure samplers take circles only. Deriving them from the grass
+  // lists means a stall that moves takes its flower keep-out with it.
+  const meadowKeepOutCircles = meadowCircles.concat(meadowRects.map((rect) => ({
+    x: (rect.minX + rect.maxX) / 2,
+    z: (rect.minZ + rect.maxZ) / 2,
+    radius: Math.hypot(rect.maxX - rect.minX, rect.maxZ - rect.minZ) / 2
+  })));
+
+  // --- Wildflowers -------------------------------------------------------
+  const wildflowerSpawnsList = wildflowersEnabled('full')
+    ? wildflowerSpawns({ count: WILDFLOWER_COUNT, circles: meadowKeepOutCircles })
+    : [];
+  const wildflowerBloomGeometry = crossQuadGeometry(0.16, 0.16);
+  const wildflowerStemGeometry = crossQuadGeometry(0.022, 1);
+  // The stem geometry's origin is its centre, so a unit-height stem scaled by
+  // `height` must also be lifted by half that to put its foot on the ground.
+  wildflowerStemGeometry.translate(0, 0.5, 0);
+  // FrontSide, not DoubleSide: crossQuadGeometry already emits both windings so
+  // every face is front-facing and the up normal is never flipped (see its
+  // comment). DoubleSide here would flip the normal back to -y on half the
+  // triangles and undo that.
+  const wildflowerMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0.85, metalness: 0, side: THREE.FrontSide
+  });
+  wildflowerMaterial.name = 'WildflowerBloom';
+  const wildflowerStemMaterial = new THREE.MeshStandardMaterial({
+    color: 0x4c6a32, roughness: 0.9, metalness: 0, side: THREE.FrontSide
+  });
+  wildflowerStemMaterial.name = 'WildflowerStem';
+  const wildflowerMesh = new THREE.InstancedMesh(
+    wildflowerBloomGeometry, wildflowerMaterial, Math.max(1, wildflowerSpawnsList.length)
+  );
+  wildflowerMesh.name = 'meadow-wildflowers';
+  wildflowerMesh.count = wildflowerSpawnsList.length;
+  wildflowerMesh.frustumCulled = false;
+  scene.add(wildflowerMesh);
+  const wildflowerStemMesh = new THREE.InstancedMesh(
+    wildflowerStemGeometry, wildflowerStemMaterial, Math.max(1, wildflowerSpawnsList.length)
+  );
+  wildflowerStemMesh.name = 'meadow-wildflower-stems';
+  wildflowerStemMesh.count = wildflowerSpawnsList.length;
+  wildflowerStemMesh.frustumCulled = false;
+  scene.add(wildflowerStemMesh);
+
+  const _wfMatrix = new THREE.Matrix4();
+  const _wfStemMatrix = new THREE.Matrix4();
+  const _wfPos = new THREE.Vector3();
+  const _wfStemPos = new THREE.Vector3();
+  const _wfScale = new THREE.Vector3();
+  const _wfStemScale = new THREE.Vector3();
+  const _wfQuat = new THREE.Quaternion();
+  const _wfEuler = new THREE.Euler();
+  const _wfTip = new THREE.Vector3();
+  const _wfColor = new THREE.Color();
+  for (let i = 0; i < wildflowerSpawnsList.length; i += 1) {
+    _wfColor.setHex(wildflowerSpawnsList[i].tint);
+    wildflowerMesh.setColorAt(i, _wfColor);
+  }
+  if (wildflowerMesh.instanceColor) wildflowerMesh.instanceColor.needsUpdate = true;
+
+  function placeWildflowers(time) {
+    for (let i = 0; i < wildflowerSpawnsList.length; i += 1) {
+      const spawn = wildflowerSpawnsList[i];
+      const { lean, tilt } = wildflowerSway(spawn, time);
+      _wfEuler.set(tilt, 0, lean, 'XYZ');
+      _wfQuat.setFromEuler(_wfEuler);
+      // The bloom rides the stem's tip, not its own authored height: the stem is
+      // rotated about its foot, so a bloom left at (x, height, z) would float
+      // free of a leaning stalk. Rotating the tip vector the same way and adding
+      // it to the foot keeps the flower on the flower.
+      _wfTip.set(0, spawn.height, 0).applyQuaternion(_wfQuat);
+      _wfPos.set(spawn.x + _wfTip.x, _wfTip.y, spawn.z + _wfTip.z);
+      _wfScale.setScalar(spawn.size);
+      _wfMatrix.compose(_wfPos, _wfQuat, _wfScale);
+      wildflowerMesh.setMatrixAt(i, _wfMatrix);
+      // The stem geometry was translated so its foot sits at the origin, so
+      // scaling it by `height` grows it upward from the ground and the shared
+      // quaternion bends it about its foot rather than about its middle.
+      _wfStemPos.set(spawn.x, 0, spawn.z);
+      _wfStemScale.set(spawn.size, spawn.height, spawn.size);
+      _wfStemMatrix.compose(_wfStemPos, _wfQuat, _wfStemScale);
+      wildflowerStemMesh.setMatrixAt(i, _wfStemMatrix);
+    }
+    wildflowerMesh.instanceMatrix.needsUpdate = true;
+    wildflowerStemMesh.instanceMatrix.needsUpdate = true;
+  }
+  placeWildflowers(0);
+
+  // Same tier-as-parameter pattern as paintRipples: the build-time call runs
+  // before the environment handle exists.
+  function paintWildflowers(phaseId, tier = environment.quality) {
+    const glow = wildflowerGlowLevel(phaseId);
+    wildflowerMaterial.color.setScalar(glow);
+    wildflowerStemMaterial.color.setHex(0x4c6a32).multiplyScalar(glow);
+    const on = wildflowerSpawnsList.length > 0 && wildflowersEnabled(tier);
+    wildflowerMesh.visible = on;
+    wildflowerStemMesh.visible = on;
+  }
+  paintWildflowers('day', 'full');
+
+  let wildflowerTime = 0;
+  function updateWildflowers(dt) {
+    if (!wildflowersEnabled(environment.quality)) return;
+    if (!wildflowerSpawnsList.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    wildflowerTime += step;
+    if (!wildflowerMesh.visible) return;
+    placeWildflowers(wildflowerTime);
+  }
+
+  // --- Reeds -------------------------------------------------------------
+  const reedSpawnsList = reedsEnabled('full')
+    ? reedSpawns({ count: REED_COUNT, circles: meadowKeepOutCircles })
+    : [];
+  // One instance per stem, not per clump, so each stem can carry its own sway.
+  const reedStemTotal = reedSpawnsList.reduce((sum, clump) => sum + clump.stems, 0);
+  // 4 cm wide rather than a botanically truer 2 cm: at the far end of the meadow
+  // a 2 cm quad is well under a pixel and the software rasteriser resolves it as
+  // a broken line of speckles. Four centimetres keeps the stem a continuous
+  // stroke at every distance the player sees it from.
+  const reedStemGeometry = crossQuadGeometry(0.04, 1);
+  reedStemGeometry.translate(0, 0.5, 0);
+  const reedHeadGeometry = new THREE.BoxGeometry(0.07, 0.18, 0.07);
+  const reedMaterial = new THREE.MeshStandardMaterial({
+    // FrontSide for the same reason as the wildflowers: the cross-quad geometry
+    // emits both windings, so DoubleSide would only flip the up normal on back
+    // faces and turn half of every stem toward the ground.
+    color: 0xffffff, roughness: 0.9, metalness: 0, side: THREE.FrontSide
+  });
+  reedMaterial.name = 'ReedStem';
+  const reedHeadMaterial = new THREE.MeshStandardMaterial({
+    // A cattail head is a dark brown spike, but a genuinely dark brown (0x4a3a22)
+    // renders near-black once it is multiplied by the phase glow and lit from
+    // behind, which reads as a hole punched in the meadow rather than a plant.
+    // This warmer brown plus a small self-lit term keeps the head legible as
+    // brown at every angle, which is what the silhouette needs it to be.
+    color: 0x7a5c34, emissive: 0x2a1d0d, emissiveIntensity: 0.6,
+    roughness: 0.95, metalness: 0
+  });
+  reedHeadMaterial.name = 'ReedHead';
+  const reedMesh = new THREE.InstancedMesh(
+    reedStemGeometry, reedMaterial, Math.max(1, reedStemTotal)
+  );
+  reedMesh.name = 'meadow-reeds';
+  reedMesh.count = reedStemTotal;
+  reedMesh.frustumCulled = false;
+  scene.add(reedMesh);
+  const reedHeadMesh = new THREE.InstancedMesh(
+    reedHeadGeometry, reedHeadMaterial, Math.max(1, reedStemTotal)
+  );
+  reedHeadMesh.name = 'meadow-reed-heads';
+  reedHeadMesh.count = reedStemTotal;
+  reedHeadMesh.frustumCulled = false;
+  scene.add(reedHeadMesh);
+
+  // Flatten the clumps into one list of stems, each remembering its clump and
+  // its index within it, so the sway pass is a single loop.
+  const reedStems = [];
+  for (const clump of reedSpawnsList) {
+    for (let s = 0; s < clump.stems; s += 1) {
+      // Stems fan out around the clump centre on a small circle, so a clump
+      // reads as one plant with several shoots rather than a single line.
+      const fan = (s / clump.stems) * Math.PI * 2;
+      reedStems.push({
+        clump,
+        stem: s,
+        x: clump.x + Math.cos(fan) * 0.13,
+        z: clump.z + Math.sin(fan) * 0.13,
+        yaw: fan
+      });
+    }
+  }
+  const _rdMatrix = new THREE.Matrix4();
+  const _rdPos = new THREE.Vector3();
+  const _rdScale = new THREE.Vector3();
+  const _rdQuat = new THREE.Quaternion();
+  const _rdYaw = new THREE.Quaternion();
+  const _rdLean = new THREE.Quaternion();
+  const _rdTip = new THREE.Vector3();
+  const _rdUp = new THREE.Vector3(0, 1, 0);
+  const _rdAxis = new THREE.Vector3(1, 0, 0);
+  const _rdColor = new THREE.Color();
+  for (let i = 0; i < reedStems.length; i += 1) {
+    _rdColor.setHex(reedStems[i].clump.tint);
+    reedMesh.setColorAt(i, _rdColor);
+  }
+  if (reedMesh.instanceColor) reedMesh.instanceColor.needsUpdate = true;
+
+  function placeReeds(time) {
+    for (let i = 0; i < reedStems.length; i += 1) {
+      const stem = reedStems[i];
+      const clump = stem.clump;
+      const { lean } = reedStemSway(clump, stem.stem, time);
+      // The clump's own fixed lean plus the wind's sway, both about the same
+      // world-horizontal axis, so the whole bed bends with the gust.
+      _rdLean.setFromAxisAngle(_rdAxis, clump.lean + lean);
+      _rdYaw.setFromAxisAngle(_rdUp, stem.yaw);
+      _rdQuat.copy(_rdLean).multiply(_rdYaw);
+      _rdPos.set(stem.x, 0, stem.z);
+      _rdScale.set(clump.size, clump.height, clump.size);
+      _rdMatrix.compose(_rdPos, _rdQuat, _rdScale);
+      reedMesh.setMatrixAt(i, _rdMatrix);
+      // The head rides the tip of its stem: the same rotation applied to a
+      // point one stem-height up, added to the stem's foot.
+      _rdTip.set(0, clump.height, 0).applyQuaternion(_rdQuat);
+      _rdPos.set(stem.x + _rdTip.x, _rdTip.y, stem.z + _rdTip.z);
+      _rdScale.setScalar(clump.size);
+      _rdMatrix.compose(_rdPos, _rdQuat, _rdScale);
+      reedHeadMesh.setMatrixAt(i, _rdMatrix);
+    }
+    reedMesh.instanceMatrix.needsUpdate = true;
+    reedHeadMesh.instanceMatrix.needsUpdate = true;
+  }
+  placeReeds(0);
+
+  function paintReeds(phaseId, tier = environment.quality) {
+    const glow = reedGlowLevel(phaseId);
+    reedMaterial.color.setScalar(glow);
+    reedHeadMaterial.color.setHex(0x7a5c34).multiplyScalar(glow);
+    const on = reedStems.length > 0 && reedsEnabled(tier);
+    reedMesh.visible = on;
+    reedHeadMesh.visible = on;
+  }
+  paintReeds('day', 'full');
+
+  let reedTime = 0;
+  function updateReeds(dt) {
+    if (!reedsEnabled(environment.quality)) return;
+    if (!reedStems.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    reedTime += step;
+    if (!reedMesh.visible) return;
+    placeReeds(reedTime);
+  }
+
+  // --- Courtyard moss ----------------------------------------------------
+  //
+  // The moss belongs on stone, and the only stone the player walks is the paved
+  // plaza disc. The pure sampler scatters in a square, so it is asked for enough
+  // patches to survive the disc filter and the world keeps only the ones whose
+  // whole footprint falls inside the disc -- the disc edge is a curve the
+  // module's straight wall segments cannot express, so the filter is the honest
+  // place to draw it. A disc of radius 8.6 inside the module's 16.7 m half-square
+  // keeps about a fifth of the candidates, so the request is five times the
+  // module's authored count to land near forty patches on the paving. The
+  // fountain and the four lamp posts are keep-outs. The request is the module's
+  // own ceiling (160), because anything larger clamps anyway; about thirty
+  // patches survive the disc, which is one per eight square metres of paving and
+  // reads as damp neglect rather than a lawn.
+  const MOSS_PLAZA_RADIUS = 8.6;
+  const MOSS_PLAZA_COUNT = 160;
+  const mossKeepOuts = [
+    { x: FOUNTAIN_SPOT.x, z: FOUNTAIN_SPOT.z, radius: FOUNTAIN_COLLIDER },
+    ...[[7, 7], [-7, 7], [7, -7], [-7, -7]].map(([x, z]) => ({ x, z, radius: 0.5 }))
+  ];
+  const mossSpawnsList = mossEnabled('full')
+    ? mossSpawns({ count: MOSS_PLAZA_COUNT, circles: mossKeepOuts })
+      .filter((patch) => Math.hypot(patch.x, patch.z) + patch.radius <= MOSS_PLAZA_RADIUS)
+    : [];
+  // A ten-sided disc is enough: a moss patch has no readable silhouette, and the
+  // low polygon count keeps the software rasteriser's fill cost down.
+  const mossGeometry = new THREE.CircleGeometry(0.5, 10);
+  const mossMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 1, metalness: 0, transparent: true, opacity: 0.85,
+    side: THREE.DoubleSide, depthWrite: false, fog: true
+  });
+  mossMaterial.name = 'CourtyardMoss';
+  const mossMesh = new THREE.InstancedMesh(
+    mossGeometry, mossMaterial, Math.max(1, mossSpawnsList.length)
+  );
+  mossMesh.name = 'courtyard-moss';
+  mossMesh.count = mossSpawnsList.length;
+  mossMesh.frustumCulled = false;
+  // Above the plaza surface (y 0.01) but below the puddles, so a puddle still
+  // reads as sitting on top of the moss rather than being cut by it.
+  mossMesh.renderOrder = 1;
+  scene.add(mossMesh);
+
+  const _msMatrix = new THREE.Matrix4();
+  const _msPos = new THREE.Vector3();
+  const _msScale = new THREE.Vector3();
+  const _msQuat = new THREE.Quaternion();
+  const _msSpin = new THREE.Quaternion();
+  const _msFlat = new THREE.Quaternion();
+  const _msNormal = new THREE.Vector3(0, 0, 1);
+  _msFlat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+  const _msColor = new THREE.Color();
+  for (let i = 0; i < mossSpawnsList.length; i += 1) {
+    const patch = mossSpawnsList[i];
+    _msColor.setHex(patch.tint);
+    mossMesh.setColorAt(i, _msColor);
+    _msPos.set(patch.x, 0.014, patch.z);
+    // A seam strip is long and thin along its own axis; a round patch is a
+    // squashed disc. Both are the same unit circle scaled differently, so the
+    // renderer branches once, here, and not per frame. The units differ: a
+    // round patch's `radius` is a half-extent (so the scale doubles it), while a
+    // seam's `length` and MOSS_SEAM_WIDTH are full dimensions (so the scale is
+    // those numbers as they stand, since the geometry's radius is 0.5).
+    if (patch.seam) {
+      _msScale.set(patch.length, MOSS_SEAM_WIDTH, 1);
+    } else {
+      _msScale.set(patch.radius * patch.stretch * 2, patch.radius * 2, 1);
+    }
+    // Spin about the circle's own normal (local Z) first, then lay it flat.
+    // The spin is negated because the module measures the angle from +x toward
+    // +z, while a rotation about the local normal carries +x toward -z.
+    _msSpin.setFromAxisAngle(_msNormal, -patch.angle);
+    _msQuat.copy(_msFlat).multiply(_msSpin);
+    _msMatrix.compose(_msPos, _msQuat, _msScale);
+    mossMesh.setMatrixAt(i, _msMatrix);
+  }
+  mossMesh.instanceMatrix.needsUpdate = true;
+  if (mossMesh.instanceColor) mossMesh.instanceColor.needsUpdate = true;
+
+  // Moss does not sway: it is a stain on the stone, not a plant in the wind.
+  function paintMoss(phaseId, tier = environment.quality) {
+    const dark = mossDarkness(phaseId);
+    const glow = mossGlowLevel(phaseId);
+    mossMaterial.color.setScalar(glow);
+    // The darkness reading is a colour multiplier, so it is folded into the
+    // material tint rather than the per-instance colour: one write per phase.
+    mossMaterial.color.multiplyScalar(1 - dark * 0.45);
+    mossMesh.visible = mossSpawnsList.length > 0 && mossEnabled(tier);
+  }
+  paintMoss('day', 'full');
 
   // --- Roof shingles ---------------------------------------------------
   const roofPlanes = [
@@ -4644,13 +5110,15 @@ export function buildWorld(renderer) {
   }
   placeShingles();
 
-  function paintShingles(phaseId) {
+  // Same tier-as-parameter pattern as paintRipples: the build-time call comes
+  // before the environment handle is initialised.
+  function paintShingles(phaseId, tier = environment.quality) {
     const glow = shingleGlowLevel(phaseId);
     shingleMaterial.color.setHex(0x6d3a2c);
     shingleMaterial.color.multiplyScalar(glow);
-    shingleMesh.visible = shingleSpawnsList.length > 0 && shinglesEnabled(environment.quality);
+    shingleMesh.visible = shingleSpawnsList.length > 0 && shinglesEnabled(tier);
   }
-  paintShingles('day');
+  paintShingles('day', 'full');
 
   // The per-instance scratch objects for the sway pass, allocated once so the
   // frame loop does no allocation.
@@ -4860,7 +5328,7 @@ export function buildWorld(renderer) {
     ivy: ivyPatches.map((entry) => entry.mesh),
     ivyCount: ivyPatches.length,
     paintIvy(phaseId) {
-      paintIvy(phaseId);
+      paintIvy(phaseId, environment.quality);
     },
     updateIvy(dt) {
       updateIvy(dt);
@@ -4871,7 +5339,7 @@ export function buildWorld(renderer) {
     spray: sprayMesh,
     sprayCount: spraySpawnsList.length,
     paintSpray(phaseId) {
-      paintSpray(phaseId);
+      paintSpray(phaseId, environment.quality);
     },
     updateSpray(dt) {
       updateSpray(dt);
@@ -4882,7 +5350,7 @@ export function buildWorld(renderer) {
     mist: mistMesh,
     mistCount: mistSpawnsList.length,
     paintMist(phaseId) {
-      paintMist(phaseId);
+      paintMist(phaseId, environment.quality);
     },
     updateMist(dt) {
       updateMist(dt);
@@ -4894,7 +5362,7 @@ export function buildWorld(renderer) {
     ripples: rippleMesh,
     rippleCount: rippleInstances.length,
     paintRipples(phaseId) {
-      paintRipples(phaseId);
+      paintRipples(phaseId, environment.quality);
     },
     updateRipples(dt) {
       updateRipples(dt);
@@ -4906,7 +5374,7 @@ export function buildWorld(renderer) {
     moths: mothMesh,
     mothCount: mothSpawnsList.length,
     paintMoths(phaseId) {
-      paintMoths(phaseId);
+      paintMoths(phaseId, environment.quality);
     },
     updateMoths(dt) {
       updateMoths(dt);
@@ -4918,7 +5386,7 @@ export function buildWorld(renderer) {
     puddles: puddleMesh,
     puddleCount: puddleSpawnsList.length,
     paintPuddles(phaseId) {
-      paintPuddles(phaseId);
+      paintPuddles(phaseId, environment.quality);
     },
     updatePuddles(dt) {
       updatePuddles(dt);
@@ -4930,10 +5398,43 @@ export function buildWorld(renderer) {
     shingles: shingleMesh,
     shingleCount: shingleSpawnsList.length,
     paintShingles(phaseId) {
-      paintShingles(phaseId);
+      paintShingles(phaseId, environment.quality);
     },
     get shinglesOn() {
       return shinglesEnabled(environment.quality);
+    },
+    // Round 95: meadow wildflowers, reeds and courtyard moss.
+    wildflowers: wildflowerMesh,
+    wildflowerStems: wildflowerStemMesh,
+    wildflowerCount: wildflowerSpawnsList.length,
+    paintWildflowers(phaseId) {
+      paintWildflowers(phaseId, environment.quality);
+    },
+    updateWildflowers(dt) {
+      updateWildflowers(dt);
+    },
+    get wildflowersOn() {
+      return wildflowersEnabled(environment.quality);
+    },
+    reeds: reedMesh,
+    reedHeads: reedHeadMesh,
+    reedCount: reedStems.length,
+    paintReeds(phaseId) {
+      paintReeds(phaseId, environment.quality);
+    },
+    updateReeds(dt) {
+      updateReeds(dt);
+    },
+    get reedsOn() {
+      return reedsEnabled(environment.quality);
+    },
+    moss: mossMesh,
+    mossCount: mossSpawnsList.length,
+    paintMoss(phaseId) {
+      paintMoss(phaseId, environment.quality);
+    },
+    get mossOn() {
+      return mossEnabled(environment.quality);
     },
     // Round 93: the daytime butterfly field.
     butterflyWings: [butterflyLeftMesh, butterflyRightMesh],
@@ -4972,12 +5473,12 @@ export function buildWorld(renderer) {
     windows: windowMesh,
     windowCount: windowSpawnsList.length,
     paintWindows(phaseId, night) {
-      paintWindows(phaseId, night);
+      paintWindows(phaseId, night, environment.quality);
     },
     updateWindows(night) {
       const next = Number.isFinite(night) ? Math.min(1, Math.max(0, night)) : 0;
       if (Math.abs(next - windowNight) < 0.01) return;
-      paintWindows(environment.phase, next);
+      paintWindows(environment.phase, next, environment.quality);
     },
     get windowsOn() {
       return windowsEnabled(environment.quality);
@@ -5064,6 +5565,9 @@ export function buildWorld(renderer) {
       if (environment.paintMoths) environment.paintMoths(environment.phase);
       if (environment.paintPuddles) environment.paintPuddles(environment.phase);
       if (environment.paintShingles) environment.paintShingles(environment.phase);
+      if (environment.paintWildflowers) environment.paintWildflowers(environment.phase);
+      if (environment.paintReeds) environment.paintReeds(environment.phase);
+      if (environment.paintMoss) environment.paintMoss(environment.phase);
       // Contact darkening rides on vertex colours; disable it on the low tier by
       // turning the attribute off on every dressed prop mesh.
       for (const { group } of propGroups) {
@@ -5369,6 +5873,9 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintMoths) environment.paintMoths(phaseId);
   if (environment.paintPuddles) environment.paintPuddles(phaseId);
   if (environment.paintShingles) environment.paintShingles(phaseId);
+  if (environment.paintWildflowers) environment.paintWildflowers(phaseId);
+  if (environment.paintReeds) environment.paintReeds(phaseId);
+  if (environment.paintMoss) environment.paintMoss(phaseId);
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,
   // night shows it full. The mesh itself keeps rendering (one draw call) so
