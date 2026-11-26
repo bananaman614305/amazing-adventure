@@ -61,6 +61,28 @@ export const PLAZA_FLOOR_V2_TEXTURE_FILES = {
   roughnessMap: 'assets/textures/plaza_floor_v2_rough.webp'
 };
 
+/**
+ * The roof shingles' own tile family.
+ *
+ * The shingles are an InstancedMesh of a 1 x 1 m box, each instance scaled to
+ * its plane's width/depth, and the plane's top face carries BoxGeometry's
+ * authored 0..1 UVs. So a 1 m tile is one repeat across every instance: no
+ * repeat count, no box projection, no per-instance UV work. That makes this
+ * family structurally different from the box-projected ones (the plaza,
+ * terrace, prop families): applyTextureFamily is called with a 1 x 1 m span and
+ * 1 m tile, and the texture's repeat lands at 1:1.
+ *
+ * A separate set from ROOF_TEXTURE_FILES (the `HouseRoof`/`MarketRoof`/
+ * `StallRoof` materials): the timber family reads as timber on the modelled
+ * gables, but the flat shingle geometry is its own warm-tan surface, so it gets
+ * its own set rather than borrowing planks.
+ */
+export const ROOF_SHINGLE_TEXTURE_FILES = {
+  map: 'assets/textures/roof_shingle_albedo.webp',
+  normalMap: 'assets/textures/roof_shingle_normal.webp',
+  roughnessMap: 'assets/textures/roof_shingle_rough.webp'
+};
+
 export const GRASS_TEXTURE_FILES = {
   map: 'assets/textures/grass_albedo.webp',
   normalMap: 'assets/textures/grass_normal.webp',
