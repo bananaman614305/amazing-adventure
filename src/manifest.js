@@ -38,6 +38,8 @@ export const REQUIRED_FILES = [
   'src/daynight.js',
   'src/atmosphere.js',
   'src/stars.js',
+  'src/moon.js',
+  'src/clouds.js',
   'src/rope.js',
   'src/housing.js',
   'src/sacktie.js',

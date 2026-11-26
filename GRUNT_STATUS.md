@@ -12,52 +12,31 @@
 
 ## Current task
 
-**Round 87: dress the lane lantern housings, sack ties and notice face -- COMPLETE.**
+**Round 88: sky dressing -- moon disc + cloud layer (in progress).**
 
-Round 86 (lane rope) is complete, verified and committed. Round 87 dressed the
-lane's remaining small flat surfaces: the three LanternHousing bodies (0.24 m,
-reusing LAMP maps at a 0.25 m tile, keepTint false, 0.55/0.35), the nine
-SackTie cords (0.02 m, reusing CLOTH maps at a 0.04 m tile, keepTint true,
-0.95/0), and both notice faces (the procedural NoticeFaceLane stand-in and
-the modelled NoticeFace panel from assets/notice.glb, reusing PAPER maps at
-a 0.4 m tile, keepTint false, 0.9/0). Delivered: src/housing.js and
-src/sacktie.js pure modules + tests (8/8 each), src/noticeface.js pure module
-+ tests (9/9) accepting both NoticeFace and NoticeFaceLane, src/lanedress.js
-shared dressing pass (dressLanternHousing/dressSackTie) + tests (18/18),
-upgradeLanternHousing()/upgradeSackTie()/upgradeNoticeFace() passes in
-world.js with assetState keys housing/sackTie/noticeFace, shared lantern
-housing material, manifest entries (120 required files), and browser checks in
-scripts/test-round2.mjs (10 checks + round87-lane-detail.png +
-round87-sacktie.png captures). Unit suite 780/781 (1 preview digest stale
-before restamp, now 781/781 after build-preview); desktop browser suite
-303 PASS / 0 FAIL (no console errors); mobile suite 189 PASS / 0 FAIL
-(no console errors) at iPhone 13 portrait 11fps, Pixel 7 portrait 1.2fps,
-iPhone SE small 2fps, iPhone 13 landscape 1.5fps.
-
-Parallel build record (owner request, parallel-build-20261125a): split into
-A (src/lanedress.js + tests), B (src/noticeface.js + tests), C (round 87
-browser checks in scripts/test-round2.mjs), and D (world.js integration +
-manifest + assetState wiring, done by me). A and B completed at the same
-time (~1-2 min each); C landed after ~3 min; D was folded into the
-integration step. Parallel was faster and cleaner than serial: the three
-agents each owned disjoint files, and their outputs slotted together without
-conflicts. No 429 this cycle.
+Added two new pure modules and wired them into the sky dome:
+- src/moon.js: MOON_DISTANCE=96, MOON_CORE_RADIUS=4, MOON_GLOW_RADIUS=12,
+  MOON_COLOR=0xd8e4ff, MOON_PHASE_VISIBILITY {day:0, dusk:0.3, night:1},
+  moonVisibility, MOON_POSITION, moonDiscPosition, MOON_GLOW_OPACITY=0.18.
+  A separate disc from the sun (which keeps its dim night anchor at 0.16).
+- src/clouds.js: CLOUD_COUNT=14, CLOUD_FIELD_RADIUS=118, CLOUD_SEED, cloudPositions,
+  CLOUD_PHASE_OPACITY {day:0.55, dusk:0.4, night:0.12}, cloudOpacity, CLOUD_BASE_COLOR,
+  cloudColor, cloudSize, cloudDrift.
+- world.js: moonDisc group (sky-moon, sky-moon-glow), cloudGroup (sky-clouds) with
+  14 cloud meshes, paintMoon/paintClouds, exported in environment; applyPhase drives
+  moon visibility and cloud opacity/colour; environment.updateClouds drifts per frame.
+- main.js: calls environment.updateClouds(dt) each frame.
+- manifest: src/moon.js, src/clouds.js added (122 required files).
+- tests: tests/moon.test.mjs (9 tests), tests/clouds.test.mjs (12 tests).
+Unit suite: 802/802 pass. release-manifest.json regenerated.
 
 ## Next steps
-
-1. Commit Round 87 integration (sources + tests + screenshots + manifest +
-   dist restamp) and checkpoint GRUNT_STATUS.md. Publish via the PR-only
-   fallback (publish.json + needs-supervision.json) at the exact final HEAD.
-2. Choose the next useful milestone. Graphics realism is the standing priority;
-   the materials audit flat list is now much shorter. Candidates: dress any
-   remaining flat families (iron, banner, cobble, grass, walls, gateStone,
-   fountainStone, terrace, plazaFloor, wood, brick, foliage, roof, bark,
-   propWood are already dressed; check the audit for what is still flat),
-   improve lighting/atmosphere, or geometry work in Blender. Continue the
-   economy rule (hasItem-guarded, one-time, no restock, no dawn reset) for
-   any new sink.
-3. Keep the trusted release channel's blocked_infrastructure status in view;
-   publication continues via the PR-only fallback until it clears.
+1. Commit Round 88 sky dressing (sources + tests + manifest + release-manifest),
+   rebuild dist, and checkpoint GRUNT_STATUS.md.
+2. Run the desktop and mobile browser suites to confirm the new sky meshes
+   render without console errors, then restamp dist.
+3. Choose the next graphics milestone: moon lighting on materials (cool fill
+   at night), cloud shadows on the ground, or geometry work in Blender.
 
 ## Round 84 complete: dress the cast's paper props.
 

@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 import { buildStarField, starFieldOpacity, starTwinkle } from './stars.js';
+import { MOON_DISTANCE, MOON_CORE_RADIUS, MOON_GLOW_RADIUS, MOON_COLOR,
+  MOON_PHASE_VISIBILITY, moonVisibility, MOON_POSITION, moonDiscPosition,
+  MOON_GLOW_OPACITY } from './moon.js';
+import { CLOUD_COUNT, CLOUD_FIELD_RADIUS, CLOUD_SEED, cloudPositions,
+  CLOUD_PHASE_OPACITY, cloudOpacity, CLOUD_BASE_COLOR, cloudColor,
+  cloudSize, cloudDrift } from './clouds.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -143,7 +149,54 @@ export function buildWorld(renderer) {
   starField.renderOrder = -1;
   scene.add(starField);
 
+  // The moon: a separate disc from the sun (which keeps its dim night anchor).
+  const moonCore = new THREE.Mesh(
+    new THREE.CircleGeometry(MOON_CORE_RADIUS, 24),
+    new THREE.MeshBasicMaterial({
+      fog: false, depthWrite: false, transparent: true, blending: THREE.AdditiveBlending
+    })
+  );
+  moonCore.name = 'sky-moon';
+  const moonGlow = new THREE.Mesh(
+    new THREE.CircleGeometry(MOON_GLOW_RADIUS, 24),
+    new THREE.MeshBasicMaterial({
+      fog: false, depthWrite: false, transparent: true, opacity: MOON_GLOW_OPACITY,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  moonGlow.name = 'sky-moon-glow';
+  const moonDisc = new THREE.Group();
+  moonDisc.name = 'sky-moon-group';
+  moonDisc.renderOrder = -1;
+  moonDisc.add(moonGlow, moonCore);
+  scene.add(moonDisc);
+
+  // The cloud layer: soft discs on the inside of the dome, drifting slowly.
+  const cloudGroup = new THREE.Group();
+  cloudGroup.name = 'sky-clouds';
+  cloudGroup.renderOrder = -1;
+  const cloudMeshes = [];
+  const cloudData = cloudPositions();
+  for (let i = 0; i < cloudData.length; i += 1) {
+    const d = cloudData[i];
+    const r = cloudSize(i);
+    const mesh = new THREE.Mesh(
+      new THREE.CircleGeometry(r, 16),
+      new THREE.MeshBasicMaterial({
+        color: CLOUD_BASE_COLOR, fog: false, depthWrite: false,
+        transparent: true, opacity: 0.5, side: THREE.DoubleSide
+      })
+    );
+    mesh.name = 'sky-cloud';
+    mesh.position.set(d.x, d.y, d.z);
+    mesh.lookAt(0, 0, 0);
+    cloudGroup.add(mesh);
+    cloudMeshes.push(mesh);
+  }
+  scene.add(cloudGroup);
+
   let starTime = 0;
+  let cloudTime = 0;
 
   const zenithColor = new THREE.Color(0x6fa8dc);
   const horizonColor = new THREE.Color(0x9fc4e8);
@@ -178,8 +231,31 @@ export function buildWorld(renderer) {
     sunDisc.visible = intensity > 0;
   }
 
+  function paintMoon(intensity) {
+    const p = moonDiscPosition(MOON_POSITION, MOON_DISTANCE);
+    moonDisc.position.set(p.x, p.y, p.z);
+    moonDisc.lookAt(0, 0, 0);
+    moonCore.material.color.setHex(MOON_COLOR);
+    moonGlow.material.color.setHex(MOON_COLOR);
+    moonCore.material.opacity = intensity;
+    moonGlow.material.opacity = MOON_GLOW_OPACITY * intensity;
+    moonDisc.visible = intensity > 0;
+  }
+
+  function paintClouds(phaseId) {
+    const op = cloudOpacity(phaseId);
+    const col = cloudColor(phaseId);
+    for (const m of cloudMeshes) {
+      m.material.color.setHex(col);
+      m.material.opacity = op;
+    }
+    cloudGroup.visible = op > 0;
+  }
+
   paintSky(0x6fa8dc, 0x9fc4e8);
   paintSun(0xfff1d0, sunDiskIntensity('day'), PHASE_LOOKS.day.sunPosition);
+  paintMoon(moonVisibility('day'));
+  paintClouds('day');
 
   const colliders = [];
 
@@ -3138,14 +3214,28 @@ export function buildWorld(renderer) {
     quality: 'full',
     paintSky,
     paintSun,
+    paintMoon,
+    paintClouds,
     sunDisc,
     starField,
+    moonDisc,
+    cloudGroup,
+    cloudMeshes,
     // Round 85: the field breathes. One cheap per-frame call nudges the whole
     // material's size with the pure twinkle maths from src/stars.js; the
     // per-phase opacity stays with applyPhase().
     updateStars(dt) {
       starTime += dt;
       starField.material.size = 0.9 * starTwinkle(0, starTime);
+    },
+    updateClouds(dt) {
+      cloudTime += dt;
+      for (let i = 0; i < cloudMeshes.length; i += 1) {
+        const m = cloudMeshes[i];
+        const d = cloudDrift(i, cloudTime);
+        // rotate around Y axis by drift
+        m.rotation.y = d;
+      }
     },
     // The palette for a phase, so the camera pipeline can derive its ambient
     // room from the same numbers the sky dome is painted with.
@@ -3458,6 +3548,12 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   }
   if (environment.paintSun) {
     environment.paintSun(look.sunColor, sunDiskIntensity(phaseId), look.sunPosition);
+  }
+  if (environment.paintMoon) {
+    environment.paintMoon(moonVisibility(phaseId));
+  }
+  if (environment.paintClouds) {
+    environment.paintClouds(phaseId);
   }
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,
