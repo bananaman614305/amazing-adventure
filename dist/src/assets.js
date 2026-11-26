@@ -1637,6 +1637,12 @@ export async function loadMaterialTextures({
       // truthiness -- a falsy check would silently skip the linear maps.
       if (space !== undefined) texture.colorSpace = space;
       texture.needsUpdate = true;
+      // The loader never sees `document` (and neither does `createImageBitmap`),
+      // so the bitmap the GPU samples has no src string of its own. Tests that
+      // want to know WHICH family a material ended up with must read it here
+      // rather than off the texture's image -- this is the only place that
+      // knows the family a texture came from.
+      texture.userData.sourceUrl = url;
       return texture;
     } catch {
       return null;

@@ -3537,10 +3537,14 @@ export function buildWorld(renderer) {
     const aoTexture = createPlazaAoTexture({ THREE });
     if (aoTexture) {
       plazaMaterial.aoMap = aoTexture;
-      // The plaza upgrade can land after the adaptive loop has already dropped
-      // to the low tier, so the intensity follows the tier that is current now
-      // rather than assuming full quality.
-      plazaMaterial.aoMapIntensity = plazaAoMapIntensity({ low: environment.quality === 'low' });
+      // The AO map is a full-tier effect: the low tier drops the intensity to
+      // 0 so the grounding cue costs nothing when the budget is tight. The
+      // upgrade must therefore only bind a NON-ZERO intensity on full, or a
+      // slow headless run that has already dropped to low would leave the
+      // material in a "bound but off" state that a browser check could read as
+      // a missing cue. The low-tier-zero path lives in setQuality so a flip
+      // restores exactly what a fresh full-tier boot would have set.
+      plazaMaterial.aoMapIntensity = environment.quality === 'low' ? 0 : 0.85;
       plazaMaterial.aoMap.channel = PLAZA_AO_MAP_CHANNEL;
     }
     assetState.plazaFloor = 'textured';
