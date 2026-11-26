@@ -12,34 +12,48 @@
 
 ## Current task
 
-**Round 93: seven dressing fields integrated (butterflies, litter, motes, windows, ivy, spray, mist) + nightFraction.**
+**Round 94: fountain ripples, night moths, meadow puddles, roof shingles integrated (sources at 7523100).**
 
-Unit suite: **1243/1243 pass** at 0e0c95d (dist restamped). All new pure modules
-integrated into `src/world.js`: butterflies (two wing InstancedMeshes, wander +
-flap), litter (4 leaf silhouettes, area-uniform scatter), motes (additive specks,
-day-only), cottage windows (12 panes projected onto border-wall faces, bedtime
-schedule via nightFraction), ivy (14 wall patches, sway + breath), fountain spray
-(64 droplets, polar fall), ground mist (14 low quads, area-uniform). `nightFraction`
-added to `src/daynight.js` (smooth 0..1 ramp over dusk+night) so a window can go
-out mid-phase. `src/main.js` frame loop calls updateButterflies/updateMotes/
-updateWindows/updateIvy/updateSpray/updateMist. `setQuality` re-derives all seven.
-Manifest: 140 required files. dist restamped at 0e0c95d.
+Four new pure modules from the parallel subagents were reviewed, fixed and
+integrated into `src/world.js` (single InstancedMesh each, uniform
+paintX/updateX + quality gating, `setQuality` and `applyPhase` re-derive all
+four; `src/main.js` frame loop calls updateRipples/updateMoths/updatePuddles).
+Review fixes: `src/moths.js` MOTH_SITES replaced with the real lamp heads (plaza
+bulbs ±7/±7 y 3.15, lane lantern 8.3/−21.6) instead of invented coordinates, and
+its test's world bound widened to 30 for the lane; `puddleShimmer` now clamps to
+±PUDDLE_SHIMMER_AMPLITUDE as documented (was ±1, made a bound test
+non-deterministic); manifest gained the three new modules (143 required files,
+regenerated). Round 93's browser checks (never written last round) plus Round
+94's checks were added to `scripts/test-round2.mjs` (ripples travel, moths 30,
+puddles 18, shingles > 0, all four invisible on low). Unit suite at 7523100:
+1313 tests, 1312 pass, 1 fail — only "dist/ is stale" (expected: world.js/main.js
+changed after the last restamp; rebuild next).
+
+Known limitation, to fix next: ripple rings use RingGeometry(0.85, 1, 24) scaled
+by radius, so band thickness grows with the ring instead of thinning per
+RIPPLE_THIN; and rippleRing's per-instance opacity (with its exact-zero fade
+tail) is computed but discarded, since MeshBasicMaterial opacity is global.
 
 Parallel split (standing `parallel-build-20261125b`): prior cycles launched
-subagents for litter (26 tests), motes (23), ripples (27), ivy (35), spray (30),
-mist (28); this cycle integrated all seven plus nightFraction, then committed
-sources (da85632) and dist (0e0c95d). Integration touches shared world.js so
-done alone, recorded here.
+subagents for ripples (27 tests at spawn time), moths, puddles and shingles;
+this cycle reviewed and integrated all four. The world.js integration touches
+one shared file, so it was done alone — recorded here as required.
 
-Pending: desktop browser suite; mobile suite (infrastructure-limited host);
+Pending: restamp dist/ and commit; rerun unit suite (expect 1313/1313); desktop
+browser suite once; mobile suite once (SwiftShader-limited host);
 publish via publish.json.
 
 ## Next steps
-1. Run desktop browser suite once on 0e0c95d, recording evidence; run mobile suite
-   and note the SwiftShader infrastructure limit honestly.
-2. Publish via /worker/state/outbox/publish.json with head 0e0c95d (Round 89-93).
-3. Next graphics milestone: ripples integration (fountain basin rings) + spray
-   already integrated; or Blender geometry work (house/terrace detail).
+1. On the clean committed tree, run `node scripts/build-preview.mjs`, commit the
+   restamped dist/, then rerun `node --test tests/*.test.mjs` and expect
+   1313/1313 (the stale-dist failure must clear).
+2. Run the desktop browser suite once on that head and record real evidence;
+   then the mobile suite once, noting the SwiftShader infrastructure limit.
+3. Fix or redesign the ripple band (constant thickness + per-instance opacity)
+   or record it honestly as a limitation, then publish via
+   /worker/state/outbox/publish.json with the exact committed HEAD SHA
+   (PR-only fallback; grunt-release is blocked_infrastructure).
+4. Next graphics milestone: Blender geometry work (house/terrace detail).
 
 ## Round 89 complete (historical)
 
