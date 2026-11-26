@@ -1874,6 +1874,9 @@ function frame() {
   if (environment.updateStars) environment.updateStars(dt);
   // Round 88: the cloud layer drifts once per frame.
   if (environment.updateClouds) environment.updateClouds(dt);
+  // Round 90: the meadow leans in the same wind field, once per frame (full
+  // tier only -- setQuality switches the sway off on low).
+  if (environment.updateMeadow) environment.updateMeadow(dt);
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
   maybeStartAmbient(dt);

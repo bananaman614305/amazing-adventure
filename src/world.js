@@ -10,6 +10,10 @@ import { MOONLIGHT_COLOR, moonlightIntensity, moonlightDirection } from './moonl
 import { cloudDapple } from './cloudshadow.js';
 import { horizonRibbonArray, horizonRibbonColors, horizonTint, horizonOpacity,
   horizonFootTint } from './horizon.js';
+import { scatterPoints, SCATTER_SEED } from './scatter.js';
+import { windDirection, windPhase, windSway } from './wind.js';
+import { tuftGeometry, tuftPhaseTint, tuftLeanAngle, tuftLeanAxis,
+  TUFT_VARIANTS } from './tuft.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -3291,6 +3295,211 @@ export function buildWorld(renderer) {
     });
   }
 
+  // --- Meadow -------------------------------------------------------------
+  // The grass ring was a textured plane with nothing standing on it, which read
+  // as a painted floor: the ground met every prop in one clean line and never
+  // broke it. Round 90 stands ~900 grass tufts on the ring so the lawn has a
+  // silhouette -- a dark, ragged edge where the eye meets the ground, blades
+  // catching the light at a different angle from the texture beneath them.
+  //
+  // Placement is decided by the pure scatter module (seeded rejection sampling
+  // against the zones that own their ground) and the shape of a clump by the
+  // pure tuft module. This block only turns those numbers into one InstancedMesh:
+  // one draw call for the whole meadow, four blade variants baked into one
+  // geometry buffer, every tuft an instance.
+  //
+  // The tufts sway in the shared wind field (src/wind.js) on the full tier. The
+  // sway is a per-instance matrix update once per frame; on the low tier the
+  // meadow still stands, it simply holds still, because a per-frame loop over
+  // 900 instances is exactly the kind of cost the low tier exists to drop.
+  const MEADOW_COUNT = 900;
+  const MEADOW_MARGIN = 0.55;
+  // Ground the tufts must not grow through. Circles are things that own a disc
+  // of ground (the fountain, the trees, the lamp posts, the barrels); rects are
+  // things that own a footprint (the plaza and lane paving, the house, the
+  // terrace steps, the bench, the stalls and the walls' own thickness).
+  //
+  // The plaza disc and the lane floor are already paved, so the ring is
+  // everything inside the border walls that is neither. The margin then keeps
+  // blades a hand's width off every edge, so nothing kisses the paving.
+  const meadowCircles = [
+    // The paved plaza disc: a circle, not a rect, so the ring's corners are
+    // still planted. A rect would have left four bare wedges.
+    { x: 0, z: 0, radius: 9 },
+    { x: FOUNTAIN_SPOT.x, z: FOUNTAIN_SPOT.z, radius: FOUNTAIN_COLLIDER },
+    ...TREE_SPOTS.map((spot) => ({ x: spot.x, z: spot.z, radius: 1.1 * spot.scale })),
+    ...[[7, 7], [-7, 7], [7, -7], [-7, -7]].map(([x, z]) => ({ x, z, radius: 0.45 })),
+    ...[[-5, 9], [-6.2, 9.4], [3, -7.5]].map(([x, z]) => ({ x, z, radius: 0.7 }))
+  ];
+  const meadowRects = [
+    // The lane floor, the house, the bench, the terrace, the market stalls and
+    // the boards are all rectangles of owned ground.
+    { minX: LANE.minX - 0.4, maxX: LANE.maxX + 0.4, minZ: LANE.minZ - 0.4, maxZ: LANE.maxZ + 0.4 },
+    { minX: -14.5, maxX: -6.5, minZ: -12, maxZ: -6 },
+    { minX: BENCH.x - 1.3, maxX: BENCH.x + 1.3, minZ: BENCH.z - 0.7, maxZ: BENCH.z + 0.7 },
+    { minX: TERRACE.minX - 0.3, maxX: TERRACE.maxX + 0.3, minZ: TERRACE.minZ - 0.3, maxZ: TERRACE.maxZ + 0.3 },
+    { minX: 8.5, maxX: 13.5, minZ: -5.2, maxZ: -0.8 },
+    { minX: -13.5, maxX: -8.5, minZ: -5.2, maxZ: -0.8 },
+    // The job board and the notice board own a strip each.
+    { minX: JOB_BOARD.x - 0.9, maxX: JOB_BOARD.x + 0.9, minZ: JOB_BOARD.z - 0.5, maxZ: JOB_BOARD.z + 0.5 },
+    { minX: NOTICE_BOARD.x - 0.9, maxX: NOTICE_BOARD.x + 0.9, minZ: NOTICE_BOARD.z - 0.5, maxZ: NOTICE_BOARD.z + 0.5 }
+  ];
+
+  // One InstancedMesh per variant, not one mesh of mixed shapes: an InstancedMesh
+  // draws the whole base geometry for every instance, so a single mesh could
+  // only ever draw one tuft shape. Four variants therefore mean four draw calls
+  // -- still trivial -- and each mesh draws only the instances the scatter
+  // assigned to it. The alternative, a custom shader that picks a vertex range
+  // per instance, buys three draw calls and costs a shader this project does not
+  // otherwise need.
+  const meadowGroup = new THREE.Group();
+  meadowGroup.name = 'meadow';
+  meadowGroup.userData = { meadow: true };
+  scene.add(meadowGroup);
+
+  const meadowArea = { minX: -HALF + 0.8, maxX: HALF - 0.8, minZ: -HALF + 0.8, maxZ: HALF - 0.8 };
+  const meadowScatter = scatterPoints({
+    count: MEADOW_COUNT,
+    seed: SCATTER_SEED,
+    area: meadowArea,
+    circles: meadowCircles,
+    rects: meadowRects,
+    margin: MEADOW_MARGIN,
+    minScale: 0.75,
+    maxScale: 1.35
+  });
+
+  // Bucket the scattered points by variant so each variant mesh knows its own
+  // instance count up front (an InstancedMesh's capacity is fixed at build).
+  const meadowByVariant = [[], [], [], []];
+  for (const point of meadowScatter.points) {
+    meadowByVariant[point.variant].push(point);
+  }
+
+  const meadowMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.9,
+    metalness: 0,
+    // Double-sided: a blade is one triangle and is seen from both faces as the
+    // player circles a clump. The up-facing normals (see tuft.js) keep the back
+    // face lit exactly like the front.
+    side: THREE.DoubleSide
+  });
+  meadowMaterial.name = 'MeadowGrass';
+
+  const meadowVariants = [];
+  const meadowPhaseTint = new THREE.Color(0xffffff);
+  for (let variant = 0; variant < TUFT_VARIANTS; variant += 1) {
+    const points = meadowByVariant[variant];
+    const shape = tuftGeometry(variant);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(shape.positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(shape.colours, 3));
+    geometry.setAttribute('normal', new THREE.BufferAttribute(shape.normals, 3));
+    geometry.computeBoundingSphere();
+
+    const mesh = new THREE.InstancedMesh(geometry, meadowMaterial, Math.max(1, points.length));
+    mesh.name = `meadow-tufts-${variant}`;
+    mesh.userData = { meadowVariant: variant, tuftCount: points.length };
+    mesh.castShadow = false; // A blade's shadow is finer than the shadow map.
+    mesh.receiveShadow = true;
+    // Instances are placed below; until then nothing is drawn for an empty
+    // bucket, so the mesh is hidden rather than left at the identity matrix.
+    mesh.count = points.length;
+    mesh.visible = points.length > 0;
+
+    const instances = [];
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const scale = new THREE.Vector3();
+    const yaw = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < points.length; i += 1) {
+      const point = points[i];
+      position.set(point.x, 0, point.z);
+      // The scatter rotation turns the clump about its own vertical axis so two
+      // instances of the same variant do not share a silhouette.
+      yaw.setFromAxisAngle(up, point.rotation);
+      scale.setScalar(point.scale);
+      matrix.compose(position, yaw, scale);
+      mesh.setMatrixAt(i, matrix);
+      instances.push({
+        x: point.x,
+        z: point.z,
+        scale: point.scale,
+        rotation: point.rotation,
+        // Precomputed per-tuft wind phase, so the sway loop is a couple of
+        // multiplies rather than a position hash every frame.
+        phase: windPhase(point.x, point.z)
+      });
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    meadowGroup.add(mesh);
+    meadowVariants.push({ mesh, instances });
+  }
+
+  // The wind direction is fixed, so the lean axis (the horizontal axis a tuft
+  // rotates about to tip downwind) is computed once, not per instance.
+  const meadowWind = windDirection();
+  const meadowAxis = tuftLeanAxis(meadowWind);
+  const meadowLeanAxis = new THREE.Vector3(meadowAxis.x, meadowAxis.y, meadowAxis.z);
+  let meadowWindTime = 0;
+
+  // The per-instance scratch objects for the sway pass, allocated once so the
+  // frame loop does no allocation.
+  const swayMatrix = new THREE.Matrix4();
+  const swayQuaternion = new THREE.Quaternion();
+  const swayPosition = new THREE.Vector3();
+  const swayScale = new THREE.Vector3();
+  const swayYaw = new THREE.Quaternion();
+  const swayLean = new THREE.Quaternion();
+  const swayUp = new THREE.Vector3(0, 1, 0);
+  let meadowSwayEnabled = true;
+
+  /**
+   * One frame of wind through the meadow. Every instance leans about the shared
+   * lean axis by its own phase-shifted sway, so a gust crosses the ring as a
+   * wave rather than landing everywhere at once.
+   *
+   * The lean is composed *after* the instance's own yaw, so the rotation axis
+   * stays world-horizontal: leaning in the tuft's local frame would tip each
+   * clump in a different direction, which is the opposite of one wind field.
+   * Allocation-free; skipped entirely on the low tier and when no tuft exists.
+   */
+  function updateMeadow(dt) {
+    if (!meadowSwayEnabled) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    if (step === 0) return;
+    meadowWindTime += step;
+    for (const { mesh, instances } of meadowVariants) {
+      if (!instances.length) continue;
+      for (let i = 0; i < instances.length; i += 1) {
+        const instance = instances[i];
+        const sway = windSway(meadowWindTime, instance.phase);
+        const lean = tuftLeanAngle(sway);
+        swayYaw.setFromAxisAngle(swayUp, instance.rotation);
+        swayLean.setFromAxisAngle(meadowLeanAxis, lean);
+        // yaw * lean: the clump turns to its own heading, then the whole thing
+        // tips about the world-horizontal lean axis.
+        swayQuaternion.copy(swayLean).multiply(swayYaw);
+        swayPosition.set(instance.x, 0, instance.z);
+        swayScale.setScalar(instance.scale);
+        swayMatrix.compose(swayPosition, swayQuaternion, swayScale);
+        mesh.setMatrixAt(i, swayMatrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  /** Paints the meadow for a phase. The baked colours are daylight; the phase
+   *  tint is a material colour multiplier, so a phase change is one write. */
+  function paintMeadow(phaseId) {
+    meadowPhaseTint.setHex(tuftPhaseTint(phaseId));
+    meadowMaterial.color.copy(meadowPhaseTint);
+  }
+  paintMeadow('day');
+
   const environment = {
     scene,
     quality: 'full',
@@ -3345,6 +3554,23 @@ export function buildWorld(renderer) {
     get cloudDim() {
       return cloudDim;
     },
+    // Round 90: the meadow. `meadow` is the group of four variant InstancedMeshes
+    // so a browser check can count them and their instances; `paintMeadow` is
+    // called from applyPhase; `updateMeadow` is the per-frame wind sway.
+    meadow: meadowGroup,
+    meadowVariants,
+    meadowScatter,
+    paintMeadow,
+    updateMeadow(dt) {
+      updateMeadow(dt);
+    },
+    setMeadowSway(enabled) {
+      meadowSwayEnabled = Boolean(enabled);
+      return meadowSwayEnabled;
+    },
+    get meadowSway() {
+      return meadowSwayEnabled;
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -3387,6 +3613,12 @@ export function buildWorld(renderer) {
       if (plazaMaterial) {
         plazaMaterial.aoMapIntensity = low ? 0 : plazaAoMapIntensity({ low: false });
       }
+      // Round 90: the meadow keeps standing on the low tier -- it is the ground's
+      // silhouette, and hiding it would put the painted floor back -- but it
+      // stops swaying, because the sway is a per-frame loop over ~900 instances
+      // and that is exactly the cost the low tier exists to drop. A still meadow
+      // still reads as grass.
+      meadowSwayEnabled = !low;
       // Contact darkening rides on vertex colours; disable it on the low tier by
       // turning the attribute off on every dressed prop mesh.
       for (const { group } of propGroups) {
@@ -3668,6 +3900,9 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   }
   if (environment.paintHorizon) {
     environment.paintHorizon(phaseId);
+  }
+  if (environment.paintMeadow) {
+    environment.paintMeadow(phaseId);
   }
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,

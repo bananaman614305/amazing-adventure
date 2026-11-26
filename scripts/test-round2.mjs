@@ -3588,6 +3588,149 @@ try {
     JSON.stringify(sd.dims.map((d) => Number(d.toFixed(3)))));
   await capture(page, 'round89-sky-dressing.png');
 
+  // --- 28n3. The meadow (round 90) -----------------------------------------
+  // Round 90 stands grass tufts on the ring so the lawn has a silhouette instead
+  // of reading as a painted floor. The meadow is four InstancedMeshes (one per
+  // blade variant) placed by the pure scatter module and swayed by the pure wind
+  // field. This check proves the live scene really has them, that they stand on
+  // the ground outside the paving, that the wind moves the instances on the full
+  // tier and that the low tier stops the sway, and that the phase tint darkens
+  // the grass at night.
+  const meadow = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.set('full');
+
+    const byName = (name) => {
+      let found = null;
+      api.scene.traverse((o) => { if (o.name === name) found = o; });
+      return found;
+    };
+    const group = byName('meadow');
+    const variants = [];
+    if (group) {
+      for (const child of group.children) {
+        if (!child.isInstancedMesh) continue;
+        variants.push({
+          name: child.name,
+          variant: child.userData.meadowVariant,
+          count: child.count,
+          // A tuft's base geometry is TUFT_BLADES * 3 vertices (5 blades).
+          vertexCount: child.geometry.getAttribute('position').count,
+          hasColor: Boolean(child.geometry.getAttribute('color')),
+          doubleSided: child.material.side === 2
+        });
+      }
+    }
+    const totalInstances = variants.reduce((sum, v) => sum + v.count, 0);
+
+    // Walk the instances of every variant and confirm each stands at y=0 (on the
+    // ground), inside the border walls, and off the plaza paving. The instance
+    // matrices live in `instanceMatrix.array` as 16 floats per instance, with the
+    // translation in columns 12..14 -- reading the raw buffer avoids needing a
+    // THREE.Matrix4 inside the page.
+    let offGround = 0;
+    let onPaving = 0;
+    let outside = 0;
+    let sampled = 0;
+    for (const v of variants) {
+      const mesh = byName(v.name);
+      if (!mesh) continue;
+      const e = mesh.instanceMatrix.array;
+      const step = Math.max(1, Math.floor(mesh.count / 60));
+      for (let i = 0; i < mesh.count; i += step) {
+        const base = i * 16;
+        const x = e[base + 12];
+        const y = e[base + 13];
+        const z = e[base + 14];
+        sampled += 1;
+        if (Math.abs(y) > 1e-4) offGround += 1;
+        if (Math.abs(x) > 16.5 || Math.abs(z) > 16.5) outside += 1;
+        // The plaza disc is r=9 at the origin; a tuft inside it would grow
+        // through the paving.
+        if (Math.hypot(x, z) < 8.5) onPaving += 1;
+      }
+    }
+
+    // Sway: sample one instance's matrix at two different wind times and see it
+    // change. `updateMeadow` advances its own clock, so two calls with a real dt
+    // must move the blades.
+    const firstVariant = variants[0] ? byName(variants[0].name) : null;
+    const readInstance = (mesh) => Array.from(mesh.instanceMatrix.array.slice(0, 16));
+    let swayMoved = null;
+    if (firstVariant && env.updateMeadow) {
+      env.updateMeadow(0.4);
+      const before = readInstance(firstVariant);
+      env.updateMeadow(0.9);
+      const after = readInstance(firstVariant);
+      let diff = 0;
+      for (let i = 0; i < 16; i += 1) diff += Math.abs(after[i] - before[i]);
+      swayMoved = diff > 1e-5;
+    }
+
+    // Low tier: the sway must stop. Switch, step twice, and confirm the matrix
+    // no longer changes.
+    let lowFrozen = null;
+    if (firstVariant && env.setMeadowSway) {
+      api.quality.set('low');
+      const wasEnabled = env.meadowSway;
+      const before = readInstance(firstVariant);
+      env.updateMeadow(0.5);
+      const after = readInstance(firstVariant);
+      let diff = 0;
+      for (let i = 0; i < 16; i += 1) diff += Math.abs(after[i] - before[i]);
+      lowFrozen = wasEnabled === false && diff < 1e-9;
+    }
+
+    // Phase tint: the material colour is the daylight white at day and a darker,
+    // cooler colour at night.
+    api.quality.set('full');
+    api.setClock(10);
+    const dayTint = byName('meadow-tufts-0')
+      ? byName('meadow-tufts-0').material.color.getHexString() : null;
+    api.setClock(150);
+    const nightTint = byName('meadow-tufts-0')
+      ? byName('meadow-tufts-0').material.color.getHexString() : null;
+
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(10);
+    return {
+      groupVisible: group ? group.visible : null,
+      variantCount: variants.length,
+      variants,
+      totalInstances,
+      sampled,
+      offGround,
+      onPaving,
+      outside,
+      swayMoved,
+      lowFrozen,
+      dayTint,
+      nightTint
+    };
+  });
+
+  const md = meadow;
+  checks.check('the meadow stands four instanced tuft variants on the ring',
+    md.groupVisible === true && md.variantCount === 4 &&
+      md.variants.every((v) => v.count > 0 && v.vertexCount === 15 && v.hasColor && v.doubleSided) &&
+      md.totalInstances > 500,
+    JSON.stringify({ variants: md.variants, total: md.totalInstances }));
+  checks.check('every tuft stands on the ground, inside the walls and off the paving',
+    md.sampled > 100 && md.offGround === 0 && md.onPaving === 0 && md.outside === 0,
+    JSON.stringify({ sampled: md.sampled, offGround: md.offGround,
+                     onPaving: md.onPaving, outside: md.outside }));
+  checks.check('the wind sways the meadow on the full tier and stills it on low',
+    md.swayMoved === true && md.lowFrozen === true,
+    JSON.stringify({ swayMoved: md.swayMoved, lowFrozen: md.lowFrozen }));
+  checks.check('the meadow is daylight green by day and cools at night',
+    md.dayTint === 'ffffff' && md.nightTint === '46536e',
+    JSON.stringify({ day: md.dayTint, night: md.nightTint }));
+  await capture(page, 'round90-meadow.png');
+
   // --- 28n2. The lane rope's rope strand (round 86) -------------------------
   // The three LaneRope boxes (2 cm diameter, 1.92 m2 total) that span the
   // lane are dressed with the round 86 twisted-fibre rope maps at a 0.08 m
