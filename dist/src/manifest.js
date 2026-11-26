@@ -95,6 +95,7 @@ export const REQUIRED_FILES = [
   'assets/lamp.glb',
   'assets/banner.glb',
   'assets/terrace-detail.glb',
+  'assets/house-detail.glb',
   'assets/textures/grass_albedo.webp',
   'assets/textures/grass_normal.webp',
   'assets/textures/grass_rough.webp',

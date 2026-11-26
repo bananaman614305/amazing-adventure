@@ -67,7 +67,7 @@ import {
   WATER_TEXTURE_FILES, WATER_TILE_METERS,
   CRATE_ASSET, CRATE_MODEL_SIZE, loadCrate,
   GATE_DOOR_ASSET, GATE_DOOR_MODEL_SIZE, loadGateDoor,
-  HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse,
+  HOUSE_ASSET, HOUSE_MODEL_SIZE, loadHouse, HOUSE_DETAIL_ASSET, HOUSE_DETAIL_MODEL_SIZE, loadHouseDetail,
   WOOD_TEXTURE_FILES, STONE_TEXTURE_FILES, BRICK_TEXTURE_FILES, PLASTER_TEXTURE_FILES,
   COBBLE_TEXTURE_FILES, GRASS_TEXTURE_FILES, PLAZA_FLOOR_TEXTURE_FILES, projectBoxGeometry,
   TREE_ASSET, TREE_MODEL_SIZE, loadTree, BARK_TEXTURE_FILES, LAMP_TEXTURE_FILES,
@@ -1480,6 +1480,8 @@ export function buildWorld(renderer) {
     terraceDetail: null,
     terraceFurniture: 'stand-in',
     terraceFurnitureDetail: null,
+    houseOverlay: 'stand-in',
+    houseOverlayDetail: null,
     gateStoneDetail: null,
     fountainStoneDetail: null,
     water: 'flat',
@@ -2119,6 +2121,53 @@ export function buildWorld(renderer) {
       // new prop) -- add a wide anchor for the pergola centre.
       assetState.terraceFurniture = 'model';
       assetState.terraceFurnitureDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: 1
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeHouseDetail() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.houseOverlay = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadHouseDetail({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.houseOverlay = 'stand-in';
+        assetState.houseOverlayDetail = result.reason;
+        return assetState;
+      }
+      const group = new THREE.Group();
+      group.name = 'house-detail-model';
+      // Authored at the house origin (house centre at origin, ground z=0 in
+      // Blender). The house itself sits at (-10.5, 0, -9), so the overlay
+      // rides the same spot and its shutters/gutters line up with the trim.
+      group.position.set(-10.5, 0, -9);
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material.clone());
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        // Glass panes: the window boxes and shutters have no glass, but the
+        // material names are scanned so a future pane still gets registered.
+        const glassKind = glassKindFor(material.name || '');
+        if (glassKind) {
+          mesh.castShadow = glassCastsShadow(glassKind);
+          glassPanes.push({ mesh, kind: glassKind, lane: false });
+        }
+        group.add(mesh);
+      }
+      scene.add(group);
+      propGroups.push({ group, tile: 2 });
+      assetState.houseOverlay = 'model';
+      assetState.houseOverlayDetail = {
         parts: result.meshes.length,
         bytes: result.bytes,
         instances: 1
@@ -6023,7 +6072,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner(), upgradeTerraceDetail()])
+      return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner(), upgradeTerraceDetail(), upgradeHouseDetail()])
         .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt()).then(() => upgradeLaneRope()).then(() => upgradeBoardPaper())
         .then(() => upgradeLanternHousing()).then(() => upgradeSackTie()).then(() => upgradeNoticeFace())
         // Water runs last and after the prop pass on purpose: the water discs
