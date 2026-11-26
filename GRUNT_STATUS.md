@@ -12,7 +12,7 @@
 
 ## Current task
 
-**Round 88: sky dressing -- moon disc + cloud layer (in progress).**
+**Round 88: sky dressing -- moon disc + cloud layer -- COMPLETE.**
 
 Added two new pure modules and wired them into the sky dome:
 - src/moon.js: MOON_DISTANCE=96, MOON_CORE_RADIUS=4, MOON_GLOW_RADIUS=12,
@@ -31,8 +31,8 @@ Added two new pure modules and wired them into the sky dome:
 Unit suite: 802/802 pass. release-manifest.json regenerated.
 
 ## Next steps
-1. Commit Round 88 sky dressing (sources + tests + manifest + release-manifest),
-   rebuild dist, and checkpoint GRUNT_STATUS.md.
+1. Round 88 verified: unit 802/802, desktop 302/302 (no console errors),
+   mobile 184/184 (no console errors). Committed at HEAD with dist restamp.
 2. Run the desktop and mobile browser suites to confirm the new sky meshes
    render without console errors, then restamp dist.
 3. Choose the next graphics milestone: moon lighting on materials (cool fill
