@@ -12,91 +12,21 @@
 
 ## Current task
 
-**Round 90: meadow dressing -- 900 scattered grass tufts with a shared wind
-field -- VERIFIED (sources committed at 803f0db).**
+**Round 92: daytime bird flock + chimney smoke columns -- IN PROGRESS.**
 
-Desktop suite: **313/313 PASS, 0 FAIL** (run on fixed tree 803f0db), including
-all five meadow checks — variants 215/216/223/246 = 900 instances, 15 vertices
-each, colour + double-sided; 0 tufts off ground/on paving/outside walls; 0 tufts
-inside any of 9 prop footprints (west stall at (-11,6), crates at (5,8) and
-(6.4,8.3)); sway moved matrix on full and froze on low; day ffffff / night
-46536e. Unit suite 919/920 (only expected dist/ staleness gate).
+Pure modules: `src/birds.js` (subagent, BIRD_COUNT 8, orbit 15-23 m, flap 0.5 rad / 0.62 s, PHASE_GLOW day 1 / dusk 0.5 / night 0) and `src/chimney.js` (subagent, CHIMNEY_COUNT 4 plumes x CHIMNEY_PUFFS 7 puffs = 28 billboards, phase glow dusk 1 / night 0.8 / day 0.25). Both reviewed line by line; added `birdHeading` (tangent) and `chimneySpawns({sites})` (real roofs) with focused tests. Unit tests: birds 48 + chimney 51 = 99, all pass.
 
-Mobile suite: attempted 3 times; the software renderer + mobile emulation
-consistently fails to boot the game (page never reaches booted state, 0 bytes
-output after 20+ min). This appears to be a host/infrastructure limitation
-with the heavier meadow scene, not a code defect — desktop suite passes. Will
-retry after dist restamp.
+Integration (this round): `src/world.js` builds two InstancedMesh wing passes (bird-wings-left/right) over a shared triangle and a crossed-quad chimney-smoke mesh (chimney-smoke) over 4 real sites (house chimney + 3 outside the walls). `src/main.js` calls updateBirds/updateSmoke each frame. `src/manifest.js` lists both. `scripts/test-round2.mjs` gained 6 live dressing checks (flutter, fireflies, birds, smoke) in one page.evaluate, mirroring the meadow block.
 
-**Round 91: cloth flutter (bunting flags + terrace banner) + night firefly
-field -- INTEGRATION IN PROGRESS (manifest regenerated, 130 files; dist pending).**
+Subagent split recorded per `parallel-build-20261125b`: this cycle launched two review-and-integrate subagents (birds, chimney) in the previous cycle; this cycle's work is integration + browser checks and cannot be split further (shared world.js), so done alone.
 
-Parallel split (standing owner request `parallel-build-20261125b`): two
-independent pure modules launched together as subagents.
-- src/flutter.js (subagent): cloth-flutter module — flutterAmount, flutterPhase,
-  flutterMotion (bounded yaw/roll/billow), flutterEnabled. 23 unit tests, all
-  pass (peak |yaw| 0.319, |roll| 0.120, billow 0.060; 20/20 distinct phases).
-- src/fireflies.js (subagent): night firefly field — fireflySpawns (64 spawns
-  in ring r9.6-15.8), fireflyGlowLevel, fireflyBlink (asymmetric), fireflyDrift,
-  fireflyEnabled. 23 unit tests, all pass (radius 9.61-15.71, height 0.80-1.70).
-
-Integration: added both to REQUIRED_FILES in src/manifest.js; imported both
-into src/world.js. Wiring flutter into bunting flags + banner and firefly
-InstancedMesh field in progress.
-
-Parallel split (standing owner request `parallel-build-20261125b`): three
-independent pure modules launched together as three subagents in one message.
-- src/scatter.js (subagent, ~4 min): seeded rejection sampling over an area
-  against circle/rect exclusion zones with a margin; returns
-  {points:[{x,z,scale,rotation,variant}], rejected, attempts}. Fail-safe
-  guards. 18 unit tests, all pass.
-- src/wind.js (subagent, ~4 min): one shared wind field -- windDirection (unit,
-  y=0), windStrength (base 0.35 + gust 0.65, two breeze sines + slow gust),
-  windSway (signed flutter), windPhase (x*0.15+z*0.11) and windOffset. 23 unit
-  tests, all pass; measured strength [0.35,0.999], sway [-0.999,0.995].
-- src/tuft.js (I wrote it; the tuft subagent stalled on a brief ambiguity and
-  produced no files): one tuft's blade geometry -- 5 blades, base->tip vertex
-  gradient, up-facing normals (grass scatters light rather than reflecting off a
-  leaf face), plus tuftPhaseTint, tuftLeanAngle and tuftLeanAxis. 22 unit tests.
-
-Integration (src/world.js): 900 tufts placed by scatterPoints over the ring
-inside the walls, excluding the plaza disc (r9), lane, fountain, trees, lamp
-posts, barrels, house, bench, terrace, market stalls and both boards. Four blade
-variants -> four InstancedMeshes (one material, vertex-coloured, double-sided);
-per-instance scale/yaw/variant from the scatter. Full tier sways every instance
-in the wind field once per frame (updateMeadow, allocation-free); low tier keeps
-the meadow standing but still (setQuality toggles meadowSway). paintMeadow tints
-the grass per phase (day white, night 46536e). main.js calls updateMeadow(dt).
-manifest: 128 required files. scripts/test-round2.mjs: 4 new live meadow checks.
-
-Evidence so far: unit 919/920 pass (only the expected dist/ staleness gate
-fails until restamp); a focused headless smoke run booted the real game and read
-900 instances in 4 variants (215/215/225/245), 15 vertices each, all y=0, none
-on the plaza (0 of 281 sampled inside r8.5), none outside the walls, sway moved
-the instance matrix (diff 0.054), low tier froze it (diff 0), dayTint ffffff /
-nightTint 46536e, no page errors. Desktop suite on the fixed tree (803f0db):
-**313/313 PASS, 0 FAIL**, including all five meadow checks — variants 215/216/
-223/246 = 900 instances, 15 vertices each, colour + double-sided; 0 tufts off
-the ground, on the paving or outside the walls; **0 tufts inside any of the 9
-prop footprints** (west stall now correctly at (-11, 6), crates at (5,8) and
-(6.4,8.3)); sway moved the matrix on full and froze on low; day ffffff / night
-46536e.
-
-**Two bugs found by review after the first suite passed, both fixed at 803f0db:**
-- Tuft tips double-counted the root radius (`rootX + cos*(radius+lean)`), so
-  clumps spread to 0.278 m against the claimed 0.16 m. Now 0.143 m worst case;
-  a unit test pins the footprint.
-- The stall/crate keep-outs were hand-copied and had drifted: the west stall's
-  rect sat at the east stall's mirrored z (-5 instead of +6), so 17 tufts grew
-  through the real west stall while bare lawn was kept empty, and all three
-  crates were missing. Rects are now derived from the stand-in meshes. A live
-  smoke run confirms 9 rects, 900 probes, 0 tufts inside a prop. A new browser
-  check walks every instance against the live footprints.
+Pending: desktop browser suite run; mobile suite retry; dist restamp; publish.
 
 ## Next steps
-1. Complete Round 91 integration: fix updateFlutter rotation handling, wire paintFireflies into applyPhase, add per-frame calls in main.js, add browser checks, run unit + desktop suite, restamp dist, commit.
-2. Publish via /worker/state/outbox/publish.json bundling Rounds 89-91.
-3. Next graphics milestone: moon lighting influence on materials, cloud shadows on ground disc, or Blender geometry work.
+1. Run desktop browser suite on the Round 91 tree; add browser checks for fireflies and flutter if needed.
+2. Run mobile browser suite (host permitting).
+3. Publish via /worker/state/outbox/publish.json bundling Rounds 89-91.
+4. Next graphics milestone: moon lighting influence on materials, cloud shadows on ground disc, or Blender geometry work.
 
 ## Round 89 complete (historical)
 
