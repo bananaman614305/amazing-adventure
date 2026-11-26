@@ -12,22 +12,22 @@
 
 ## Current task
 
-**Round 96 in progress: contact-shadow decals (done), ripple band/alpha (done), terrace-detail GLB (integrated).**
+**Round 96 complete: contact-shadow decals, ripple band/alpha, terrace-detail GLB.**
 
-Round 96 now has all three pieces in world.js: contact-shadow InstancedMesh
-`contact-shadows` (127 lines, repainted per phase, dropped on low tier), the
-ripple ShaderMaterial mapping fixed (`(band*0.5)/span`, `span=radius/RIPPLE_RING_AT`),
-and `upgradeTerraceDetail()` wired into `loadAssets()` (group `terrace-furniture-model`
-on the terrace slab at y=1.2, 6 mesh names, contact-shadow anchor for the pergola).
-Loader `loadTerraceDetail` and browser checks landed via subagents. Unit suite
-passes 1419/1420 (only the expected stale-dist check). Browser + mobile suites
-not yet run this cycle.
+All three pieces shipped and verified. Contact-shadow pure module
+`src/contactshadows.js` (14 tests) + world integration (InstancedMesh
+`contact-shadows`, 28 decals, repainted per phase, dropped on low tier).
+Ripple module exports `RIPPLE_MIN_BAND`/`RIPPLE_BAND_BIRTH` and per-ring
+`band`/`alpha`; world ShaderMaterial mapping fixed (`(band*0.5)/span`,
+`span=radius/RIPPLE_RING_AT`). Terrace-detail GLB (pergola + 2 planters,
+168 tris) integrated as `upgradeTerraceDetail()` on the terrace slab at y=1.2.
+Loader `loadTerraceDetail` and browser checks landed. Verified: unit suite
+1420/1420, desktop browser 344/344, mobile 184/184. Dist restamped (commit
+a5b83bb). Published via publish.json fallback (PR-only, no merge authority).
 
 ## Next steps
-1. Commit sources, run `node scripts/build-preview.mjs`, commit dist restamp; rerun unit suite (expect 1420/1420).
-2. Run `npm run test:browser` once, then `npm run test:mobile` once; fix any failures.
-3. Update CREDITS.md mesh names already done; finalise GRUNT_STATUS checkpoint.
-4. Publish via /worker/state/outbox/publish.json with exact HEAD SHA (PR-only fallback; grunt-release blocked_infrastructure).
+1. Await publish-result.json for Round 96 PR.
+2. Next graphics milestone: house/terrace detail geometry or contact-shadow decals under the existing sun shadow map.
 
 ## Round 89 complete (historical)
 
