@@ -12,30 +12,38 @@
 
 ## Current task
 
-**Round 99 complete: deeper house detail overlay.**
+**Round 100 complete: second-generation plaza flagstone texture set.**
 
-Added a 164-triangle overlay GLB that dresses the merchant house at human
-scale: four shutters flanking the front windows, two stone window boxes, a
-front step and doormat at the door, front/back guttering with a downspout, and
-a chimney pot on the existing chimney. The overlay rides the house origin
-(-10.5, 0, -9), is footprint-validated against the 8 x 6 roof span (8.2 x 6.2
-x 5.8 authored box), and is registered with the prop-family registry so its
-`HouseDoorWood`, `HouseStone`, `HouseBrick` and `HouseGutterIron` materials are
-dressed by the existing stone/wood/brick/iron passes. `assetState.houseOverlay`
-reports `'model'` with parts/bytes.
+Replaced the plaza floor's first-generation flagstone set with a Kaggle-authored
+second generation (`art/kaggle/plaza_floor_v2_textures.py`, procedural, seeded):
+stronger lattice jitter, per-stone inset and warm/cool tint, a damp field, a
+chipped arris and per-slab dish. Ships as
+`assets/textures/plaza_floor_v2_{albedo,normal,rough}.webp`; `world.js`
+`upgradePlazaFloor()` loads the v2 set first and falls back to v1 if a file is
+missing, so the game still boots without the upgrade. The baked AO cue keeps the
+full-tier 0.85 intensity and drops to 0 on the low tier (re-derived on tier
+flip). The texture loader now stamps `texture.userData.sourceUrl` so a test can
+tell WHICH family reached a material — the ImageBitmap it builds has no src
+string of its own.
 
-Evidence: unit suite 1446/1446 PASS (6 new house-detail tests); manifest 150
-files all present; desktop browser 353/353 PASS (new house-detail-model +
-origin y=0 check, no console errors); mobile 184/184 PASS across 4 profiles;
-dist restamped (commit 833f534, digest
-5dbbdda1468da6e8d2779ce6105b0e775e3c1463a2db532515e5772a7a686de4).
+Browser-check fixes this round: the assets evaluation pins full quality while
+sampling `assetsReady()` (a slow headless run can drop adaptive to low and zero
+the AO intensity before the settle point) and restores the previous tier after.
+
+Evidence: unit suite 1450/1450 PASS (84 asset tests incl. the userData source
+record); desktop browser 356/356 PASS incl. "the plaza is dressed from the
+second-generation flagstone set" {"src":"plaza_floor_v2_albedo.webp","isV2":true}
+and "the plaza keeps its baked AO cue on the full tier" {"ao":true,"intensity":0.85},
+no console errors; mobile 184/184 PASS across 4 profiles. Dist restamped at
+5153c4d (digest b0f9b5181f673b20703a1e326f98469af94b19b817e49003d16e4393389b2d1d);
+the syntax fix to the browser harness is committed at 9bd2e65.
 
 Publication: PR-only fallback written to /worker/state/outbox/publish.json at
-HEAD 02e7f0b5d043bd20121e242b32ba8e8e5814755a (trusted channel still blocked on
-infrastructure). Awaiting publish-result.json.
+HEAD 9bd2e65 (trusted channel still blocked on infrastructure). Awaiting
+publish-result.json.
 
 ## Next steps
 1. Read /worker/state/outbox/publish-result.json next cycle; if it names a PR, do not merge or deploy from the shell.
-2. Next graphics milestone: a Kaggle texture pass on the plaza flagstones (the plaza floor is the largest remaining flat surface), or contact-shadow decals under the sun shadow map.
-3. If the flagstone pass lands, add it as a new texture family with its own tile size and a browser check.
+2. Next graphics milestone from the round-100 survey: pergola contact-shadow anchor in contactAnchors (~world.js:5342), or the roof shingle tile family (~world.js:5457), or ivy reusing the leaf family (~world.js:4500).
+3. If a new texture family lands, add its files to the manifest and a browser check that reads userData.sourceUrl.
 
