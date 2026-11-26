@@ -234,6 +234,24 @@ its procedural stand-in or flat colour and stays fully playable.
   9.7 KB / 23.5 KB / 12.5 KB against 164 KB / 208 KB / 111 KB for the source
   PNGs. Fully procedural; no outside images, datasets or models to license.
 
+### Round 101 additions
+
+- `assets/textures/roof_shingle_{albedo,normal,rough}.webp` —
+  `art/kaggle/roof_shingle_textures.py`, run on the private Kaggle notebook
+  (Tesla T4, CuPy backend). A tile family for the procedural roof shingles:
+  the `roof-shingles` InstancedMesh lays 1 x 1 m boxes across three pitched
+  planes, and the authored 0..1 UVs carry the map once per metre, so a 1 m tile
+  is one repeat across every instance. A value albedo (joint shadow, per-course
+  grain, nail dots, damp and valley fields) so the authored 0x6d3a2c shingle
+  colour and the per-phase glow keep supplying hue and brightness; a shallow
+  lap-relief normal, and a near-flat matte roughness so the roof reads as
+  timber shingling rather than painted iron. Albedo/normal/roughness 1024x1024,
+  seam ratios albedo, normal and rough all well under 3 = no visible seam.
+  Shipped as lossless WebP. Applied by `upgradeShingles()` with the shingle base
+  colour 0x6d3a2c as the tint, so the existing per-instance tone and the
+  `paintShingles` day/night glow keep working over the map. Fully procedural;
+  no outside images, datasets or models to license.
+
 ### Round 71 additions
 
 - `assets/banner.glb` — `art/blender/make_banner.py`. 4 meshes, 17.6 KB: a subdivided cloth panel (BannerCanvas, 384 tris, fold wave + sagging hem), a painted-iron rod, finials, and hanging straps. Authored around the cloth centre with front facing glTF +Z, so the game sets position only. Footprint measured off the cloth only (rod span is finial overhang). Same licence as the game (generated, not downloaded).

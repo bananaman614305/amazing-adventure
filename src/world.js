@@ -80,7 +80,7 @@ import {
   cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts,
   fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint,
   ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor,
-  PAPER_TEXTURE_FILES, ROPE_TEXTURE_FILES
+  PAPER_TEXTURE_FILES, ROPE_TEXTURE_FILES, ROOF_SHINGLE_TEXTURE_FILES
 } from './assets.js';
 import {
   boardPaperFamilyFor, boardPaperParams, shouldDressBoardPaper, CAST_PAPER_TILE_METERS
@@ -1491,7 +1491,11 @@ export function buildWorld(renderer) {
     // Round 74: window and lamp panes. Glass is dressed per phase, not per
     // texture, so this reports the counts rather than a map list.
     glass: 'flat',
-    glassDetail: null
+    glassDetail: null,
+    // Round 101: the roof shingles' own tile family (see upgradeShingles).
+    // 'flat' until the family is fetched and dressed.
+    shingle: 'flat',
+    shingleDetail: null
   };
 
   function upgradeFountain() {
@@ -3556,6 +3560,67 @@ export function buildWorld(renderer) {
       repeat: [repeat.repeatX, repeat.repeatY]
     };
     return assetState;
+  }
+
+  /**
+   * Dresses the roof shingles (the `roof-shingles` InstancedMesh) with their
+   * own tile family.
+   *
+   * The upgrade follows the plaza floor's shape: try the new family, record
+   * what actually arrived, and degrade honestly. The difference is the fallback:
+   * the plaza keeps a documented v1 set on disk, while the shingles have only
+   * ever had their authored flat material (colour 0x6d3a2c, roughness 0.85).
+   * So a missing family falls back to that existing flat material rather than to
+   * a second texture set -- which is exactly what the material already is.
+   *
+   * The 1 m box means one tile across every instance: applyTextureFamily is
+   * called with a 1 x 1 m span and a 1 m tile, and the authored 0..1 UVs carry
+   * the map once per metre. There is no AO map for the roof -- the roof plane is
+   * a single pitched face with no occluder beneath it to bake from -- so this
+   * family binds only map/normalMap/roughnessMap.
+   */
+  function upgradeShingles() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      // No fetch, no upgrade: the flat material stands as-is. Recording
+      // 'unavailable' (rather than 'flat') is what lets a bug report tell
+      // "could not fetch" apart from "fetched and 404'd".
+      assetState.shingle = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadMaterialTextures({ THREE, files: ROOF_SHINGLE_TEXTURE_FILES }).then((textures) => {
+      if (!textures.anyLoaded) {
+        // No v1 shingle set exists to fall back to: the material is already the
+        // flat 0x6d3a2c it has always been, so leaving it untouched is the
+        // fallback. 'flat' here means "fetched, nothing arrived", distinct from
+        // the 'unavailable' above that means "fetch itself was blocked".
+        assetState.shingle = 'flat';
+        return assetState;
+      }
+      // The shared box means the texture family itself is shared by every
+      // instance, and applyTextureFamily writes the sampler state onto the
+      // texture object -- not the material -- so there is nothing per-instance
+      // to clone. The family is applied once.
+      applyTextureFamily(shingleMaterial,
+        { ...cloneTextureFamily(textures), anyLoaded: true }, 1, 1, 1,
+        // 0x6d3a2c, the shingle base colour: the family is a value map (joint
+        // shadow, grain, nails) and carries no hue of its own, so the base
+        // colour still supplies the roof's tone and the existing per-instance
+        // instanceColor and paintShingles() glow multiplication keep working
+        // over it. paintShingles rewrites this colour on every phase flip, so
+        // an albedo that baked in a hue would be tinted twice and drift dark.
+        0x6d3a2c);
+      assetState.shingle = 'textured';
+      assetState.shingleDetail = {
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: 1,
+        instances: shingleSpawnsList.length
+      };
+      return assetState;
+    });
   }
 
   function upgradeWoodBrick() {
@@ -6102,7 +6167,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner(), upgradeTerraceDetail(), upgradeHouseDetail()])
+      return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeShingles(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner(), upgradeTerraceDetail(), upgradeHouseDetail()])
         .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt()).then(() => upgradeLaneRope()).then(() => upgradeBoardPaper())
         .then(() => upgradeLanternHousing()).then(() => upgradeSackTie()).then(() => upgradeNoticeFace())
         // Water runs last and after the prop pass on purpose: the water discs

@@ -2190,6 +2190,23 @@ try {
         const src = (t && t.userData && t.userData.sourceUrl) || '';
         return { src: String(src).split('/').pop(), isV2: String(src).includes('plaza_floor_v2_albedo') };
       })(),
+      // Round 101: the roof shingles. The `roof-shingles` InstancedMesh shares
+      // one material across every instance, so the check reads that one material
+      // and proves the new tile family reached it. The src is the loader's own
+      // userData.sourceUrl record (the ImageBitmap has no src string of its
+      // own), so this says which family actually dressed the roof.
+      shingles: (() => {
+        const mesh = api.scene.getObjectByName('roof-shingles');
+        const m = mesh && mesh.material;
+        if (!m) return null;
+        const src = (m.map && m.map.userData && m.map.userData.sourceUrl) || '';
+        return {
+          map: Boolean(m.map),
+          normal: Boolean(m.normalMap),
+          rough: Boolean(m.roughnessMap),
+          src: String(src).split('/').pop()
+        };
+      })(),
       terrace: {
         tread: describe(named('terrace-tread')),
         ramp: describe(named('terrace-ramp')),
@@ -2254,6 +2271,16 @@ try {
     assets.plazaSet.repeat[0] === 6 && assets.plazaSet.repeat[1] === 6 &&
     assets.plazaSet.maps && assets.plazaSet.maps.length === 3,
     JSON.stringify(assets.plazaSet));
+
+  // Round 101: the roof shingles wear the new tile family. The plaza checks
+  // above prove *a* material is bound and the v2 family reached it; this one
+  // proves the `roof-shingles` InstancedMesh's shared material is dressed from
+  // the shingle family and that the loader's own source record agrees.
+  checks.check('the roof shingles wear the new tile family',
+    assets.state.shingle === 'textured' && assets.shingles &&
+    assets.shingles.map && assets.shingles.normal && assets.shingles.rough &&
+    String(assets.shingles.src || '').includes('roof_shingle_albedo'),
+    JSON.stringify({ state: assets.state.shingle, shingle: assets.shingles }));
 
   // The AO map is dropped on the low tier by design, so the check pins the full
   // tier first. The assets evaluation restored the tier and adaptive flag it

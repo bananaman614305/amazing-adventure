@@ -19,7 +19,7 @@ import {
   CLOTH_TEXTURE_FILES, FELT_TEXTURE_FILES, FELT_FAMILY, BUNTING_TILE_METERS,
   WATER_TEXTURE_FILES, WATER_TILE_METERS,
   PLAZA_FLOOR_V2_TEXTURE_FILES, PLAZA_TEXTURE_TILE_METERS,
-  PLAZA_TEXTURE_SPAN_METERS, plazaFloorRepeat,
+  PLAZA_TEXTURE_SPAN_METERS, plazaFloorRepeat, ROOF_SHINGLE_TEXTURE_FILES,
   PLAZA_AO_MAP_CHANNEL, plazaAoMapIntensity, plazaAoMapIntensityForQuality,
   createPlazaAoTexture, contactDarkeningColors, applyContactDarkeningGeometry,
   TERRACE_DETAIL_ASSET, TERRACE_DETAIL_MODEL_SIZE, loadTerraceDetail,
@@ -174,6 +174,72 @@ test('every shipped plaza flagstone map, both generations, is on disk', () => {
     assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${url} exists`);
     assert.ok(url.endsWith('.webp'), `${url} ships as WebP, not PNG`);
   }
+});
+
+test('the roof shingle family names exactly the three shingle maps', () => {
+  // The shingle family is its own object with its own three files: a set that
+  // drifted onto the timber ROOF_TEXTURE_FILES would dress the shingles as
+  // planks, and a regression aliasing it would make the two families share
+  // one download, so the paths are pinned literally.
+  assert.deepEqual(ROOF_SHINGLE_TEXTURE_FILES, {
+    map: 'assets/textures/roof_shingle_albedo.webp',
+    normalMap: 'assets/textures/roof_shingle_normal.webp',
+    roughnessMap: 'assets/textures/roof_shingle_rough.webp'
+  });
+  assert.deepEqual(Object.keys(ROOF_SHINGLE_TEXTURE_FILES).sort(),
+    ['map', 'normalMap', 'roughnessMap']);
+  for (const url of Object.values(ROOF_SHINGLE_TEXTURE_FILES)) {
+    assert.match(url, /^assets\/textures\/roof_shingle_\w+\.webp$/,
+      `${url} is a served relative WebP path`);
+  }
+  // Separate from the timber family: shingles and gables are different reads,
+  // so a shared map would mean they were really the same surface.
+  const timber = new Set(Object.values(ROOF_TEXTURE_FILES));
+  for (const url of Object.values(ROOF_SHINGLE_TEXTURE_FILES)) {
+    assert.equal(timber.has(url), false, `${url} is not a timber map`);
+  }
+});
+
+test('the roof shingle family loads through the shared texture pipeline and the clone', async () => {
+  // The family uses the same loader as every other set, and cloneTextureFamily
+  // must carry all three maps for the InstancedMesh (the world applies the
+  // family once, with a 1 m tile on a 1 m box).
+  const requested = [];
+  const loaded = await loadMaterialTextures({
+    THREE: fakeTHREE,
+    files: ROOF_SHINGLE_TEXTURE_FILES,
+    createBitmap: async () => ({ width: 512, height: 512 }),
+    fetchImpl: async (url) => { requested.push(url); return okResponse({}); }
+  });
+  assert.equal(loaded.anyLoaded, true);
+  assert.deepEqual(requested.sort(), Object.values(ROOF_SHINGLE_TEXTURE_FILES).sort(),
+    'all three shingle maps are attempted');
+  assert.ok(loaded.map && loaded.normalMap && loaded.roughnessMap,
+    'the full set survived the load');
+  // Every map records its source on userData so the browser check can read
+  // which family reached the shingle material.
+  for (const key of ['map', 'normalMap', 'roughnessMap']) {
+    assert.equal(loaded[key].userData.sourceUrl, ROOF_SHINGLE_TEXTURE_FILES[key],
+      `${key} records its source url`);
+  }
+
+  // The clone gives the shared box its own sampler state and keeps all three
+  // maps; a null family (the flat fallback) clones to all-null.
+  // The fake Texture has no clone, so give the loaded maps one the way the
+  // existing clone test does; the world's textures are real THREE.Texture
+  // objects, which clone by construction.
+  for (const key of ['map', 'normalMap', 'roughnessMap']) {
+    loaded[key].clone = function clone() { return { ...this }; };
+  }
+  const clone = cloneTextureFamily(loaded);
+  assert.notEqual(clone.map, loaded.map, 'the map is a distinct object');
+  assert.ok(clone.map && clone.normalMap && clone.roughnessMap,
+    'the clone carries every map');
+  const empty = cloneTextureFamily({ map: null, normalMap: null, roughnessMap: null, anyLoaded: false });
+  assert.equal(empty.map, null);
+  assert.equal(empty.normalMap, null);
+  assert.equal(empty.roughnessMap, null);
+  assert.equal(empty.anyLoaded, false);
 });
 
 test('the terrace reuses the wall stone family instead of a third set of maps', () => {
