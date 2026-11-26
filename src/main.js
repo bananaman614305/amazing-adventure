@@ -1877,6 +1877,10 @@ function frame() {
   // Round 90: the meadow leans in the same wind field, once per frame (full
   // tier only -- setQuality switches the sway off on low).
   if (environment.updateMeadow) environment.updateMeadow(dt);
+  // Round 91: the bunting and banner cloth flutter once per frame (full tier).
+  if (environment.updateFlutter) environment.updateFlutter(dt);
+  // Round 91: the night firefly field drifts and blinks once per frame.
+  if (environment.updateFireflies) environment.updateFireflies(dt);
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
   maybeStartAmbient(dt);

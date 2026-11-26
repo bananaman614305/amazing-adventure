@@ -46,6 +46,8 @@ export const REQUIRED_FILES = [
   'src/scatter.js',
   'src/tuft.js',
   'src/wind.js',
+  'src/flutter.js',
+  'src/fireflies.js',
   'src/rope.js',
   'src/housing.js',
   'src/sacktie.js',

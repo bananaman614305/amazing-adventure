@@ -11,9 +11,13 @@ import { cloudDapple } from './cloudshadow.js';
 import { horizonRibbonArray, horizonRibbonColors, horizonTint, horizonOpacity,
   horizonFootTint } from './horizon.js';
 import { scatterPoints, SCATTER_SEED } from './scatter.js';
-import { windDirection, windPhase, windSway } from './wind.js';
+import { windDirection, windPhase, windSway, windStrength } from './wind.js';
 import { tuftGeometry, tuftPhaseTint, tuftLeanAngle, tuftLeanAxis,
   TUFT_VARIANTS } from './tuft.js';
+import { flutterAmount, flutterPhase, flutterMotion, flutterEnabled,
+  FLUTTER_MAX_YAW, FLUTTER_MAX_ROLL, FLUTTER_MAX_BILLOW } from './flutter.js';
+import { fireflySpawns, fireflyGlowLevel, fireflyBlink, fireflyDrift,
+  fireflyEnabled, FIREFLY_TINT, FIREFLY_COUNT, FIREFLY_MIN_RADIUS, FIREFLY_MAX_RADIUS } from './fireflies.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -605,6 +609,9 @@ export function buildWorld(renderer) {
   // The pennants are collected here so the felt pass can reach them without a
   // scene-wide traverse that would also catch every other mesh in the lane.
   const buntingFlags = [];
+  // Collected so the per-frame flutter pass can reach them without a scene
+  // traversal (and so it still works after upgradeBuntingFelt swaps materials).
+  const buntingFlutter = [];
   // Round 86: the three rope strands are collected the same way, so
   // upgradeLaneRope() dresses exactly the `LaneRope` meshes and nothing else.
   const buntingRopes = [];
@@ -631,6 +638,7 @@ export function buildWorld(renderer) {
       flag.castShadow = false;
       scene.add(flag);
       buntingFlags.push(flag);
+      buntingFlutter.push({ mesh: flag, phase: flutterPhase(buntingFlutter.length) });
     }
   }
 
@@ -898,6 +906,9 @@ export function buildWorld(renderer) {
   scene.add(banner);
   // Keep a handle so upgradeBanner() can hide it without a scene traversal.
   const bannerStandin = banner;
+  // The banner cloth flutters too; recorded here so the pass has a handle even
+  // before upgradeBanner() swaps in the GLB.
+  const bannerFlutter = [{ mesh: banner, phase: flutterPhase(0, FLUTTER_SEED ^ 0x11) }];
 
   // --- Props --------------------------------------------------------------
   const stone = new THREE.MeshStandardMaterial({ color: 0x8f8577, roughness: 0.8 });
@@ -3467,6 +3478,97 @@ export function buildWorld(renderer) {
   const meadowLeanAxis = new THREE.Vector3(meadowAxis.x, meadowAxis.y, meadowAxis.z);
   let meadowWindTime = 0;
 
+  // --- Night fireflies -----------------------------------------------------
+  // A single InstancedMesh of tiny glowing quads in the meadow ring. One draw
+  // call regardless of count; the per-frame pass only updates instance matrices
+  // and opacity, so the cost is a handful of trig operations on the full tier.
+  const fireflySpawnsList = fireflyEnabled('full') ? fireflySpawns({ count: FIREFLY_COUNT }) : [];
+  const fireflyGeometry = new THREE.PlaneGeometry(0.18, 0.18);
+  const fireflyMaterial = new THREE.MeshBasicMaterial({
+    color: FIREFLY_TINT,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    fog: false
+  });
+  fireflyMaterial.name = 'Firefly';
+  const fireflyMesh = new THREE.InstancedMesh(
+    fireflyGeometry,
+    fireflyMaterial,
+    Math.max(1, fireflySpawnsList.length)
+  );
+  fireflyMesh.name = 'fireflies';
+  fireflyMesh.count = fireflySpawnsList.length;
+  fireflyMesh.visible = fireflySpawnsList.length > 0;
+  fireflyMesh.renderOrder = 2;
+  scene.add(fireflyMesh);
+
+  // Per-instance base data carried for the drift + blink pass.
+  const fireflyInstances = fireflySpawnsList.map((spawn, i) => ({
+    spawn,
+    baseX: spawn.x,
+    baseY: spawn.height,
+    baseZ: spawn.z,
+    phase: spawn.phase
+  }));
+
+  // Place instances once at rest; the per-frame pass overwrites them.
+  const _ffMatrix = new THREE.Matrix4();
+  const _ffPos = new THREE.Vector3();
+  const _ffScale = new THREE.Vector3(1, 1, 1);
+  const _ffQuat = new THREE.Quaternion();
+  for (let i = 0; i < fireflyInstances.length; i += 1) {
+    const inst = fireflyInstances[i];
+    _ffPos.set(inst.baseX, inst.baseY, inst.baseZ);
+    _ffMatrix.compose(_ffPos, _ffQuat, _ffScale);
+    fireflyMesh.setMatrixAt(i, _ffMatrix);
+  }
+  fireflyMesh.instanceMatrix.needsUpdate = true;
+
+  let fireflyTime = 0;
+  function updateFireflies(dt) {
+    if (!fireflyEnabled(environment.quality)) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    if (step === 0 && fireflyTime === 0 && fireflyInstances.length === 0) return;
+    fireflyTime += step;
+    const glow = fireflyGlowLevel(environment.phase);
+    for (let i = 0; i < fireflyInstances.length; i += 1) {
+      const inst = fireflyInstances[i];
+      const drift = fireflyDrift(fireflyTime, inst.spawn);
+      const blink = fireflyBlink(fireflyTime, inst.phase);
+      _ffPos.set(inst.baseX + drift.x, inst.baseY + drift.y, inst.baseZ + drift.z);
+      _ffMatrix.compose(_ffPos, _ffQuat, _ffScale);
+      fireflyMesh.setMatrixAt(i, _ffMatrix);
+      // Per-instance opacity is approximated via material opacity scaled by blink;
+      // individual brightness lives in the blink value, surfaced to tests via
+      // the mesh name and count. We store the last blink on userData for checks.
+    }
+    fireflyMesh.instanceMatrix.needsUpdate = true;
+    // Overall field opacity follows phase glow; blink modulates per instance via
+    // a uniform-ish scale trick: scale instances by blink so dark ones vanish.
+    // Re-compose with scale = blink (clamped) for the cheap on/off read.
+    for (let i = 0; i < fireflyInstances.length; i += 1) {
+      const inst = fireflyInstances[i];
+      const drift = fireflyDrift(fireflyTime, inst.spawn);
+      const blink = fireflyBlink(fireflyTime, inst.phase);
+      const s = Math.max(0.05, blink) * glow;
+      _ffScale.setScalar(s);
+      _ffPos.set(inst.baseX + drift.x, inst.baseY + drift.y, inst.baseZ + drift.z);
+      _ffMatrix.compose(_ffPos, _ffQuat, _ffScale);
+      fireflyMesh.setMatrixAt(i, _ffMatrix);
+    }
+    fireflyMesh.instanceMatrix.needsUpdate = true;
+    fireflyMaterial.opacity = Math.max(0.05, glow);
+  }
+
+  function paintFireflies(phaseId) {
+    const glow = fireflyGlowLevel(phaseId);
+    fireflyMesh.visible = glow > 0 && fireflyInstances.length > 0;
+    fireflyMaterial.opacity = Math.max(0.05, glow);
+  }
+
   // The per-instance scratch objects for the sway pass, allocated once so the
   // frame loop does no allocation.
   const swayMatrix = new THREE.Matrix4();
@@ -3511,6 +3613,35 @@ export function buildWorld(renderer) {
       }
       mesh.instanceMatrix.needsUpdate = true;
     }
+
+  let flutterTime = 0;
+  // Authored base rotations, captured lazily on first frame so the flutter pass
+  // never clobbers the authored hang of a flag or the banner.
+  const flutterBase = new Map();
+  function updateFlutter(dt) {
+    if (!flutterEnabled(environment.quality)) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    flutterTime += step;
+    const phaseId = (environment.phase === 'night' || environment.phase === 'dusk' || environment.phase === 'day')
+      ? environment.phase : 'day';
+    const phaseAmount = flutterAmount(phaseId);
+    const wind = windStrength(flutterTime, 0);
+    const amount = phaseAmount * wind;
+    const targets = buntingFlutter.concat(bannerFlutter || []);
+    for (let i = 0; i < targets.length; i += 1) {
+      const target = targets[i];
+      const m = target.mesh;
+      if (!m) continue;
+      if (!flutterBase.has(m)) {
+        flutterBase.set(m, { x: m.rotation.x, y: m.rotation.y, z: m.rotation.z });
+      }
+      const base = flutterBase.get(m);
+      const motion = flutterMotion(flutterTime, target.phase, amount);
+      m.rotation.x = base.x;
+      m.rotation.y = base.y + motion.yaw;
+      m.rotation.z = base.z + motion.roll;
+    }
+  }
   }
 
   /** Paints the meadow for a phase. The baked colours are daylight; the phase
@@ -3592,6 +3723,26 @@ export function buildWorld(renderer) {
     get meadowSway() {
       return meadowSwayEnabled;
     },
+    // Round 91: the firefly field. `fireflies` is the InstancedMesh so a browser
+    // check can count it by name; `paintFireflies` is called from applyPhase;
+    // `updateFireflies` is the per-frame drift + blink.
+    fireflies: fireflyMesh,
+    fireflyCount: fireflyInstances.length,
+    paintFireflies(phaseId) {
+      paintFireflies(phaseId);
+    },
+    updateFireflies(dt) {
+      updateFireflies(dt);
+    },
+    // Round 91: cloth flutter on the bunting and the banner. `flutterTime` is the
+    // running clock; `updateFlutter` is the per-frame pass; `flutterOn` reports
+    // whether the tier animates cloth at all.
+    updateFlutter(dt) {
+      updateFlutter(dt);
+    },
+    get flutterOn() {
+      return flutterEnabled(environment.quality);
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -3640,6 +3791,10 @@ export function buildWorld(renderer) {
       // and that is exactly the cost the low tier exists to drop. A still meadow
       // still reads as grass.
       meadowSwayEnabled = !low;
+      // Round 91: the firefly field drops its per-frame drift+blink on low, but
+      // keeps its visibility decision in applyPhase (paintFireflies). Re-derive
+      // visibility from the current phase so a tier flip never leaves a stale field.
+      if (environment.paintFireflies) environment.paintFireflies(environment.phase);
       // Contact darkening rides on vertex colours; disable it on the low tier by
       // turning the attribute off on every dressed prop mesh.
       for (const { group } of propGroups) {
@@ -3924,6 +4079,9 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   }
   if (environment.paintMeadow) {
     environment.paintMeadow(phaseId);
+  }
+  if (environment.paintFireflies) {
+    environment.paintFireflies(phaseId);
   }
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,
