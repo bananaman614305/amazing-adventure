@@ -12,38 +12,26 @@
 
 ## Current task
 
-**Round 100 complete: second-generation plaza flagstone texture set.**
+**Round 101 in progress: roof shingle tile family.**
 
-Replaced the plaza floor's first-generation flagstone set with a Kaggle-authored
-second generation (`art/kaggle/plaza_floor_v2_textures.py`, procedural, seeded):
-stronger lattice jitter, per-stone inset and warm/cool tint, a damp field, a
-chipped arris and per-slab dish. Ships as
-`assets/textures/plaza_floor_v2_{albedo,normal,rough}.webp`; `world.js`
-`upgradePlazaFloor()` loads the v2 set first and falls back to v1 if a file is
-missing, so the game still boots without the upgrade. The baked AO cue keeps the
-full-tier 0.85 intensity and drops to 0 on the low tier (re-derived on tier
-flip). The texture loader now stamps `texture.userData.sourceUrl` so a test can
-tell WHICH family reached a material — the ImageBitmap it builds has no src
-string of its own.
+Integration landed (uncommitted): src/assets.js adds ROOF_SHINGLE_TEXTURE_FILES;
+src/world.js adds upgradeShingles() (loads the family, falls back to the flat
+0x6d3a2c material, records assetState.shingle/shingleDetail); the shingle
+material is dressed with a 1 m tile; assetState gains shingle/shingleDetail;
+upgradeShingles() added to the loadAssets() Promise.all. tests/assets.test.mjs
+gains 2 tests (family shape + load/clone); scripts/test-round2.mjs gains the
+"the roof shingles wear the new tile family" check; manifest +3 files; CREDITS
+updated. Unit suite currently 86 asset tests PASS.
 
-Browser-check fixes this round: the assets evaluation pins full quality while
-sampling `assetsReady()` (a slow headless run can drop adaptive to low and zero
-the AO intensity before the settle point) and restores the previous tier after.
-
-Evidence: unit suite 1450/1450 PASS (84 asset tests incl. the userData source
-record); desktop browser 356/356 PASS incl. "the plaza is dressed from the
-second-generation flagstone set" {"src":"plaza_floor_v2_albedo.webp","isV2":true}
-and "the plaza keeps its baked AO cue on the full tier" {"ao":true,"intensity":0.85},
-no console errors; mobile 184/184 PASS across 4 profiles. Dist restamped at
-5153c4d (digest b0f9b5181f673b20703a1e326f98469af94b19b817e49003d16e4393389b2d1d);
-the syntax fix to the browser harness is committed at 9bd2e65.
-
-Publication: PR-only fallback written to /worker/state/outbox/publish.json at
-HEAD 9bd2e65 (trusted channel still blocked on infrastructure). Awaiting
-publish-result.json.
+Texture generator: art/kaggle/roof_shingle_textures.py authored (1024x1024,
+procedural, seeded, CuPy-capable). Local validation in progress: the height
+field has been reworked to a periodic layout so the tile seams cleanly; the
+albedo is a value map (joint shadow, grain, nails, damp, valley) so the
+authored 0x6d3a2c colour and per-phase glow are not tinted twice. Kaggle
+submission v44 ERRORED (root cause under investigation); regenerated locally
+once the layout fix lands, then submitted.
 
 ## Next steps
-1. Read /worker/state/outbox/publish-result.json next cycle; if it names a PR, do not merge or deploy from the shell.
-2. Next graphics milestone from the round-100 survey: pergola contact-shadow anchor in contactAnchors (~world.js:5342), or the roof shingle tile family (~world.js:5457), or ivy reusing the leaf family (~world.js:4500).
-3. If a new texture family lands, add its files to the manifest and a browser check that reads userData.sourceUrl.
-
+1. Finish validating art/kaggle/roof_shingle_textures.py locally (seam ratios < 3, normal green mean > 128, albedo stddev > 0), then submit to Kaggle and download the PNGs.
+2. Convert the PNGs to WebP at assets/textures/roof_shingle_{albedo,normal,rough}.webp, verify dimensions/content, commit sources + assets.
+3. Run npm test (full unit suite) and npm run test:browser once to confirm the new check passes; update GRUNT_STATUS with evidence and write publish.json.
