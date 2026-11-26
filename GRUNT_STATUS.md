@@ -12,31 +12,50 @@
 
 ## Current task
 
-**Round 88: sky dressing -- moon disc + cloud layer -- COMPLETE.**
+**Round 89: sky dressing -- moon disc + cloud layer + distant ridge, moonlight
+key and cloud dapple -- COMPLETE.**
 
-Added two new pure modules and wired them into the sky dome:
-- src/moon.js: MOON_DISTANCE=96, MOON_CORE_RADIUS=4, MOON_GLOW_RADIUS=12,
-  MOON_COLOR=0xd8e4ff, MOON_PHASE_VISIBILITY {day:0, dusk:0.3, night:1},
-  moonVisibility, MOON_POSITION, moonDiscPosition, MOON_GLOW_OPACITY=0.18.
-  A separate disc from the sun (which keeps its dim night anchor at 0.16).
-- src/clouds.js: CLOUD_COUNT=14, CLOUD_FIELD_RADIUS=118, CLOUD_SEED, cloudPositions,
-  CLOUD_PHASE_OPACITY {day:0.55, dusk:0.4, night:0.12}, cloudOpacity, CLOUD_BASE_COLOR,
-  cloudColor, cloudSize, cloudDrift.
-- world.js: moonDisc group (sky-moon, sky-moon-glow), cloudGroup (sky-clouds) with
-  14 cloud meshes, paintMoon/paintClouds, exported in environment; applyPhase drives
-  moon visibility and cloud opacity/colour; environment.updateClouds drifts per frame.
-- main.js: calls environment.updateClouds(dt) each frame.
-- manifest: src/moon.js, src/clouds.js added (122 required files).
-- tests: tests/moon.test.mjs (9 tests), tests/clouds.test.mjs (12 tests).
-Unit suite: 802/802 pass. release-manifest.json regenerated.
+Three new pure modules (split across three parallel subagents), each with focused
+tests, integrated into the real booted scene:
+- src/moonlight.js: per-phase cool key light intensity/direction (10 tests).
+  MOONLIGHT_INTENSITY {day:0, dusk:0.05, night:0.32}, unit-length direction,
+  moonlightColor/moonlightEnabled. Wired as a DirectionalLight in world.js (no
+  shadow) re-derived from moonlightIntensity in applyPhase and setQuality.
+- src/cloudshadow.js: cloud projection + smoothstep dapple of the sun (22 tests).
+  cloudShadowFactor, nearestCloudDistance, applyCloudShadow, and cloudDapple
+  (two coprime sinusoids capped at 0.2 of the sun). World uses cloudDapple to
+  modulate sun.intensity each frame (full tier + daylight only).
+- src/horizon.js: seeded ridge silhouette, ribbon geometry and per-phase
+  vertex-colour gradient (22 tests). HORIZON_BASE_Y=-30, HORIZON_BASE_HEIGHT=44,
+  VARIATION=6 so crests land 8-20 m above ground and clear the 3.2 m wall;
+  horizonRibbonColors (ridge->foot haze) and horizonFootTint added. Mesh is
+  sky-horizon, renderOrder 1, vertex coloured, paintHorizon per phase.
+- world.js: imports all three, horizonRidge mesh + paintHorizon, moon light,
+  cloudDapple sun modulation, environment additions (moon, paintHorizon,
+  updateCloudDapple, setSunBase, cloudDim). manifest: 125 required files.
+- tests/horizon.test.mjs: 22 tests including horizonRibbonColors/horizonFootTint.
+- scripts/test-round2.mjs: 6 live checks (moon disc, cloud layer, ridge ring,
+  moonlight key, cloud dapple). Ridge check now reads the averaged vertex colour
+  because the mesh is vertex-coloured rather than tinted by material colour.
+
+Verified: unit 856/856 pass; desktop browser 308/308 pass with all six new checks
+green (moon night/day, cloud 14 high @ 0.55/0.12, ridge minY -30 maxY 18.13,
+  moonlight 0.32 night/0 day, dapple [0.976,1,0.984,0.893,0.828,0.832]);
+mobile 184/184 pass, no console errors. dist restamped at 3c562de then 7351f1c.
 
 ## Next steps
-1. Round 88 verified: unit 802/802, desktop 302/302 (no console errors),
-   mobile 184/184 (no console errors). Committed at HEAD with dist restamp.
-2. Run the desktop and mobile browser suites to confirm the new sky meshes
-   render without console errors, then restamp dist.
-3. Choose the next graphics milestone: moon lighting on materials (cool fill
-   at night), cloud shadows on the ground, or geometry work in Blender.
+1. Publication remains PR-only via /worker/state/outbox/publish.json (trusted
+   grunt-release channel blocked on 256-commit host limit; PR 59 already open at
+   f4518fd). Next publish should bundle the Round 89 commits into a fresh
+   publish.json when the next milestone commits.
+2. Next graphics milestone candidates: moon lighting influence on materials
+   (cool bounce at night), cloud shadows on the ground (per-pixel shadow factor
+   using cloudShadowFactor on the plaza), or Blender geometry work. The pure
+   cloudshadow module already provides the maths; integrating it into the ground
+   material's colour or a vertex-coloured ground disc is the natural next step.
+3. Run the desktop and mobile suites once per round (not per small change) per
+   owner note; keep focused unit tests in between. Do not weaken the required
+   verification.
 
 ## Round 84 complete: dress the cast's paper props.
 
