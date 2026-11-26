@@ -2797,6 +2797,29 @@ try {
     house.state.house === 'model' && house.models === 1 && house.hidden === 2,
     JSON.stringify({ state: house.state.house, models: house.models,
                     hidden: house.hidden }));
+  // --- 28g-ii. The modelled house detail overlay ----------------------------
+  const houseDetail = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    let detailModels = 0;
+    const detailNames = [];
+    api.scene.traverse((o) => {
+      if (o.name === 'house-detail-model') detailModels += 1;
+      if (o.isMesh && o.parent && o.parent.name === 'house-detail-model') detailNames.push(o.name);
+    });
+    const st = api.assetState();
+    return {
+      state: st.houseOverlay,
+      detail: st.houseOverlayDetail,
+      models: detailModels,
+      names: detailNames.sort(),
+      y: (() => { let y = null; api.scene.traverse((o) => { if (o.name === 'house-detail-model') y = o.position.y; }); return y; })()
+    };
+  }));
+  checks.check('the modelled house detail overlay rides the house origin',
+    houseDetail.state === 'model' && houseDetail.models === 1 && houseDetail.y === 0 &&
+      houseDetail.detail && houseDetail.detail.parts >= 12,
+    JSON.stringify({ state: houseDetail.state, models: houseDetail.models,
+                    y: houseDetail.y, detail: houseDetail.detail }));
 
   await capture(page, 'round41-house.png');
   // --- 28h. Prop models wear their material families ------------------------

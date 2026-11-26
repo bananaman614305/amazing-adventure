@@ -20,7 +20,8 @@ import {
   WATER_TEXTURE_FILES, WATER_TILE_METERS,
   PLAZA_AO_MAP_CHANNEL, plazaAoMapIntensity, plazaAoMapIntensityForQuality,
   createPlazaAoTexture, contactDarkeningColors, applyContactDarkeningGeometry,
-  TERRACE_DETAIL_ASSET, TERRACE_DETAIL_MODEL_SIZE, loadTerraceDetail
+  TERRACE_DETAIL_ASSET, TERRACE_DETAIL_MODEL_SIZE, loadTerraceDetail,
+  HOUSE_DETAIL_ASSET, HOUSE_DETAIL_MODEL_SIZE, loadHouseDetail
 } from '../src/assets.js';
 import { parseGlb, glbToMeshes } from '../src/glb.js';
 import { TERRACE } from '../src/terrain.js';
@@ -1425,6 +1426,113 @@ test('a failed terrace-detail load reports why, and never throws', async () => {
   assert.match(empty.reason, /no geometry/);
 });
 
+// The house detail overlay is a second footprint-checked asset, but unlike the
+// house trim it has no collider of its own: the trim's roof/door boxes are
+// already hidden, and the overlay simply rides on top. So the check that matters
+// here is against the house's roof span (8 x 6) and against the trim height
+// (5.33), not against a fountain-style collider. A re-authored model that
+// outgrows the roof would silently float past the eaves.
+test('the house detail is authored to fit the merchant house roof', () => {
+  assert.equal(HOUSE_DETAIL_ASSET, 'assets/house-detail.glb');
+  assert.deepEqual(HOUSE_DETAIL_MODEL_SIZE, { width: 8.2, depth: 6.2, height: 5.8 });
+
+  // The house trim's roof overhangs to 8 x 6 (see make_house.py); the overlay
+  // may overhang by 0.1 m per side for the gutter and downspout, but must not
+  // exceed that. Asserted against the literal roof span so a future re-author
+  // that outgrows the roof fails here rather than in a browser at the eaves.
+  assert.ok(HOUSE_DETAIL_MODEL_SIZE.width <= 8.2 + 0.001,
+    'the overlay is no wider than the roof plus a small gutter allowance');
+  assert.ok(HOUSE_DETAIL_MODEL_SIZE.depth <= 6.2 + 0.001,
+    'and no deeper, so it sits inside the roof span');
+  // It must clear the trim's chimney cap (5.33), since the pot stacks on top.
+  assert.ok(HOUSE_DETAIL_MODEL_SIZE.height > 5.33);
+});
+
+// The real asset's extents, read off the committed GLB. Held here so the fake
+// meshes below describe the same model the shipped file does.
+const HOUSE_DETAIL_MESH_BOXES = {
+  'HouseShutter_-2.0_-1': { min: { x: -2.76, y: 1.05, z: 2.49 }, max: { x: -2.54, y: 2.35, z: 2.55 } },
+  'HouseShutter_-2.0_1': { min: { x: -1.46, y: 1.05, z: 2.49 }, max: { x: -1.24, y: 2.35, z: 2.55 } },
+  'HouseShutter_2.0_-1': { min: { x: 1.24, y: 1.05, z: 2.49 }, max: { x: 1.46, y: 2.35, z: 2.55 } },
+  'HouseShutter_2.0_1': { min: { x: 2.54, y: 1.05, z: 2.49 }, max: { x: 2.76, y: 2.35, z: 2.55 } },
+  'HouseWindowBox_-2.0': { min: { x: -2.45, y: 0.91, z: 2.275 }, max: { x: -1.55, y: 1.09, z: 2.525 } },
+  'HouseWindowBox_2.0': { min: { x: 1.55, y: 0.91, z: 2.275 }, max: { x: 2.45, y: 1.09, z: 2.525 } },
+  HouseFrontStep: { min: { x: -0.8, y: 0, z: 1.6 }, max: { x: 0.8, y: 0.15, z: 2.4 } },
+  HouseDoormat: { min: { x: -0.5, y: 0.15, z: 1.7 }, max: { x: 0.5, y: 0.17, z: 2.3 } },
+  HouseGutter_front: { min: { x: -4.1, y: 2.99, z: 2.84 }, max: { x: 4.1, y: 3.11, z: 2.96 } },
+  HouseGutter_back: { min: { x: -4.1, y: 2.99, z: -2.96 }, max: { x: 4.1, y: 3.11, z: -2.84 } },
+  HouseDownspout: { min: { x: 3.85, y: 0, z: 2.85 }, max: { x: 3.95, y: 3.0, z: 2.95 } },
+  HouseChimneyPot: { min: { x: 1.88, y: 5.25, z: -1.32 }, max: { x: 2.52, y: 5.7, z: -0.68 } }
+};
+
+const houseDetailMeshes = (boxes = HOUSE_DETAIL_MESH_BOXES) =>
+  Object.entries(boxes).map(([name, box]) => ({ name, geometry: { boundingBox: box } }));
+
+test('a successful house-detail load reports its real footprint and size', async () => {
+  const result = await loadHouseDetail({
+    THREE: fakeTHREE,
+    loadGlb: () => houseDetailMeshes(),
+    fetchImpl: async () => okResponse(new ArrayBuffer(15836))
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.bytes, 15836);
+  assert.equal(result.url, HOUSE_DETAIL_ASSET);
+  const round2 = (v) => Math.round(v * 100) / 100;
+  // Footprint is the widest part (the 8.2 m gutter) and the chimney-pot top;
+  // the z span is 5.92 because the gutters sit at +/-2.96, inside the 6.2 box.
+  assert.equal(round2(result.footprint.width), HOUSE_DETAIL_MODEL_SIZE.width);
+  assert.equal(round2(result.footprint.depth), 5.92);
+  assert.ok(result.footprint.depth <= HOUSE_DETAIL_MODEL_SIZE.depth);
+  assert.equal(round2(result.footprint.height), 5.7);
+  assert.ok(result.footprint.height <= HOUSE_DETAIL_MODEL_SIZE.height);
+  assert.equal(result.meshes.length, 12, 'all twelve parts are handed back to the world');
+});
+
+test('a house-detail model that outgrows its footprint is refused rather than clipping', async () => {
+  const cases = {
+    // Wider than 8.2: the gutter would float past the roof edge.
+    wider: { ...HOUSE_DETAIL_MESH_BOXES, HouseGutter_front: { min: { x: -4.5, y: 2.99, z: 2.84 }, max: { x: 4.5, y: 3.11, z: 2.96 } } },
+    // Deeper than 6.2: it would overhang the eaves.
+    deeper: { ...HOUSE_DETAIL_MESH_BOXES, HouseGutter_back: { min: { x: -4.1, y: 2.99, z: -3.4 }, max: { x: 4.1, y: 3.11, z: -2.84 } } },
+    // Sunk below the ground plane: the step would bury itself.
+    sunk: { ...HOUSE_DETAIL_MESH_BOXES, HouseFrontStep: { min: { x: -0.8, y: -0.2, z: 1.6 }, max: { x: 0.8, y: 0.15, z: 2.4 } } },
+    // Taller than 5.8: the pot would float above the chimney.
+    taller: { ...HOUSE_DETAIL_MESH_BOXES, HouseChimneyPot: { min: { x: 1.88, y: 5.25, z: -1.32 }, max: { x: 2.52, y: 6.2, z: -0.68 } } }
+  };
+  for (const [label, boxes] of Object.entries(cases)) {
+    const result = await loadHouseDetail({
+      THREE: fakeTHREE,
+      loadGlb: () => houseDetailMeshes(boxes),
+      fetchImpl: async () => okResponse(new ArrayBuffer(64))
+    });
+    assert.equal(result.ok, false, `${label} is refused`);
+    assert.match(result.reason, /exceeds its footprint/, `${label} says why`);
+  }
+});
+
+test('a failed house-detail load reports why, and never throws', async () => {
+  const missing = await loadHouseDetail({
+    THREE: fakeTHREE, loadGlb: () => [],
+    fetchImpl: async () => failResponse(404)
+  });
+  assert.equal(missing.ok, false);
+  assert.match(missing.reason, /404/);
+
+  const corrupt = await loadHouseDetail({
+    THREE: fakeTHREE, loadGlb: () => { throw new Error('not a GLB file'); },
+    fetchImpl: async () => okResponse(new ArrayBuffer(8))
+  });
+  assert.equal(corrupt.ok, false);
+  assert.match(corrupt.reason, /not a GLB/);
+
+  const empty = await loadHouseDetail({
+    THREE: fakeTHREE, loadGlb: () => [],
+    fetchImpl: async () => okResponse(new ArrayBuffer(8))
+  });
+  assert.equal(empty.ok, false);
+  assert.match(empty.reason, /no geometry/);
+});
+
 test('the shipped terrace-detail GLB parses and matches the authored box', async () => {
   const file = join(ROOT, 'assets/terrace-detail.glb');
   assert.ok(existsSync(file), 'the asset is committed');
@@ -1496,4 +1604,79 @@ test('the shipped terrace-detail GLB parses and matches the authored box', async
   assert.equal(result.ok, true, `the shipped asset loads (${result.reason || 'ok'})`);
   assert.equal(result.bytes, bytes.byteLength);
   assert.equal(result.url, TERRACE_DETAIL_ASSET);
+});
+
+test('the shipped house-detail GLB parses and matches the authored box', async () => {
+  const file = join(ROOT, 'assets/house-detail.glb');
+  assert.ok(existsSync(file), 'the asset is committed');
+  const bytes = readFileSync(file);
+  assert.ok(bytes.byteLength >= 8 * 1024, `the file is real geometry (${bytes.byteLength} bytes)`);
+
+  // A local, slightly richer fake: the shared one stubs computeBoundingBox, and
+  // this test needs the real bounds the GLB describes. Extended here rather than
+  // in the shared object so the other tests keep their no-op stub.
+  class BoundsGeometry {
+    constructor() { this.attributes = {}; }
+    setAttribute(n, a) { this.attributes[n] = a; }
+    setIndex(a) { this.index = a; }
+    computeVertexNormals() {}
+    computeBoundingBox() {
+      const p = this.attributes.position.array;
+      const min = { x: Infinity, y: Infinity, z: Infinity };
+      const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+      for (let i = 0; i < p.length; i += 3) {
+        min.x = Math.min(min.x, p[i]); max.x = Math.max(max.x, p[i]);
+        min.y = Math.min(min.y, p[i + 1]); max.y = Math.max(max.y, p[i + 1]);
+        min.z = Math.min(min.z, p[i + 2]); max.z = Math.max(max.z, p[i + 2]);
+      }
+      this.boundingBox = { min, max };
+    }
+    computeBoundingSphere() {}
+  }
+  const extendedFake = { ...fakeTHREE, BufferGeometry: BoundsGeometry };
+
+  // Copy into a standalone ArrayBuffer: readFileSync hands back a Buffer whose
+  // backing store may be shared, and parseGlb takes a DataView over it.
+  const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const parsed = parseGlb(arrayBuffer);
+  const meshes = glbToMeshes(parsed, extendedFake);
+
+  assert.deepEqual(
+    meshes.map((m) => m.name),
+    ['HouseShutter_-2.0_-1', 'HouseShutter_-2.0_1', 'HouseShutter_2.0_-1',
+      'HouseShutter_2.0_1', 'HouseWindowBox_-2.0', 'HouseWindowBox_2.0',
+      'HouseFrontStep', 'HouseDoormat', 'HouseGutter_front', 'HouseGutter_back',
+      'HouseDownspout', 'HouseChimneyPot'],
+    'the twelve authored parts are present and named'
+  );
+
+  let triangles = 0;
+  for (const mesh of meshes) {
+    assert.ok(mesh.material && typeof mesh.material.name === 'string' && mesh.material.name.length > 0,
+      `${mesh.name} carries a named material so a texture family can find it`);
+    assert.ok(mesh.geometry.index, `${mesh.name} is indexed`);
+    triangles += mesh.geometry.index.array.length / 3;
+  }
+  assert.ok(triangles < 300, `the detail stays low-poly (${triangles} triangles)`);
+
+  // The combined footprint must fit the authored box: this is the same check the
+  // loader makes at runtime, held against the file actually on disk.
+  const footprint = fountainFootprint(meshes);
+  assert.ok(footprint.width <= HOUSE_DETAIL_MODEL_SIZE.width + 0.01,
+    `width ${footprint.width} fits ${HOUSE_DETAIL_MODEL_SIZE.width}`);
+  assert.ok(footprint.depth <= HOUSE_DETAIL_MODEL_SIZE.depth + 0.01,
+    `depth ${footprint.depth} fits ${HOUSE_DETAIL_MODEL_SIZE.depth}`);
+  assert.ok(footprint.height <= HOUSE_DETAIL_MODEL_SIZE.height + 0.01,
+    `height ${footprint.height} fits ${HOUSE_DETAIL_MODEL_SIZE.height}`);
+  assert.ok(footprint.minY >= -0.01, 'nothing sinks below the ground plane');
+
+  // And the loader itself accepts the real file, so the two halves agree.
+  const result = await loadHouseDetail({
+    THREE: extendedFake,
+    loadGlb: (buf) => glbToMeshes(parseGlb(buf), extendedFake),
+    fetchImpl: async () => okResponse(arrayBuffer)
+  });
+  assert.equal(result.ok, true, `the shipped asset loads (${result.reason || 'ok'})`);
+  assert.equal(result.bytes, bytes.byteLength);
+  assert.equal(result.url, HOUSE_DETAIL_ASSET);
 });
