@@ -61,10 +61,16 @@ function finitePoint(value) {
  *
  * moves the projection the correct way for both conventions: flip the sign of
  * every component of sunDir and both the numerator and denominator flip, so the
- * result is unchanged. Returns null when the projection is not defined (a cloud
- * at ground level, a horizontal sun, or non-finite inputs).
+ * result is unchanged. Returns null when the projection is not defined (a
+ * horizontal sun, or non-finite inputs) rather than dividing by a near-zero.
+ *
+ * Exported because the world needs the same answer in two directions: to know
+ * where a cloud's shadow lands, and -- for the near passer layer -- where to
+ * hang a cloud so that its shadow lands on the plaza. See
+ * {@link raisePointToCloud}, which is this map's inverse.
  */
-function projectCloud(cloud, sunDir) {
+export function projectCloudToGround(cloud, sunDir) {
+  if (!finitePoint(cloud) || !finitePoint(sunDir)) return null;
   const vertical = sunDir.y;
   if (!finiteNumber(vertical) || Math.abs(vertical) < HORIZON_EPSILON) return null;
   const t = cloud.y / vertical;
@@ -72,6 +78,39 @@ function projectCloud(cloud, sunDir) {
   const z = cloud.z - sunDir.z * t;
   if (!finiteNumber(x) || !finiteNumber(z)) return null;
   return { x, z };
+}
+
+/**
+ * The inverse of {@link projectCloudToGround}: the point `altitude` metres up
+ * along the sun's ray from a ground position, i.e. where a cloud must sit for
+ * its shadow to fall on `ground`.
+ *
+ *     cloud = ground + sunDir * (altitude / sunDir.y)
+ *
+ * Only the direction of `sunDir` matters, so scaling it changes nothing; the
+ * result keeps `y` exactly at `altitude` up to rounding. Returns null when the
+ * ray is horizontal or the inputs are junk. The world uses this for the near
+ * passer clouds: their ground footprint is the authored value and the overhead
+ * disc is derived from it, so the disc and its shadow cannot drift apart.
+ *
+ * `ground.y` is optional and reads as 0 when absent, because the caller's
+ * footprint is a flat `{ x, z, r }` and the ground is the y = 0 plane. A
+ * non-finite `y`, if given, still makes the call fail rather than silently
+ * treating it as zero.
+ */
+export function raisePointToCloud(ground, sunDir, altitude) {
+  if (ground == null || !finiteNumber(ground.x) || !finiteNumber(ground.z)) return null;
+  const baseY = ground.y === undefined ? 0 : ground.y;
+  if (!finiteNumber(baseY) || !finitePoint(sunDir)) return null;
+  if (!finiteNumber(altitude) || altitude <= 0) return null;
+  const vertical = sunDir.y;
+  if (!finiteNumber(vertical) || Math.abs(vertical) < HORIZON_EPSILON) return null;
+  const t = altitude / vertical;
+  const x = ground.x + sunDir.x * t;
+  const y = baseY + sunDir.y * t;
+  const z = ground.z + sunDir.z * t;
+  if (!finiteNumber(x) || !finiteNumber(y) || !finiteNumber(z)) return null;
+  return { x, y, z };
 }
 
 /** Smoothstep, clamped to [0, 1]. Used so the shadow's edge eases out rather
@@ -87,7 +126,7 @@ function smoothstep(u) {
  * normalised distance so the rim is soft.
  */
 function singleCloudShade(point, cloud, sunDir, radius) {
-  const projected = projectCloud(cloud, sunDir);
+  const projected = projectCloudToGround(cloud, sunDir);
   if (!projected) return 0;
   const dx = point.x - projected.x;
   const dz = point.z - projected.z;
@@ -133,7 +172,7 @@ export function nearestCloudDistance(point, clouds, sunDir) {
   let nearest = Infinity;
   for (const cloud of clouds) {
     if (!finitePoint(cloud)) continue;
-    const projected = projectCloud(cloud, sunDir);
+    const projected = projectCloudToGround(cloud, sunDir);
     if (!projected) continue;
     const distance = Math.hypot(point.x - projected.x, point.z - projected.z);
     if (finiteNumber(distance) && distance < nearest) nearest = distance;

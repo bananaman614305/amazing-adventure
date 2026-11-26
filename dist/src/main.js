@@ -1879,6 +1879,9 @@ function frame() {
   if (environment.updateStars) environment.updateStars(dt);
   // Round 88: the cloud layer drifts once per frame.
   if (environment.updateClouds) environment.updateClouds(dt);
+  // Round 98: the near passer clouds drift with the same frame, and skip
+  // themselves entirely when the layer is off (low tier, or night).
+  if (environment.updatePassers) environment.updatePassers(dt);
   // Round 90: the meadow leans in the same wind field, once per frame (full
   // tier only -- setQuality switches the sway off on low).
   if (environment.updateMeadow) environment.updateMeadow(dt);

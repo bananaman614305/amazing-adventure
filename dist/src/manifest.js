@@ -42,6 +42,7 @@ export const REQUIRED_FILES = [
   'src/clouds.js',
   'src/moonlight.js',
   'src/cloudshadow.js',
+  'src/cloudpassers.js',
   'src/horizon.js',
   'src/scatter.js',
   'src/tuft.js',
