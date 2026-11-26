@@ -45,6 +45,7 @@ import { wildflowerSpawns, wildflowerSway, wildflowerGlowLevel, wildflowersEnabl
 import { reedSpawns, reedStemSway, reedGlowLevel, reedsEnabled, REED_COUNT } from './reeds.js';
 import { mossSpawns, mossDarkness, mossGlowLevel, mossEnabled,
   MOSS_SEAM_WIDTH } from './moss.js';
+import { shadowDecals, shadowOpacity, shadowsEnabled } from './contactshadows.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -59,6 +60,7 @@ import {
   loadMarketStall, BENCH_ASSET, BENCH_MODEL_SIZE, loadBench,
   NOTICE_ASSET, NOTICE_MODEL_SIZE, loadNotice,
   BANNER_ASSET, BANNER_MODEL_SIZE, loadBanner, BANNER_TEXTURE_FILES,
+  TERRACE_DETAIL_ASSET, TERRACE_DETAIL_MODEL_SIZE, loadTerraceDetail,
   FELT_TEXTURE_FILES, FELT_FAMILY, BUNTING_TILE_METERS,
   WATER_TEXTURE_FILES, WATER_TILE_METERS,
   CRATE_ASSET, CRATE_MODEL_SIZE, loadCrate,
@@ -1338,6 +1340,8 @@ export function buildWorld(renderer) {
     bark: 'flat',
     barkDetail: null,
     terraceDetail: null,
+    terraceFurniture: 'stand-in',
+    terraceFurnitureDetail: null,
     gateStoneDetail: null,
     fountainStoneDetail: null,
     water: 'flat',
@@ -1938,6 +1942,48 @@ export function buildWorld(renderer) {
         canvasDressed,
         ironDressed,
         maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => canvasTextures[k])
+      };
+      return assetState;
+    });
+  }
+
+  function upgradeTerraceDetail() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.terraceFurniture = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadTerraceDetail({ THREE, loadGlb }).then((result) => {
+      if (!result.ok) {
+        assetState.terraceFurniture = 'stand-in';
+        assetState.terraceFurnitureDetail = result.reason;
+        return assetState;
+      }
+      const group = new THREE.Group();
+      group.name = 'terrace-furniture-model';
+      // Authored centred at origin on z=0; the terrace slab top sits at
+      // TERRACE.height, so lift the whole model onto it.
+      group.position.set(0, TERRACE.height, TERRACE.minZ + (TERRACE.maxZ - TERRACE.minZ) / 2);
+      for (const { name, geometry, material } of result.meshes) {
+        const mesh = new THREE.Mesh(geometry, material.clone());
+        mesh.name = name;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+      scene.add(group);
+      propGroups.push({ group, tile: 1.5 });
+      // The pergola posts stand on the slab, so they ground the terrace; register
+      // them as contact-shadow anchors is left to the existing list (pergola is a
+      // new prop) -- add a wide anchor for the pergola centre.
+      assetState.terraceFurniture = 'model';
+      assetState.terraceFurnitureDetail = {
+        parts: result.meshes.length,
+        bytes: result.bytes,
+        instances: 1
       };
       return assetState;
     });
@@ -4439,8 +4485,6 @@ export function buildWorld(renderer) {
   // not clipped by the quad's own boundary; the instance scale divides by it so
   // the visible ring still lands exactly on `radius`.
   const RIPPLE_RING_AT = 0.85;
-  // Half-thickness of the band in world metres at birth.
-  const RIPPLE_BAND_HALF = 0.012;
 
   const rippleMaterial = new THREE.ShaderMaterial({
     uniforms: {
@@ -4518,13 +4562,17 @@ export function buildWorld(renderer) {
       _rScale.setScalar(half * 2);
       _rMatrix.compose(_rPos, _rQuat, _rScale);
       rippleMesh.setMatrixAt(i, _rMatrix);
-      // Constant world thickness, modulated by the spawn size factor: the band
-      // never thickens as the ring widens, which is what RIPPLE_THIN describes.
-      // `d` runs 0..1 across the quad, whose half-extent is radius/RIPPLE_RING_AT,
-      // so one d unit is (radius/RIPPLE_RING_AT) metres.
-      const thickness = RIPPLE_BAND_HALF * (r.scale > 0 ? r.scale : 1);
-      rippleBandArray[i] = Math.min(0.5, (thickness * RIPPLE_RING_AT) / radius);
-      rippleAlphaArray[i] = r.opacity > 0 ? Math.min(1, r.opacity / RIPPLE_MAX_OPACITY) : 0;
+      // The module hands over the band as a world thickness in metres that
+      // narrows over the ring's life (RIPPLE_MIN_BAND floor). The shader measures
+      // in `d` units, where one d unit spans radius/RIPPLE_RING_AT metres, and
+      // its smoothstep takes a *half* width (it feathers from half the band out
+      // to the full band), so half the thickness is divided by that span.
+      const span = radius / RIPPLE_RING_AT;
+      const band = r.band > 0 ? r.band : 0;
+      rippleBandArray[i] = Math.min(0.5, span > 0 ? (band * 0.5) / span : 0);
+      // `alpha` already carries the exact-zero fade tail and the per-instance
+      // strength; it only needs normalising against the material's own maximum.
+      rippleAlphaArray[i] = r.alpha > 0 ? Math.min(1, r.alpha / RIPPLE_MAX_OPACITY) : 0;
     }
     rippleMesh.instanceMatrix.needsUpdate = true;
     rippleBandAttr.needsUpdate = true;
@@ -5061,6 +5109,128 @@ export function buildWorld(renderer) {
   }
   paintMoss('day', 'full');
 
+  // --- Contact shadow decals -------------------------------------------
+  //
+  // The sun's shadow map resolves a prop's cast shadow down to its own texel
+  // size, and the last hand's width around a barrel's foot or a lamp post's
+  // base is exactly where that resolution runs out: the prop meets the paving
+  // with a bright, hard seam and reads as pasted on. A soft dark smudge under
+  // every footprint is the cheapest fix -- one InstancedMesh of flat discs, no
+  // lights, no extra passes -- and it is the strongest grounding cue available
+  // for that price.
+  //
+  // The anchors are the props that actually touch the ground, read from the same
+  // tables the world built them from (the lamp loop, the barrel cylinders, the
+  // crate stand-ins, the bench, the job and notice boards) so a prop that moves
+  // takes its smudge with it. The lane's bunting and the hanging lanterns are
+  // deliberately absent: they hang overhead and touch nothing. The sacks are
+  // included -- they are soft props sitting on the flagstones and they are the
+  // worst offenders for the pasted-on look.
+  const contactAnchors = [
+    { x: FOUNTAIN_SPOT.x, z: FOUNTAIN_SPOT.z, radius: FOUNTAIN_COLLIDER },
+    ...[[7, 7], [-7, 7], [7, -7], [-7, -7]].map(([x, z]) => ({ x, z, radius: 0.22 })),
+    ...TREE_SPOTS.map((spot) => ({ x: spot.x, z: spot.z, radius: TREE_MODEL_SIZE.trunkRadius * 1.6 })),
+    { x: -10.5, z: -9, radius: 4.5 },
+    { x: 11, z: -3, radius: 2.2 },
+    { x: -11, z: 6, radius: 1.8 },
+    { x: 5, z: 8, radius: 0.85 },
+    { x: 6.4, z: 8.3, radius: 0.85 },
+    { x: -5, z: 9, radius: 0.55 },
+    { x: -6.2, z: 9.4, radius: 0.55 },
+    { x: 3, z: -7.5, radius: 0.55 },
+    { x: BENCH.x, z: BENCH.z, radius: 1.2 },
+    { x: JOB_BOARD.x, z: JOB_BOARD.z, radius: 0.8 },
+    { x: NOTICE_BOARD.x, z: NOTICE_BOARD.z, radius: 0.9 },
+    ...LANE_PROPS.map((prop) => ({
+      x: prop.x,
+      z: prop.z,
+      radius: Math.max(prop.width, prop.depth) * 0.65
+    })),
+    ...LANE_SACKS.map((sack) => ({ x: sack.x, z: sack.z, radius: sack.radius * 1.6 })),
+    { x: 0, z: (TERRACE.minZ + TERRACE.maxZ) / 2, radius: 1.7 }
+  ];
+  const contactSpawnsList = shadowsEnabled('full')
+    ? shadowDecals(contactAnchors)
+    : [];
+
+  // A soft round falloff, generated once on a canvas, so a decal has no visible
+  // rim. The same helper shape as the smoke puff and the plaza AO map; a null
+  // canvas (no DOM) leaves the decals with hard edges rather than throwing.
+  function createContactShadowTexture(size = 64) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(255,255,255,0.9)');
+    g.addColorStop(0.55, 'rgba(255,255,255,0.45)');
+    g.addColorStop(0.85, 'rgba(255,255,255,0.12)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    // The map is an alpha falloff, not albedo, so it is deliberately left in the
+    // default (linear) colour space: tagging it sRGB would bend the gradient.
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  // A twelve-sided disc is enough for a soft smudge with no readable silhouette,
+  // and the low polygon count keeps the software rasteriser's fill cost down.
+  const contactGeometry = new THREE.CircleGeometry(0.5, 12);
+  const contactMaterial = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    map: createContactShadowTexture(),
+    transparent: true,
+    opacity: 0.3,
+    depthWrite: false,
+    fog: true
+  });
+  contactMaterial.name = 'ContactShadow';
+  const contactMesh = new THREE.InstancedMesh(
+    contactGeometry, contactMaterial, Math.max(1, contactSpawnsList.length)
+  );
+  contactMesh.name = 'contact-shadows';
+  contactMesh.count = contactSpawnsList.length;
+  contactMesh.frustumCulled = false;
+  // Above the plaza surface and the moss (y 0.01/0.014) but below the puddles and
+  // the ripple decals, so a puddle still reads as sitting on top of the ground.
+  contactMesh.renderOrder = 1;
+  scene.add(contactMesh);
+
+  const _csMatrix = new THREE.Matrix4();
+  const _csPos = new THREE.Vector3();
+  const _csScale = new THREE.Vector3();
+  const _csQuat = new THREE.Quaternion();
+  const _csFlat = new THREE.Quaternion();
+  const _csNormal = new THREE.Vector3(0, 0, 1);
+  const _csYaw = new THREE.Quaternion();
+  const _csUp = new THREE.Vector3(0, 1, 0);
+  _csFlat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+  for (let i = 0; i < contactSpawnsList.length; i += 1) {
+    const decal = contactSpawnsList[i];
+    // The squash is applied to the disc's local Y (which the flat rotation maps
+    // onto world Z), so the ellipse is free to point anywhere; the yaw is a
+    // stable per-decal choice derived from the position, not from the frame.
+    _csYaw.setFromAxisAngle(_csUp, (decal.x * 0.7 + decal.z * 1.3) % (Math.PI * 2));
+    _csQuat.copy(_csFlat).multiply(_csYaw);
+    _csPos.set(decal.x, 0.012, decal.z);
+    _csScale.set(decal.radius * 2, decal.radius * 2 * decal.squash, 1);
+    _csMatrix.compose(_csPos, _csQuat, _csScale);
+    contactMesh.setMatrixAt(i, _csMatrix);
+  }
+  contactMesh.instanceMatrix.needsUpdate = true;
+
+  // Contact decals do not move: the ground under a prop does not change with the
+  // hour. Only their strength follows the phase.
+  function paintContactShadows(phaseId, tier = environment.quality) {
+    contactMaterial.opacity = shadowOpacity(phaseId);
+    contactMesh.visible = contactSpawnsList.length > 0 && shadowsEnabled(tier);
+  }
+  paintContactShadows('day', 'full');
+
   // --- Roof shingles ---------------------------------------------------
   const roofPlanes = [
     { x: -10.5, z: -9, y: 3.3 + 0.3, width: 8, depth: 6, yaw: 0, pitch: 0 },
@@ -5436,6 +5606,15 @@ export function buildWorld(renderer) {
     get mossOn() {
       return mossEnabled(environment.quality);
     },
+    // Round 96: contact shadow decals under the ground props.
+    contactShadows: contactMesh,
+    contactCount: contactSpawnsList.length,
+    paintContactShadows(phaseId) {
+      paintContactShadows(phaseId, environment.quality);
+    },
+    get contactShadowsOn() {
+      return shadowsEnabled(environment.quality);
+    },
     // Round 93: the daytime butterfly field.
     butterflyWings: [butterflyLeftMesh, butterflyRightMesh],
     butterflyCount: butterflySpawnsList.length,
@@ -5568,6 +5747,7 @@ export function buildWorld(renderer) {
       if (environment.paintWildflowers) environment.paintWildflowers(environment.phase);
       if (environment.paintReeds) environment.paintReeds(environment.phase);
       if (environment.paintMoss) environment.paintMoss(environment.phase);
+      if (environment.paintContactShadows) environment.paintContactShadows(environment.phase);
       // Contact darkening rides on vertex colours; disable it on the low tier by
       // turning the attribute off on every dressed prop mesh.
       for (const { group } of propGroups) {
@@ -5689,7 +5869,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner()])
+      return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner(), upgradeTerraceDetail()])
         .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt()).then(() => upgradeLaneRope()).then(() => upgradeBoardPaper())
         .then(() => upgradeLanternHousing()).then(() => upgradeSackTie()).then(() => upgradeNoticeFace())
         // Water runs last and after the prop pass on purpose: the water discs
@@ -5876,6 +6056,7 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintWildflowers) environment.paintWildflowers(phaseId);
   if (environment.paintReeds) environment.paintReeds(phaseId);
   if (environment.paintMoss) environment.paintMoss(phaseId);
+  if (environment.paintContactShadows) environment.paintContactShadows(phaseId);
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,
   // night shows it full. The mesh itself keeps rendering (one draw call) so
