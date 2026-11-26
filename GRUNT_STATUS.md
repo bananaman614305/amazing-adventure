@@ -23,17 +23,16 @@ gains 2 tests (family shape + load/clone); scripts/test-round2.mjs gains the
 "the roof shingles wear the new tile family" check; manifest +3 files; CREDITS
 updated. Unit suite: 86 asset tests PASS (last run).
 
-Texture generator: art/kaggle/roof_shingle_textures.py authored (1024x1024,
-procedural, seeded, CuPy-capable). The height field has been reworked to a
-periodic layout (constant shingle count and parity stagger) so the tile seams
-vertically as well as horizontally. The albedo is a value map (joint shadow,
-grain, nails, damp, valley) so the authored 0x6d3a2c colour and per-phase glow
-are not tinted twice. Local validation is blocked on the host venv disappearing
-between commands; the next step is to run the generator in a single compound
-command and inspect seam ratios. Kaggle submission v44 ERRORED; the script will
-be resubmitted once local validation passes.
+Texture generator: art/kaggle/roof_shingle_textures.py authored. The height
+field was reworked to one shingle per tile (butt at bottom, joint at top, crown
+in the middle) so the tile is perfectly periodic in both directions. The albedo
+is a value map (joint shadow, grain, nails, damp, valley) so the authored
+0x6d3a2c colour and per-phase glow are not tinted twice. Local validation
+blocked on the host venv disappearing between commands; the venv will be placed
+in /worker/state for persistence. Kaggle submission v44 ERRORED; resubmit once
+local validation passes.
 
 ## Next steps
-1. Run the generator in one compound command (venv + run + report), fix any seam-ratio failure, then submit to Kaggle and download the PNGs.
+1. Place the venv in /worker/state, run the generator, inspect seam ratios and normal green mean, fix any failure, then submit to Kaggle and download the PNGs.
 2. Convert the PNGs to WebP at assets/textures/roof_shingle_{albedo,normal,rough}.webp, verify dimensions/content, commit sources + assets.
 3. Run npm test and npm run test:browser once to confirm the new check passes; update GRUNT_STATUS with evidence and write publish.json.
