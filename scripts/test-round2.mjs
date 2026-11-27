@@ -4914,15 +4914,29 @@ try {
       transparent: contact.material.transparent,
       materialName: contact.material.name || null
     } : null;
+    // Every decal is checked against the surface UNDER it, not against one
+    // absolute height: round 105 moved the plazas, the lane and the terrace to
+    // their own heights, so a terrace decal correctly sits at 1.2 m while a
+    // grass decal sits at 2 mm. The lift above that surface must be the same
+    // for all of them, which is the invariant that actually matters -- a decal
+    // buried in the slab or floating above it has a lift of the wrong size, and
+    // one that stayed at an old absolute height shows up as a lift of 1.2 m.
     let firstY = null, minY = null, maxY = null;
+    let liftMin = null, liftMax = null, liftWorst = 0;
     if (contact && contact.instanceMatrix && contact.instanceMatrix.array) {
       const arr = contact.instanceMatrix.array;
       const n = Math.floor(arr.length / 16);
       for (let i = 0; i < n; i += 1) {
+        const x = arr[i * 16 + 12];
         const y = arr[i * 16 + 13];
+        const z = arr[i * 16 + 14];
         if (i === 0) firstY = y;
         minY = minY === null ? y : Math.min(minY, y);
         maxY = maxY === null ? y : Math.max(maxY, y);
+        const lift = y - api.surfaceHeightAt(x, z);
+        liftMin = liftMin === null ? lift : Math.min(liftMin, lift);
+        liftMax = liftMax === null ? lift : Math.max(liftMax, lift);
+        liftWorst = Math.max(liftWorst, Math.abs(lift - 0.002));
       }
     }
     // Phase strength: the repaint is driven directly, so the opacity numbers
@@ -4968,6 +4982,7 @@ try {
       contact: contactInfo,
       envCount: env.contactCount === undefined ? null : env.contactCount,
       ys: { first: firstY, min: minY, max: maxY },
+      lifts: { min: liftMin, max: liftMax, worst: Number(liftWorst.toFixed(6)) },
       phase: { day: dayOpacity, night: nightOpacity },
       low: { visible: lowVisible, on: lowOn },
       fullVisible,
@@ -4979,10 +4994,10 @@ try {
     r96.contact && r96.contact.count > 0 && r96.contact.visible === true &&
       r96.contact.transparent === true,
     JSON.stringify({ mesh: r96.contact, envCount: r96.envCount }));
-  checks.check('contact shadow decals sit on the ground',
+  checks.check('contact shadow decals sit on the surface under them',
     r96.contact && r96.contact.count === r96.envCount &&
-      r96.ys.min !== null && r96.ys.min >= 0.005 && r96.ys.max <= 0.03,
-    JSON.stringify({ count: r96.contact ? r96.contact.count : null, envCount: r96.envCount, ys: r96.ys }));
+      r96.lifts.min !== null && r96.lifts.min >= 0.0015 && r96.lifts.worst <= 0.0005,
+    JSON.stringify({ count: r96.contact ? r96.contact.count : null, envCount: r96.envCount, ys: r96.ys, lifts: r96.lifts }));
   checks.check('contact shadow strength follows the phase',
     r96.phase.day !== null && r96.phase.night !== null &&
       Math.abs(r96.phase.day - 0.30) <= 1e-6 && Math.abs(r96.phase.night - 0.12) <= 1e-6,
