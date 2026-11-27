@@ -20,6 +20,7 @@ import {
   IVY_TINTS, IVY_PHASE_GLOW,
   ivyGlowLevel, ivySpawns, ivySway, ivyEnabled
 } from '../src/ivy.js';
+import { WALL_TRIM, WALL_TRIM_IVY_PLANE } from '../src/walltrim.js';
 
 const FIELDS = ['x', 'z', 'yaw', 'width', 'span', 'baseY', 'phase', 'tint', 'sway'];
 
@@ -28,12 +29,12 @@ test('the authored constants are the ones the world relies on', () => {
   assert.equal(IVY_COUNT, 14);
   assert.equal(IVY_MAX_COUNT, 80);
   assert.equal(IVY_WALL_RADIUS, 16.3);
-  assert.equal(IVY_MIN_BASE_Y, 0.15);
+  assert.equal(IVY_MIN_BASE_Y, 0.82);
   assert.equal(IVY_MAX_BASE_Y, 1.6);
   assert.equal(IVY_MIN_WIDTH, 0.7);
   assert.equal(IVY_MAX_WIDTH, 1.9);
   assert.equal(IVY_MIN_SPAN, 0.9);
-  assert.equal(IVY_MAX_SPAN, 2.4);
+  assert.equal(IVY_MAX_SPAN, 2.28);
   assert.equal(IVY_MIN_SWAY, 0.01);
   assert.equal(IVY_MAX_SWAY, 0.035);
 });
@@ -59,6 +60,28 @@ test('the tallest patch still leaves bare stone above it', () => {
   // that cap, which requires IVY_MAX_SPAN <= 3.1 - IVY_MIN_BASE_Y.
   assert.ok(IVY_MIN_BASE_Y + IVY_MAX_SPAN <= 3.1 + 1e-9, 'tallest patch would reach the coping');
   assert.ok(IVY_MAX_BASE_Y + IVY_MAX_SPAN >= 3.1 - 1e-9, 'cap never binds, baseY band unused');
+});
+
+test('the base floor clears the border wall trim band for every possible patch', () => {
+  // walltrim.js steps its plinth and pilaster courses courtyard-side of the ivy
+  // card plane, so a card whose base sits inside that band is sliced by stone
+  // it cannot grow through. This is the invariant behind IVY_MIN_BASE_Y: the
+  // band top plus the largest corner dip a card can swing into from its own
+  // sway rotation must sit at or below the floor, for any width and sway the
+  // module can produce -- not just for the shipped seed.
+  const wallInner = 17 - 0.5;
+  assert.ok(WALL_TRIM_IVY_PLANE < wallInner, 'ivy cards must hang inside the wall face');
+  const plinthInner = wallInner - WALL_TRIM.plinthProjection;
+  const pilasterInner = wallInner - WALL_TRIM.pilasterProjection;
+  assert.ok(plinthInner < WALL_TRIM_IVY_PLANE, 'plinth no longer crosses the card plane; revisit this test');
+  assert.ok(pilasterInner < WALL_TRIM_IVY_PLANE, 'pilaster no longer crosses the card plane; revisit this test');
+
+  const bandTop = WALL_TRIM.plinthHeight + WALL_TRIM.pilasterHeight;
+  const worstDip = (IVY_MAX_WIDTH / 2) * Math.sin(IVY_MAX_SWAY);
+  assert.ok(
+    IVY_MIN_BASE_Y >= bandTop + worstDip - 1e-9,
+    `floor ${IVY_MIN_BASE_Y} m does not clear the ${bandTop} m band plus a ${worstDip} m sway dip`
+  );
 });
 
 test('the tint table is frozen, four colours and all green-dominant', () => {

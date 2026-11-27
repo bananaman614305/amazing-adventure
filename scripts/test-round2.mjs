@@ -4661,6 +4661,118 @@ try {
   checks.check('the house shingles climb the gable and lie flush with the slope',
     !r103.missing && r103.houseSpan > 1.4 && r103.tiltWorst <= 0.02,
     JSON.stringify({ span: r103.houseSpan, tiltWorst: r103.tiltWorst, tiltAt: r103.tiltAt }));
+
+  // Round 104: the eave trim. The shingles end on a modelled eave, and until
+  // this round the roofline simply stopped there, so the courses read as strips
+  // stopping in mid-air. A fascia board now caps the eave, a lead apron hangs
+  // under it, and a bargeboard closes each rake. The checks read the two
+  // instanced meshes rather than the module, so a placement bug in world.js is
+  // caught: a fascia must sit just under the measured eave line of one of the
+  // four roofs, and a bargeboard must be tilted by the roof's own pitch (a barge
+  // left level would cut through the gable).
+  const r104 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    let group = null;
+    let boards = null;
+    let drips = null;
+    api.scene.traverse((o) => {
+      if (o.name === 'roof-edge-trim') group = o;
+      if (o.name === 'roof-edge-boards') boards = o;
+      if (o.name === 'roof-edge-drips') drips = o;
+    });
+    if (!group || !boards || !drips) return { missing: true };
+    // The four modelled roofs: eave line and rake extents, plus the pitch.
+    const roofs = [
+      { id: 'house-south', eaveZ: -5.9009, eaveY: 3.0265, centreZ: -7.467059, x: [-14.5, -6.5], pitch: 0.533333 },
+      { id: 'house-north', eaveZ: -12.0991, eaveY: 3.0265, centreZ: -10.532941, x: [-14.5, -6.5], pitch: 0.533333 },
+      { id: 'east', eaveZ: -2.6, eaveY: 0.84, centreZ: -3.1, x: [8.85, 13.15], pitch: 0.2 },
+      { id: 'west', eaveZ: 6.3, eaveY: 0.756, centreZ: 5.925, x: [-12.6125, -9.3875], pitch: 0.24 }
+    ];
+    const m = boards.instanceMatrix.array;
+    const failures = [];
+    let fascias = 0;
+    let barges = 0;
+    let worstFascia = 0;
+    let worstBarge = 0;
+    for (let i = 0; i < boards.count; i += 1) {
+      const o = i * 16;
+      const x = m[o + 12];
+      const y = m[o + 13];
+      const z = m[o + 14];
+      // Column 2 is the box's local +Z scaled by its size: level for a fascia,
+      // tilted downhill for a bargeboard.
+      const down = -m[o + 9] / Math.max(1e-9, Math.hypot(m[o + 8], m[o + 9], m[o + 10]));
+      // The two house roofs share an x range, so the roof is the nearest one in
+      // z among those whose x span holds the board. A board sits on its roof's
+      // eave line (a fascia) or at mid-slope (a barge), so the nearer of those
+      // two z values identifies the roof unambiguously.
+      let roof = null;
+      let best = Infinity;
+      for (const r of roofs) {
+        if (x < r.x[0] - 0.2 || x > r.x[1] + 0.2) continue;
+        const d = Math.min(Math.abs(z - r.eaveZ), Math.abs(z - r.centreZ));
+        if (d < best) { best = d; roof = r; }
+      }
+      if (!roof || best > 3) { if (failures.length < 6) failures.push({ i, x, y, z, why: 'no roof under it' }); continue; }
+      if (Math.abs(down) < 0.02) {
+        fascias += 1;
+        // A fascia's centre sits 6.5 cm under the eave surface (fasciaRise 0.02
+        // minus half its 0.17 m height) and on the eave line in z.
+        const dev = Math.abs(y - (roof.eaveY - 0.065));
+        if (dev > worstFascia) worstFascia = dev;
+        if (dev > 0.02 || Math.abs(z - roof.eaveZ) > 0.05) {
+          if (failures.length < 6) failures.push({ i, roof: roof.id, y, z, dev, why: 'fascia off the eave' });
+        }
+      } else {
+        barges += 1;
+        const expected = roof.pitch / Math.sqrt(1 + roof.pitch * roof.pitch);
+        const dev = Math.abs(down - expected);
+        if (dev > worstBarge) worstBarge = dev;
+        if (dev > 0.02) {
+          if (failures.length < 6) failures.push({ i, roof: roof.id, down, expected, why: 'barge not tilted with the roof' });
+        }
+        // A barge runs from the eave to the ridge, so its centre is mid-slope.
+        if (Math.abs(z - roof.centreZ) > 0.15) {
+          if (failures.length < 6) failures.push({ i, roof: roof.id, z, centreZ: roof.centreZ, why: 'barge off mid-slope' });
+        }
+      }
+    }
+    const fullVisible = Boolean(group.visible && boards.visible && drips.visible);
+    api.quality.set('low');
+    const lowVisible = Boolean(group.visible && boards.visible && drips.visible);
+    api.quality.set('full');
+    const backVisible = Boolean(group.visible && boards.visible && drips.visible);
+    const result = {
+      groupVisible: fullVisible,
+      boards: boards.count,
+      drips: drips.count,
+      fascias,
+      barges,
+      worstFascia: Number(worstFascia.toFixed(4)),
+      worstBarge: Number(worstBarge.toFixed(4)),
+      failures,
+      low: lowVisible,
+      back: backVisible
+    };
+    api.quality.set(startTier);
+    api.quality.setAdaptive(startAdaptive);
+    return result;
+  });
+  checks.check('the rooflines carry a fascia, a drip apron and a bargeboard',
+    !r104.missing && r104.groupVisible === true &&
+      r104.boards === 12 && r104.drips === 4 && r104.fascias === 4 && r104.barges === 8,
+    JSON.stringify(r104));
+  checks.check('every fascia caps a modelled eave and every barge lies in the roof plane',
+    !r104.missing && r104.failures.length === 0 && r104.worstFascia <= 0.02 &&
+      r104.worstBarge <= 0.02,
+    JSON.stringify({ worstFascia: r104.worstFascia, worstBarge: r104.worstBarge, failures: r104.failures }));
+  checks.check('the roof edge trim drops on the low tier and returns on full',
+    !r104.missing && r104.low === false && r104.back === true,
+    JSON.stringify({ low: r104.low, back: r104.back }));
   await capture(page, 'round94-dressing.png');
 
   // --- Round 95: meadow wildflowers, reeds, courtyard moss -----------------
