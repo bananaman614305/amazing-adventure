@@ -59,6 +59,7 @@ export const REQUIRED_FILES = [
   'src/moths.js',
   'src/puddles.js',
   'src/shingles.js',
+  'src/roofedge.js',
   'src/wildflowers.js',
   'src/reeds.js',
   'src/moss.js',

@@ -37,8 +37,21 @@
 //    patch that ran to the coping would read as a curtain hung over the stone
 //    rather than ivy growing up it. Every baseY is capped so baseY + span stays
 //    at or below 3.1 m, leaving a sliver of bare stone above the highest leaf.
-//    The cap only ever lowers a sampled baseY; because the tallest span (2.4 m)
-//    still leaves 0.7 m of headroom, the floor of 0.15 m is never violated.
+//    The cap only ever lowers a sampled baseY; because the tallest span (2.28 m)
+//    still leaves 0.82 m of headroom, the floor of 0.82 m is never violated.
+//
+// 4. A patch starts above the border wall's trim band. The wall carries a
+//    plinth course (0..0.45 m) and a pilaster band (0.45..0.77 m), and both step
+//    courtyard-side of the 16.44 m card plane -- 0.06 m and 0.22 m respectively
+//    (see `walltrim.js`). A card that began near the ground would therefore be
+//    sliced by stone it cannot grow through, which is exactly what the first
+//    layout did on 6 of 14 patches. The base floor is 0.82 m: the 0.77 m band
+//    top plus the largest corner dip a card can swing into from its own sway
+//    rotation (half the widest card times sin of the widest sway, 0.033 m),
+//    rounded up. The cost is that no patch creeps up from the foot of the wall,
+//    but ivy that has climbed reads better than ivy cut off at knee height, and
+//    the floor clears the band for every possible patch rather than for the
+//    shipped seed alone.
 //
 // The seeded draws are laid out so the ring and the `faces` path consume the RNG
 // in exactly the same order: two position draws first (the ring uses the first
@@ -69,9 +82,11 @@ export const IVY_MAX_COUNT = 80;
 export const IVY_WALL_RADIUS = 16.3;
 
 /** Lowest base height above the ground, in metres. A patch that starts at the
- *  very foot of the wall reads as ground cover creeping in; lifting it a little
- *  reads as ivy that has climbed. */
-export const IVY_MIN_BASE_Y = 0.15;
+ *  very foot of the wall reads as ground cover creeping in, and worse, it is
+ *  cut by the border wall's plinth and pilaster courses, which step in front of
+ *  the card plane up to 0.77 m. 0.82 m clears that band plus the widest sway
+ *  dip (see the header). */
+export const IVY_MIN_BASE_Y = 0.82;
 
 /** Highest base height above the ground, in metres. Above this a patch starts
  *  too near the top of the 3.2 m wall to leave any bare stone showing. */
@@ -90,8 +105,8 @@ export const IVY_MAX_WIDTH = 1.9;
 export const IVY_MIN_SPAN = 0.9;
 
 /** Largest patch height up the wall, in metres. Chosen so baseY + span can stay
- *  under the 3.2 m wall even at the highest base. */
-export const IVY_MAX_SPAN = 2.4;
+ *  under the 3.1 m cap even at the raised 0.82 m floor: 0.82 + 2.28 = 3.10. */
+export const IVY_MAX_SPAN = 2.28;
 
 /** Smallest sway amplitude, in radians. Even on a still day a leaf edge moves a
  *  little; zero would make the card look like paint. */
@@ -269,7 +284,8 @@ export function ivySpawns(options = {}) {
     const width = IVY_MIN_WIDTH + rng() * (IVY_MAX_WIDTH - IVY_MIN_WIDTH);
     const span = IVY_MIN_SPAN + rng() * (IVY_MAX_SPAN - IVY_MIN_SPAN);
     // Cap the base so the patch never reaches the coping; the tallest span
-    // leaves 0.7 m of headroom, so this can never push baseY below its floor.
+    // leaves exactly 0.82 m of headroom, so this can never push baseY below
+    // its floor.
     const sampledBase = IVY_MIN_BASE_Y + rng() * (IVY_MAX_BASE_Y - IVY_MIN_BASE_Y);
     const baseY = Math.min(sampledBase, IVY_TOP_LIMIT - span);
     const phase = rng();

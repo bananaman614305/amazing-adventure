@@ -42,6 +42,7 @@ import { mothSpawns, mothFlight, mothGlowLevel, mothsEnabled, MOTH_COUNT } from 
 import { puddleSpawns, puddleGloss, puddleDarkness, puddleShimmer, puddlesEnabled,
   PUDDLE_COUNT, PUDDLE_WATER_Y, PUDDLE_CLEAR_RADIUS } from './puddles.js';
 import { shingleSpawns, shingleGlowLevel, shinglesEnabled } from './shingles.js';
+import { roofEdgeSpans, roofEdgeEnabled } from './roofedge.js';
 import { wildflowerSpawns, wildflowerSway, wildflowerGlowLevel, wildflowersEnabled,
   WILDFLOWER_COUNT } from './wildflowers.js';
 import { reedSpawns, reedStemSway, reedGlowLevel, reedsEnabled, REED_COUNT } from './reeds.js';
@@ -5668,6 +5669,88 @@ export function buildWorld(renderer) {
   }
   paintShingles('day', 'full');
 
+  // --- Roof edge trim ---------------------------------------------------
+  // The shingles climb a real slope and end on a real eave, but the modelled
+  // roof's own edge is a thin line: from the ground the courses read as strips
+  // stopping in mid-air. src/roofedge.js decides where a fascia, a drip apron
+  // and the gable bargeboards sit on each of the four roof planes; this block
+  // turns them into two instanced boxes -- one for the wooden boards (fascia
+  // and barge share a section and a material) and one for the lead drip -- so
+  // the whole roofline costs two draw calls and the low tier drops it with one
+  // visibility flag. Per-instance scale gives each board its own length, so the
+  // geometry is a single unit box and the boards still vary from 1 m to 8 m.
+  //
+  // The boards carry a flat stained-wood / lead colour rather than a texture
+  // family. They are 4-17 cm wide strips viewed at courtyard distance, so a
+  // per-board UV would stretch one tile down an 8 m fascia and read as a smear;
+  // the shadow the boards cast under the eave is what sells them, and the
+  // colour only has to sit in the roof's palette.
+  const roofEdgeSpawnsList = roofEdgeEnabled('full')
+    ? roofEdgeSpans({ planes: roofPlanes })
+    : [];
+  const roofEdgeGroup = new THREE.Group();
+  roofEdgeGroup.name = 'roof-edge-trim';
+  const roofEdgeWood = roofEdgeSpawnsList.filter((span) => span.kind !== 'drip');
+  const roofEdgeDrips = roofEdgeSpawnsList.filter((span) => span.kind === 'drip');
+  const roofEdgeWoodMat = new THREE.MeshStandardMaterial({
+    color: 0x4a3524, roughness: 0.78, metalness: 0
+  });
+  roofEdgeWoodMat.name = 'RoofEdgeWood';
+  const roofEdgeDripMat = new THREE.MeshStandardMaterial({
+    color: 0x585a56, roughness: 0.5, metalness: 0.3
+  });
+  roofEdgeDripMat.name = 'RoofEdgeDrip';
+  const roofEdgeGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const roofEdgeBoardsMesh = new THREE.InstancedMesh(
+    roofEdgeGeometry, roofEdgeWoodMat, Math.max(1, roofEdgeWood.length)
+  );
+  roofEdgeBoardsMesh.name = 'roof-edge-boards';
+  roofEdgeBoardsMesh.count = roofEdgeWood.length;
+  roofEdgeBoardsMesh.frustumCulled = false;
+  const roofEdgeDripsMesh = new THREE.InstancedMesh(
+    roofEdgeGeometry, roofEdgeDripMat, Math.max(1, roofEdgeDrips.length)
+  );
+  roofEdgeDripsMesh.name = 'roof-edge-drips';
+  roofEdgeDripsMesh.count = roofEdgeDrips.length;
+  roofEdgeDripsMesh.frustumCulled = false;
+  roofEdgeGroup.add(roofEdgeBoardsMesh, roofEdgeDripsMesh);
+  scene.add(roofEdgeGroup);
+
+  // The same yaw-then-tilt composition the shingle strips use: yaw about world
+  // Y, then tilt about the box's own local X. A fascia has tilt 0 and runs
+  // level; a bargeboard has tilt atan(pitch) so its local Z climbs the rake and
+  // its local Y is the roof's normal.
+  const _reMatrix = new THREE.Matrix4();
+  const _rePos = new THREE.Vector3();
+  const _reScale = new THREE.Vector3();
+  const _reQuat = new THREE.Quaternion();
+  const _reYawQuat = new THREE.Quaternion();
+  const _reTiltQuat = new THREE.Quaternion();
+  const _reUp = new THREE.Vector3(0, 1, 0);
+  const _reXAxis = new THREE.Vector3(1, 0, 0);
+
+  function placeRoofEdge(mesh, spans) {
+    for (let i = 0; i < spans.length; i += 1) {
+      const span = spans[i];
+      _rePos.set(span.x, span.y, span.z);
+      _reYawQuat.setFromAxisAngle(_reUp, span.yaw);
+      _reTiltQuat.setFromAxisAngle(_reXAxis, span.tilt || 0);
+      _reQuat.copy(_reYawQuat).multiply(_reTiltQuat);
+      _reScale.set(span.size[0], span.size[1], span.size[2]);
+      _reMatrix.compose(_rePos, _reQuat, _reScale);
+      mesh.setMatrixAt(i, _reMatrix);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+  placeRoofEdge(roofEdgeBoardsMesh, roofEdgeWood);
+  placeRoofEdge(roofEdgeDripsMesh, roofEdgeDrips);
+
+  function paintRoofEdge(tier = environment.quality) {
+    const on = roofEdgeSpawnsList.length > 0 && roofEdgeEnabled(tier);
+    roofEdgeGroup.visible = on;
+  }
+  paintRoofEdge('full');
+
   function paintWallsTrim(tier = environment.quality) {
     wallTrimGroup.visible = wallTrimEnabled(tier);
   }
@@ -5965,6 +6048,18 @@ export function buildWorld(renderer) {
     paintShingles(phaseId) {
       paintShingles(phaseId, environment.quality);
     },
+    // Round 104: the eave fascia, drip apron and gable bargeboards.
+    roofEdge: roofEdgeGroup,
+    roofEdgeBoards: roofEdgeBoardsMesh,
+    roofEdgeDrips: roofEdgeDripsMesh,
+    roofEdgeCount: roofEdgeSpawnsList.length,
+    roofEdgeSpans: roofEdgeSpawnsList,
+    paintRoofEdge() {
+      paintRoofEdge(environment.quality);
+    },
+    get roofEdgeOn() {
+      return roofEdgeEnabled(environment.quality);
+    },
     paintWallsTrim() {
       paintWallsTrim(environment.quality);
     },
@@ -6142,6 +6237,7 @@ export function buildWorld(renderer) {
       if (environment.paintMoths) environment.paintMoths(environment.phase);
       if (environment.paintPuddles) environment.paintPuddles(environment.phase);
       if (environment.paintShingles) environment.paintShingles(environment.phase);
+      if (environment.paintRoofEdge) environment.paintRoofEdge();
       if (environment.paintWallsTrim) environment.paintWallsTrim();
       if (environment.paintWildflowers) environment.paintWildflowers(environment.phase);
       if (environment.paintReeds) environment.paintReeds(environment.phase);
@@ -6456,6 +6552,7 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintMoths) environment.paintMoths(phaseId);
   if (environment.paintPuddles) environment.paintPuddles(phaseId);
   if (environment.paintShingles) environment.paintShingles(phaseId);
+  if (environment.paintRoofEdge) environment.paintRoofEdge();
   if (environment.paintWallsTrim) environment.paintWallsTrim();
   if (environment.paintWildflowers) environment.paintWildflowers(phaseId);
   if (environment.paintReeds) environment.paintReeds(phaseId);
