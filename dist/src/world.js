@@ -49,6 +49,7 @@ import { reedSpawns, reedStemSway, reedGlowLevel, reedsEnabled, REED_COUNT } fro
 import { mossSpawns, mossDarkness, mossGlowLevel, mossEnabled,
   MOSS_SEAM_WIDTH, MOSS_DECAL_LIFT } from './moss.js';
 import { shadowDecals, shadowOpacity, shadowsEnabled, SHADOW_DECAL_LIFT } from './contactshadows.js';
+import { plazaKerbSpec, lanePlinthSpec, kerbEnabled, plinthEnabled, PLAZA_KERB_MAJOR, PLAZA_KERB_TUBE, PLAZA_KERB_SEGMENTS, PLAZA_KERB_TUBE_SEGMENTS } from './kerb.js';
 import { WALL_TRIM, wallTrimLayout, wallTrimEnabled } from './walltrim.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import { surfaceHeightAt } from './paving.js';
@@ -529,6 +530,34 @@ export function buildWorld(renderer) {
   plaza.receiveShadow = true;
   scene.add(plaza);
 
+  // Round 108: a chamfered stone kerb around the plaza disc so the 1 cm step
+  // reads as paving laid on a bed rather than as a floating line. A torus (one
+  // draw call) rather than a zero-thickness ring: see src/kerb.js.
+  const plazaKerbSpec_ = plazaKerbSpec();
+  const plazaKerb = new THREE.Mesh(
+    new THREE.TorusGeometry(
+      plazaKerbSpec_.majorRadius,
+      plazaKerbSpec_.tubeRadius,
+      plazaKerbSpec_.tubeSegments,
+      plazaKerbSpec_.segments
+    ),
+    new THREE.MeshStandardMaterial({ color: 0x9a8a78, roughness: 0.72, metalness: 0 })
+  );
+  plazaKerb.name = 'plaza-kerb';
+  plazaKerb.rotation.x = Math.PI / 2;
+  plazaKerb.position.y = plazaKerbSpec_.y;
+  plazaKerb.castShadow = true;
+  plazaKerb.receiveShadow = true;
+  plazaKerb.visible = kerbEnabled('full');
+  scene.add(plazaKerb);
+
+  function paintKerb(tier = environment.quality) {
+    plazaKerb.visible = kerbEnabled(tier);
+    plinthGroup.visible = plinthEnabled(tier);
+  }
+  paintKerb('full');
+
+
   // --- Border walls -------------------------------------------------------
   const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x6f6455, roughness: 0.85 });
   // The trim courses share the wall's base stone colour until upgradeWallsTrim()
@@ -639,6 +668,46 @@ export function buildWorld(renderer) {
   );
   laneFloor.receiveShadow = true;
   scene.add(laneFloor);
+
+  // Round 108: a stone plinth around the lane rectangle so the 2 cm step reads
+  // as a plinth, not as a floating slab. Four mitred boxes (one per side) so
+  // the straight edges stay straight; see src/kerb.js.
+  const plinthSpec = lanePlinthSpec();
+  const plinthGroup = new THREE.Group();
+  plinthGroup.name = 'lane-plinth';
+  const plinthMat = new THREE.MeshStandardMaterial({ color: 0x9a8a78, roughness: 0.72, metalness: 0 });
+  const plinthGeom = new THREE.BoxGeometry(1, 1, 1);
+  const plinthLeft = new THREE.Mesh(plinthGeom, plinthMat);
+  plinthLeft.scale.set(plinthSpec.width, plinthSpec.height, LANE.maxZ - LANE.minZ + plinthSpec.width);
+  plinthLeft.position.set(LANE.minX, plinthSpec.height / 2, (LANE.minZ + LANE.maxZ) / 2);
+  plinthLeft.name = 'lane-plinth-left';
+  plinthLeft.castShadow = true;
+  plinthLeft.receiveShadow = true;
+  plinthGroup.add(plinthLeft);
+  const plinthRight = new THREE.Mesh(plinthGeom, plinthMat);
+  plinthRight.scale.set(plinthSpec.width, plinthSpec.height, LANE.maxZ - LANE.minZ + plinthSpec.width);
+  plinthRight.position.set(LANE.maxX, plinthSpec.height / 2, (LANE.minZ + LANE.maxZ) / 2);
+  plinthRight.name = 'lane-plinth-right';
+  plinthRight.castShadow = true;
+  plinthRight.receiveShadow = true;
+  plinthGroup.add(plinthRight);
+  const plinthFar = new THREE.Mesh(plinthGeom, plinthMat);
+  plinthFar.scale.set(LANE.maxX - LANE.minX + plinthSpec.width, plinthSpec.height, plinthSpec.width);
+  plinthFar.position.set((LANE.minX + LANE.maxX) / 2, plinthSpec.height / 2, LANE.minZ);
+  plinthFar.name = 'lane-plinth-far';
+  plinthFar.castShadow = true;
+  plinthFar.receiveShadow = true;
+  plinthGroup.add(plinthFar);
+  const plinthNear = new THREE.Mesh(plinthGeom, plinthMat);
+  plinthNear.scale.set(LANE.maxX - LANE.minX + plinthSpec.width, plinthSpec.height, plinthSpec.width);
+  plinthNear.position.set((LANE.minX + LANE.maxX) / 2, plinthSpec.height / 2, LANE.maxZ);
+  plinthNear.name = 'lane-plinth-near';
+  plinthNear.castShadow = true;
+  plinthNear.receiveShadow = true;
+  plinthGroup.add(plinthNear);
+  plinthGroup.visible = plinthEnabled('full');
+  scene.add(plinthGroup);
+
 
   // Lane walls: two long sides and a far end, leaving the gate end open.
   const laneWall = new THREE.MeshStandardMaterial({ color: 0x6a6053, roughness: 0.88 });
@@ -6090,6 +6159,21 @@ export function buildWorld(renderer) {
     paintWallsTrim() {
       paintWallsTrim(environment.quality);
     },
+    // Round 108: kerb ring + lane plinth.
+    kerb: plazaKerb,
+    plinthGroup: plinthGroup,
+    plazaKerb: plazaKerb,
+    plinthEnabled: plinthEnabled('full'),
+    kerbEnabled: kerbEnabled('full'),
+    paintKerb() {
+      paintKerb(environment.quality);
+    },
+    get kerbOn() {
+      return kerbEnabled(environment.quality);
+    },
+    get plinthOn() {
+      return plinthEnabled(environment.quality);
+    },
     get shinglesOn() {
       return shinglesEnabled(environment.quality);
     },
@@ -6272,6 +6356,7 @@ export function buildWorld(renderer) {
       if (environment.paintReeds) environment.paintReeds(environment.phase);
       if (environment.paintMoss) environment.paintMoss(environment.phase);
       if (environment.paintContactShadows) environment.paintContactShadows(environment.phase);
+      if (environment.paintKerb) environment.paintKerb();
       // Round 98: the passers are translucent quads plus a per-frame loop,
       // both dropped on low; a tier flip must re-derive their visibility
       // rather than leave the last tier's answer standing.
@@ -6592,6 +6677,7 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintReeds) environment.paintReeds(phaseId);
   if (environment.paintMoss) environment.paintMoss(phaseId);
   if (environment.paintContactShadows) environment.paintContactShadows(phaseId);
+  if (environment.paintKerb) environment.paintKerb();
   if (environment.paintPassers) environment.paintPassers(phaseId);
   scene.fog.color.setHex(look.fog);
   // The star field's opacity follows the phase: day hides it, dusk hints,
