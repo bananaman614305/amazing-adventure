@@ -25,6 +25,11 @@ import {
   CAST_PAPER_TILE_METERS
 } from './paper.js';
 export { CAST_PAPER_TILE_METERS } from './paper.js';
+import {
+  CAST_STEEL_FAMILIES, castSteelFamilyFor, castSteelParams, shouldDressCastSteel,
+  CAST_STEEL_TILE_METERS
+} from './steel.js';
+export { CAST_STEEL_TILE_METERS } from './steel.js';
 
 // Round 67: the metre scale the cast coats are box-projected at. It is the
 // cloth PROP_FAMILY's tile (see assets.js), so a cast coat, a lane sack and any
@@ -1019,4 +1024,106 @@ export async function upgradeCastPaper(npcs, { THREE, fetchImpl = fetch, texture
     }
   }
   return dressCastPaper(npcs, loadedTextures, { THREE });
+}
+
+// ---------------------------------------------------------------------------
+// Round 110: the cast's armour. Halden's helmet, nasal, pauldrons and spear tip
+// are authored with a material named `Steel` at roughness 0.4 / metalness 0.7 and
+// previously matched no family, so they stayed flat (0.86 m2 of untextured
+// armour, the worst flat metal in the scene). The rules live in src/steel.js.
+// It reuses the generated lamp metal normal + roughness maps rather than a new
+// set: the lamp albedo is painted iron and would contaminate the authored
+// blue-grey tint, so the albedo is deliberately omitted (keepTint stays true).
+// ---------------------------------------------------------------------------
+
+/** The downloaded map set, keyed by the family id in src/steel.js. */
+export const CAST_STEEL_TEXTURE_FILES = {
+  normalMap: 'assets/textures/lamp_normal.webp',
+  roughnessMap: 'assets/textures/lamp_rough.webp'
+};
+
+/**
+ * Dresses every mesh whose authored material belongs to a cast steel family.
+ *
+ * Maps are cloned once per *material*, not once per mesh: all Steel meshes in
+ * one rig share the material object the GLB reader built, so a per-mesh clone
+ * would allocate duplicate map sets for one draw. The first mesh through a
+ * material sets it up; later meshes only get their own projected UVs. Only the
+ * normal and roughness maps are attached (no albedo), so the authored blue-grey
+ * tint survives untouched.
+ */
+export function dressCastSteel(npcs, textures, { THREE } = {}) {
+  const dressed = [];
+  const perFamily = { steel: 0 };
+  let seams = 0;
+  let anyLoaded = false;
+  if (!THREE || !textures) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  const family = CAST_STEEL_FAMILIES[0];
+  if (!shouldDressCastSteel(family, textures)) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  anyLoaded = true;
+
+  const materialFamilies = new Map();
+
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const fam = castSteelFamilyFor(material && material.name);
+      if (!fam) return;
+      if (!shouldDressCastSteel(fam, textures)) return;
+
+      const scale = accumulatedScale(mesh);
+      const split = projectBoxGeometry({
+        THREE, geometry: mesh.geometry, tileMeters: fam.tileMeters / scale
+      });
+      if (split.seams > 0) seams += split.seams;
+
+      if (materialFamilies.get(material) !== fam) {
+        const params = castSteelParams(fam);
+        for (const key of ['normalMap', 'roughnessMap']) {
+          const texture = textures[key];
+          if (!texture) continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        material.roughness = params.roughness;
+        material.metalness = params.metalness;
+        material.needsUpdate = true;
+        materialFamilies.set(material, fam);
+      }
+
+      mesh.userData.steelDressed = true;
+      perFamily.steel += 1;
+      dressed.push({ npc: npc.id, name: mesh.name, family: 'steel', tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, perFamily, anyLoaded };
+}
+
+/**
+ * Loads the lamp metal maps and dresses the cast's armour with them.
+ * Never throws.
+ */
+export async function upgradeCastSteel(npcs, { THREE, fetchImpl = fetch, textures = null } = {}) {
+  if (!THREE || !npcs || !npcs.length) {
+    return { dressed: 0, meshes: [], anyLoaded: false, perFamily: { steel: 0 } };
+  }
+  let loadedTextures = textures;
+  if (!loadedTextures) {
+    try {
+      loadedTextures = await loadMaterialTextures({ THREE, files: CAST_STEEL_TEXTURE_FILES, fetchImpl });
+    } catch {
+      loadedTextures = null;
+    }
+  }
+  return dressCastSteel(npcs, loadedTextures, { THREE });
 }
