@@ -1403,16 +1403,19 @@ test('every asset helper world.js calls is actually imported', () => {
 
 // --- Round 69: baked plaza AO + prop contact darkening -----------------------
 
-test('the plaza AO map binds to channel 0 and dims with the quality tier', () => {
+test('the plaza AO map binds to channel 0 and stays on at every tier', () => {
   // CircleGeometry only carries `uv`; an aoMap that expected uv1 would sample
   // garbage (or fail to compile on some drivers). Channel 0 is the contract.
   assert.equal(PLAZA_AO_MAP_CHANNEL, 0);
-  // The map multiplies indirect light only, so a modest intensity is enough of
-  // a grounding cue; zero on the low tier keeps the cost off tight budgets.
+  // The map only multiplies indirect light, is static, and costs no per-frame
+  // work, so the tier split was removed and only the sun shadow pass plus the
+  // per-frame decal fields remain tier-gated. The low tier keeps the authored
+  // 0.85 along with the prop vertex colour contact darkening.
   const full = plazaAoMapIntensity({ low: false });
   assert.ok(full > 0 && full <= 1, `full-tier intensity out of range: ${full}`);
-  assert.equal(plazaAoMapIntensity({ low: true }), 0);
-  assert.equal(plazaAoMapIntensityForQuality('low'), 0);
+  assert.equal(full, 0.85, 'authored plaza AO intensity is pinned at 0.85');
+  assert.equal(plazaAoMapIntensity({ low: true }), full);
+  assert.equal(plazaAoMapIntensityForQuality('low'), full);
   assert.equal(plazaAoMapIntensityForQuality('full'), full);
 });
 
