@@ -69,6 +69,17 @@
 //    the fascia. The two boards overlap there by their own thickness, which is
 //    what a real corner looks like.
 //
+// 5. A plane may opt out of the trim entirely by carrying `trim: false`. The
+//    two market-stall roofs are the modelled MarketAwning -- itself a finished
+//    edge (a pitched slab with overhang, posts and a hanging sign) -- and the
+//    round-104 boards were measured sitting 0.020-0.025 m inside that mesh on
+//    both stalls: the fascia by 0.025 m on its z axis, both bargeboards by
+//    0.020 m on x. Rather than shrink the boards everywhere or shave the
+//    model, the caller marks the planes whose modelled roof already ends
+//    well and the module lays nothing on them. Only the exact boolean false
+//    skips, so a missing field or a junk value (0, null, 'x') never silently
+//    strips a roof that wanted its trim.
+//
 // Every export is total: junk input is clamped or skipped, and no call can
 // yield NaN or Infinity.
 
@@ -253,7 +264,8 @@ function roofNormal(plane) {
  *
  * Options:
  *   - `planes` is the caller's array of `{ x, z, y, width, depth, yaw, pitch }`
- *     with an optional `id`. The default is an empty array: a caller who
+ *     with an optional `id` and an optional `trim: false` opt-out (see the
+ *     header). The default is an empty array: a caller who
  *     forgets gets no trim rather than an invented roof somewhere in the scene.
  *   - `spec` overrides ROOF_EDGE piece by piece; a junk entry falls back to the
  *     authored value (see `readSpec`).
@@ -269,7 +281,9 @@ function roofNormal(plane) {
  *
  * A pitched plane gets a fascia and a drip along its far (eave) edge and, with
  * `bargeRun` on, a bargeboard along each rake (u = ±width/2). A flat plane gets
- * a fascia and a drip around all four edges and no bargeboard. Malformed planes
+ * a fascia and a drip around all four edges and no bargeboard. A plane carrying
+ * `trim: false` -- exactly the boolean false -- is skipped entirely: no fascia,
+ * no drip, no barge. Malformed planes
  * are skipped. The call never throws and never yields NaN or Infinity.
  */
 export function roofEdgeSpans(options = {}) {
@@ -285,6 +299,10 @@ export function roofEdgeSpans(options = {}) {
     const raw = opts.planes[i];
     const plane = usablePlane(raw);
     if (plane === null) continue;
+    // The per-plane opt-out reads the RAW descriptor, not the clamped copy:
+    // only an exact boolean false skips, so junk and missing values fall
+    // through to the full trim (see header point 5 for the measured clash).
+    if (raw !== null && typeof raw === 'object' && !Array.isArray(raw) && raw.trim === false) continue;
     const id = planeId(raw, plane);
 
     // The eave edges as { axis: 'u'|'v', at: -1|1 }. `axis` names the axis the

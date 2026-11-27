@@ -244,6 +244,47 @@ test('bargeRun off drops the raking boards but keeps the eave trim', () => {
   assert.equal(countKind(roofEdgeSpans({ planes: [PLANE], spec: { bargeRun: 'yes' } }), 'barge'), 2);
 });
 
+// Round 109: a plane may opt out of the trim with `trim: false`, because the
+// two stall roofs are the modelled MarketAwning -- a finished edge of its own
+// that the round-104 boards measured intersecting by 0.020-0.025 m. Only the
+// exact boolean false skips; a junk or missing field must leave the trim up.
+test('trim: false skips a plane entirely; junk trim values do not', () => {
+  // A skipped plane beside a normal one: the normal plane still gets its full
+  // set (one fascia, one drip, two barges) and the skipped one lays nothing.
+  const bare = { ...PLANE, x: 20, id: 'bare', trim: false };
+  const mixed = roofEdgeSpans({ planes: [PLANE, bare] });
+  assert.equal(mixed.filter((span) => span.plane === 'test').length, 4);
+  assert.equal(mixed.filter((span) => span.plane === 'bare').length, 0);
+  assert.equal(mixed.length, 4);
+  assert.ok(!mixed.some((span) => span.plane === 'bare'), 'skipped plane produced a span');
+
+  // Only the exact boolean false skips: junk values read as trim on.
+  for (const trim of [0, null, 'x', {}, undefined, 1, 'false', []]) {
+    const spans = roofEdgeSpans({ planes: [{ ...PLANE, trim }] });
+    assert.equal(spans.length, 4, `trim ${String(trim)} unexpectedly skipped the plane`);
+    assert.equal(countKind(spans, 'fascia'), 1, `trim ${String(trim)} fascia count`);
+    assert.equal(countKind(spans, 'drip'), 1, `trim ${String(trim)} drip count`);
+    assert.equal(countKind(spans, 'barge'), 2, `trim ${String(trim)} barge count`);
+  }
+  // A missing field does not skip either.
+  const noField = { ...PLANE };
+  delete noField.trim;
+  assert.equal(roofEdgeSpans({ planes: [noField] }).length, 4);
+
+  // A trim:false plane is skipped even beside junk entries, and on a flat plane
+  // it drops all four banded edges too, not just the bargeboards.
+  assert.deepEqual(roofEdgeSpans({ planes: [bare, null, 42, 'x'] }), []);
+  assert.deepEqual(roofEdgeSpans({ planes: [{ ...FLAT, trim: false }] }), []);
+
+  // The count helper agrees with the spans on a mixed call.
+  const options = { planes: [PLANE, bare] };
+  assert.equal(roofEdgeCount(options), roofEdgeSpans(options).length);
+  assert.equal(roofEdgeCount(options), 4);
+
+  // Determinism: two identical calls give identical arrays.
+  assert.deepEqual(roofEdgeSpans(options), roofEdgeSpans(options));
+});
+
 test('the fascia sits at the eave, risen above the surface', () => {
   const fascia = roofEdgeSpans({ planes: [PLANE] }).find((span) => span.kind === 'fascia');
   const local = toLocal(PLANE, fascia.x, fascia.z);
@@ -434,7 +475,11 @@ test('roofEdgeCount agrees with roofEdgeSpans length for several inputs', () => 
     { planes: REAL_PLANES },
     { planes: [null, 42, PLANE, 'x'] },
     { planes: [PLANE], spec: { bargeRun: false } },
-    { planes: [PLANE], spec: { fasciaHeight: -5 } }
+    { planes: [PLANE], spec: { fasciaHeight: -5 } },
+    { planes: [PLANE, { ...PLANE, x: 20, id: 'bare', trim: false }] },
+    { planes: [{ ...PLANE, trim: 0 }] },
+    { planes: [{ ...PLANE, trim: null }] },
+    { planes: [{ ...PLANE, trim: 'x' }] }
   ];
   for (const options of cases) {
     assert.equal(

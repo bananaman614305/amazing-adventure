@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildWorld, applyPhase, KEY_SPOT, KEY_PICKUP_RANGE, floorHeightAt, surfaceHeightAt, TERRACE, STEP_HEIGHT, BENCH } from './world.js';
 import { Player } from './player.js';
-import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, upgradeCastSkin, upgradeCastAccent, upgradeCastBoot, upgradeCastPaper, animateCast, TALK_RANGE } from './npcs.js';
+import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, upgradeCastSkin, upgradeCastAccent, upgradeCastBoot, upgradeCastPaper, upgradeCastSteel, animateCast, TALK_RANGE } from './npcs.js';
 import { welcome } from './onboard.js';
 import {
   createInitialState,
@@ -610,7 +610,12 @@ const castReady = upgradeNPCs(npcs, { THREE, loadGlb })
       // fully dressed cast.
       .then(() => upgradeCastPaper(npcs, { THREE }))
       .then((paper) => Object.assign(summary, { paper }))
-      .catch((error) => Object.assign(summary, { paper: { dressed: 0, reason: String(error) } }));
+      .catch((error) => Object.assign(summary, { paper: { dressed: 0, reason: String(error) } }))
+      // Round 110: the cast's armour (halden's helmet, nasal, pauldrons and
+      // spear tip) picks up the lamp metal normal + roughness maps.
+      .then(() => upgradeCastSteel(npcs, { THREE }))
+      .then((steel) => Object.assign(summary, { steel }))
+      .catch((error) => Object.assign(summary, { steel: { dressed: 0, reason: String(error) } }));
   })
   .catch((error) => {
     return { loaded: 0, total: npcs.length, mode: 'boxes', reason: String(error) };

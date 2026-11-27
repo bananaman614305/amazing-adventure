@@ -5354,6 +5354,101 @@ try {
   checks.check('kerb is dropped on low tier', r108kerb.kerbVisibleLow === false, JSON.stringify(r108kerb));
   checks.check('plinth is dropped on low tier', r108kerb.plinthVisibleLow === false, JSON.stringify(r108kerb));
 
+  // --- Round 109: market-stall fascia/barge must not intersect the awning ---
+  // Round 104's trim was measured sitting 0.020-0.025 m inside the modelled
+  // MarketAwning on both stalls (fascia 0.025 m on z, both barges 0.020 m on
+  // x). The fix is per-plane: both stall roofPlanes carry `trim: false`, so
+  // roofEdgeSpans() lays no boards on them. This check reads the live span list
+  // plus every MarketAwning mesh in the booted scene, composes the same
+  // yaw-then-tilt AABB the module uses, and counts overlaps -- it must be zero.
+  // A non-vacuous guard keeps the house plane's trim in place so the opt-out
+  // cannot silently strip every roof.
+  const r109trim = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    try {
+      await api.assetsReady();
+      api.scene.updateMatrixWorld(true);
+      const spans = (api.environment.roofEdgeSpans || []).slice();
+      // awning world AABBs from the live meshes (scaling is in matrixWorld)
+      const awnings = [];
+      api.scene.traverse((o) => {
+        if (o.isMesh && o.name === 'MarketAwning') {
+          o.geometry.computeBoundingBox();
+          const b = o.geometry.boundingBox.clone();
+          b.applyMatrix4(o.matrixWorld);
+          awnings.push({ min: [b.min.x,b.min.y,b.min.z], max: [b.max.x,b.max.y,b.max.z] });
+        }
+      });
+      function spanAABB(s) {
+        const hx = s.size[0]/2, hy = s.size[1]/2, hz = s.size[2]/2;
+        const cosY = Math.cos(s.yaw), sinY = Math.sin(s.yaw);
+        const tilt = s.tilt || 0;
+        const cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+        let min = [Infinity,Infinity,Infinity], max = [-Infinity,-Infinity,-Infinity];
+        for (let sx = -1; sx <= 1; sx += 2)
+          for (let sy = -1; sy <= 1; sy += 2)
+            for (let sz = -1; sz <= 1; sz += 2) {
+              const lx = sx*hx;
+              const ly = sy*hy*cosT - sz*hz*sinT;
+              const lz = sy*hy*sinT + sz*hz*cosT;
+              const wx = s.x + lx*cosY + lz*sinY;
+              const wy = s.y + ly;
+              const wz = s.z - lx*sinY + lz*cosY;
+              if (wx < min[0]) min[0] = wx; if (wx > max[0]) max[0] = wx;
+              if (wy < min[1]) min[1] = wy; if (wy > max[1]) max[1] = wy;
+              if (wz < min[2]) min[2] = wz; if (wz > max[2]) max[2] = wz;
+            }
+        return { min, max };
+      }
+      let overlaps = 0, worst = 0, worstName = null;
+      for (const s of spans) {
+        if (s.kind !== 'fascia' && s.kind !== 'barge') continue;
+        const a = spanAABB(s);
+        for (const aw of awnings) {
+          const ox = Math.min(a.max[0], aw.max[0]) - Math.max(a.min[0], aw.min[0]);
+          const oy = Math.min(a.max[1], aw.max[1]) - Math.max(a.min[1], aw.min[1]);
+          const oz = Math.min(a.max[2], aw.max[2]) - Math.max(a.min[2], aw.min[2]);
+          if (ox > 0 && oy > 0 && oz > 0) {
+            overlaps += 1;
+            const pen = Math.min(ox, oy, oz);
+            if (pen > worst) { worst = pen; worstName = s.name; }
+          }
+        }
+      }
+      // non-vacuous: house south plane still carries fascia + 2 barges
+      const houseSpans = spans.filter((s) => s.plane === '-10.5--7.467059');
+      const houseFascia = houseSpans.filter((s) => s.kind === 'fascia').length;
+      const houseBarge = houseSpans.filter((s) => s.kind === 'barge').length;
+      const stallSpans = spans.filter((s) => s.plane === '11--3.1' || s.plane === '-11-5.925');
+      return {
+        awningCount: awnings.length,
+        spanCount: spans.length,
+        overlaps,
+        worst: Number(worst.toFixed(4)),
+        worstName,
+        houseFascia,
+        houseBarge,
+        stallSpanCount: stallSpans.length
+      };
+    } finally {
+      api.quality.set(startTier);
+      if (startAdaptive) api.quality.setAdaptive(true);
+    }
+  });
+  checks.check('no roof-edge trim intersects a market-stall awning',
+    r109trim.awningCount === 2 && r109trim.overlaps === 0,
+    JSON.stringify(r109trim));
+  checks.check('house south roof still carries fascia and two barges (non-vacuous)',
+    r109trim.houseFascia >= 1 && r109trim.houseBarge === 2,
+    JSON.stringify(r109trim));
+  checks.check('both stall planes carry no trim spans',
+    r109trim.stallSpanCount === 0,
+    JSON.stringify(r109trim));
+
   // --- Round 97: dress the terrace furniture ---------------------------------
   // The terrace GLB's timber members and planter stone join the existing wood
   // and house-stone families (only the family tests widen -- the GLB is

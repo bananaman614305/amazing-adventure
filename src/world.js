@@ -5688,8 +5688,12 @@ export function buildWorld(renderer) {
   const roofPlanes = [
     { x: -10.5, z: -7.467059, y: 3.861765, width: 8, depth: 3.132353, yaw: 0, pitch: 0.533333 },
     { x: -10.5, z: -10.532941, y: 3.861765, width: 8, depth: 3.132353, yaw: Math.PI, pitch: 0.533333 },
-    { x: 11, z: -3.1, y: 0.94, width: 4.3, depth: 1, yaw: 0, pitch: 0.2 },
-    { x: -11, z: 5.925, y: 0.846, width: 3.225, depth: 0.75, yaw: 0, pitch: 0.24 }
+    // Round 109: both stall roofs are the modelled MarketAwning -- a finished
+    // edge of its own (pitched slab with overhang, posts, hanging sign) that
+    // the trim measured intersecting by 0.020-0.025 m, so these two planes
+    // opt out of fascia/drip/barge entirely.
+    { x: 11, z: -3.1, y: 0.94, width: 4.3, depth: 1, yaw: 0, pitch: 0.2, trim: false },
+    { x: -11, z: 5.925, y: 0.846, width: 3.225, depth: 0.75, yaw: 0, pitch: 0.24, trim: false }
   ];
   const shingleSpawnsList = shinglesEnabled('full')
     ? shingleSpawns({ planes: roofPlanes })
