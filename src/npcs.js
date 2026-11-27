@@ -4,7 +4,7 @@ import { floorHeightAt } from './world.js';
 import {
   CAST_ASSETS, projectBoxGeometry, loadCast, loadMaterialTextures,
   CLOTH_TEXTURE_FILES, SKIN_TEXTURE_FILES, HAIR_TEXTURE_FILES, FELT_TEXTURE_FILES,
-  LEATHER_TEXTURE_FILES, PAPER_TEXTURE_FILES
+  LEATHER_TEXTURE_FILES, PAPER_TEXTURE_FILES, WOOD_TEXTURE_FILES
 } from './assets.js';
 import {
   CAST_SKIN_FAMILIES, castSkinFamilyFor, castSkinParams, shouldDressCastSkin
@@ -30,6 +30,11 @@ import {
   CAST_STEEL_TILE_METERS
 } from './steel.js';
 export { CAST_STEEL_TILE_METERS } from './steel.js';
+import {
+  CAST_WOOD_FAMILIES, castWoodFamilyFor, castWoodParams, shouldDressCastWood,
+  CAST_WOOD_TILE_METERS
+} from './woodprop.js';
+export { CAST_WOOD_TILE_METERS } from './woodprop.js';
 
 // Round 67: the metre scale the cast coats are box-projected at. It is the
 // cloth PROP_FAMILY's tile (see assets.js), so a cast coat, a lane sack and any
@@ -1127,3 +1132,87 @@ export async function upgradeCastSteel(npcs, { THREE, fetchImpl = fetch, texture
   }
   return dressCastSteel(npcs, loadedTextures, { THREE });
 }
+
+// Round 111: the cast's carried timber (mara's lantern pole, pip's hoop, halden's
+// spear shaft, wren's ledger board). The rules live in src/woodprop.js. It reuses
+// the crate/barrel plank maps (WOOD_TEXTURE_FILES) so the cast props read as the
+// same workshop timber as the plaza crates; the albedo carries the wood colour so
+// the tint is replaced rather than multiplied (keepTint false).
+// ---------------------------------------------------------------------------
+export const CAST_WOOD_TEXTURE_FILES = WOOD_TEXTURE_FILES;
+
+export function dressCastWood(npcs, textures, { THREE } = {}) {
+  const dressed = [];
+  const perFamily = { wood: 0 };
+  let seams = 0;
+  let anyLoaded = false;
+  if (!THREE || !textures) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  const family = CAST_WOOD_FAMILIES[0];
+  if (!shouldDressCastWood(family, textures)) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  anyLoaded = true;
+
+  const materialFamilies = new Map();
+
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const fam = castWoodFamilyFor(material && material.name);
+      if (!fam) return;
+      if (!shouldDressCastWood(fam, textures)) return;
+
+      const scale = accumulatedScale(mesh);
+      const split = projectBoxGeometry({
+        THREE, geometry: mesh.geometry, tileMeters: fam.tileMeters / scale
+      });
+      if (split.seams > 0) seams += split.seams;
+
+      if (materialFamilies.get(material) !== fam) {
+        const params = castWoodParams(fam);
+        for (const key of ['map', 'normalMap', 'roughnessMap']) {
+          const texture = textures[key];
+          if (!texture) continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        // keepTint is false for wood: the reused albedo carries the colour, so
+        // the material tint must be white or the grain is double-tinted.
+        material.color.setHex(0xffffff);
+        material.roughness = params.roughness;
+        material.metalness = params.metalness;
+        material.needsUpdate = true;
+        materialFamilies.set(material, fam);
+      }
+
+      mesh.userData.woodDressed = true;
+      perFamily.wood += 1;
+      dressed.push({ npc: npc.id, name: mesh.name, family: 'wood', tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, perFamily, anyLoaded };
+}
+
+export async function upgradeCastWood(npcs, { THREE, fetchImpl = fetch, textures = null } = {}) {
+  if (!THREE || !npcs || !npcs.length) {
+    return { dressed: 0, meshes: [], anyLoaded: false, perFamily: { wood: 0 } };
+  }
+  let loadedTextures = textures;
+  if (!loadedTextures) {
+    try {
+      loadedTextures = await loadMaterialTextures({ THREE, files: CAST_WOOD_TEXTURE_FILES, fetchImpl });
+    } catch {
+      loadedTextures = null;
+    }
+  }
+  return dressCastWood(npcs, loadedTextures, { THREE });
+}
+

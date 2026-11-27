@@ -3674,6 +3674,113 @@ try {
     `images ${JSON.stringify([...new Set(castSteel.rows.map((r) => r.image))])}`);
 
   await capture(page, 'round110-cast-steel.png');
+
+  // --- Round 111: ground dressing + the cast's carried wood -------------------
+  // Two surfaces were still flat: the house doormat (a bespoke coir albedo) and
+  // the terrace planters' inset soil tops. The plaza prop-family pass
+  // (upgradePropFamilies) now dresses them, and a new cast pass dresses the
+  // four `WoodP` props the cast carries (PropPole, PropHoop, PropSpear,
+  // PropLedger). Checked live after both settle points: each surface must carry
+  // the three maps, have a uv attribute, be marked by its pass, and sit at the
+  // family's settings. The doormat and soil ship a coloured albedo, so their
+  // tint must be white; the cast wood keeps the wood family's 0.78 / 0. The
+  // block pins the tier and disables adaptive switching inside a try/finally so
+  // the page is handed back exactly as the later checks expect.
+  const r111 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    try {
+      await api.assetsReady();
+      await api.castReady;
+
+      // The doormat: one mesh under the house-detail group.
+      const house = api.scene.getObjectByName('house-detail-model');
+      let doormat = null;
+      if (house) {
+        house.traverse((o) => {
+          if (o.isMesh && o.name === 'HouseDoormat') doormat = o;
+        });
+      }
+      const describe = (o) => {
+        if (!o) return null;
+        const uv = o.geometry && o.geometry.getAttribute('uv');
+        const m = o.material || {};
+        return {
+          found: true,
+          map: Boolean(m.map),
+          normalMap: Boolean(m.normalMap),
+          roughnessMap: Boolean(m.roughnessMap),
+          hasUv: Boolean(uv),
+          propFamily: o.userData ? (o.userData.propFamily || null) : null,
+          woodDressed: o.userData ? o.userData.woodDressed === true : false,
+          tint: m.color ? m.color.getHexString() : null,
+          roughness: Number(Number(m.roughness).toFixed(3)),
+          metalness: Number(Number(m.metalness).toFixed(3))
+        };
+      };
+      const doormatRow = describe(doormat);
+
+      // The two planter soil tops under the terrace-furniture group.
+      const furniture = api.scene.getObjectByName('terrace-furniture-model');
+      const soilRows = [];
+      if (furniture) {
+        furniture.traverse((o) => {
+          if (o.isMesh && (o.name === 'TerracePlanterASoil'
+            || o.name === 'TerracePlanterBSoil')) {
+            soilRows.push(Object.assign({ mesh: o.name }, describe(o)));
+          }
+        });
+      }
+
+      // The cast's four WoodP props, identified by material name. They sit on
+      // two different rigs; record how many distinct map images they share
+      // rather than asserting a tight count.
+      const woodRows = [];
+      const woodImages = new Set();
+      for (const npc of api.npcs) {
+        npc.group.traverse((o) => {
+          if (!o.isMesh || !o.material) return;
+          if ((o.material.name || '') !== 'WoodP') return;
+          const row = describe(o);
+          row.key = `${npc.id}/${o.name}`;
+          woodRows.push(row);
+          if (o.material.map && o.material.map.image) {
+            woodImages.add(o.material.map.image.width);
+          }
+        });
+      }
+
+      return {
+        doormat: doormatRow,
+        soil: soilRows,
+        wood: woodRows,
+        woodImageCount: woodImages.size
+      };
+    } finally {
+      api.quality.set(startTier);
+      if (startAdaptive) api.quality.setAdaptive(true);
+    }
+  });
+  checks.check('r111 the doormat carries bespoke coir maps and a uv set',
+    r111.doormat && r111.doormat.found === true && r111.doormat.map
+      && r111.doormat.normalMap && r111.doormat.roughnessMap && r111.doormat.hasUv
+      && r111.doormat.propFamily === 'doormat' && r111.doormat.tint === 'ffffff',
+    JSON.stringify(r111.doormat));
+  checks.check('r111 both planter soil tops carry bespoke maps and a uv set',
+    r111.soil.length === 2 && r111.soil.every((r) => r.found && r.map && r.normalMap
+      && r.roughnessMap && r.hasUv && r.propFamily === 'soil' && r.tint === 'ffffff'),
+    JSON.stringify(r111.soil));
+  checks.check('r111 the four cast WoodP props are dressed at wood 0.78 / 0',
+    r111.wood.length === 4 && r111.wood.every((r) => r.found && r.map && r.normalMap
+      && r.roughnessMap && r.hasUv && r.woodDressed && r.tint === 'ffffff'
+      && r.roughness === 0.78 && r.metalness === 0) && r111.woodImageCount <= 4,
+    JSON.stringify({ rows: r111.wood.length, images: r111.woodImageCount,
+      keys: r111.wood.map((r) => r.key).sort() }));
+
+  await capture(page, 'round111-ground-dressing.png');
   // --- 28n. The night sky's star field (round 85) -----------------------------
   // A star field sits inside the sky dome. At night it is full opacity and
   // twinkle-bright; at day it is hidden; dusk sits between. Checked live, on
