@@ -12,25 +12,32 @@
 
 ## Current task
 
-**Round 111 code is in and the desktop suite is green apart from one stale check
-that I fixed.** Evidence: `npm run test:browser` against `f28ce75` ran 382/383
-with all three round-111 checks passing — doormat coir family, both planter soil
-tops on the bespoke soil family, four cast `WoodP` props dressed at 0.78/0 — and
-"no console errors" passed. The only failure was a round-97 assertion
-('terrace soil stays flat') that round 111 deliberately invalidated; its own
-evidence showed 3 maps on each soil top, so I rewrote that check to assert the
-dressed contract (`9699a61`). A desktop re-run against `9699a61` is in flight
-(log `/tmp/scratchpad/browser2.log`); the mobile suite has not run yet. Code
-review subagent died on a 429 from the free pool; the live-scene material audit
-is queued behind the running suite. Release channel still reports
-`blocked_infrastructure` (host caps reachable commits at 256, branch is 300+
-ahead), so no release ids are pending; the PR-only fallback stays the path.
+**Round 111 is closed out and self-review found a real deployment bug, now
+fixed.** Desktop suite passed 383/383 at `9699a61` (all three round-111 checks
+green, no console errors). Reviewing the round myself (the review subagent had
+silently died) turned up something no test could see: the doormat and soil
+texture maps added in round 111 — and the boot leather maps referenced since
+round 82 — were in `assets/` and named by `src/`, but missing from
+`REQUIRED_FILES`, so `dist/` shipped without them. The boot-time load 404s, the
+family reports `flat`, and the game still plays: a silent fidelity loss.
+Fixed in `9b7d8e2` (nine paths added to `src/manifest.js`) plus a new
+non-vacuous guard in `tests/manifest.test.mjs` that derives every
+`assets/`/`vendor/` reference from `src/*.js` and fails if `REQUIRED_FILES` omits
+it, and `b971cea` (dist rebuilt with the maps). Unit suite 1557/1557 on the new
+head. The mobile suite is running against `b971cea` now (log
+`/tmp/scratchpad/mobile.log`, pid confirmed alive) — result not yet read.
+Release channel is still `blocked_infrastructure` (host caps reachable commits
+at 256; branch is 300+ ahead), no release ids pending; PR-only fallback path.
 
 ## Next steps
-1. Read the `9699a61` desktop re-run result (relaunch if the process died with
-   the cycle), then run `npm run test:mobile` once; fix anything red.
-2. Review round 111 myself (the subagent review hit 429) — woodprop totality,
-   `dressCastWood` map cloning, main.js playtest chain — then start round 112
-   from the audit's ranked flat-surface list.
+1. Read the `b971cea` mobile result and fix anything red; that closes round 111
+   across both device classes.
+2. Start round 112. The audit (`/tmp/scratchpad/audit-r112/ranked.md`) shows the
+   flat-surface axis is exhausted — only 9 flat materials remain (~12.9 m²) and
+   all but the 1.66 m² MeadowGrass tufts are flat by design (glass response,
+   emissive bulbs/markers, eyes/mouth). Two design agents are working the
+   alternatives: one ranking non-flat realism axes (lighting, geometry, material
+   quality, atmosphere), one auditing real render-budget headroom at full vs
+   `low` tier. That picks the round-112 direction.
 3. Keep the 101-111 release batched for `grunt-release` once the host commit cap
    is lifted; until then keep `publish.json` current per round.
