@@ -215,15 +215,22 @@ test('the coping and plinth stop at the wall corners rather than growing past th
     const along = run.axis === 'x' ? 0 : 2;
     // The course span is exactly the wall face: the run ends plus one half
     // thickness each way, never more. A course that grew past the corner would
-    // overshoot the corner itself.
+    // overshoot the corner itself. The one exception is a gate-adjacent run's
+    // pier end: the pier is not wall, so the course abuts the pier's inner face
+    // there instead of extending half a thickness (the pier-face test below
+    // pins that end).
+    const pierAtLowEnd = run.gateAdjacent && run.from >= GATE.maxX;
+    const pierAtHighEnd = run.gateAdjacent && run.to <= GATE.minX;
     for (const kind of ['coping', 'plinth']) {
       const piece = kind === 'coping' ? copingFor(run) : plinthFor(run);
       const lo = piece.position[along] - piece.size[along] / 2;
       const hi = piece.position[along] + piece.size[along] / 2;
-      assert.ok(Math.abs(lo - (run.from - WALL_HALF_THICK)) < 1e-9,
-        `${run.id} ${kind} inner end ${lo} is not the wall corner ${run.from - WALL_HALF_THICK}`);
-      assert.ok(Math.abs(hi - (run.to + WALL_HALF_THICK)) < 1e-9,
-        `${run.id} ${kind} outer end ${hi} is not the wall corner ${run.to + WALL_HALF_THICK}`);
+      const expectedLo = pierAtLowEnd ? run.from : run.from - WALL_HALF_THICK;
+      const expectedHi = pierAtHighEnd ? run.to : run.to + WALL_HALF_THICK;
+      assert.ok(Math.abs(lo - expectedLo) < 1e-9,
+        `${run.id} ${kind} inner end ${lo} is not ${expectedLo}`);
+      assert.ok(Math.abs(hi - expectedHi) < 1e-9,
+        `${run.id} ${kind} outer end ${hi} is not ${expectedHi}`);
     }
   }
 });
@@ -274,19 +281,51 @@ test('every pilaster projects under the keep-clear margin on the inner face', ()
   }
 });
 
-test('no pilaster lands inside the gate opening', () => {
+test('no pilaster lands inside the gate opening or on a gate pier', () => {
+  // The gate piers are 0.7 m boxes centred half a pier-width either side of the
+  // opening (world.js builds them at GATE.minX - 0.35 and GATE.maxX + 0.35),
+  // so pier A spans 7.30..8.00 and pier B 11.00..11.70. A pilaster projects
+  // past both faces, so its whole width must clear the pier, not just the
+  // opening.
+  const PIER_HALF = 0.35;
+  const pierA = [GATE.minX - PIER_HALF - PIER_HALF, GATE.minX];
+  const pierB = [GATE.maxX, GATE.maxX + PIER_HALF + PIER_HALF];
   const runs = wallRuns();
   for (const run of runs) {
     for (const pilaster of pilastersFor(run)) {
-      // North runs are the only ones at z = -HALF; a pilaster there must clear
-      // the gate opening x 8..11 entirely (its whole width, not just its centre).
       if (run.fixed !== -HALF) continue;
       const halfWidth = pilaster.size[0] / 2;
       const lo = pilaster.position[0] - halfWidth;
       const hi = pilaster.position[0] + halfWidth;
-      const overlaps = lo < GATE.maxX && hi > GATE.minX;
-      assert.equal(overlaps, false,
+      const inOpening = lo < GATE.maxX && hi > GATE.minX;
+      const onPierA = lo < pierA[1] && hi > pierA[0];
+      const onPierB = lo < pierB[1] && hi > pierB[0];
+      assert.equal(inOpening, false,
         `${run.id} pilaster spans ${lo}..${hi}, inside the gate opening ${GATE.minX}..${GATE.maxX}`);
+      assert.equal(onPierA || onPierB, false,
+        `${run.id} pilaster spans ${lo}..${hi}, overlapping a gate pier`);
+    }
+  }
+});
+
+test('courses on a gate-adjacent run stop at the pier inner face, not the opening', () => {
+  const runs = wallRuns();
+  for (const run of runs) {
+    if (!run.gateAdjacent) continue;
+    const along = 0;
+    for (const kind of ['coping', 'plinth']) {
+      const piece = kind === 'coping' ? copingFor(run) : plinthFor(run);
+      const lo = piece.position[along] - piece.size[along] / 2;
+      const hi = piece.position[along] + piece.size[along] / 2;
+      // The pier's courtyard-facing face sits at the opening face (x 8 or 11):
+      // the course abuts the pier there rather than growing past it.
+      const pierFace = run.to <= GATE.minX ? GATE.minX : GATE.maxX;
+      const touches = run.to <= GATE.minX ? hi : lo;
+      assert.ok(Math.abs(touches - pierFace) < 1e-9,
+        `${run.id} ${kind} ${run.to <= GATE.minX ? 'outer end' : 'inner end'} ${touches} is not at the pier face ${pierFace}`);
+      // And it never crosses the opening.
+      const spansOpening = lo < GATE.maxX && hi > GATE.minX;
+      assert.equal(spansOpening, false, `${run.id} ${kind} crosses the gate opening`);
     }
   }
 });

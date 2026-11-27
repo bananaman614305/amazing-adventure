@@ -3098,6 +3098,20 @@ try {
       }
       return [Number(min.toFixed(3)), Number(max.toFixed(3))];
     };
+    // A box-projected piece maps every face by metres / tile, so the widest UV
+    // span across the piece equals its longest edge over the tile size. That
+    // ratio is the metric projection's fingerprint: a piece wearing the wall's
+    // own repeat would carry the wall's span instead.
+    const uvMetric = (mesh) => {
+      const span = uvSpan(mesh);
+      if (!span || !mesh.geometry) return null;
+      mesh.geometry.computeBoundingBox();
+      const box = mesh.geometry.boundingBox;
+      const size = box.max.clone().sub(box.min);
+      const maxDim = Math.max(size.x, size.y, size.z);
+      return { span, maxDim: Number(maxDim.toFixed(3)),
+               ratio: Number(((span[1] - span[0]) / maxDim).toFixed(4)) };
+    };
     return {
       wallsTrim: state.wallsTrim,
       trimMaps: state.wallsTrimDetail ? state.wallsTrimDetail.maps : [],
@@ -3112,7 +3126,9 @@ try {
       plinth: describe(one('border-wall-plinth-south')),
       pilaster: describe(one('border-wall-pilaster-south-0')),
       copingUv: uvSpan(one('border-wall-coping-south')),
-      pilasterUv: uvSpan(one('border-wall-pilaster-south-0'))
+      pilasterUv: uvSpan(one('border-wall-pilaster-south-0')),
+      copingMetric: uvMetric(one('border-wall-coping-south')),
+      pilasterMetric: uvMetric(one('border-wall-pilaster-south-0'))
     };
   }));
   checks.check('the trim covers all five runs with named pieces',
@@ -3124,11 +3140,20 @@ try {
     trim.trimMeshes === trim.pieces.length,
     JSON.stringify({ wallsTrim: trim.wallsTrim, maps: trim.trimMaps,
                      tile: trim.trimTile, meshes: trim.trimMeshes }));
+  // The metric projection's fingerprint is UV metres per world metre: a face
+  // maps at exactly 1 / tileMeters, so the widest UV span over the piece's
+  // longest edge is 1/1.6 = 0.625. A piece still wearing the wall's own repeat
+  // (or a UV span under 1, i.e. not projected at all) misses that ratio.
+  const expectedRatio = 1 / 1.6;
+  const metricOk = (metric) => metric &&
+    Math.abs(metric.ratio - expectedRatio) < 0.01;
   checks.check('the trim pieces wear the projected stone maps, not the wall repeat',
     trim.coping && trim.coping.map && trim.coping.normal && trim.coping.rough &&
     trim.plinth && trim.plinth.map && trim.pilaster && trim.pilaster.map &&
-    trim.coping.repeat[0] === 1 && trim.copingUv[1] > 1 && trim.pilasterUv[1] > 1,
-    JSON.stringify({ coping: trim.coping, copingUv: trim.copingUv, pilasterUv: trim.pilasterUv }));
+    trim.coping.repeat[0] === 1 && trim.coping.repeat[1] === 1 &&
+    metricOk(trim.copingMetric) && metricOk(trim.pilasterMetric),
+    JSON.stringify({ coping: trim.coping, copingMetric: trim.copingMetric,
+                     pilasterMetric: trim.pilasterMetric, expectedRatio }));
   const before = (await page.evaluate(() => window.amazingAdventure.quality.tier));
   await page.evaluate(() => window.amazingAdventure.quality.set('low'));
   const low = await page.evaluate(() => {

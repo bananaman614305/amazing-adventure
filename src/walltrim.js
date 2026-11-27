@@ -127,6 +127,12 @@ const MAX_RUN_LENGTH = 200;
  *  drift into the lane mouth. */
 const GATE_MIN_X = 8;
 const GATE_MAX_X = 11;
+// The gate piers are 0.7 m wide boxes centred half a pier-width either side of
+// the opening, so each pier's inner face (toward the courtyard) sits at the
+// opening face x 8 and x 11. The courses on a gate-adjacent run stop at that
+// inner face, and the pilaster band keeps the same clear span so no strip
+// crowds a pier.
+const PIER_OVERHANG = 0.7 / 2;
 
 /** The five runs. `axis` is the direction the wall runs, `from`/`to` the extent
  *  along it, `fixed` the coordinate on the other axis. The two north segments
@@ -202,23 +208,89 @@ function runCenter(run) {
   return (run.from + run.to) / 2;
 }
 
+/** The gate-adjacent run's far end on the opening side: the pier's inner face
+ *  (the face toward the courtyard), so a course or pilaster band stops at the
+ *  pier instead of overlapping it. The piers are 0.7 m wide boxes centred half
+ *  a pier-width either side of the opening, so the inner faces sit at the
+ *  opening faces x 8 and x 11. A non-gate-adjacent run has no stop. */
+function gateStop(run) {
+  if (!run.gateAdjacent) return null;
+  if (run.to <= GATE_MIN_X) return GATE_MIN_X;
+  if (run.from >= GATE_MAX_X) return GATE_MAX_X;
+  return null;
+}
+
+/** The run's effective extent for a course: [from', to'], where the stop end
+ *  replaces the opening end on a gate-adjacent run. Every course and band is
+ *  laid out on this extent, so the stop end is honoured by length and centre
+ *  alike and no course can overlap a pier or the lane mouth. */
+function courseExtent(run) {
+  const stop = gateStop(run);
+  if (stop === null) return [run.from, run.to];
+  // The stop replaces the end nearest the opening: the left run's `to`, the
+  // right run's `from`.
+  if (run.to <= GATE_MIN_X) return [run.from, stop];
+  return [stop, run.to];
+}
+
+/** The span a course covers along its run, in run-axis coordinates. A course
+ *  covers the wall face, so each end extends one half-thickness past the run
+ *  end to meet the neighbouring wall at the corner -- but a gate-adjacent run's
+ *  pier end stops exactly at the pier's inner face, because the pier there is
+ *  not wall and there is nothing for the course to meet. */
+function courseSpan(run) {
+  const [from, to] = courseExtent(run);
+  const stop = gateStop(run);
+  // The corner end always gets the half-thickness; the pier end gets none.
+  const cornerEnd = run.to <= GATE_MIN_X || !run.gateAdjacent
+    ? from - WALL_HALF_THICK
+    : to + WALL_HALF_THICK;
+  const pierEnd = stop === null
+    ? (run.to <= GATE_MIN_X || !run.gateAdjacent ? to + WALL_HALF_THICK : from - WALL_HALF_THICK)
+    : stop;
+  return [Math.min(cornerEnd, pierEnd), Math.max(cornerEnd, pierEnd)];
+}
+
+/** The run's full course length, from corner to corner (or pier to corner on a
+ *  gate-adjacent north run), so courses and pilasters cannot overlap the gate
+ *  piers or the lane mouth. */
+function courseRunLength(run) {
+  const [from, to] = courseSpan(run);
+  return to - from;
+}
+
 /** The centre offset of the outer face from the wall line, signed so it points
  *  away from the courtyard. */
 function outerFace(run) {
   return run.fixed >= 0 ? run.fixed + WALL_HALF_THICK : run.fixed - WALL_HALF_THICK;
 }
 
+/** The pilaster stop: the pier's outer edge (the edge away from the courtyard),
+ *  because a strip projects past both faces and so needs the whole pier kept
+ *  clear, not just its inner face. A non-gate-adjacent run has no stop. */
+function pilasterStop(run) {
+  if (!run.gateAdjacent) return null;
+  // The pier's outer edge, not its centre or inner face: a pier is 2 *
+  // PIER_OVERHANG wide, centred PIER_OVERHANG outside the opening, so its far
+  // edge is a further PIER_OVERHANG out. A strip that cleared only the centre
+  // would still overlap the half of the pier nearer the wall corner.
+  if (run.to <= GATE_MIN_X) return GATE_MIN_X - 2 * PIER_OVERHANG;
+  if (run.from >= GATE_MAX_X) return GATE_MAX_X + 2 * PIER_OVERHANG;
+  return null;
+}
+
 /** The pilaster band this run offers, in run-axis coordinates. A band is the
  *  span a pilaster centre may occupy; its ends are inset by the pilaster
  *  half-width so a strip's edge never kisses the wall corner. On a
- *  gate-adjacent north segment the band also stops short of the opening, so no
- *  pilaster centre can land in x 8..11 or crowd the piers that frame it. */
+ *  gate-adjacent north segment the band stops at the pier's outer edge, so no
+ *  strip can overlap the pier that frames the opening. */
 function pilasterBand(run, halfWidth) {
+  const stop = pilasterStop(run);
   let bandMin = run.from + halfWidth;
   let bandMax = run.to - halfWidth;
-  if (run.gateAdjacent) {
-    if (run.to <= GATE_MIN_X) bandMax = Math.min(bandMax, GATE_MIN_X - halfWidth);
-    if (run.from >= GATE_MAX_X) bandMin = Math.max(bandMin, GATE_MAX_X + halfWidth);
+  if (stop !== null) {
+    if (run.to <= GATE_MIN_X) bandMax = Math.min(bandMax, stop - halfWidth);
+    if (run.from >= GATE_MAX_X) bandMin = Math.max(bandMin, stop + halfWidth);
   }
   return [bandMin, bandMax];
 }
@@ -257,21 +329,24 @@ export function wallRuns() {
  */
 export function copingFor(run) {
   const r = usableRun(run) || WALL_RUNS[0];
-  const runLength = r.to - r.from;
+  const runLength = courseRunLength(r);
   // The cap covers the wall face plus one projection outward and nothing along
   // the run ends: a course stops at the corner rather than growing past the
   // wall it caps. The earlier draft grew the length too; the unit test pins
-  // the span to [from - halfThickness, to + halfThickness].
-  const length = runLength + 2 * WALL_HALF_THICK;
+  // the span to the wall face [from - halfThickness, to + halfThickness], with
+  // the gate-adjacent pier end stopping at the pier's inner face.
+  const length = runLength;
   const depth = 2 * halfDepth(WALL_TRIM.copingProjection) - WALL_TRIM.copingProjection;
   const height = clampNumber(WALL_TRIM.copingHeight, 0, 1, 0.22);
   // The cap runs from the inner face to the outer face plus its projection, so
   // its centre is the wall line shifted half the projection toward the outside;
-  // nothing of it hangs over the courtyard.
+  // nothing of it hangs over the courtyard. The centre is the course span's
+  // midpoint, so a gate-adjacent cap ends at the pier's inner face.
   const shift = (r.fixed >= 0 ? 1 : -1) * WALL_TRIM.copingProjection / 2;
+  const [spanFrom, spanTo] = courseSpan(r);
   const center = r.axis === 'x'
-    ? { x: runCenter(r), z: r.fixed + shift }
-    : { x: r.fixed + shift, z: runCenter(r) };
+    ? { x: (spanFrom + spanTo) / 2, z: r.fixed + shift }
+    : { x: r.fixed + shift, z: (spanFrom + spanTo) / 2 };
   return {
     size: [r.axis === 'x' ? length : depth, height, r.axis === 'x' ? depth : length],
     position: [
@@ -302,14 +377,18 @@ export function plinthFor(run) {
   // Same discipline as the coping: the foot course stops at the corner rather
   // than growing along the run, so its span is the wall face [from -
   // halfThickness, to + halfThickness]. The projection only steps the depth
-  // outward, never the length.
-  const runLength = r.to - r.from;
-  const length = runLength + 2 * WALL_HALF_THICK;
+  // outward, never the length. A gate-adjacent run stops at the pier's inner
+  // face instead of the opening face, so the course cannot overlap a pier.
+  const runLength = courseRunLength(r);
+  const length = runLength;
   const depth = 2 * halfDepth(WALL_TRIM.plinthProjection);
   const height = clampNumber(WALL_TRIM.plinthHeight, 0, 1, 0.45);
   // Symmetric steps: the centre sits on the wall line, half a projection inside
-  // each face, because the foot course reads as one course around the wall.
-  const along = runCenter(r);
+  // each face, because the foot course reads as one course around the wall. The
+  // centre is the course span's midpoint, so a gate-adjacent course ends at the
+  // pier's inner face.
+  const [spanFrom, spanTo] = courseSpan(r);
+  const along = (spanFrom + spanTo) / 2;
   const center = r.axis === 'x' ? { x: along, z: r.fixed } : { x: r.fixed, z: along };
   return {
     size: [r.axis === 'x' ? length : depth, height, r.axis === 'x' ? depth : length],
