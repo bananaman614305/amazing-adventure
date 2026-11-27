@@ -25,7 +25,7 @@ shares the walls' one stone fetch but keeps its own cloned texture set and a
 (`border-wall-south/east/west/north-left/north-right`). The courses stop
 exactly at the wall corners: both span [from - halfThickness, to +
 halfThickness]; the outward projection steps the depth only. Committed: dd9ad94
-(7 files), aa2c6c9 (corner-stop fix), 8369d92 (checkpoint), fc79c99 (dist
+(7 files), aa2c6c9 (corner-stop fix), 8369d92 and a9c3b8a (checkpoints), fc79c99 (dist
 rebuild). tests/walltrim.test.mjs 20/20 pass. Browser checks for the named
 pieces, projected stone maps and the tier flag are in scripts/test-round2.mjs
 (28k-i block). The full unit suite is re-running in the background; browser +
