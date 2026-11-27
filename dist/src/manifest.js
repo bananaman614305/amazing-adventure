@@ -67,6 +67,7 @@ export const REQUIRED_FILES = [
   'src/moss.js',
   'src/walltrim.js',
   'src/contactshadows.js',
+  'src/lightspill.js',
   'src/kerb.js',
   'src/paving.js',
   'src/ivy.js',

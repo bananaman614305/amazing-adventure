@@ -48,7 +48,8 @@ import { wildflowerSpawns, wildflowerSway, wildflowerGlowLevel, wildflowersEnabl
 import { reedSpawns, reedStemSway, reedGlowLevel, reedsEnabled, REED_COUNT } from './reeds.js';
 import { mossSpawns, mossDarkness, mossGlowLevel, mossEnabled,
   MOSS_SEAM_WIDTH, MOSS_DECAL_LIFT } from './moss.js';
-import { shadowDecals, shadowOpacity, shadowsEnabled, SHADOW_DECAL_LIFT } from './contactshadows.js';
+import { shadowDecals, shadowOpacity, shadowsEnabled, SHADOW_DECAL_LIFT, contactShadowYaw } from './contactshadows.js';
+import { spillDecals, spillStrength, spillEnabled, SPILL_DECAL_LIFT, SPILL_MIN_RADIUS, SPILL_MAX_RADIUS } from './lightspill.js';
 import { plazaKerbSpec, lanePlinthSpec, kerbEnabled, plinthEnabled, PLAZA_KERB_MAJOR, PLAZA_KERB_TUBE, PLAZA_KERB_SEGMENTS, PLAZA_KERB_TUBE_SEGMENTS } from './kerb.js';
 import { WALL_TRIM, wallTrimLayout, wallTrimEnabled } from './walltrim.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
@@ -4721,6 +4722,89 @@ export function buildWorld(renderer) {
   }
   paintWindows('day', 0);
 
+  // --- Warm window-light spill pools on the ground -------------------------
+  // One soft warm pool under every lit pane, on the ground under the wall face
+  // it sits on. The positions come from the window schedule projected onto the
+  // nearest inner face (same projection as the panes), so a pool and its pane
+  // stay in lockstep. The strength follows the night through spillStrength().
+  const spillAnchors = windowSpawnsList.map((spawn, i) => {
+    const face = windowFaces[i];
+    return { x: face.px, z: face.pz, warmth: spawn.warmth };
+  });
+  const spillSpawnsList = spillEnabled('full') ? spillDecals(spillAnchors) : [];
+
+  function createSpillTexture(size = 64) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(255,220,150,1.0)');
+    g.addColorStop(0.4, 'rgba(255,200,120,0.55)');
+    g.addColorStop(0.85, 'rgba(255,180,90,0.12)');
+    g.addColorStop(1, 'rgba(255,160,70,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  const spillGeometry = new THREE.PlaneGeometry(1, 1);
+  const spillMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: createSpillTexture(),
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: true,
+    blending: THREE.AdditiveBlending
+  });
+  spillMaterial.name = 'WindowSpill';
+  const spillMesh = new THREE.InstancedMesh(
+    spillGeometry, spillMaterial, Math.max(1, spillSpawnsList.length)
+  );
+  spillMesh.name = 'window-spill';
+  spillMesh.count = spillSpawnsList.length;
+  spillMesh.frustumCulled = false;
+  spillMesh.renderOrder = 1;
+  scene.add(spillMesh);
+
+  const _spMatrix = new THREE.Matrix4();
+  const _spPos = new THREE.Vector3();
+  const _spScale = new THREE.Vector3();
+  const _spQuat = new THREE.Quaternion();
+  const _spFlat = new THREE.Quaternion();
+  const _spYaw = new THREE.Quaternion();
+  const _spUp = new THREE.Vector3(0, 1, 0);
+  _spFlat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+  const _spColor = new THREE.Color(0xffc07a);
+  for (let i = 0; i < spillSpawnsList.length; i += 1) {
+    const pool = spillSpawnsList[i];
+    _spYaw.setFromAxisAngle(_spUp, pool.yaw);
+    _spQuat.copy(_spFlat).multiply(_spYaw);
+    _spPos.set(pool.x, surfaceHeightAt(pool.x, pool.z) + SPILL_DECAL_LIFT, pool.z);
+    _spScale.set(pool.radius * 2, pool.radius * 2, 1);
+    _spMatrix.compose(_spPos, _spQuat, _spScale);
+    spillMesh.setMatrixAt(i, _spMatrix);
+    _spColor.setHex(0xffc07a).multiplyScalar(pool.opacity);
+    spillMesh.setColorAt(i, _spColor);
+  }
+  spillMesh.instanceMatrix.needsUpdate = true;
+  if (spillMesh.instanceColor) spillMesh.instanceColor.needsUpdate = true;
+
+  function paintSpill(phaseId, night, tier = environment.quality) {
+    const coarse = (phaseId === 'dusk' ? 0.18 : phaseId === 'night' ? 0.62 : 0);
+    const n = Number.isFinite(night) ? Math.min(1, Math.max(0, night)) : coarse;
+    const strength = spillStrength(phaseId, n);
+    spillMaterial.opacity = strength;
+    spillMesh.visible = spillSpawnsList.length > 0 && spillEnabled(tier) && strength > 0;
+  }
+  paintSpill('day', 0, 'full');
+
   // --- Ivy on the border walls ---------------------------------------------
   const ivySpawnsList = ivyEnabled('full')
     ? ivySpawns({
@@ -5666,30 +5750,35 @@ export function buildWorld(renderer) {
   const _csYaw = new THREE.Quaternion();
   const _csUp = new THREE.Vector3(0, 1, 0);
   _csFlat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-  for (let i = 0; i < contactSpawnsList.length; i += 1) {
-    const decal = contactSpawnsList[i];
-    // The squash is applied to the disc's local Y (which the flat rotation maps
-    // onto world Z), so the ellipse is free to point anywhere; the yaw is a
-    // stable per-decal choice derived from the position, not from the frame.
-    _csYaw.setFromAxisAngle(_csUp, (decal.x * 0.7 + decal.z * 1.3) % (Math.PI * 2));
-    _csQuat.copy(_csFlat).multiply(_csYaw);
-    // A fixed 12 mm put every decal off the plaza under the stone: the lane
-    // floor is 2 cm up and the terrace 1.2 m, so nine of the anchors -- the
-    // lane props, the sacks and the terrace bench -- had an invisible smudge.
-    // The decal sits on the surface under it, lifted by the smallest of the
-    // three overlay lifts so it stays below the moss and the water.
-    _csPos.set(decal.x, surfaceHeightAt(decal.x, decal.z) + SHADOW_DECAL_LIFT, decal.z);
-    _csScale.set(decal.radius * 2, decal.radius * 2 * decal.squash, 1);
-    _csMatrix.compose(_csPos, _csQuat, _csScale);
-    contactMesh.setMatrixAt(i, _csMatrix);
+
+  // The decals' positions are fixed (the ground under a prop does not change
+  // with the hour), but their aim follows the sun: the ellipse's major axis
+  // points away from the light, so the field reads as one shadow direction.
+  // Rebuilding only the yaw keeps the position/scale work out of the per-phase
+  // path; the sun aim comes from PHASE_LOOKS.
+  function placeContactShadows(sunPosition) {
+    for (let i = 0; i < contactSpawnsList.length; i += 1) {
+      const decal = contactSpawnsList[i];
+      const yaw = contactShadowYaw(sunPosition, decal.x, decal.z);
+      _csYaw.setFromAxisAngle(_csUp, yaw);
+      _csQuat.copy(_csFlat).multiply(_csYaw);
+      _csPos.set(decal.x, surfaceHeightAt(decal.x, decal.z) + SHADOW_DECAL_LIFT, decal.z);
+      _csScale.set(decal.radius * 2, decal.radius * 2 * decal.squash, 1);
+      _csMatrix.compose(_csPos, _csQuat, _csScale);
+      contactMesh.setMatrixAt(i, _csMatrix);
+    }
+    contactMesh.instanceMatrix.needsUpdate = true;
   }
-  contactMesh.instanceMatrix.needsUpdate = true;
+  placeContactShadows(PHASE_LOOKS.day.sunPosition);
 
   // Contact decals do not move: the ground under a prop does not change with the
-  // hour. Only their strength follows the phase.
+  // hour. Only their strength follows the phase; the aim is re-derived from
+  // the phase sun so a phase change re-aims the field.
   function paintContactShadows(phaseId, tier = environment.quality) {
     contactMaterial.opacity = shadowOpacity(phaseId);
     contactMesh.visible = contactSpawnsList.length > 0 && shadowsEnabled(tier);
+    const look = PHASE_LOOKS[phaseId];
+    if (look && look.sunPosition) placeContactShadows(look.sunPosition);
   }
   paintContactShadows('day', 'full');
 
@@ -6292,6 +6381,15 @@ export function buildWorld(renderer) {
     get windowsOn() {
       return windowsEnabled(environment.quality);
     },
+    // Round 112: warm window-light spill pools on the ground.
+    windowSpill: spillMesh,
+    windowSpillCount: spillSpawnsList.length,
+    paintWindowSpill(phaseId, night) {
+      paintSpill(phaseId, night, environment.quality);
+    },
+    get windowSpillOn() {
+      return spillEnabled(environment.quality);
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -6369,6 +6467,7 @@ export function buildWorld(renderer) {
       if (environment.paintLitter) environment.paintLitter(environment.phase);
       if (environment.paintMotes) environment.paintMotes(environment.phase);
       if (environment.paintWindows) environment.paintWindows(environment.phase);
+      if (environment.paintWindowSpill) environment.paintWindowSpill(environment.phase);
       if (environment.paintIvy) environment.paintIvy(environment.phase);
       if (environment.paintSpray) environment.paintSpray(environment.phase);
       if (environment.paintMist) environment.paintMist(environment.phase);
@@ -6690,6 +6789,7 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintLitter) environment.paintLitter(phaseId);
   if (environment.paintMotes) environment.paintMotes(phaseId);
   if (environment.paintWindows) environment.paintWindows(phaseId);
+  if (environment.paintWindowSpill) environment.paintWindowSpill(phaseId);
   if (environment.paintIvy) environment.paintIvy(phaseId);
   if (environment.paintSpray) environment.paintSpray(phaseId);
   if (environment.paintMist) environment.paintMist(phaseId);

@@ -669,6 +669,7 @@ function syncPhase(force = false) {
   // runs, so refining here makes a forced clock paint the right village at once
   // rather than waiting for the next frame.
   if (environment.updateWindows) environment.updateWindows(nightFraction(clockSeconds));
+  if (environment.paintWindowSpill) environment.paintWindowSpill(environment.phase, nightFraction(clockSeconds));
   setNPCRoutine(npcs, phase.id);
   clockPhase.textContent = phase.label;
   // The drone shifts root and level with the time of day.
@@ -1957,6 +1958,7 @@ function frame() {
   if (environment.updateButterflies) environment.updateButterflies(dt);
   if (environment.updateMotes) environment.updateMotes(dt);
   if (environment.updateWindows) environment.updateWindows(nightFraction(clockSeconds));
+  if (environment.paintWindowSpill) environment.paintWindowSpill(environment.phase, nightFraction(clockSeconds));
   if (environment.updateIvy) environment.updateIvy(dt);
   if (environment.updateSpray) environment.updateSpray(dt);
   if (environment.updateMist) environment.updateMist(dt);
