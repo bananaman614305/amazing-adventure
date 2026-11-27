@@ -3141,7 +3141,7 @@ try {
     low.visible === false && low.tier === 'low',
     JSON.stringify(low));
 
-  await capture(page, 'round45-plaza.png');
+  await capture(page, 'round45a-trim.png');
   checks.check('the sky is a vertex-colour gradient dome',
     plaza.dome && plaza.dome.vertexColors && plaza.dome.colorCount > 100,
     JSON.stringify(plaza.dome));
