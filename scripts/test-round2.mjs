@@ -5619,7 +5619,7 @@ try {
   // The terrace GLB's timber members and planter stone join the existing wood
   // and house-stone families (only the family tests widen -- the GLB is
   // untouched), so the pergola reads as planked timber and the planters as
-  // dressed stone. The soil top stays flat by design. Checked live: each mesh
+  // dressed stone, and (round 111) the soil top joins the bespoke soil family. Checked live: each mesh
   // must carry the three maps (or none, for soil), with metre-space repeat 1:1
   // and the authored tint preserved on the timber (keepTint false -> white) and
   // the soil left untinted.
@@ -5667,8 +5667,8 @@ try {
   checks.check('terrace timber and stone keep their family tints (wood white, stone white)',
     terraceDress.rows.filter((r) => !/Soil/i.test(r.mesh)).every((r) => r.tint === 'ffffff'),
     JSON.stringify([...new Set(terraceDress.rows.filter((r) => !/Soil/i.test(r.mesh)).map((r) => r.tint))]));
-  checks.check('terrace soil stays flat (no maps, authored colour)',
-    terraceDress.rows.filter((r) => /Soil/i.test(r.mesh)).every((r) => r.maps === 0),
+  checks.check('terrace soil is dressed in the bespoke soil family (round 111)',
+    terraceDress.rows.filter((r) => /Soil/i.test(r.mesh)).every((r) => r.maps === 3 && r.hasUv),
     JSON.stringify(terraceDress.rows.filter((r) => /Soil/i.test(r.mesh)).map((r) => ({ m: r.mesh, maps: r.maps }))));
   checks.check('terrace dressing reports wood and stone families in propWoodDetail',
     terraceDress.assetState === 'textured' &&
