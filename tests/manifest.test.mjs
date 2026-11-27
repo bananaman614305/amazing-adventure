@@ -38,6 +38,38 @@ test('the manifest lists the real game source, not just some of it', () => {
   assert.deepEqual(unlisted, [], `src files missing from the manifest: ${unlisted.join(', ')}`);
 });
 
+test('the manifest lists every texture, model and vendor file assets.js references', async () => {
+  // Rounds 101-111 each added a texture family and listed it by hand. Round 111
+  // added doormat_* and soil_* to assets.js but not to REQUIRED_FILES, so dist/
+  // shipped without them: the boot-time load 404s, every family degrades to
+  // 'flat', and the game still plays -- a silent fidelity loss that no existing
+  // test could see, because the manifest test only walked src/*.js. The cast's
+  // leather maps had the same gap since round 82. So the guard now reads the
+  // asset references out of the source itself and fails on any that the preview
+  // would not contain. Anything under assets/ or vendor/ that a src module names
+  // as a quoted string is treated as a shipped file.
+  const refs = new Set();
+  for (const file of allFiles.filter((f) => f.startsWith('src/') && f.endsWith('.js'))) {
+    const text = readFileSync(join(ROOT, file), 'utf8');
+    for (const match of text.matchAll(/['"`]((?:assets|vendor)\/[A-Za-z0-9_./-]+\.(?:webp|glb|png|jpg|js|txt))['"`]/g)) {
+      refs.add(match[1]);
+    }
+  }
+  // The guard must be non-vacuous: if the regex ever stops matching (a refactor
+  // to template strings with a directory variable, say), this test would pass
+  // while checking nothing.
+  assert.ok(refs.size > 80, `only ${refs.size} asset references found; the scan is broken`);
+  const listed = new Set(REQUIRED_FILES);
+  const unlisted = [...refs].filter((r) => !listed.has(r)).sort();
+  assert.deepEqual(unlisted, [],
+    `assets referenced by src/ but missing from REQUIRED_FILES (dist/ would 404 them): ${unlisted.join(', ')}`);
+  // Every referenced file must also exist, or the manifest-and-disk check above
+  // would pass on a name the build copies into a hole.
+  for (const ref of refs) {
+    assert.ok(allFiles.includes(ref), `${ref} is referenced but does not exist`);
+  }
+});
+
 test('the manifest agrees with version.js', () => {
   const m = buildManifest();
   assert.equal(m.version, VERSION);
