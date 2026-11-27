@@ -29,20 +29,24 @@ no console errors: iPhone 13 portrait 9.1fps, Pixel 7 1.2, iPhone SE 1.9, iPhone
 13 landscape 1.3). Round 111 is closed across both device classes.
 Release channel is still `blocked_infrastructure` (host caps reachable commits
 at 256; branch is 300+ ahead), no release ids pending; PR-only fallback path.
-**Round 112 started: night light depth — window spill pools + sun-aimed contact
-shadows.** Both audit agents finished; their reports are saved at
-`/tmp/scratchpad/audit-r112/` (ranked.md lost to a scratchpad wipe, budget.md
-kept; the design ranking is summarized in Current-task history above). Two
-subagents are building the pure halves in parallel: src/lightspill.js (warm
-ground pools under lit windows, driven by nightFraction) and the sun-aim maths
-for src/contactshadows.js (the world.js:5673 yaw placeholder replaced by the
-phase sun direction). Integration into world.js, browser checks and dist
-follow once both land.
+**Round 112 (night light depth) is implemented and committed; desktop browser
+suite running.** Both pure halves are in: `src/lightspill.js` (warm ground
+pools under lit panes, seeded, per-phase strength via `spillStrength`) and
+`contactShadowYaw` in `src/contactshadows.js` (ellipse aims away from the
+phase sun). Integration in `src/world.js` builds `window-spill`
+(InstancedMesh, additive, `vertexColors` for per-pool opacity, low-tier drop,
+per-phase opacity) placed from the projected window faces, and re-aims the
+contact decals from `PHASE_LOOKS.sunPosition` on phase change. `src/main.js`
+paints the spill per frame alongside `updateWindows`. Browser checks
+(`r112` block in `scripts/test-round2.mjs`) cover: spill decals exist and
+match window count, strength follows night (day hidden), low-tier drop, and
+contact yaw day vs dusk differ. Unit suite 1580/1580 on `f0e7437`; dist
+rebuilt. Release channel still `blocked_infrastructure`, PR-only fallback.
+Pending: desktop + mobile suites, self-review, publish.json update.
 
 ## Next steps
-1. Land the two round-112 pure modules + tests, integrate both into world.js
-   (InstancedMesh 'window-spill' with surfaceHeightAt placement, low-tier drop,
-   per-phase opacity; contact decal ellipse aimed along the phase sun azimuth,
-   recomputed on phase change), add browser checks, rebuild dist.
+1. Read the desktop browser result (background `bhgw98l9v`), fix any r112
+   failure, then run `npm run test:mobile`; self-review the round and update
+   `publish.json`.
 2. Keep the 101-111 release batched for `grunt-release` once the host commit cap
    is lifted; until then keep `publish.json` current per round.
