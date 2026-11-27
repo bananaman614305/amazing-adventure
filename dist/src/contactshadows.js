@@ -85,6 +85,15 @@ export const SHADOW_MAX_SQUASH = 1.0;
  *  while breaking the painted-ring look. */
 export const SHADOW_JITTER = 0.35;
 
+/** Height of a contact-shadow decal above the paved surface under it, in metres.
+ *  A decal is a translucent, depthWrite:false quad, so it must sit a little
+ *  above the stone to beat z-fighting at grazing angles; 2 mm clears the paving
+ *  without reading as a raised disc. This is a LIFT above the surface, not an
+ *  absolute world height: the lane floor sits 2 cm higher than the plaza and the
+ *  terrace 1.2 m higher, so one absolute height cannot work for every surface.
+ *  It is the lowest of the three ground-overlay layers. */
+export const SHADOW_DECAL_LIFT = 0.002;
+
 /** Per-decal opacity range. This is the strength of one smudge relative to the
  *  others -- a big stall's foot is denser than a lamp post's -- before the
  *  per-phase multiplier is applied. */

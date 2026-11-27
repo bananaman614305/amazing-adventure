@@ -1710,12 +1710,18 @@ export const loadStoneTextures = loadMaterialTextures;
 export const PLAZA_AO_MAP_CHANNEL = 0;
 
 /**
- * AO strength for the plaza floor, per quality tier. The map only multiplies
- * indirect light (see aomap_fragment.glsl.js), so it is a grounding hint for
- * grazing angles rather than a shadow; it is disabled outright on the low tier.
+ * AO strength for the plaza floor. The map only multiplies indirect light (see
+ * aomap_fragment.glsl.js), so it is a grounding hint for grazing angles rather
+ * than a shadow. It is a static 256x256 texture multiply on the same UVs as the
+ * flagstone map and costs no per-frame work, so round 105 dropped the tier
+ * split: the low tier now keeps the authored 0.85 along with the prop vertex
+ * colour contact darkening, which is baked into geometry's `color` attribute.
+ * The low tier only drops the sun shadow pass and the per-frame decal fields.
+ * `low` is still accepted for backwards compatibility but no longer changes the
+ * result, so `plazaAoMapIntensity({ low: true })` returns 0.85 too.
  */
 export function plazaAoMapIntensity({ low = false } = {}) {
-  return low ? 0 : 0.85;
+  return 0.85;
 }
 
 /**
@@ -1822,7 +1828,7 @@ export const plazaAoMapChannel = () => PLAZA_AO_MAP_CHANNEL;
 export const plazaAoIntensity = plazaAoMapIntensity;
 export const plazaAoMapIntensityValue = plazaAoMapIntensity;
 export function plazaAoMapIntensityForQuality(tier) {
-  return plazaAoMapIntensity({ low: tier === 'low' });
+  return plazaAoMapIntensity();
 }
 export const createPlazaAoMap = createPlazaAoTexture;
 export const bakePlazaAoMap = createPlazaAoTexture;

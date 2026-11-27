@@ -91,8 +91,15 @@ export const PUDDLE_MARGIN = 0.6;
  *  across a motif and read as a bug (see the header). */
 export const PUDDLE_CLEAR_RADIUS = 4.2;
 
-/** Height of the water quads above the paving, in metres. Tiny on purpose: just
- *  enough to beat z-fighting, far too little to read as a raised disc. */
+/** Height of the water quads above the paved surface under the puddle, in metres.
+ *  This is a LIFT above the surface, not an absolute world height: the lane floor
+ *  sits 2 cm higher than the plaza and the terrace 1.2 m higher, so one absolute
+ *  height cannot work, and world.js places each puddle at surfaceHeightAt(x, z) +
+ *  PUDDLE_WATER_Y. Tiny on purpose -- just enough to beat z-fighting, far too
+ *  little to read as a raised disc -- and the largest of the three ground-overlay
+ *  lifts, so the stack is ordered: contact decal 2 mm (SHADOW_DECAL_LIFT),
+ *  moss 3 mm (MOSS_DECAL_LIFT), puddle 12 mm (PUDDLE_WATER_Y) above the
+ *  surface, and the three layers can never share a height and z-fight. */
 export const PUDDLE_WATER_Y = 0.012;
 
 /** How glossy a puddle reads per phase, as a reflectivity multiplier (1 = a

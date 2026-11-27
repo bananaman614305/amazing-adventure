@@ -32,12 +32,13 @@
 //    respectively -- in front of both planes, not behind them. Glass is still
 //    safe because the trim band only occupies 0..0.77 m of height while the
 //    lowest window starts at 1.6 m (WINDOW_MIN_HEIGHT): no trim piece ever
-//    reaches the window band. Ivy is not so lucky: ivy patches run from a 0.15 m
-//    base up to 1.6 m, so they overlap the trim band and trim can occlude an ivy
-//    card where the two coincide. That occlusion is a known, accepted visual
-//    limitation rather than a bug, and the module says so instead of pretending
-//    the margin prevents it. The coping projects nothing inward, so its inner
-//    edge stays at the inner face and it never reaches either plane.
+//    reaches the window band. Ivy is safe too: round 104 raised IVY_MIN_BASE_Y to
+//    0.82 m, so ivy cards start above the trim band's 0.77 m top and no trim
+//    piece can occlude an ivy card. That invariant -- band top =
+//    plinthHeight + pilasterHeight = 0.77 m versus the 0.82 m ivy base, worst
+//    sway dip excluded -- is pinned by a unit test in tests/ivy.test.mjs. The
+//    coping projects nothing inward, so its inner edge stays at the inner face
+//    and it never reaches either plane.
 //
 // The numbers worth the words:
 //
@@ -100,9 +101,11 @@ export const WALL_TRIM_HEIGHT = 3.2;
  *  - `keepClear`: the largest inward projection any trim may make. It is an
  *    upper bound on how far a piece may step in, not a clearance from the
  *    window plane (16.48 m) or the ivy plane (16.44 m): the plinth and
- *    pilasters step past both of those planes, and glass is safe only because
- *    the trim band (0..0.77 m) sits below the lowest window (1.6 m), while ivy
- *    cards overlapping that band are occluded where trim crosses them.
+ *    pilasters step past both of those planes, and glass is safe because the
+ *    trim band (0..0.77 m) sits below the lowest window (1.6 m). Ivy is safe
+ *    too, because round 104 raised IVY_MIN_BASE_Y to 0.82 m, so ivy cards
+ *    start above the band top (plinthHeight + pilasterHeight = 0.77 m) and no
+ *    trim piece can occlude one; tests/ivy.test.mjs pins that invariant.
  *  - `tileMeters`: the stone texture family's tile, so the courses' UVs line up
  *    with the terrace stonework (`TERRACE_TEXTURE_TILE_METERS`). */
 /** The plane (|coord|) at which window panes sit, inside the wall's inner face.
