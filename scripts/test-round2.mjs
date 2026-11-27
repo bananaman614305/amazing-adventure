@@ -3181,7 +3181,7 @@ try {
     window.amazingAdventure.quality.set(b.tier);
     window.amazingAdventure.quality.setAdaptive(b.adaptive);
   }, before);
-  const restored = await page.evaluate(() => {
+  const restoredQuality = await page.evaluate(() => {
     const q = window.amazingAdventure.quality;
     return { tier: q.tier, adaptive: q.adaptive };
   });
@@ -3190,8 +3190,8 @@ try {
     tierFlip.full.visible === true && tierFlip.full.tier === 'full',
     JSON.stringify(tierFlip));
   checks.check('the trim tier flip restores the tier and the adaptive flag',
-    restored.tier === before.tier && restored.adaptive === before.adaptive,
-    JSON.stringify({ before, restored }));
+    restoredQuality.tier === before.tier && restoredQuality.adaptive === before.adaptive,
+    JSON.stringify({ before, restored: restoredQuality }));
 
   await capture(page, 'round45a-trim.png');
   checks.check('the sky is a vertex-colour gradient dome',
