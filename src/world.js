@@ -4764,6 +4764,9 @@ export function buildWorld(renderer) {
     blending: THREE.AdditiveBlending
   });
   spillMaterial.name = 'WindowSpill';
+  // Instance colours carry each pool's own opacity, so the shader must read
+  // them; without vertexColors the per-pool strength would be ignored.
+  spillMaterial.vertexColors = true;
   const spillMesh = new THREE.InstancedMesh(
     spillGeometry, spillMaterial, Math.max(1, spillSpawnsList.length)
   );
