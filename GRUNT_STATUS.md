@@ -12,28 +12,21 @@
 
 ## Current task
 
-**Round 106 (gutter clash) — in flight.** Round 105 fully verified green
-(unit 1521/1521, mobile 184/184, desktop 367/367, no console errors). The
-env-map browser check is in the working tree (uncommitted). The gutter clash
-fix lowers `HouseGutter_front`/`HouseGutter_back` in
-`art/blender/make_house_detail.py` (gutter z 3.05 -> 2.95, downspout height
-3.0 -> 2.89, centre 1.5 -> 1.445) and re-exports `assets/house-detail.glb`
-(15852 bytes, HOUSE_DETAIL_OK, 164 tris, bounds unchanged). A new browser
-check reads every `roof-shingles` instance matrix and each gutter's world AABB
-and requires zero overlaps. The desktop suite is running (PID 1572) to
-exercise both new checks; unit suite currently 1520/1521 with the only fail
-being the stale-dist preview check (dist not yet rebuilt). Releases 101-105
-still owed; channel is `blocked_infrastructure`.
+**Round 107 (context-loss robustness) — complete and verified.** The
+`getProgramInfoLog` null shim from round 105 was extended to
+`getShaderInfoLog` (same `.trim()` crash path in three's WebGLProgram) after
+the mobile suite surfaced `TypeError: Cannot read properties of null (reading
+'trim')` on iPhone 13 and iPhone SE. Mobile now 184/184 with zero console
+errors; desktop 369/369 with zero console errors. Round 106 (gutter clash) is
+also verified: gutters lowered to y 2.85..2.97 so eave tiles clear them, new
+browser check 0 overlaps, desktop 369/369 + mobile 184/184. Dist rebuilt at
+8fcb85e. Releases 101-105 still owed; channel is `blocked_infrastructure`.
 
 ## Next steps
-1. Wait for the desktop suite; fix any failures; rebuild dist after the tree is
-   clean; rerun the unit suite (must be 1521/1521).
-2. Market-stall fascia/barge vs `MarketAwning` overlaps (2-2.5 cm): re-measure
-   after the gutter move and nudge or document.
-3. Barge/gutter-end overlaps (0.04 m) and the fascia's top strip still
-   visible: raise/extend the fascia in `src/roofedge.js` to cover the
-   gutter's full 0.12 m height and z-depth.
-4. Kerb ring around the plaza disc + lane plinth (realism audit gap 5).
-5. Flat-surface dressing: a Steel pass for the cast, doormat/planter-soil
+1. Next graphics milestone: kerb ring around the plaza disc + lane plinth
+   (realism audit gap 5), keeping existing decal heights.
+2. Market-stall fascia/barge vs `MarketAwning` overlaps (2-2.5 cm):
+   re-measure and nudge or document.
+3. Flat-surface dressing: a Steel pass for the cast, doormat/planter-soil
    albedo; consider a Kaggle steel texture job.
-6. Releases 101-105 when the channel unblocks.
+4. Releases 101-105 when the channel unblocks.
