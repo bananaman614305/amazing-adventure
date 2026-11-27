@@ -4674,102 +4674,195 @@ try {
     const api = window.amazingAdventure;
     const startTier = api.quality.tier;
     const startAdaptive = api.quality.adaptive;
+    // Every later check shares this page, so the tier this block forces for its
+    // own visibility probe must come back however this block ends. A `finally`
+    // covers the early `missing` return and any thrown error; restoring only on
+    // the success path would leave the page pinned at full with adaptive off and
+    // quietly change what every subsequent check measures.
     api.quality.setAdaptive(false);
     api.quality.set('full');
-    let group = null;
-    let boards = null;
-    let drips = null;
-    api.scene.traverse((o) => {
-      if (o.name === 'roof-edge-trim') group = o;
-      if (o.name === 'roof-edge-boards') boards = o;
-      if (o.name === 'roof-edge-drips') drips = o;
-    });
-    if (!group || !boards || !drips) return { missing: true };
-    // The four modelled roofs: eave line and rake extents, plus the pitch.
-    const roofs = [
-      { id: 'house-south', eaveZ: -5.9009, eaveY: 3.0265, centreZ: -7.467059, x: [-14.5, -6.5], pitch: 0.533333 },
-      { id: 'house-north', eaveZ: -12.0991, eaveY: 3.0265, centreZ: -10.532941, x: [-14.5, -6.5], pitch: 0.533333 },
-      { id: 'east', eaveZ: -2.6, eaveY: 0.84, centreZ: -3.1, x: [8.85, 13.15], pitch: 0.2 },
-      { id: 'west', eaveZ: 6.3, eaveY: 0.756, centreZ: 5.925, x: [-12.6125, -9.3875], pitch: 0.24 }
-    ];
-    const m = boards.instanceMatrix.array;
-    const failures = [];
-    let fascias = 0;
-    let barges = 0;
-    let worstFascia = 0;
-    let worstBarge = 0;
-    for (let i = 0; i < boards.count; i += 1) {
-      const o = i * 16;
-      const x = m[o + 12];
-      const y = m[o + 13];
-      const z = m[o + 14];
-      // Column 2 is the box's local +Z scaled by its size: level for a fascia,
-      // tilted downhill for a bargeboard.
-      const down = -m[o + 9] / Math.max(1e-9, Math.hypot(m[o + 8], m[o + 9], m[o + 10]));
-      // The two house roofs share an x range, so the roof is the nearest one in
-      // z among those whose x span holds the board. A board sits on its roof's
-      // eave line (a fascia) or at mid-slope (a barge), so the nearer of those
-      // two z values identifies the roof unambiguously.
-      let roof = null;
-      let best = Infinity;
-      for (const r of roofs) {
-        if (x < r.x[0] - 0.2 || x > r.x[1] + 0.2) continue;
-        const d = Math.min(Math.abs(z - r.eaveZ), Math.abs(z - r.centreZ));
-        if (d < best) { best = d; roof = r; }
+    try {
+      let group = null;
+      let boards = null;
+      let drips = null;
+      api.scene.traverse((o) => {
+        if (o.name === 'roof-edge-trim') group = o;
+        if (o.name === 'roof-edge-boards') boards = o;
+        if (o.name === 'roof-edge-drips') drips = o;
+      });
+      if (!group || !boards || !drips) return { missing: true };
+      // The four modelled roofs: eave line and rake extents, plus the pitch, the
+      // top-face centre height and the yaw that says which way the slope runs.
+      // `planeY` is the value from `roofPlanes` in world.js; `yaw` PI on the
+      // north house roof flips the slope so its eave lies at a larger z.
+      const roofs = [
+        { id: 'house-south', eaveZ: -5.9009, eaveY: 3.0265, centreZ: -7.467059, x: [-14.5, -6.5], pitch: 0.533333, planeY: 3.861765, yaw: 0 },
+        { id: 'house-north', eaveZ: -12.0991, eaveY: 3.0265, centreZ: -10.532941, x: [-14.5, -6.5], pitch: 0.533333, planeY: 3.861765, yaw: Math.PI },
+        { id: 'east', eaveZ: -2.6, eaveY: 0.84, centreZ: -3.1, x: [8.85, 13.15], pitch: 0.2, planeY: 0.94, yaw: 0 },
+        { id: 'west', eaveZ: 6.3, eaveY: 0.756, centreZ: 5.925, x: [-12.6125, -9.3875], pitch: 0.24, planeY: 0.846, yaw: 0 }
+      ];
+      // The roof surface height at a given z, as a function of the plane's
+      // centre height and pitch. The sign follows the yaw: with yaw 0 the far
+      // (eave) edge is at +z and the surface falls towards it, so a positive
+      // pitch lowers y as z grows; with yaw PI the slope runs the other way.
+      // Reproducing the eave heights already in the array pins the convention:
+      // house-south gives 3.02648 against eaveY 3.0265, house-north likewise.
+      const planeYAtZ = (r, z) =>
+        r.planeY - r.pitch * (z - r.centreZ) * (r.yaw === 0 ? 1 : -1);
+      const m = boards.instanceMatrix.array;
+      const failures = [];
+      // Every fascia centre, so each drip can be matched to the board it hangs
+      // from rather than merely counted.
+      const fasciaAt = [];
+      let fascias = 0;
+      let barges = 0;
+      let worstFascia = 0;
+      let worstBarge = 0;
+      let worstBargeX = 0;
+      let worstBargeY = 0;
+      for (let i = 0; i < boards.count; i += 1) {
+        const o = i * 16;
+        const x = m[o + 12];
+        const y = m[o + 13];
+        const z = m[o + 14];
+        // Column 2 is the box's local +Z scaled by its size: level for a fascia,
+        // tilted downhill for a bargeboard.
+        const down = -m[o + 9] / Math.max(1e-9, Math.hypot(m[o + 8], m[o + 9], m[o + 10]));
+        // The two house roofs share an x range, so the roof is the nearest one in
+        // z among those whose x span holds the board. A board sits on its roof's
+        // eave line (a fascia) or at mid-slope (a barge), so the nearer of those
+        // two z values identifies the roof unambiguously.
+        let roof = null;
+        let best = Infinity;
+        for (const r of roofs) {
+          if (x < r.x[0] - 0.2 || x > r.x[1] + 0.2) continue;
+          const d = Math.min(Math.abs(z - r.eaveZ), Math.abs(z - r.centreZ));
+          if (d < best) { best = d; roof = r; }
+        }
+        if (!roof || best > 3) { if (failures.length < 6) failures.push({ i, x, y, z, why: 'no roof under it' }); continue; }
+        if (Math.abs(down) < 0.02) {
+          fascias += 1;
+          fasciaAt.push({ x, y, z });
+          // A fascia's centre sits 6.5 cm under the eave surface (fasciaRise 0.02
+          // minus half its 0.17 m height) and on the eave line in z.
+          const dev = Math.abs(y - (roof.eaveY - 0.065));
+          if (dev > worstFascia) worstFascia = dev;
+          if (dev > 0.02 || Math.abs(z - roof.eaveZ) > 0.05) {
+            if (failures.length < 6) failures.push({ i, roof: roof.id, y, z, dev, why: 'fascia off the eave' });
+          }
+        } else {
+          barges += 1;
+          const expected = roof.pitch / Math.sqrt(1 + roof.pitch * roof.pitch);
+          const dev = Math.abs(down - expected);
+          if (dev > worstBarge) worstBarge = dev;
+          if (dev > 0.02) {
+            if (failures.length < 6) failures.push({ i, roof: roof.id, down, expected, why: 'barge not tilted with the roof' });
+          }
+          // A barge is centred ON a rake, so its x is one of the roof's two rake
+          // x values, not merely somewhere inside the span. 5 cm catches a board
+          // on the wrong rake while leaving room for the plane's own rounding.
+          const rakeX = Math.min(Math.abs(x - roof.x[0]), Math.abs(x - roof.x[1]));
+          if (rakeX > worstBargeX) worstBargeX = rakeX;
+          if (rakeX > 0.05) {
+            if (failures.length < 6) failures.push({ i, roof: roof.id, x, rakes: roof.x, rakeX, why: 'barge off the rake' });
+          }
+          // A barge runs from the eave to the ridge, so its centre is mid-slope.
+          if (Math.abs(z - roof.centreZ) > 0.15) {
+            if (failures.length < 6) failures.push({ i, roof: roof.id, z, centreZ: roof.centreZ, why: 'barge off mid-slope' });
+          }
+          // The board is pushed `along = -bargeHeight/2 + bargeRise` (-0.055 m)
+          // down the roof normal, so its centre y is the plane's height at its
+          // own z plus cos(atan(pitch)) * along. That surface term ignores the
+          // z the normal itself shifts the board by (sinT * along), which costs
+          // up to pitch * sinT * |along| = 1.4 cm on the 0.533 house roof; the
+          // 5 cm tolerance absorbs that while still rejecting a board sunk into
+          // the slope or floating a hand's width above it.
+          const along = -0.15 / 2 + 0.02;
+          const expectedY = planeYAtZ(roof, z) + Math.cos(Math.atan(roof.pitch)) * along;
+          const yDev = Math.abs(y - expectedY);
+          if (yDev > worstBargeY) worstBargeY = yDev;
+          if (yDev > 0.05) {
+            if (failures.length < 6) failures.push({ i, roof: roof.id, y, expectedY, yDev, why: 'barge off the roof surface' });
+          }
+        }
       }
-      if (!roof || best > 3) { if (failures.length < 6) failures.push({ i, x, y, z, why: 'no roof under it' }); continue; }
-      if (Math.abs(down) < 0.02) {
-        fascias += 1;
-        // A fascia's centre sits 6.5 cm under the eave surface (fasciaRise 0.02
-        // minus half its 0.17 m height) and on the eave line in z.
-        const dev = Math.abs(y - (roof.eaveY - 0.065));
-        if (dev > worstFascia) worstFascia = dev;
-        if (dev > 0.02 || Math.abs(z - roof.eaveZ) > 0.05) {
-          if (failures.length < 6) failures.push({ i, roof: roof.id, y, z, dev, why: 'fascia off the eave' });
+      // The drips hang from the fascia, so each one's centre must be directly
+      // under the nearest fascia in x/z and at the height that fascia's own
+      // section dictates. The lip's centre is fasciaY - fasciaHeight/2 - lipGap
+      // - lipDrop/2: half the board below its centre, the gap under the board,
+      // then half the lip's own drop. With ROOF_EDGE's 0.17 / 0.02 / 0.04 that
+      // is fasciaY - 0.125. In z the lip sits lipSetback behind the fascia's
+      // outer face, which on an eave line is the same z to within 1.5 cm.
+      const dm = drips.instanceMatrix.array;
+      let worstDripY = 0;
+      let worstDripZ = 0;
+      for (let i = 0; i < drips.count; i += 1) {
+        const o = i * 16;
+        const dx = dm[o + 12];
+        const dy = dm[o + 13];
+        const dz = dm[o + 14];
+        let fascia = null;
+        let best = Infinity;
+        for (const f of fasciaAt) {
+          const d = Math.hypot(f.x - dx, f.z - dz);
+          if (d < best) { best = d; fascia = f; }
         }
-      } else {
-        barges += 1;
-        const expected = roof.pitch / Math.sqrt(1 + roof.pitch * roof.pitch);
-        const dev = Math.abs(down - expected);
-        if (dev > worstBarge) worstBarge = dev;
-        if (dev > 0.02) {
-          if (failures.length < 6) failures.push({ i, roof: roof.id, down, expected, why: 'barge not tilted with the roof' });
+        if (!fascia) {
+          if (failures.length < 6) failures.push({ i, dx, dy, dz, why: 'drip with no fascia above it' });
+          continue;
         }
-        // A barge runs from the eave to the ridge, so its centre is mid-slope.
-        if (Math.abs(z - roof.centreZ) > 0.15) {
-          if (failures.length < 6) failures.push({ i, roof: roof.id, z, centreZ: roof.centreZ, why: 'barge off mid-slope' });
+        const expectedY = fascia.y - 0.17 / 2 - 0.02 - 0.04 / 2;
+        const yDev = Math.abs(dy - expectedY);
+        const zDev = Math.abs(dz - fascia.z);
+        if (yDev > worstDripY) worstDripY = yDev;
+        if (zDev > worstDripZ) worstDripZ = zDev;
+        if (yDev > 0.01 || zDev > 0.05) {
+          if (failures.length < 6) failures.push({ i, dx, dy, dz, expectedY, yDev, zDev, why: 'drip off its fascia' });
         }
       }
+      const fullVisible = Boolean(group.visible && boards.visible && drips.visible);
+      api.quality.set('low');
+      const lowVisible = Boolean(group.visible && boards.visible && drips.visible);
+      api.quality.set('full');
+      const backVisible = Boolean(group.visible && boards.visible && drips.visible);
+      return {
+        groupVisible: fullVisible,
+        boards: boards.count,
+        drips: drips.count,
+        fascias,
+        barges,
+        worstFascia: Number(worstFascia.toFixed(4)),
+        worstBarge: Number(worstBarge.toFixed(4)),
+        worstDripY: Number(worstDripY.toFixed(4)),
+        worstDripZ: Number(worstDripZ.toFixed(4)),
+        worstBargeX: Number(worstBargeX.toFixed(4)),
+        worstBargeY: Number(worstBargeY.toFixed(4)),
+        failures,
+        low: lowVisible,
+        back: backVisible
+      };
+    } finally {
+      api.quality.set(startTier);
+      api.quality.setAdaptive(startAdaptive);
     }
-    const fullVisible = Boolean(group.visible && boards.visible && drips.visible);
-    api.quality.set('low');
-    const lowVisible = Boolean(group.visible && boards.visible && drips.visible);
-    api.quality.set('full');
-    const backVisible = Boolean(group.visible && boards.visible && drips.visible);
-    const result = {
-      groupVisible: fullVisible,
-      boards: boards.count,
-      drips: drips.count,
-      fascias,
-      barges,
-      worstFascia: Number(worstFascia.toFixed(4)),
-      worstBarge: Number(worstBarge.toFixed(4)),
-      failures,
-      low: lowVisible,
-      back: backVisible
-    };
-    api.quality.set(startTier);
-    api.quality.setAdaptive(startAdaptive);
-    return result;
   });
   checks.check('the rooflines carry a fascia, a drip apron and a bargeboard',
     !r104.missing && r104.groupVisible === true &&
       r104.boards === 12 && r104.drips === 4 && r104.fascias === 4 && r104.barges === 8,
     JSON.stringify(r104));
-  checks.check('every fascia caps a modelled eave and every barge lies in the roof plane',
+  checks.check('every fascia caps a modelled eave, every drip hangs from a fascia, and every barge sits centred on a rake in its roof plane',
     !r104.missing && r104.failures.length === 0 && r104.worstFascia <= 0.02 &&
-      r104.worstBarge <= 0.02,
-    JSON.stringify({ worstFascia: r104.worstFascia, worstBarge: r104.worstBarge, failures: r104.failures }));
+      r104.worstBarge <= 0.02 && r104.worstDripY <= 0.01 && r104.worstDripZ <= 0.05 &&
+      r104.worstBargeX <= 0.05 && r104.worstBargeY <= 0.05,
+    JSON.stringify({
+      worstFascia: r104.worstFascia,
+      worstBarge: r104.worstBarge,
+      worstDripY: r104.worstDripY,
+      worstDripZ: r104.worstDripZ,
+      worstBargeX: r104.worstBargeX,
+      worstBargeY: r104.worstBargeY,
+      failures: r104.failures
+    }));
   checks.check('the roof edge trim drops on the low tier and returns on full',
     !r104.missing && r104.low === false && r104.back === true,
     JSON.stringify({ low: r104.low, back: r104.back }));

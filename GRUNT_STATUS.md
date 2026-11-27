@@ -12,6 +12,10 @@
 
 ## Current task
 
+**Round 105 (grounded overlays + static cues on low) is code-complete at HEAD 5268a6e.** New pure module `src/paving.js` exports `surfaceHeightAt` (plaza disc 0.01, lane floor 0.02, terrace 1.2, ramp linear, else 0) and `surfaceHeightAt` is re-exported from world.js and surfaced on `window.amazingAdventure`. Contact-shadow decals, moss patches and puddles now place at `surfaceHeightAt(x, z) + lift` instead of one absolute height, so the nine lane/terrace decals that were buried are visible and terrace puddles sit on the slab. Lifts: SHADOW_DECAL_LIFT 0.002 < MOSS_DECAL_LIFT 0.003 < PUDDLE_WATER_Y 0.012, each a named constant. Plaza AO and prop vertex-colour contact darkening (both static cues) now stay on at every tier; only the sun shadow pass and the per-frame decal fields drop on low. `plazaAoMapIntensity()` returns a constant 0.85. Round 96 browser check rewritten for per-surface decal heights; new checks for static cues on low and env-map scheduling. `src/main.js` env-map scheduler now uses a 1 s idle deadline plus a first-frame `ensureFirstEnvironmentMap()` fallback; `roofEdgeOn` now also requires a non-empty span list; roof-edge meshes now castShadow. `src/roofedge.js` planeId primitive-id guard and ivy/walltrim doc fixes carried through from the failed subagent round. Unit suite 1521/1521 green at 5268a6e; dist rebuilt and committed. Desktop browser suite not yet run this round (next step); mobile suite still owed.
+
+## Current task (prior) — see git history
+
 **Round 104 (eave trim) is code-complete at HEAD bf72c2b; the desktop browser
 suite is running (background shell bb0sx5x66).** The four modelled roofs now end
 in a real roofline: `src/roofedge.js` (new pure module, 25 unit tests) decides a
@@ -43,15 +47,19 @@ Not yet done: the desktop suite result, the mobile suite, and the Round 104
 release.
 
 ## Next steps
-1. Read the desktop suite result (shell bb0sx5x66); expect the three r104 checks
-   green. Then `npm run test:mobile` once, and fix anything either suite finds.
+1. The first desktop run of Round 105 exited 0 with "366/367 checks passed";
+   its background log kept only the last 62 lines, so the one failing check is
+   not yet named. A full-log rerun is running now
+   (`/worker/state/claude-tmp/r105-desktop2.log`). Identify the failing check from
+   that log, fix it, rebuild dist if sources change, and rerun only the affected
+   checks. Then run `npm run test:mobile` once.
 2. Read the two subagent reports due this cycle — `/worker/state/claude-tmp/r104-review.md`
    (code review of this round) and `/worker/state/claude-tmp/gutter-clash-report.md`
    (do the modelled HouseGutter/Downspout boxes clash with the new boards or the
    shingles, and is the gutter hidden from the ground?). Fix real findings in a
    follow-up commit, rerunning the affected checks.
-3. Releases still owed, oldest first: Round 101, 102, 103 and now 104 corrected
-   heads. The trusted channel was last reported `blocked_infrastructure`
+3. Releases still owed, oldest first: Round 101, 102, 103, 104 and now 105
+   corrected heads. The trusted channel was last reported `blocked_infrastructure`
    (256-commit rev-list limit) in needs-supervision.json; re-check that file
    first, then `grunt-release verify release tests|browser|mobile` at the clean
    head, poll, prepare, review, advance. Report deployed only after the exact
