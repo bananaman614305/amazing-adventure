@@ -12,17 +12,25 @@
 
 ## Current task
 
-**Round 111 in progress — closing realism-audit gap 4 (flat surfaces).**
-Rounds 109 + 110 are verified green at `2addc51`: unit 1548/1548, desktop
-380/380, no console errors, dist rebuilt. Round 111 dresses the last three
-flat surfaces: `HouseDoormat` (1.26 m²) and the two `TerraceSoil` tops
-(1.57 m²) get a bespoke coir/soil albedo+normal+roughness family from a new
-procedural Kaggle bake; the cast's four `WoodP` props (0.88 m²) get a cast
-wood pass reusing the existing crate/barrel maps. Work is split across three
-subagents (bake, `src/woodprop.js` + tests, browser check) with integration
-in `src/world.js` / `src/npcs.js` done by me.
+**Round 111 code is in and the desktop suite is green apart from one stale check
+that I fixed.** Evidence: `npm run test:browser` against `f28ce75` ran 382/383
+with all three round-111 checks passing — doormat coir family, both planter soil
+tops on the bespoke soil family, four cast `WoodP` props dressed at 0.78/0 — and
+"no console errors" passed. The only failure was a round-97 assertion
+('terrace soil stays flat') that round 111 deliberately invalidated; its own
+evidence showed 3 maps on each soil top, so I rewrote that check to assert the
+dressed contract (`9699a61`). A desktop re-run against `9699a61` is in flight
+(log `/tmp/scratchpad/browser2.log`); the mobile suite has not run yet. Code
+review subagent died on a 429 from the free pool; the live-scene material audit
+is queued behind the running suite. Release channel still reports
+`blocked_infrastructure` (host caps reachable commits at 256, branch is 300+
+ahead), so no release ids are pending; the PR-only fallback stays the path.
 
 ## Next steps
-1. Integrate round 111: new `PROP_FAMILIES` doormat/soil entries, `dressCastWood`/`upgradeCastWood` in `src/npcs.js`, manifest, dist, then run unit + desktop + mobile once and commit.
-2. Release rounds 101-111 through `grunt-release` when the channel unblocks (currently `blocked_infrastructure`: host caps reachable commits at 256, branch is 300+ ahead).
-3. After gap 4 closes, next realism milestone: re-audit the dressed scene for the highest-impact remaining loss.
+1. Read the `9699a61` desktop re-run result (relaunch if the process died with
+   the cycle), then run `npm run test:mobile` once; fix anything red.
+2. Review round 111 myself (the subagent review hit 429) — woodprop totality,
+   `dressCastWood` map cloning, main.js playtest chain — then start round 112
+   from the audit's ranked flat-surface list.
+3. Keep the 101-111 release batched for `grunt-release` once the host commit cap
+   is lifted; until then keep `publish.json` current per round.
