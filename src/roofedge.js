@@ -178,8 +178,19 @@ function usablePlane(raw) {
  *  own centre, which is unique for the four real roofs and stable between runs. */
 function planeId(raw, plane) {
   if (raw !== null && typeof raw === 'object' && !Array.isArray(raw)) {
-    const id = String(raw.id);
-    if (id.length > 0 && id !== 'null' && id !== 'undefined') return id;
+    // `String()` runs user code: a null-prototype object throws the "Cannot
+    // convert object to primitive value" TypeError, and an object with a
+    // throwing `toString` throws that. The module's contract is that no export
+    // can ever throw, so only a primitive id is trusted -- `String` of a
+    // string, number, boolean, bigint or symbol is total -- and everything else
+    // falls back to the plane's own centre. (Symbols stringify fine, but a
+    // symbol id is a caller mistake rather than a name, so it is not accepted.)
+    const rawId = raw.id;
+    const idType = typeof rawId;
+    if (idType === 'string' || idType === 'number' || idType === 'boolean' || idType === 'bigint') {
+      const id = String(rawId);
+      if (id.length > 0 && id !== 'null' && id !== 'undefined') return id;
+    }
   }
   return `${plane.x}-${plane.z}`;
 }

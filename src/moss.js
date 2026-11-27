@@ -75,6 +75,15 @@ export const MOSS_MIN_RADIUS = 0.18;
  *  reading as a damp stain and starts reading as a shrub. */
 export const MOSS_MAX_RADIUS = 0.55;
 
+/** Height of a moss decal above the paved surface under it, in metres. Moss must
+ *  sit above the contact-shadow decals (SHADOW_DECAL_LIFT = 0.002 m) and below
+ *  the rainwater puddles (PUDDLE_WATER_Y = 0.012 m), so a puddle reads as lying
+ *  on the moss rather than the other way round. Like the other overlay lifts this
+ *  is a height above the surface under the patch, not an absolute world height:
+ *  the lane floor and the terrace stand higher than the plaza, so one absolute
+ *  height cannot suit every surface. */
+export const MOSS_DECAL_LIFT = 0.003;
+
 /** How far the moss tint is multiplied down per phase (0 = no darkening, 1 =
  *  fully dark). Frozen so a caller cannot mutate it. Wet stone darkens as the
  *  light leaves it, so night is the darkest reading. */

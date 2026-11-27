@@ -47,10 +47,11 @@ import { wildflowerSpawns, wildflowerSway, wildflowerGlowLevel, wildflowersEnabl
   WILDFLOWER_COUNT } from './wildflowers.js';
 import { reedSpawns, reedStemSway, reedGlowLevel, reedsEnabled, REED_COUNT } from './reeds.js';
 import { mossSpawns, mossDarkness, mossGlowLevel, mossEnabled,
-  MOSS_SEAM_WIDTH } from './moss.js';
-import { shadowDecals, shadowOpacity, shadowsEnabled } from './contactshadows.js';
+  MOSS_SEAM_WIDTH, MOSS_DECAL_LIFT } from './moss.js';
+import { shadowDecals, shadowOpacity, shadowsEnabled, SHADOW_DECAL_LIFT } from './contactshadows.js';
 import { WALL_TRIM, wallTrimLayout, wallTrimEnabled } from './walltrim.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
+import { surfaceHeightAt } from './paving.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
   LANE_BUNTING, LANE_SACKS, LANE_LANTERNS, LANTERN_HEIGHT, lanternPlacement,
@@ -120,6 +121,7 @@ import {
 // requirement. The walkable geometry maths lives in terrain.js so it can be
 // tested without Three.js.
 export { WORLD_SIZE, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
+export { surfaceHeightAt } from './paving.js';
 
 /**
  * Builds the courtyard: ground, sky, fog, lights and solid props.
@@ -2314,7 +2316,11 @@ export function buildWorld(renderer) {
             color: 0xffffff,
             roughness: 0.85,
             metalness: 0,
-            vertexColors: environment.quality !== 'low'
+            // The near-ground darkening is baked into the geometry's `color`
+            // attribute, so it costs nothing per frame and stays on at every
+            // tier (round 105). setQuality re-derives the flag anyway, so a tier
+            // flip cannot leave this material behind.
+            vertexColors: true
           });
           for (const [key, texture] of Object.entries(textures)) {
             if (!texture || key === 'anyLoaded') continue;
@@ -3221,10 +3227,11 @@ export function buildWorld(renderer) {
           // and hoops share the lane lantern's sheen; the roughness map still
           // governs where the chips are dull.
           metalness: family.metalness ?? 0,
-          // Dressing runs late, after several fetches, so it can finish after the
-          // adaptive loop has already dropped to the low tier. Reading the
-          // current tier here keeps the cue off instead of switching it back on.
-          vertexColors: environment.quality !== 'low'
+          // The contact darkening is baked into the geometry's `color`
+          // attribute, so it is a static cue with no per-frame cost and stays on
+          // at every tier (round 105). setQuality re-derives it for every dressed
+          // prop anyway, so this flag and its path cannot drift apart.
+          vertexColors: true
         });
         for (const [key, texture] of Object.entries(textures)) {
           if (!texture || key === 'anyLoaded') continue;
@@ -3612,14 +3619,12 @@ export function buildWorld(renderer) {
     const aoTexture = createPlazaAoTexture({ THREE });
     if (aoTexture) {
       plazaMaterial.aoMap = aoTexture;
-      // The AO map is a full-tier effect: the low tier drops the intensity to
-      // 0 so the grounding cue costs nothing when the budget is tight. The
-      // upgrade must therefore only bind a NON-ZERO intensity on full, or a
-      // slow headless run that has already dropped to low would leave the
-      // material in a "bound but off" state that a browser check could read as
-      // a missing cue. The low-tier-zero path lives in setQuality so a flip
-      // restores exactly what a fresh full-tier boot would have set.
-      plazaMaterial.aoMapIntensity = environment.quality === 'low' ? 0 : 0.85;
+      // The AO map multiplies indirect light only, from a 256x256 texture on the
+      // flagstone's own UVs -- a static multiply with no per-frame cost -- so
+      // round 105 keeps it at every quality tier. It is read through
+      // plazaAoMapIntensity() and not a literal, so the authored strength and
+      // the setQuality path below cannot drift apart.
+      plazaMaterial.aoMapIntensity = plazaAoMapIntensity();
       plazaMaterial.aoMap.channel = PLAZA_AO_MAP_CHANNEL;
     }
     assetState.plazaFloor = 'textured';
@@ -5053,7 +5058,10 @@ export function buildWorld(renderer) {
     for (let i = 0; i < puddleSpawnsList.length; i += 1) {
       const spawn = puddleSpawnsList[i];
       const { wobble } = puddleShimmer(spawn, time);
-      _pPos.set(spawn.x, PUDDLE_WATER_Y, spawn.z);
+      // The water is a lift above whatever is under it, not an absolute height:
+      // a puddle that lands on the terrace must lie on the slab, not 1.2 m below
+      // it. surfaceHeightAt is the one place that knows the paved surfaces.
+      _pPos.set(spawn.x, surfaceHeightAt(spawn.x, spawn.z) + PUDDLE_WATER_Y, spawn.z);
       const sc = spawn.size * (1 + wobble * 0.05);
       _pScale.set(sc, 1, sc);
       _pMatrix.compose(_pPos, _pFlat, _pScale);
@@ -5409,8 +5417,10 @@ export function buildWorld(renderer) {
   mossMesh.name = 'courtyard-moss';
   mossMesh.count = mossSpawnsList.length;
   mossMesh.frustumCulled = false;
-  // Above the plaza surface (y 0.01) but below the puddles, so a puddle still
-  // reads as sitting on top of the moss rather than being cut by it.
+  // The moss sits MOSS_DECAL_LIFT above the surface under each patch, which puts
+  // it above the contact decals (SHADOW_DECAL_LIFT) and below the puddles
+  // (PUDDLE_WATER_Y), so a puddle still reads as lying on the moss rather than
+  // being cut by it.
   mossMesh.renderOrder = 1;
   scene.add(mossMesh);
 
@@ -5427,7 +5437,9 @@ export function buildWorld(renderer) {
     const patch = mossSpawnsList[i];
     _msColor.setHex(patch.tint);
     mossMesh.setColorAt(i, _msColor);
-    _msPos.set(patch.x, 0.014, patch.z);
+    // Same lift-above-the-surface rule as the puddles and contact decals: the
+    // moss grows on the stone that is actually under it.
+    _msPos.set(patch.x, surfaceHeightAt(patch.x, patch.z) + MOSS_DECAL_LIFT, patch.z);
     // A seam strip is long and thin along its own axis; a round patch is a
     // squashed disc. Both are the same unit circle scaled differently, so the
     // renderer branches once, here, and not per frame. The units differ: a
@@ -5548,8 +5560,9 @@ export function buildWorld(renderer) {
   contactMesh.name = 'contact-shadows';
   contactMesh.count = contactSpawnsList.length;
   contactMesh.frustumCulled = false;
-  // Above the plaza surface and the moss (y 0.01/0.014) but below the puddles and
-  // the ripple decals, so a puddle still reads as sitting on top of the ground.
+  // The lowest of the ground overlays: SHADOW_DECAL_LIFT above the surface under
+  // each prop, so it sits under the moss and the puddles and a puddle still
+  // reads as lying on top of the ground.
   contactMesh.renderOrder = 1;
   scene.add(contactMesh);
 
@@ -5569,7 +5582,12 @@ export function buildWorld(renderer) {
     // stable per-decal choice derived from the position, not from the frame.
     _csYaw.setFromAxisAngle(_csUp, (decal.x * 0.7 + decal.z * 1.3) % (Math.PI * 2));
     _csQuat.copy(_csFlat).multiply(_csYaw);
-    _csPos.set(decal.x, 0.012, decal.z);
+    // A fixed 12 mm put every decal off the plaza under the stone: the lane
+    // floor is 2 cm up and the terrace 1.2 m, so nine of the anchors -- the
+    // lane props, the sacks and the terrace bench -- had an invisible smudge.
+    // The decal sits on the surface under it, lifted by the smallest of the
+    // three overlay lifts so it stays below the moss and the water.
+    _csPos.set(decal.x, surfaceHeightAt(decal.x, decal.z) + SHADOW_DECAL_LIFT, decal.z);
     _csScale.set(decal.radius * 2, decal.radius * 2 * decal.squash, 1);
     _csMatrix.compose(_csPos, _csQuat, _csScale);
     contactMesh.setMatrixAt(i, _csMatrix);
@@ -5682,9 +5700,13 @@ export function buildWorld(renderer) {
   //
   // The boards carry a flat stained-wood / lead colour rather than a texture
   // family. They are 4-17 cm wide strips viewed at courtyard distance, so a
-  // per-board UV would stretch one tile down an 8 m fascia and read as a smear;
-  // the shadow the boards cast under the eave is what sells them, and the
-  // colour only has to sit in the roof's palette.
+  // per-board UV would stretch one tile down an 8 m fascia and read as a smear.
+  // What sells them is that they stand proud of the wall and cast, so both
+  // meshes are in the sun's shadow pass: a fascia that throws a thin line onto
+  // the stone under the eave reads as a board, and one that does not reads as a
+  // painted stripe. That costs two extra draws in the shadow pass on the full
+  // tier only -- the group is hidden on low, which also removes it from that
+  // pass -- and the colour only has to sit in the roof's palette.
   const roofEdgeSpawnsList = roofEdgeEnabled('full')
     ? roofEdgeSpans({ planes: roofPlanes })
     : [];
@@ -5707,12 +5729,14 @@ export function buildWorld(renderer) {
   roofEdgeBoardsMesh.name = 'roof-edge-boards';
   roofEdgeBoardsMesh.count = roofEdgeWood.length;
   roofEdgeBoardsMesh.frustumCulled = false;
+  roofEdgeBoardsMesh.castShadow = true;
   const roofEdgeDripsMesh = new THREE.InstancedMesh(
     roofEdgeGeometry, roofEdgeDripMat, Math.max(1, roofEdgeDrips.length)
   );
   roofEdgeDripsMesh.name = 'roof-edge-drips';
   roofEdgeDripsMesh.count = roofEdgeDrips.length;
   roofEdgeDripsMesh.frustumCulled = false;
+  roofEdgeDripsMesh.castShadow = true;
   roofEdgeGroup.add(roofEdgeBoardsMesh, roofEdgeDripsMesh);
   scene.add(roofEdgeGroup);
 
@@ -6058,7 +6082,10 @@ export function buildWorld(renderer) {
       paintRoofEdge(environment.quality);
     },
     get roofEdgeOn() {
-      return roofEdgeEnabled(environment.quality);
+      // Both halves of paintRoofEdge's own test: an empty span list means the
+      // group is hidden whatever the tier says, and reporting only the tier
+      // would tell a check the trim is on screen when nothing was built.
+      return roofEdgeSpawnsList.length > 0 && roofEdgeEnabled(environment.quality);
     },
     paintWallsTrim() {
       paintWallsTrim(environment.quality);
@@ -6192,10 +6219,12 @@ export function buildWorld(renderer) {
         environment.moon.intensity = low ? 0 : moonLevel;
         environment.moon.visible = !low && moonLevel > 0;
       }
-      // Plaza AO only multiplies indirect light; drop it on the low tier so the
-      // grounding cue costs nothing when the budget is tight.
+      // Plaza AO only multiplies indirect light and is a static texture sample
+      // on existing UVs, so round 105 keeps it on at every tier. It is still
+      // re-derived here rather than left alone, so a flip back from low restores
+      // exactly what a fresh full-tier boot would have set.
       if (plazaMaterial) {
-        plazaMaterial.aoMapIntensity = low ? 0 : plazaAoMapIntensity({ low: false });
+        plazaMaterial.aoMapIntensity = plazaAoMapIntensity({ low });
       }
       // Round 90: the meadow keeps standing on the low tier -- it is the ground's
       // silhouette, and hiding it would put the painted floor back -- but it
@@ -6247,8 +6276,11 @@ export function buildWorld(renderer) {
       // both dropped on low; a tier flip must re-derive their visibility
       // rather than leave the last tier's answer standing.
       if (environment.paintPassers) environment.paintPassers(environment.phase);
-      // Contact darkening rides on vertex colours; disable it on the low tier by
-      // turning the attribute off on every dressed prop mesh.
+      // Contact darkening rides on vertex colours baked into the geometry's
+      // `color` attribute -- no per-frame work -- so round 105 keeps it on at
+      // every tier. It is still re-derived here rather than skipped, because
+      // the dressing pass can finish after a tier flip and this is the one
+      // place that puts every dressed prop back in step.
       for (const { group } of propGroups) {
         group.traverse((mesh) => {
           // Only meshes that actually carry a `color` attribute are toggled.
@@ -6258,8 +6290,10 @@ export function buildWorld(renderer) {
           // attribute (black or a warning depending on the driver).
           if (!mesh.isMesh || !mesh.material) return;
           if (!mesh.geometry?.attributes?.color) return;
-          mesh.material.vertexColors = !low;
-          mesh.material.needsUpdate = true;
+          if (!mesh.material.vertexColors) {
+            mesh.material.vertexColors = true;
+            mesh.material.needsUpdate = true;
+          }
           mesh.geometry.attributes.color.needsUpdate = true;
         });
       }

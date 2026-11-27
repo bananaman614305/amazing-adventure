@@ -157,9 +157,8 @@ test('a junk spec is tolerated and clamped to finite sizes', () => {
   assert.equal(drip.size[1], S.lipDrop);
 
   // Junk spec containers and absurd-but-finite overrides stay finite and
-  // non-negative. (A negative override clamping to 0 rather than to a positive
-  // minimum is a known module bug pinned by the todo test at the foot of this
-  // file, so positivity is not asserted here.)
+  // non-negative. Sections clamp up to a 4 mm minimum (see the positive-size
+  // test below), offsets to zero, so nothing here can collapse or explode.
   for (const spec of [null, 42, 'x', [], {}, { fasciaHeight: Infinity },
     { fasciaHeight: 1e9, bargeThickness: -1, lipGap: NaN }]) {
     for (const span of roofEdgeSpans({ planes: [PLANE], spec })) {
@@ -490,4 +489,35 @@ test('a negative section override still yields a positive-size board', () => {
       }
     }
   }
+});
+
+// `planeId` stringifies the caller's `id` to build the mesh name, and `String()`
+// runs caller code: a null-prototype object throws "Cannot convert object to
+// primitive value" and an object with a throwing `toString` rethrows. The
+// module's contract is that no export throws, so only a primitive id is
+// accepted and anything else falls back to the plane's own centre -- one junk
+// id must not take every roof's trim down with it.
+test('a non-primitive or throwing id falls back to the plane centre without throwing', () => {
+  const { toString } = Object.prototype;
+  const basePlane = { x: 3, z: -4, y: 5, width: 4, depth: 2, yaw: 0, pitch: 0.3 };
+  const junkIds = [
+    Object.create(null),
+    { toString() { throw new Error('boom'); } },
+    ['a'],
+    new Map(),
+    Symbol('sym')
+  ];
+  for (const id of junkIds) {
+    const spans = roofEdgeSpans({ planes: [{ ...basePlane, id }] });
+    assert.ok(spans.length > 0, `id ${toString.call(id)} produced no boards`);
+    for (const span of spans) {
+      assert.equal(span.plane, '3--4', `id ${toString.call(id)} did not fall back to the centre`);
+      assert.ok(span.name.startsWith(`roof-${span.kind}-3--4-`), span.name);
+    }
+  }
+  // A primitive id is still honoured, and a real one beside a junk one does not
+  // shift the junk plane's fallback.
+  const honour = roofEdgeSpans({ planes: [{ ...basePlane, id: 7 }, { ...basePlane, id: Object.create(null), x: 9 }] });
+  assert.ok(honour.some((span) => span.plane === '7'));
+  assert.ok(honour.some((span) => span.plane === '9--4'));
 });

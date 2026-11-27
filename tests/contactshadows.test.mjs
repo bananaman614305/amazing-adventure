@@ -11,10 +11,13 @@ import {
   SHADOW_MIN_SQUASH,
   SHADOW_MAX_SQUASH,
   SHADOW_JITTER,
+  SHADOW_DECAL_LIFT,
   shadowOpacity,
   shadowsEnabled,
   shadowDecals
 } from '../src/contactshadows.js';
+import { MOSS_DECAL_LIFT } from '../src/moss.js';
+import { PUDDLE_WATER_Y } from '../src/puddles.js';
 
 // The courtyard props the world actually hands over, at the radii it uses, so
 // the suite exercises the real footprint scale rather than invented ones.
@@ -173,4 +176,18 @@ test('the field runs on full and is dropped on low', () => {
   for (const junk of [undefined, null, 'medium', 0, {}]) {
     assert.equal(shadowsEnabled(junk), true);
   }
+});
+
+test('ground overlays stack from shadow to moss to puddle without z-fighting', () => {
+  // Contact shadows lie under moss, and a puddle lies on top of both, so no
+  // two translucent layers can share a height and z-fight or occlude the wrong
+  // one. Each lift is a thin film, not a raised disc.
+  for (const lift of [SHADOW_DECAL_LIFT, MOSS_DECAL_LIFT, PUDDLE_WATER_Y]) {
+    assert.ok(Number.isFinite(lift), `lift must be finite: ${lift}`);
+    assert.ok(lift > 0, `lift must be above the surface: ${lift}`);
+  }
+  assert.ok(SHADOW_DECAL_LIFT < MOSS_DECAL_LIFT, 'shadows sit below moss');
+  assert.ok(MOSS_DECAL_LIFT < PUDDLE_WATER_Y, 'moss sits below puddles');
+  assert.ok(PUDDLE_WATER_Y < 0.05, 'puddle stays a film, not a raised disc');
+  assert.ok(SHADOW_DECAL_LIFT <= 0.01, 'shadow decal stays a film');
 });

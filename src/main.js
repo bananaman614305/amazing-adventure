@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildWorld, applyPhase, KEY_SPOT, KEY_PICKUP_RANGE, floorHeightAt, TERRACE, STEP_HEIGHT, BENCH } from './world.js';
+import { buildWorld, applyPhase, KEY_SPOT, KEY_PICKUP_RANGE, floorHeightAt, surfaceHeightAt, TERRACE, STEP_HEIGHT, BENCH } from './world.js';
 import { Player } from './player.js';
 import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, upgradeCastSkin, upgradeCastAccent, upgradeCastBoot, upgradeCastPaper, animateCast, TALK_RANGE } from './npcs.js';
 import { welcome } from './onboard.js';
@@ -522,8 +522,33 @@ function scheduleEnvironmentMap(phaseId) {
   envMapScheduled = true;
   // requestIdleCallback is not available everywhere; a zero-delay timeout does
   // the same job of getting off the phase-change frame.
+  //
+  // The deadline is not optional. A plain requestIdleCallback waits for the
+  // browser to report an idle period, and the continuous requestAnimationFrame
+  // loop means that never happens: measured on this build, a bare callback was
+  // still unfulfilled after 8 s and the environment map was never built in
+  // play, so every metal, glass and water surface went unreflected. A 1 s
+  // deadline guarantees the build a slot without pulling PMREM work into the
+  // frame that repaints the sky.
   const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
-  idle(() => buildPendingEnvironmentMap());
+  idle(() => buildPendingEnvironmentMap(), { timeout: 1000 });
+}
+
+// The idle queue alone is not enough for the opening seconds of play: even a
+// deadline can land a second in, and the first view of the plaza is the one a
+// player judges. So once the first frame has been rendered -- the shaders are
+// compiled and the cost of one more task is no longer on the critical path --
+// the current phase's map is built on a zero-delay timeout if it is still
+// missing. Both paths funnel through buildPendingEnvironmentMap, which caches
+// per phase and clears pendingEnvPhase, so whichever runs first wins and the
+// other is a no-op; nothing can build twice.
+let firstFrameRendered = false;
+function ensureFirstEnvironmentMap() {
+  if (envMapsBuilt > 0) return;
+  if (!pendingEnvPhase) pendingEnvPhase = currentPhase;
+  setTimeout(() => {
+    if (envMapsBuilt === 0) buildPendingEnvironmentMap();
+  }, 0);
 }
 const npcs = createNPCs(scene);
 // Upgrade the cast from procedural figures to the modelled rigs in the
@@ -1962,6 +1987,14 @@ function frame() {
 
   renderer.render(scene, camera);
 
+  // The first rendered frame is the earliest safe moment to prefilter the
+  // environment map: shaders are compiled, and this is where the "no idle slot
+  // ever arrives" fallback starts (see ensureFirstEnvironmentMap).
+  if (!firstFrameRendered) {
+    firstFrameRendered = true;
+    ensureFirstEnvironmentMap();
+  }
+
   // Adapt resolution from the real frame time, not the clamped game delta. The
   // first few frames are dropped by the controller itself so shader compiles do
   // not count against the machine.
@@ -2040,6 +2073,11 @@ window.amazingAdventure = {
   scene,
   camera,
   environment,
+  // The paved surface under a point, which is not the same as the walking floor:
+  // the plaza disc, the lane floor and the terrace stand at three different
+  // heights. Round 105 places every ground overlay on it, so the browser suite
+  // can recompute where a decal should have gone instead of pinning one height.
+  surfaceHeightAt,
   // Lets a test (or a bug report) ask what actually shipped rather than guessing.
   assetState: () => environment.assetState,
   assetsReady: () => assetsReady,
