@@ -12,22 +12,36 @@
 
 ## Current task
 
-**Round 101 corrected asset committed; browser re-verification required.**
-Self-review (two read-only agents + a sign trace) found three real bugs in
-art/kaggle/roof_shingle_textures.py:
-- B2 normal Y-sign inverted for the bottom-up PNG read by Three.js (would read
-  every butt edge/grain ridge as a valley). Fix: negate the Y gradient, matching
-  plaza v2. Confirmed by a sign trace (green 0.4995 < 0.5 for a +row ramp, vs
-  the old > 0.5).
-- B1 seam assertions measured the pinned-float arrays (always 0, vacuous); the
-  check now runs on the 8-bit quantized arrays write_png emits.
-- B3 dead course-geometry block and a dishonest "courses: 8" report entry
-  removed (tile is one banded course; the running bond comes from instance
-  layout). Also dropped dead is_crown, vestigial base=1.0, duplicated grain
-  comment, and fixed the docstring.
-The generator fix is committed (6fa7f02), the corrected normal regenerated on
-Tesla T4 (Kaggle v46), WebP-converted and re-verified (seams pass; only the G
-channel changed, max diff 0.1922), and dist rebuilt (62aea49). The earlier
+**Round 102 (border-wall trim) committed; browser suite running.**
+No release is pending for Round 102 yet; release ids are recorded when the
+browser/mobile verification passes.
+The five bare border-wall boxes now wear dressed-ashlar trim: a 0.22 m coping
+course on the 3.2 m wall top, a 0.45 m plinth course stepping out at the foot,
+and 32 pilaster strips (5 runs: south 7, east 9, west 9, north-left 5,
+north-right 2), all placed by the new pure module `src/walltrim.js` (seeded,
+total, keep-clear of the window/ivy plane) and boxed by `src/world.js`. The trim
+shares the walls' one stone fetch but keeps its own cloned texture set and a
+1.6 m box projection, so the walls' 34 m repeat is untouched. One group
+(`border-wall-trim`) drops the whole band on the low tier. Meshes are named
+`border-wall-{coping,plinth,pilaster}-<run>-<i>` plus the base walls
+(`border-wall-south/east/west/north-left/north-right`). Committed: dd9ad94 (7
+files), b410d20 (dist rebuild). tests/walltrim.test.mjs 19/19 pass. Browser
+checks for the named pieces, projected stone maps and the tier flag are in
+scripts/test-round2.mjs (28k-i block). Full unit suite re-running in the
+background; browser + mobile suites run once after it passes.
+
+The Round 101 corrected-asset work stands as before: generator fix committed
+(6fa7f02), corrected normal regenerated on Tesla T4 (Kaggle v46), WebP
+re-verified (seams pass; G channel changed, max diff 0.1922), dist rebuilt
+(62aea49), release ed44bd6 published as PR #59. Pages check this cycle: the
+served site matches main at d237b99 exactly (src/manifest.js 200, the 40
+manifest files present, dist/preview.json 404 as on main, vendor three 200).
+PR #59 is still open (merge_commit_sha bd6d2ed exists but merged_at null) and
+carries head 08d4cfa (Round 100, no walltrim.js), i.e. the pre-correction
+head; the correction is only on grunt/round72-bunting-felt. The trusted
+channel still owes the Round 101 corrected-head release; do not report it
+deployed until the corrected head is merged and the served site carries
+src/walltrim.js's sibling state.
 357/357 desktop and 184/184 mobile ran against the INVERTED normal, so both
 browser suites must be re-run at HEAD 62aea49 before release. Release
 verification ids from the pre-fix head are stale and must be re-queued.
@@ -38,6 +52,7 @@ df7dfd5d-20fd-47b3-8a81-af7f98b2f80b, mobile
 6f4e134d-3521-475c-af63-be1cf53f103b. Review agents running.
 
 ## Next steps
-1. Kaggle job v46 finishes -> download normal PNG, WebP-convert, re-verify seams, commit, rebuild dist, re-run browser suites.
-2. Poll the three release verification ids, then `grunt-release prepare` at the corrected HEAD and record the review.
-3. Round 102 candidate (survey agent): border-wall coping/pilasters — pure code, reuses the stone family, no new asset. Flat-colour backlog is nearly exhausted; remaining realism gap is geometry/silhouette.
+1. Full unit suite passes -> run `npm run test:browser`, then `npm run test:mobile` (one at a time).
+2. Poll the release verification ids for the Round 101 corrected-asset release, then `grunt-release prepare` at the corrected HEAD and record the review; verify the exact Pages build for PR #59 before reporting it deployed.
+3. Round 102 release: once the browser and mobile suites pass, `grunt-release verify release tests|browser|mobile`, `prepare` at b410d20 on grunt/round72-bunting-felt, review, advance.
+4. Next round candidate: remaining geometry/silhouette gaps — e.g. roof edge coping/bargeboards on the house and terrace, or the barn walls mentioned earlier. Flat-colour backlog is nearly exhausted.
