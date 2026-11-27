@@ -615,7 +615,7 @@ const castReady = upgradeNPCs(npcs, { THREE, loadGlb })
       // spear tip) picks up the lamp metal normal + roughness maps.
       .then(() => upgradeCastSteel(npcs, { THREE }))
       .then((steel) => Object.assign(summary, { steel }))
-      .catch((error) => Object.assign(summary, { steel: { dressed: 0, reason: String(error) } }));
+      .catch((error) => Object.assign(summary, { steel: { dressed: 0, reason: String(error) } }))
       // Round 111: the cast's carried timber (mara's pole, pip's hoop, halden's
       // spear shaft, wren's ledger board) picks up the crate plank maps.
       .then(() => upgradeCastWood(npcs, { THREE }))
