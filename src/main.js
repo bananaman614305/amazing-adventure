@@ -347,9 +347,15 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 // after the browser handed the context back. Return '' for null
 // unconditionally: a program with no log is indistinguishable from one whose
 // log is empty, and three treats an empty log as "nothing to print".
-const rawProgramInfoLog = renderer.getContext().getProgramInfoLog.bind(renderer.getContext());
-renderer.getContext().getProgramInfoLog = (program) => {
+const gl = renderer.getContext();
+const rawProgramInfoLog = gl.getProgramInfoLog.bind(gl);
+gl.getProgramInfoLog = (program) => {
   const log = rawProgramInfoLog(program);
+  return log === null ? '' : log;
+};
+const rawShaderInfoLog = gl.getShaderInfoLog.bind(gl);
+gl.getShaderInfoLog = (shader) => {
+  const log = rawShaderInfoLog(shader);
   return log === null ? '' : log;
 };
 const basePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
