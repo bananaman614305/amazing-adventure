@@ -12,48 +12,47 @@
 
 ## Current task
 
-**Round 102 (border-wall trim) is code-complete at HEAD ef84687; the desktop
-browser suite is running again after Chrome crashed mid-run.** The five bare
-border walls now wear dressed-ashlar trim placed by the pure module
-`src/walltrim.js`: a 0.22 m coping on the 3.2 m wall top, a 0.45 m plinth at the
-foot, and 32 pilaster strips (south 7, east 9, west 9, north-left 5,
-north-right 2). Meshes are named `border-wall-{coping,plinth,pilaster}-<run>[-<i>]`,
-share the walls' one stone fetch but use their own cloned textures at a 1.6 m
-box projection, and the low tier drops the whole `border-wall-trim` group.
+**Round 104 (eave trim) is code-complete at HEAD bf72c2b; the desktop browser
+suite is running (background shell bb0sx5x66).** The four modelled roofs now end
+in a real roofline: `src/roofedge.js` (new pure module, 25 unit tests) decides a
+fascia board along each eave, a lead drip apron hung under it, and a bargeboard
+along each gable rake, in the same local yaw-then-tilt frame `placeShingles`
+uses. `world.js` turns them into two InstancedMeshes on one unit BoxGeometry
+(`roof-edge-boards` 12 instances, `roof-edge-drips` 4) inside the group
+`roof-edge-trim`; 16 descriptors total (4 fascia + 4 drip + 8 barge), verified
+offline against the measured eave lines (worst deviation 0). The low tier drops
+the group and both tier-flip paths re-derive it; `api.environment` gained
+`roofEdge`, `roofEdgeBoards`, `roofEdgeDrips`, `roofEdgeCount`, `roofEdgeSpans`,
+`paintRoofEdge()`, `roofEdgeOn`. Three new r104 browser checks read the instance
+matrices and pin 12/4/4/8, the eave and rake placement, and the tier flip.
 
-Fixed this cycle (a2a3b88): pilasters now stop at the gate piers' OUTER edges
-(7.30 / 11.70) — they project past both wall faces, so clearing only the pier
-centre left the first north-right strip inside pier B. Courses correctly stop at
-the pier INNER faces (8.00 / 11.00). The browser check for projected UVs was
-itself wrong (a 1.56 m pilaster maps to a 0.975 UV span at a 1.6 m tile); it now
-reads UV span ÷ longest edge = 1/1.6 for any box-projected piece.
+`readSpec` now clamps every section up to a 4 mm minimum instead of 0, so a
+negative override yields a thin board rather than a zero-size one (a subagent's
+contract finding, fixed and pinned).
 
-Evidence so far: tests/walltrim.test.mjs 21/21; full unit suite 1472/1473 with
-the only failure the stale dist digest, since rebuilt (f1c948f); desktop suite at
-f1c948f reached 341/341 including all four trim checks, then Chrome died
-("Target closed") before the last ~20 checks — a browser crash, not a check
-failure, so run bcyvnqv5j is repeating the full suite. Mobile not yet run.
+Also fixed this round: the ivy-vs-trim clash quantified by a subagent (6 of 14
+patches were sliced by the border wall's plinth/pilaster band up to 0.22 m deep).
+`IVY_MIN_BASE_Y` 0.15 -> 0.82 and `IVY_MAX_SPAN` 2.4 -> 2.28; a new unit test
+pins the invariant against `walltrim.js`'s own numbers, so a future trim change
+cannot silently reintroduce the clash.
 
-**Found for the next round (not yet fixed):** the instanced shingle field is
-laid on the procedural roof slabs, which `upgradeHouse()` and
-`upgradeMarketStalls()` hide once the models load. Measured with
-`shingleSpawns()` on the house plane: 44 of 150 strips sit ABOVE the modelled
-gable surface (up to 0.543 m), so once assets load the shingles float through
-the real roof. The modelled roofs are a gable (eave 3.0 m, ridge 4.6 m) and two
-pitched awnings, not flat slabs. A subagent is measuring the exact world-space
-planes to retile them.
-
-Round 101 corrected-asset work stands: PR #59 is still open at head 08d4cfa
-(Round 100, pre-correction); the served Pages site matches main d237b99. The
-trusted channel still owes the Round 101 corrected-head release — do not report
-it deployed until the corrected head is merged.
-
-Trusted release: channel configured. The three queued verification ids (tests
-846ac85d, browser df7dfd5d, mobile 6f4e134d) ran against the pre-correction head
-and are stale. Round 102 has no verification ids yet; they are queued only after
-the desktop and mobile suites pass at the same head.
+Checks done: focused ivy (36/36) and roofedge (25/25) suites; full unit suite
+1503/1504 with the only failure the expected stale-dist preview test, then dist
+rebuilt and preview.test.mjs 10/10 at bf72c2b. Manifest regenerated (158 files).
+Not yet done: the desktop suite result, the mobile suite, and the Round 104
+release.
 
 ## Next steps
-1. Finish the desktop suite (run bcyvnqv5j) and the full unit suite at the same head, then `npm run test:mobile` — one browser suite at a time. Only then queue Round 102 verification ids and prepare the release.
-2. Fix the shingles-on-hidden-slabs bug found this cycle: retile the shingle field onto the modelled gable and awning planes (exact world-space planes being measured), and drop shingle strips on the low tier as today. This is the visible artefact in the game right now.
-3. Round 101 corrected-head release: re-queue the three verification checks at the corrected head, prepare, review, advance; verify the exact Pages build for PR #59 before reporting it deployed.
+1. Read the desktop suite result (shell bb0sx5x66); expect the three r104 checks
+   green. Then `npm run test:mobile` once, and fix anything either suite finds.
+2. Read the two subagent reports due this cycle — `/worker/state/claude-tmp/r104-review.md`
+   (code review of this round) and `/worker/state/claude-tmp/gutter-clash-report.md`
+   (do the modelled HouseGutter/Downspout boxes clash with the new boards or the
+   shingles, and is the gutter hidden from the ground?). Fix real findings in a
+   follow-up commit, rerunning the affected checks.
+3. Releases still owed, oldest first: Round 101, 102, 103 and now 104 corrected
+   heads. The trusted channel was last reported `blocked_infrastructure`
+   (256-commit rev-list limit) in needs-supervision.json; re-check that file
+   first, then `grunt-release verify release tests|browser|mobile` at the clean
+   head, poll, prepare, review, advance. Report deployed only after the exact
+   Pages build is verified.
