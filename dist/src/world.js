@@ -84,6 +84,7 @@ import {
   cloneTextureFamily, TERRACE_TEXTURE_TILE_METERS, terraceStoneParts,
   fountainStoneParts, fountainStoneMaterialParams, fountainStoneTint,
   ROOF_TEXTURE_FILES, LEAF_TEXTURE_FILES, PROP_FAMILIES, propFamilyFor,
+  DOORMAT_TEXTURE_FILES, SOIL_TEXTURE_FILES,
   PAPER_TEXTURE_FILES, ROPE_TEXTURE_FILES, ROOF_SHINGLE_TEXTURE_FILES
 } from './assets.js';
 import {
@@ -2467,8 +2468,10 @@ export function buildWorld(renderer) {
       // the three files, so this is a cache hit rather than a second download.
       return Promise.all([
         loadMaterialTextures({ THREE, files: CLOTH_TEXTURE_FILES }),
-        loadMaterialTextures({ THREE, files: LAMP_TEXTURE_FILES })
-      ]).then(([cloth, iron]) => {
+        loadMaterialTextures({ THREE, files: LAMP_TEXTURE_FILES }),
+        loadMaterialTextures({ THREE, files: DOORMAT_TEXTURE_FILES }),
+        loadMaterialTextures({ THREE, files: SOIL_TEXTURE_FILES })
+      ]).then(([cloth, iron, doormat, soil]) => {
         if (cloth.anyLoaded) {
           familyTextures.cloth = cloth;
           assetState.cloth = 'textured';
@@ -2486,6 +2489,24 @@ export function buildWorld(renderer) {
           };
         } else {
           assetState.iron = 'flat';
+        }
+        if (doormat.anyLoaded) {
+          familyTextures.doormat = doormat;
+          assetState.doormat = 'textured';
+          assetState.doormatDetail = {
+            maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => doormat[k])
+          };
+        } else {
+          assetState.doormat = 'flat';
+        }
+        if (soil.anyLoaded) {
+          familyTextures.soil = soil;
+          assetState.soil = 'textured';
+          assetState.soilDetail = {
+            maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => soil[k])
+          };
+        } else {
+          assetState.soil = 'flat';
         }
         return assetState;
       });

@@ -190,6 +190,18 @@ export const WOOD_TEXTURE_FILES = {
   roughnessMap: 'assets/textures/wood_rough.webp'
 };
 
+export const DOORMAT_TEXTURE_FILES = {
+  map: 'assets/textures/doormat_albedo.webp',
+  normalMap: 'assets/textures/doormat_normal.webp',
+  roughnessMap: 'assets/textures/doormat_rough.webp'
+};
+
+export const SOIL_TEXTURE_FILES = {
+  map: 'assets/textures/soil_albedo.webp',
+  normalMap: 'assets/textures/soil_normal.webp',
+  roughnessMap: 'assets/textures/soil_rough.webp'
+};
+
 export const PLASTER_TEXTURE_FILES = {
   map: 'assets/textures/plaster_albedo.webp',
   normalMap: 'assets/textures/plaster_normal.webp',
@@ -493,6 +505,29 @@ export const PROP_FAMILIES = [
     files: STONE_TEXTURE_FILES,
     tileMeters: 1.6,
     roughness: 0.9
+  },
+  {
+    // Round 111: the house front step's coir mat. Tight on purpose: only the
+    // modelled house's `HouseDoormat` mesh carries this material, and a broad
+    // /doormat|mat/ would risk swallowing a future `FloorMat` that keeps its own
+    // pass. Reuses the bespoke doormat_* bake; the albedo carries the coir
+    // colour, so keepTint stays false.
+    id: 'doormat',
+    test: /^housedoormat$/i,
+    files: DOORMAT_TEXTURE_FILES,
+    tileMeters: 0.35,
+    roughness: 0.92
+  },
+  {
+    // Round 111: the terrace planters' soil tops. Tight on purpose: only the two
+    // `TerracePlanter*Soil` meshes carry `TerraceSoil`. Reuses the bespoke
+    // soil_* bake (damp earth, clumps + pebbles); keepTint false because the
+    // albedo carries the earth colour.
+    id: 'soil',
+    test: /^terracesoil$/i,
+    files: SOIL_TEXTURE_FILES,
+    tileMeters: 0.25,
+    roughness: 0.78
   },
   {
     // Round 70: painted ironwork. The barrel hoops, crate bands, bench

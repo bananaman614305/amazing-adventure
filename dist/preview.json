@@ -4,9 +4,9 @@
   "build": "A living world",
   "entryPoint": "index.html",
   "workingTreeClean": true,
-  "fileCount": 161,
-  "sourceDigest": "0688036825043945b925372b13675b3e1f125511b0f315120d32eb0e67de261a",
-  "digest": "0688036825043945b925372b13675b3e1f125511b0f315120d32eb0e67de261a",
+  "fileCount": 162,
+  "sourceDigest": "7ea012df678d84be466d21c37c0ed44f5b4d43793578f5e698c7e8259222b7e5",
+  "digest": "7ea012df678d84be466d21c37c0ed44f5b4d43793578f5e698c7e8259222b7e5",
   "files": [
     "assets/banner.glb",
     "assets/barrel.glb",
@@ -166,6 +166,7 @@
     "src/wildflowers.js",
     "src/wind.js",
     "src/windows.js",
+    "src/woodprop.js",
     "src/world.js",
     "vendor/THREE-LICENSE.txt",
     "vendor/three.module.min.js"

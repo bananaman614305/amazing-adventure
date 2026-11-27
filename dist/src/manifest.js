@@ -21,6 +21,7 @@ export const REQUIRED_FILES = [
   'src/npcs.js',
   'src/skin.js',
   'src/steel.js',
+  'src/woodprop.js',
   'src/accent.js',
   'src/boot.js',
   'src/paper.js',
