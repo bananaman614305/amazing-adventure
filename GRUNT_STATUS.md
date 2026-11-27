@@ -24,20 +24,25 @@ Fixed in `9b7d8e2` (nine paths added to `src/manifest.js`) plus a new
 non-vacuous guard in `tests/manifest.test.mjs` that derives every
 `assets/`/`vendor/` reference from `src/*.js` and fails if `REQUIRED_FILES` omits
 it, and `b971cea` (dist rebuilt with the maps). Unit suite 1557/1557 on the new
-head. The mobile suite is running against `b971cea` now (log
-`/tmp/scratchpad/mobile.log`, pid confirmed alive) — result not yet read.
+head. The mobile suite passed 184/184 at `b971cea` (exit 0, four phone profiles,
+no console errors: iPhone 13 portrait 9.1fps, Pixel 7 1.2, iPhone SE 1.9, iPhone
+13 landscape 1.3). Round 111 is closed across both device classes.
 Release channel is still `blocked_infrastructure` (host caps reachable commits
 at 256; branch is 300+ ahead), no release ids pending; PR-only fallback path.
+**Round 112 started: night light depth — window spill pools + sun-aimed contact
+shadows.** Both audit agents finished; their reports are saved at
+`/tmp/scratchpad/audit-r112/` (ranked.md lost to a scratchpad wipe, budget.md
+kept; the design ranking is summarized in Current-task history above). Two
+subagents are building the pure halves in parallel: src/lightspill.js (warm
+ground pools under lit windows, driven by nightFraction) and the sun-aim maths
+for src/contactshadows.js (the world.js:5673 yaw placeholder replaced by the
+phase sun direction). Integration into world.js, browser checks and dist
+follow once both land.
 
 ## Next steps
-1. Read the `b971cea` mobile result and fix anything red; that closes round 111
-   across both device classes.
-2. Start round 112. The audit (`/tmp/scratchpad/audit-r112/ranked.md`) shows the
-   flat-surface axis is exhausted — only 9 flat materials remain (~12.9 m²) and
-   all but the 1.66 m² MeadowGrass tufts are flat by design (glass response,
-   emissive bulbs/markers, eyes/mouth). Two design agents are working the
-   alternatives: one ranking non-flat realism axes (lighting, geometry, material
-   quality, atmosphere), one auditing real render-budget headroom at full vs
-   `low` tier. That picks the round-112 direction.
-3. Keep the 101-111 release batched for `grunt-release` once the host commit cap
+1. Land the two round-112 pure modules + tests, integrate both into world.js
+   (InstancedMesh 'window-spill' with surfaceHeightAt placement, low-tier drop,
+   per-phase opacity; contact decal ellipse aimed along the phase sun azimuth,
+   recomputed on phase change), add browser checks, rebuild dist.
+2. Keep the 101-111 release batched for `grunt-release` once the host commit cap
    is lifted; until then keep `publish.json` current per round.
