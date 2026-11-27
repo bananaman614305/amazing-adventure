@@ -239,8 +239,8 @@ its procedural stand-in or flat colour and stays fully playable.
 - `assets/textures/roof_shingle_{albedo,normal,rough}.webp` —
   `art/kaggle/roof_shingle_textures.py`, run on the private Kaggle notebook
   (Tesla T4, CuPy backend). A tile family for the procedural roof shingles:
-  the `roof-shingles` InstancedMesh lays 1 x 1 m boxes across three pitched
-  planes, and the authored 0..1 UVs carry the map once per metre, so a 1 m tile
+  the `roof-shingles` InstancedMesh lays 1 x 1 m boxes across three flat roof
+  slabs (pitch 0), and the authored 0..1 UVs carry the map once per metre, so a 1 m tile
   is one repeat across every instance. A value albedo (joint shadow, fine
   grain, nail dots, damp field) so the authored 0x6d3a2c shingle
   colour and the per-phase glow keep supplying hue and brightness; a shallow

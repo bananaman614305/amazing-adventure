@@ -48,6 +48,7 @@ import { reedSpawns, reedStemSway, reedGlowLevel, reedsEnabled, REED_COUNT } fro
 import { mossSpawns, mossDarkness, mossGlowLevel, mossEnabled,
   MOSS_SEAM_WIDTH } from './moss.js';
 import { shadowDecals, shadowOpacity, shadowsEnabled } from './contactshadows.js';
+import { WALL_TRIM, wallTrimLayout, wallTrimEnabled } from './walltrim.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
 import {
   GATE, LANE, AREAS, LANE_PROPS, NOTICE_BOARD, NORTH_WALL_SEGMENTS, LEDGER_SPOT, JOB_BOARD,
@@ -527,33 +528,65 @@ export function buildWorld(renderer) {
 
   // --- Border walls -------------------------------------------------------
   const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x6f6455, roughness: 0.85 });
+  // The trim courses share the wall's base stone colour until upgradeWallsTrim()
+  // dresses them from the stone family; the material stays a separate instance so
+  // the walls' 34 m repeat cannot be overwritten by the courses' 1.6 m projection.
+  const trimMaterial = new THREE.MeshStandardMaterial({ color: 0x6f6455, roughness: 0.85 });
   const wallHeight = 3.2;
   const wallThickness = 1;
 
   // The north wall is split either side of the gate so the gate opening can be
   // opened and closed by its own collider (see the gate block below).
   const sides = [
-    { x: 0, z: HALF, w: WORLD_SIZE, d: wallThickness },
-    { x: -HALF, z: 0, w: wallThickness, d: WORLD_SIZE },
-    { x: HALF, z: 0, w: wallThickness, d: WORLD_SIZE }
+    { id: 'south', axis: 'x', from: -HALF, to: HALF, fixed: HALF },
+    { id: 'east', axis: 'z', from: -HALF, to: HALF, fixed: HALF },
+    { id: 'west', axis: 'z', from: -HALF, to: HALF, fixed: -HALF }
   ];
 
   for (const side of sides) {
     addBox(scene, colliders, {
-      size: [side.w, wallHeight, side.d],
-      position: [side.x, wallHeight / 2, side.z],
+      size: side.axis === 'x' ? [side.to - side.from, wallHeight, wallThickness]
+        : [wallThickness, wallHeight, side.to - side.from],
+      position: side.axis === 'x'
+        ? [(side.from + side.to) / 2, wallHeight / 2, side.fixed]
+        : [side.fixed, wallHeight / 2, (side.from + side.to) / 2],
       material: wallMaterial
     });
+    // Named so the browser suite reads the wall by name rather than by guessing
+    // which grey box is which.
+    scene.children[scene.children.length - 1].name = `border-wall-${side.id}`;
   }
 
-  for (const segment of NORTH_WALL_SEGMENTS) {
+  NORTH_WALL_SEGMENTS.forEach((segment, i) => {
     const width = segment.maxX - segment.minX;
-    addBox(scene, colliders, {
+    const mesh = addBox(scene, colliders, {
       size: [width, wallHeight, wallThickness],
       position: [(segment.minX + segment.maxX) / 2, wallHeight / 2, -HALF],
       material: wallMaterial
     });
+    mesh.name = `border-wall-${i === 0 ? 'north-left' : 'north-right'}`;
+  });
+
+  // --- Border-wall trim ----------------------------------------------------
+  // A bare 3.2 m box reads as a modern retaining wall. src/walltrim.js decides
+  // where a coping course, a plinth course and the pilaster strips sit on each of
+  // the five runs; this block only turns those descriptors into boxes and keeps
+  // them in one group so the low tier can drop the whole band for the cost of a
+  // single visibility flag. Every piece is shorter than addBox's 0.9 m collider
+  // threshold, so none of them changes where the player can walk.
+  const wallTrimGroup = new THREE.Group();
+  wallTrimGroup.name = 'border-wall-trim';
+  const wallTrimMeshes = [];
+  for (const piece of wallTrimLayout()) {
+    const mesh = addBox(wallTrimGroup, null, {
+      size: piece.size,
+      position: piece.position,
+      material: trimMaterial
+    });
+    mesh.name = piece.name;
+    wallTrimMeshes.push(mesh);
   }
+  scene.add(wallTrimGroup);
 
   // --- The north gate ----------------------------------------------------
   // Two stone piers frame the opening; the door itself is a slab that lifts
@@ -1463,6 +1496,7 @@ export function buildWorld(renderer) {
     cobble: 'flat',
     grass: 'flat',
     walls: 'flat',
+    wallsTrim: 'flat',
     gateStone: 'flat',
     fountainStone: 'flat',
     terrace: 'flat',
@@ -1495,7 +1529,8 @@ export function buildWorld(renderer) {
     // Round 101: the roof shingles' own tile family (see upgradeShingles).
     // 'flat' until the family is fetched and dressed.
     shingle: 'flat',
-    shingleDetail: null
+    shingleDetail: null,
+    wallsTrimDetail: null
   };
 
   function upgradeFountain() {
@@ -3335,6 +3370,41 @@ export function buildWorld(renderer) {
    * deliberately resolves null for stone, so STONE_TEXTURE_FILES is used here
    * directly).
    */
+  /**
+   * Dresses the border-wall trim (coping, plinth and pilaster courses) from the
+   * stone family. The walls use a 34 m repeat, so the trim gets its own cloned
+   * texture set and a 1.6 m box projection, matching the terrace stone.
+   */
+  function upgradeWallsTrim() {
+    if (!canLoadAssets({
+      hasFetch: typeof fetch === 'function',
+      protocol: typeof location !== 'undefined' ? location.protocol : '',
+      isSecureContext: typeof isSecureContext !== 'undefined' ? isSecureContext : undefined
+    })) {
+      assetState.wallsTrim = 'unavailable';
+      return Promise.resolve(assetState);
+    }
+    return loadStoneFamily().then((textures) => {
+      if (!textures.anyLoaded) {
+        assetState.wallsTrim = 'flat';
+        return assetState;
+      }
+      for (const mesh of wallTrimMeshes) {
+        projectBoxGeometry({ THREE, geometry: mesh.geometry,
+          tileMeters: WALL_TRIM.tileMeters });
+      }
+      applyTextureFamily(trimMaterial,
+        { ...cloneTextureFamily(textures), anyLoaded: true }, 1, 1, 1);
+      assetState.wallsTrim = 'textured';
+      assetState.wallsTrimDetail = {
+        meshes: wallTrimMeshes.length,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => textures[k]),
+        tileMeters: WALL_TRIM.tileMeters
+      };
+      return assetState;
+    });
+  }
+
   function upgradeGateStone() {
     if (!canLoadAssets({
       hasFetch: typeof fetch === 'function',
@@ -5572,6 +5642,11 @@ export function buildWorld(renderer) {
   }
   paintShingles('day', 'full');
 
+  function paintWallsTrim(tier = environment.quality) {
+    wallTrimGroup.visible = wallTrimEnabled(tier);
+  }
+  paintWallsTrim('full');
+
   // The per-instance scratch objects for the sway pass, allocated once so the
   // frame loop does no allocation.
   const swayMatrix = new THREE.Matrix4();
@@ -5864,6 +5939,9 @@ export function buildWorld(renderer) {
     paintShingles(phaseId) {
       paintShingles(phaseId, environment.quality);
     },
+    paintWallsTrim() {
+      paintWallsTrim(environment.quality);
+    },
     get shinglesOn() {
       return shinglesEnabled(environment.quality);
     },
@@ -6038,6 +6116,7 @@ export function buildWorld(renderer) {
       if (environment.paintMoths) environment.paintMoths(environment.phase);
       if (environment.paintPuddles) environment.paintPuddles(environment.phase);
       if (environment.paintShingles) environment.paintShingles(environment.phase);
+      if (environment.paintWallsTrim) environment.paintWallsTrim();
       if (environment.paintWildflowers) environment.paintWildflowers(environment.phase);
       if (environment.paintReeds) environment.paintReeds(environment.phase);
       if (environment.paintMoss) environment.paintMoss(environment.phase);
@@ -6167,7 +6246,7 @@ export function buildWorld(renderer) {
      * than a guess about timing.
      */
     loadAssets() {
-      return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeTerrace(), upgradePlazaFloor(), upgradeShingles(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner(), upgradeTerraceDetail(), upgradeHouseDetail()])
+      return Promise.all([upgradeFountain().then(() => upgradeFountainStone()), upgradeBarrels(), upgradeStalls(), upgradeLamps(), upgradeMarketStalls(), upgradeBench(), upgradeNotice(), upgradeCrates(), upgradeGateDoor(), upgradeHouse(), upgradeCobble(), upgradeGrass(), upgradeWalls(), upgradeGateStone(), upgradeWallsTrim(), upgradeTerrace(), upgradePlazaFloor(), upgradeShingles(), upgradeWoodBrick(), upgradePropMaps(), upgradeTree(), upgradeBark(), upgradeLaneLamp(), upgradeBanner(), upgradeTerraceDetail(), upgradeHouseDetail()])
         .then(() => upgradePropFamilies()).then(() => upgradeBuntingFelt()).then(() => upgradeLaneRope()).then(() => upgradeBoardPaper())
         .then(() => upgradeLanternHousing()).then(() => upgradeSackTie()).then(() => upgradeNoticeFace())
         // Water runs last and after the prop pass on purpose: the water discs
@@ -6351,6 +6430,7 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintMoths) environment.paintMoths(phaseId);
   if (environment.paintPuddles) environment.paintPuddles(phaseId);
   if (environment.paintShingles) environment.paintShingles(phaseId);
+  if (environment.paintWallsTrim) environment.paintWallsTrim();
   if (environment.paintWildflowers) environment.paintWildflowers(phaseId);
   if (environment.paintReeds) environment.paintReeds(phaseId);
   if (environment.paintMoss) environment.paintMoss(phaseId);

@@ -3066,6 +3066,82 @@ try {
   checks.check('the border walls wear the stone family',
     plaza.walls === 'textured' && plaza.wallMaps.length === 3,
     JSON.stringify({ walls: plaza.walls, maps: plaza.wallMaps }));
+  // --- 28k-i. The border-wall trim -------------------------------------------
+  // The coping course, plinth course and pilaster strips that turn the bare wall
+  // boxes into dressed ashlar. Named pieces, shared box-projected UVs, one group
+  // the low tier drops.
+  const trim = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    const state = api.assetState();
+    const group = api.scene.getObjectByName('border-wall-trim');
+    const pieces = [];
+    group && group.traverse((o) => { if (o.isMesh) pieces.push(o.name); });
+    const one = (name) => group && group.getObjectByName(name);
+    const describe = (mesh) => {
+      if (!mesh || !mesh.material) return null;
+      const m = mesh.material;
+      return {
+        map: Boolean(m.map), normal: Boolean(m.normalMap),
+        rough: Boolean(m.roughnessMap), repeat: m.map ? [m.map.repeat.x, m.map.repeat.y] : null,
+        color: m.color ? m.color.getHexString() : null, metalness: m.metalness
+      };
+    };
+    const uvSpan = (mesh) => {
+      const uv = mesh && mesh.geometry && mesh.geometry.getAttribute &&
+        mesh.geometry.getAttribute('uv');
+      if (!uv) return null;
+      let min = Infinity; let max = -Infinity;
+      for (let i = 0; i < uv.count * 2; i += 1) {
+        const v = uv.array[i];
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      return [Number(min.toFixed(3)), Number(max.toFixed(3))];
+    };
+    return {
+      wallsTrim: state.wallsTrim,
+      trimMaps: state.wallsTrimDetail ? state.wallsTrimDetail.maps : [],
+      trimTile: state.wallsTrimDetail ? state.wallsTrimDetail.tileMeters : null,
+      trimMeshes: state.wallsTrimDetail ? state.wallsTrimDetail.meshes : null,
+      groupVisible: Boolean(group && group.visible),
+      pieces,
+      kinds: { coping: pieces.filter((n) => n.includes('-coping-')).length,
+               plinth: pieces.filter((n) => n.includes('-plinth-')).length,
+               pilaster: pieces.filter((n) => n.includes('-pilaster-')).length },
+      coping: describe(one('border-wall-coping-south')),
+      plinth: describe(one('border-wall-plinth-south')),
+      pilaster: describe(one('border-wall-pilaster-south-0')),
+      copingUv: uvSpan(one('border-wall-coping-south')),
+      pilasterUv: uvSpan(one('border-wall-pilaster-south-0'))
+    };
+  }));
+  checks.check('the trim covers all five runs with named pieces',
+    trim.groupVisible && trim.pieces.length > 0 &&
+    trim.kinds.coping === 5 && trim.kinds.plinth === 5 && trim.kinds.pilaster > 0,
+    JSON.stringify({ visible: trim.groupVisible, kinds: trim.kinds, total: trim.pieces.length }));
+  checks.check('the trim dresses the coping, plinth and pilaster from the stone family',
+    trim.wallsTrim === 'textured' && trim.trimMaps.length === 3 && trim.trimTile === 1.6 &&
+    trim.trimMeshes === trim.pieces.length,
+    JSON.stringify({ wallsTrim: trim.wallsTrim, maps: trim.trimMaps,
+                     tile: trim.trimTile, meshes: trim.trimMeshes }));
+  checks.check('the trim pieces wear the projected stone maps, not the wall repeat',
+    trim.coping && trim.coping.map && trim.coping.normal && trim.coping.rough &&
+    trim.plinth && trim.plinth.map && trim.pilaster && trim.pilaster.map &&
+    trim.coping.repeat[0] === 1 && trim.copingUv[1] > 1 && trim.pilasterUv[1] > 1,
+    JSON.stringify({ coping: trim.coping, copingUv: trim.copingUv, pilasterUv: trim.pilasterUv }));
+  const before = (await page.evaluate(() => window.amazingAdventure.quality.tier));
+  await page.evaluate(() => window.amazingAdventure.quality.set('low'));
+  const low = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const group = api.scene.getObjectByName('border-wall-trim');
+    return { visible: Boolean(group && group.visible), tier: api.quality.tier };
+  });
+  await page.evaluate((t) => window.amazingAdventure.quality.set(t), before);
+  checks.check('the low tier drops the whole trim band for one visibility flag',
+    low.visible === false && low.tier === 'low',
+    JSON.stringify(low));
+
+  await capture(page, 'round45-plaza.png');
   checks.check('the sky is a vertex-colour gradient dome',
     plaza.dome && plaza.dome.vertexColors && plaza.dome.colorCount > 100,
     JSON.stringify(plaza.dome));
