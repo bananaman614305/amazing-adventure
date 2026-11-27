@@ -24,13 +24,20 @@
 //    `NORTH_WALL_SEGMENTS` and with `WORLD_SIZE`, and a drift in the world is
 //    caught there rather than silently absorbed here.
 //
-// 2. Every trim piece respects the window and ivy plane. Window panes sit on a
-//    plane at 16.48 m (HALF - 0.52), and the ivy cards hang around the same
-//    plane, so the keep-clear rule caps every inward projection. Each piece
-//    settles its own limit: the coping projects nothing inward (its inner edge
-//    stops flush with the wall's inner face), the plinth steps 0.12 m inside,
-//    and the pilasters step 0.28 m -- all under the 0.3 m blanket margin, so a
-//    trim band can never reach the glass or clip a leaf card.
+// 2. The keep-clear margin is an upper bound on inward step, not a clearance
+//    from the glass or the ivy. Window panes sit on a plane at 16.48 m
+//    (HALF - 0.52) and ivy cards on a plane at 16.44 m (HALF - 0.56), both
+//    inside the wall's inner face at 16.5 m, so the plinth's 0.12 m step and
+//    the pilaster's 0.28 m step carry their inner edges to 16.38 m and 16.22 m
+//    respectively -- in front of both planes, not behind them. Glass is still
+//    safe because the trim band only occupies 0..0.77 m of height while the
+//    lowest window starts at 1.6 m (WINDOW_MIN_HEIGHT): no trim piece ever
+//    reaches the window band. Ivy is not so lucky: ivy patches run from a 0.15 m
+//    base up to 1.6 m, so they overlap the trim band and trim can occlude an ivy
+//    card where the two coincide. That occlusion is a known, accepted visual
+//    limitation rather than a bug, and the module says so instead of pretending
+//    the margin prevents it. The coping projects nothing inward, so its inner
+//    edge stays at the inner face and it never reaches either plane.
 //
 // The numbers worth the words:
 //
@@ -90,10 +97,22 @@ export const WALL_TRIM_HEIGHT = 3.2;
  *  - `pilasterWidth` / `pilasterHeight` / `pilasterProjection` /
  *    `pilasterMinSpacing` / `pilasterMaxSpacing`: the vertical strips between
  *    courses, sitting on the plinth;
- *  - `keepClear`: the largest inward projection any trim may make, so a piece
- *    can never reach the window/ivy plane at 16.48 m;
+ *  - `keepClear`: the largest inward projection any trim may make. It is an
+ *    upper bound on how far a piece may step in, not a clearance from the
+ *    window plane (16.48 m) or the ivy plane (16.44 m): the plinth and
+ *    pilasters step past both of those planes, and glass is safe only because
+ *    the trim band (0..0.77 m) sits below the lowest window (1.6 m), while ivy
+ *    cards overlapping that band are occluded where trim crosses them.
  *  - `tileMeters`: the stone texture family's tile, so the courses' UVs line up
  *    with the terrace stonework (`TERRACE_TEXTURE_TILE_METERS`). */
+/** The plane (|coord|) at which window panes sit, inside the wall's inner face.
+ *  Exported so tests name it instead of re-deriving 16.48. */
+export const WALL_TRIM_WINDOW_PLANE = 16.48;
+
+/** The plane (|coord|) at which ivy cards hang, inside the wall's inner face.
+ *  Exported so tests name it instead of re-deriving 16.44. */
+export const WALL_TRIM_IVY_PLANE = 16.44;
+
 export const WALL_TRIM = Object.freeze({
   copingHeight: 0.22,
   copingProjection: 0.14,
@@ -504,10 +523,10 @@ export function wallTrimLayout() {
 }
 
 /** Whether the trim runs at this quality tier. The low tier drops the trim
- *  meshes, consistent with the quality-tier convention: each box is a draw call
- *  and a light, which is exactly the cost the low tier exists to shed. Junk
- *  reads as the full tier, so an unexpected tier never silently strips the walls
- *  back to bare boxes. */
+ *  meshes, consistent with the quality-tier convention: each box is a draw call,
+ *  which is exactly the cost the low tier exists to shed. (The trim group carries
+ *  no lights of its own.) Junk reads as the full tier, so an unexpected tier
+ *  never silently strips the walls back to bare boxes. */
 export function wallTrimEnabled(tier) {
   return tier !== 'low';
 }

@@ -1,15 +1,15 @@
 // Where the tile courses lie on every roof plane in the plaza and the lane,
 // decided without a GPU.
 //
-// The plaza's roofs and the lane's rooflines are flat slabs carrying one roof
-// texture stretched across the whole plane. A single texture on a single quad
-// has no thickness and no break: the eave is a ruler-straight edge, the surface
-// has one tone, and the eye reads a painted lid rather than a roof. Real tile
-// roofs show courses of overlapping shingles, each course stepped up from the
-// one below, each shingle a slightly different shade, and the eave a broken line
-// where individual tiles end. `world.js` will render one thin instanced strip
-// per shingle; this module decides where every strip goes, how wide it is and
-// how bright, and knows nothing about Three.js.
+// The plaza's roofs carry one roof texture stretched across each sloping
+// surface. A single texture on a single quad has no thickness and no break: the
+// eave is a ruler-straight edge, the surface has one tone, and the eye reads a
+// painted lid rather than a roof. Real tile roofs show courses of overlapping
+// shingles, each course stepped up from the one below, each shingle a slightly
+// different shade, and the eave a broken line where individual tiles end.
+// `world.js` will render one thin instanced strip per shingle; this module
+// decides where every strip goes, how wide it is, how bright and how far it is
+// tilted, and knows nothing about Three.js.
 //
 // The caller supplies the roof planes -- `{ x, z, y, width, depth, yaw, pitch }`
 // -- so the module carries no map of the world. (x, z) is the plane's centre, y
@@ -33,6 +33,17 @@
 //    also lifted SHINGLE_LIFT above the plane; at 12 mm that is above the depth
 //    buffer's resolution at eye distance, and well below the 26 mm course pitch,
 //    so a course overlaps the one below rather than hovering over it.
+//
+//    Courses are spaced 0.26 m apart in HORIZONTAL run, because `v` is the
+//    plane's horizontal footprint and `depth` its horizontal extent. On a
+//    pitched roof the distance a strip travels along the slope is
+//    `0.26 * sqrt(1 + pitch^2)` -- 0.295 m on the house's 0.533 pitch -- so a
+//    strip sized 0.9 * 0.26 and left untilted would cover only 79% of its
+//    course and the roof would read as widely spaced battens. The descriptor's
+//    `depth` is therefore the visible height measured ALONG THE SLOPE,
+//    `0.9 * 0.26 * sqrt(1 + pitch^2)`, which is exactly the 0.9 * 0.26 the
+//    untilted case used once the strip is tilted back to horizontal: the
+//    horizontal footprint of every strip is unchanged, and so is the 10% gap.
 //
 // 3. Shingles are 0.5 to 1.1 m long along a course. Narrower than half a metre
 //    aliases into a stripe at courtyard distance; wider than 1.1 m stops reading
@@ -214,6 +225,8 @@ function readMaxCourses(value) {
  * centred at v = depth/2 - (k*H + H/2), so its y is
  * `plane.y - pitch*v + SHINGLE_LIFT` and consecutive courses are exactly
  * pitch*H apart in height. A shingle's centre is at u = cursor + width/2.
+ * Every descriptor also carries the plane's `pitch`, so the caller can tilt the
+ * strip to lie flush with the sloping surface instead of leaving it flat.
  */
 function walkPlanes(options, emit) {
   const opts = options !== null && typeof options === 'object' && !Array.isArray(options)
@@ -266,13 +279,19 @@ function walkPlanes(options, emit) {
 
         if (emit !== null) {
           const u = cursor + width / 2;
+          // The strip is tilted by atan(pitch) in world.js so it lies flush with
+          // the slope; measured along that slope its visible height is the
+          // course's 90% stretched by sqrt(1 + pitch^2), which keeps the
+          // horizontal gap at 10% of the course (see the header).
+          const slope = Math.sqrt(1 + plane.pitch * plane.pitch);
           emit({
             x: plane.x + u * cosYaw + v * sinYaw,
             y,
             z: plane.z - u * sinYaw + v * cosYaw,
             yaw: plane.yaw,
+            pitch: plane.pitch,
             width,
-            depth: SHINGLE_COURSE_HEIGHT * SHINGLE_VISIBLE_FRACTION,
+            depth: SHINGLE_COURSE_HEIGHT * SHINGLE_VISIBLE_FRACTION * slope,
             tone
           });
         }
@@ -298,14 +317,20 @@ function walkPlanes(options, emit) {
  *   - `maxCourses` clamps a finite value into [1, SHINGLE_COURSES_PER_PLANE] and
  *     floors it; junk falls back to SHINGLE_COURSES_PER_PLANE.
  *
- * Each descriptor is `{ x, y, z, yaw, width, depth, tone }` in world metres:
+ * Each descriptor is `{ x, y, z, yaw, pitch, width, depth, tone }` in world
+ * metres:
  *   - `x`, `y`, `z` is the shingle's centre, on the plane and lifted by
  *     SHINGLE_LIFT above the plane's sloping surface;
  *   - `yaw` is the plane's yaw, so a strip's long axis runs along the course;
+ *   - `pitch` is the plane's pitch, so the caller can tilt the strip by
+ *     atan(pitch) about its local cross-course axis and lay it flush with the
+ *     slope; it is 0 for a flat plane and for a junk pitch;
  *   - `width` is its length along the course, never wider than
  *     SHINGLE_MAX_WIDTH and clipped on the last shingle so each course spans the
  *     plane's width exactly;
- *   - `depth` is the course's visible height, 90% of SHINGLE_COURSE_HEIGHT;
+ *   - `depth` is the course's visible height measured along the slope,
+ *     90% of SHINGLE_COURSE_HEIGHT times sqrt(1 + pitch^2), so a tilted strip
+ *     leaves the same 10% horizontal gap an untilted one did;
  *   - `tone` is a brightness multiplier in [SHINGLE_MIN_TONE, SHINGLE_MAX_TONE].
  *
  * Planes are visited in array order and their shingles in eave-to-ridge, then
