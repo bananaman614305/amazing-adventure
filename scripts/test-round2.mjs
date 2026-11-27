@@ -5309,6 +5309,51 @@ try {
     r106gutter.gutters.length === 2 && r106gutter.overlaps === 0,
     JSON.stringify(r106gutter));
 
+  // --- Round 108: kerb ring + lane plinth ------------------------------------
+  const r108kerb = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    try {
+      await api.assetsReady();
+      api.scene.updateMatrixWorld(true);
+      const names = [];
+      api.scene.traverse((o) => { if (o.isMesh && o.name) names.push(o.name); });
+      const hasKerb = names.includes('plaza-kerb');
+      const plinthNames = ['lane-plinth-left','lane-plinth-right','lane-plinth-far','lane-plinth-near']
+        .filter((n) => names.includes(n));
+      // world AABB of the kerb (torus): compute from geometry + matrixWorld
+      let kerbBox = null;
+      api.scene.traverse((o) => {
+        if (o.isMesh && o.name === 'plaza-kerb') {
+          o.geometry.computeBoundingBox();
+          const b = o.geometry.boundingBox.clone();
+          b.applyMatrix4(o.matrixWorld);
+          kerbBox = { min: [b.min.x,b.min.y,b.min.z], max: [b.max.x,b.max.y,b.max.z] };
+        }
+      });
+      // low-tier drop
+      api.quality.set('low');
+      let kerbVisibleLow = null, plinthVisibleLow = null;
+      api.scene.traverse((o) => {
+        if (o.isMesh && o.name === 'plaza-kerb') kerbVisibleLow = o.visible;
+      });
+      api.scene.traverse((o) => {
+        if (o.isGroup && o.name === 'lane-plinth') plinthVisibleLow = o.visible;
+      });
+      return { hasKerb, plinthCount: plinthNames.length, plinthNames, kerbBox, kerbVisibleLow, plinthVisibleLow };
+    } finally {
+      api.quality.set(startTier);
+      if (startAdaptive) api.quality.setAdaptive(true);
+    }
+  });
+  checks.check('plaza kerb mesh exists', r108kerb.hasKerb, JSON.stringify(r108kerb));
+  checks.check('all four lane plinth meshes exist', r108kerb.plinthCount === 4, JSON.stringify(r108kerb));
+  checks.check('kerb is dropped on low tier', r108kerb.kerbVisibleLow === false, JSON.stringify(r108kerb));
+  checks.check('plinth is dropped on low tier', r108kerb.plinthVisibleLow === false, JSON.stringify(r108kerb));
+
   // --- Round 97: dress the terrace furniture ---------------------------------
   // The terrace GLB's timber members and planter stone join the existing wood
   // and house-stone families (only the family tests widen -- the GLB is
