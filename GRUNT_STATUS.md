@@ -12,7 +12,8 @@
 
 ## Current task
 
-**Round 102 (border-wall trim) committed; unit suite re-running.**
+**Round 102 (border-wall trim) committed at f1c948f; desktop browser suite
+re-running against the corrected geometry.**
 The five bare border-wall boxes now wear dressed-ashlar trim: a 0.22 m coping
 course on the 3.2 m wall top, a 0.45 m plinth course stepping out at the foot,
 and 32 pilaster strips (5 runs: south 7, east 9, west 9, north-left 5,
@@ -50,10 +51,28 @@ src/walltrim.js's sibling state.
 browser suites must be re-run at HEAD 62aea49 before release. Release
 verification ids from the pre-fix head are stale and must be re-queued.
 
-Cycle notes: the desktop browser suite running now (task ba1vdruf1) was
-launched from the first trim commit dd9ad94, before the corner-stop fix; it
-exercises the overshooting course lengths. A second run at fc79c99 should
-follow the mobile suite if the first passes.
+Two trim bugs found and fixed this cycle (a2a3b88):
+
+1. **Pilasters overlapped gate pier B.** A strip projects past both wall
+   faces, so it must clear the whole pier, not just the courtyard face. The
+   stop was the pier centre (11.35), leaving the first north-right strip at
+   11.594..12.094 inside pier B (11.00..11.70). `pilasterStop` now returns the
+   pier outer edges (7.30 / 11.70). Courses still stop at the pier inner faces
+   (8.00 / 11.00) because they abut the wall.
+2. **The trim UV browser check was wrong, not the code.** It asserted every
+   piece's UV span exceeds 1; the 1.56 m-deep pilaster maps to 0.975 at a
+   1.6 m tile. The check now computes UV span ÷ the piece's longest edge, which
+   is exactly 1/1.6 = 0.625 for any box-projected piece and is not for a piece
+   wearing the wall's 34 m repeat. Evidence at the old head: copingUv
+   [-10.938, 10.938] (21.876 / 35 = 0.625), pilasterUv [-0.487, 0.487].
+
+The previous desktop suite (task ba1vdruf1, from dd9ad94) finished 360/361:
+the single failure was the UV assertion above, i.e. a test bug. It ran against
+the pre-fix overshooting geometry, so a fresh run at f1c948f is in flight
+(task bk3vcw4dn).
+
+Unit suite: 1472/1473 with the only failure the stale `dist/` digest, which
+was rebuilt at f1c948f. tests/walltrim.test.mjs 21/21 pass.
 
 Trusted release: channel is configured. Verification ids queued (plan
 `release`): tests 846ac85d-95f9-43f3-b90c-aacadae655b6, browser
@@ -64,7 +83,7 @@ has no verification ids yet; they are queued only after the browser and mobile
 suites pass at HEAD fc79c99.
 
 ## Next steps
-1. Full unit suite passes -> finish the running desktop browser suite (started from the first trim commit, so it exercises the overshooting geometry; the length-only fix changes no material/light/collider state), then `npm run test:mobile` at fc79c99 (one at a time).
+1. Desktop browser suite at f1c948f (task bk3vcw4dn) -> then `npm run test:mobile` at the same head (one at a time). Re-run the full unit suite once to confirm the rebuilt dist digest passes.
 2. Round 101 corrected-asset release: re-queue `grunt-release verify release tests|browser|mobile` at the corrected HEAD, poll the new ids, `prepare`, review, advance. Verify the exact Pages build for PR #59 before reporting it deployed. The three stale ids (tests 846ac85d, browser df7dfd5d, mobile 6f4e134d) were queued against the pre-correction head and must not be reused.
 3. Round 102 release: once browser + mobile pass at fc79c99, `grunt-release verify release tests|browser|mobile`, `prepare` at fc79c99 on grunt/round72-bunting-felt, review, advance.
 4. Next round candidate: remaining geometry/silhouette gaps — e.g. roof edge coping/bargeboards on the house and terrace, or the barn walls mentioned earlier. Flat-colour backlog is nearly exhausted.
