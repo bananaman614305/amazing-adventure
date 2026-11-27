@@ -5278,6 +5278,94 @@ try {
       r96.ripples.band.positive === true && r96.ripples.alpha.positive === true,
     JSON.stringify(r96.ripples));
   await capture(page, 'round96-dressing.png');
+  // --- Round 112: window-light spill pools + sun-aimed contact shadows -----
+  // The lit cottage windows get warm pools of light on the ground under them,
+  // and the contact-shadow ellipses aim away from the sun. Both are pure fields
+  // decided in src/lightspill.js and src/contactshadows.js and turned into
+  // meshes here; this block reads them live.
+  const r112 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(22); // night
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const spill = byName('window-spill');
+    const spillInfo = spill ? {
+      count: spill.count,
+      visible: spill.visible,
+      opacity: Number(spill.material.opacity),
+      blending: spill.material.blending,
+      materialName: spill.material.name || null
+    } : null;
+    // Day: strength must be zero and mesh hidden.
+    api.setClock(12);
+    const spillDayVisible = spill ? spill.visible : null;
+    const spillDayOpacity = spill ? Number(spill.material.opacity) : null;
+    // Night again for tier gating.
+    api.setClock(22);
+    api.quality.set('low');
+    const lowVisible = spill ? spill.visible : null;
+    const lowOn = env.windowSpillOn === undefined ? null : env.windowSpillOn;
+    api.quality.set('full');
+    const fullVisible = spill ? spill.visible : null;
+    const fullCount = env.windowSpillCount === undefined ? null : env.windowSpillCount;
+
+    // Sun-aimed contact yaw: read instance matrices at day vs dusk; the yaw
+    // (rotation part) must differ, and day must match PHASE_LOOKS.sunPosition.
+    const contact = byName('contact-shadows');
+    const readYaw = (mesh) => {
+      if (!mesh || !mesh.instanceMatrix) return null;
+      const arr = mesh.instanceMatrix.array;
+      // Matrix is column-major; yaw about Y mixes m02 and m12 relative to flat
+      // rotation. Simpler: decode the quaternion from the upper 3x3 and derive
+      // yaw angle. For a Y-rotation composed with flat, the world-space forward
+      // axis is (m08, m09, m10). yaw = atan2(m08, m10) after flat.
+      // The composed matrix's local X axis after flat+yaw: use m00,m02.
+      // Practical: extract angle from element [8] (x of z-axis) and [10] (z of z-axis).
+      const x = arr[8], z = arr[10];
+      return Math.atan2(x, z);
+    };
+    env.paintContactShadows('day');
+    const yawDay = readYaw(contact);
+    env.paintContactShadows('dusk');
+    const yawDusk = readYaw(contact);
+    // Restore phase paint.
+    env.paintContactShadows('night');
+
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      spill: spillInfo,
+      spillDay: { visible: spillDayVisible, opacity: spillDayOpacity },
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible, count: fullCount },
+      contact: { yawDay, yawDusk }
+    };
+  });
+  checks.check('window-spill decals exist under the lit panes',
+    r112.spill && r112.spill.count > 0 && r112.spill.count === r112.full.count &&
+      r112.spill.materialName === 'WindowSpill' && r112.spill.blending === 2 &&
+      r112.full.visible === true && r112.full.count > 0,
+    JSON.stringify(r112));
+  checks.check('window-spill strength follows the night',
+    r112.spill.opacity > 0 && r112.spill.visible === true &&
+      r112.spillDay.visible === false && r112.spillDay.opacity === 0,
+    JSON.stringify({ spill: r112.spill, day: r112.spillDay }));
+  checks.check('window-spill drops on the low tier',
+    r112.low.visible === false && r112.low.on === false && r112.full.visible === true,
+    JSON.stringify({ low: r112.low, full: r112.full }));
+  checks.check('contact shadow decals aim with the sun',
+    r112.contact.yawDay !== null && r112.contact.yawDusk !== null &&
+      Number.isFinite(r112.contact.yawDay) && Number.isFinite(r112.contact.yawDusk) &&
+      Math.abs(r112.contact.yawDay - r112.contact.yawDusk) > 0.5,
+    JSON.stringify(r112.contact));
+  await capture(page, 'round112-spill.png');
+
 
   // --- Environment maps: the idle scheduler must build on its own ----------
   // The realism audit found the PMREM environment map was never built in play:

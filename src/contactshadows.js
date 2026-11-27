@@ -231,3 +231,40 @@ export function shadowDecals(anchors) {
   }
   return out;
 }
+
+/**
+ * The yaw, in radians, the world spins a contact-shadow decal by for a given
+ * sun position, so the ellipse's major axis points AWAY from the sun and the
+ * shadow falls opposite the light.
+ *
+ * The sun is authored as a plain [x, y, z] triple (see PHASE_LOOKS in
+ * world.js). While it is above the horizon (y > 0) the shadow direction is the
+ * sun's horizontal projection reversed: atan2(sunX, sunZ) + PI. When the sun is
+ * on or below the horizon, or the input is junk, the world falls back to the
+ * seeded placeholder yaw it used before this function existed,
+ * `(decal.x * 0.7 + decal.z * 1.3) % (2*PI)`, so night decals stay stable and a
+ * bad phase never breaks the frame. The result is always normalised into
+ * [0, 2*PI).
+ *
+ * The decal position feeds only the fallback, so a phase with a real sun aims
+ * every decal the same way (which is what makes the field read as one shadow
+ * direction) while a sunless phase keeps the old per-decal variety.
+ */
+export const CONTACT_SHADOW_SUN_HORIZON = 0;
+
+export function contactShadowYaw(sunPosition, decalX, decalZ) {
+  const placeholder = () => {
+    const x = Number.isFinite(decalX) ? decalX : 0;
+    const z = Number.isFinite(decalZ) ? decalZ : 0;
+    const raw = (x * 0.7 + z * 1.3) % (Math.PI * 2);
+    const norm = raw < 0 ? raw + Math.PI * 2 : raw;
+    return Number.isFinite(norm) ? norm : 0;
+  };
+  if (!Array.isArray(sunPosition) || sunPosition.length < 3) return placeholder();
+  const [sx, sy, sz] = sunPosition;
+  if (!Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(sz)) return placeholder();
+  if (sy <= CONTACT_SHADOW_SUN_HORIZON) return placeholder();
+  const yaw = Math.atan2(sx, sz) + Math.PI;
+  const norm = ((yaw % (Math.PI * 2)) + (Math.PI * 2)) % (Math.PI * 2);
+  return Number.isFinite(norm) ? norm : 0;
+}

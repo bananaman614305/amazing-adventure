@@ -12,9 +12,11 @@ import {
   SHADOW_MAX_SQUASH,
   SHADOW_JITTER,
   SHADOW_DECAL_LIFT,
+  CONTACT_SHADOW_SUN_HORIZON,
   shadowOpacity,
   shadowsEnabled,
-  shadowDecals
+  shadowDecals,
+  contactShadowYaw
 } from '../src/contactshadows.js';
 import { MOSS_DECAL_LIFT } from '../src/moss.js';
 import { PUDDLE_WATER_Y } from '../src/puddles.js';
@@ -190,4 +192,62 @@ test('ground overlays stack from shadow to moss to puddle without z-fighting', (
   assert.ok(MOSS_DECAL_LIFT < PUDDLE_WATER_Y, 'moss sits below puddles');
   assert.ok(PUDDLE_WATER_Y < 0.05, 'puddle stays a film, not a raised disc');
   assert.ok(SHADOW_DECAL_LIFT <= 0.01, 'shadow decal stays a film');
+});
+
+test('contactShadowYaw is exported and the horizon constant is zero', () => {
+  assert.equal(CONTACT_SHADOW_SUN_HORIZON, 0);
+  assert.equal(typeof contactShadowYaw, 'function');
+});
+
+test('contactShadowYaw returns a value in [0, 2*PI)', () => {
+  for (const sp of [[16, 22, 10], [-18, 7, 6], [12, 20, -8], [0, 1, 0]]) {
+    const y = contactShadowYaw(sp, 3, 4);
+    assert.ok(Number.isFinite(y));
+    assert.ok(y >= 0 && y < Math.PI * 2);
+  }
+});
+
+test('contactShadowYaw is deterministic', () => {
+  const a = contactShadowYaw([16, 22, 10], 3, 4);
+  const b = contactShadowYaw([16, 22, 10], 3, 4);
+  assert.equal(a, b);
+});
+
+test('day and dusk sun positions yield different yaws', () => {
+  const day = contactShadowYaw([16, 22, 10], 3, 4);
+  const dusk = contactShadowYaw([-18, 7, 6], 3, 4);
+  assert.notEqual(day, dusk);
+  // The sun swings roughly 180 degrees between day and dusk.
+  let diff = Math.abs(day - dusk);
+  if (diff > Math.PI) diff = Math.PI * 2 - diff;
+  assert.ok(diff > Math.PI / 2, `expected a large swing, got ${diff}`);
+});
+
+test('a below-horizon sun falls back to the placeholder yaw', () => {
+  const yaw = contactShadowYaw([0, -5, 0], 3, 4);
+  const placeholder = ((3 * 0.7 + 4 * 1.3) % (Math.PI * 2) + (Math.PI * 2)) % (Math.PI * 2);
+  assert.equal(yaw, placeholder);
+});
+
+test('junk sunPosition falls back to the placeholder yaw', () => {
+  const placeholder = ((3 * 0.7 + 4 * 1.3) % (Math.PI * 2) + (Math.PI * 2)) % (Math.PI * 2);
+  for (const junk of [undefined, null, 7, 'x', [], [1, 2], [NaN, 1, 2], [1, NaN, 2], [1, 2, NaN]]) {
+    assert.equal(contactShadowYaw(junk, 3, 4), placeholder, `failed for ${JSON.stringify(junk)}`);
+  }
+});
+
+test('junk decal coordinates fall back to the placeholder using zero', () => {
+  // Non-finite decal coords should not throw and should land in range.
+  for (const [dx, dz] of [[NaN, 4], [3, NaN], [Infinity, 4], [3, -Infinity]]) {
+    const y = contactShadowYaw([16, 22, 10], dx, dz);
+    // Sun is above horizon, so yaw comes from sun alone; decal coords do not matter.
+    assert.ok(Number.isFinite(y));
+    assert.ok(y >= 0 && y < Math.PI * 2);
+  }
+});
+
+test('night sun (above horizon) uses the sun aim, not the fallback', () => {
+  const night = contactShadowYaw([12, 20, -8], 3, 4);
+  const placeholder = ((3 * 0.7 + 4 * 1.3) % (Math.PI * 2) + (Math.PI * 2)) % (Math.PI * 2);
+  assert.notEqual(night, placeholder);
 });
