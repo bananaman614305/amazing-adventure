@@ -3131,9 +3131,13 @@ try {
       pilasterMetric: uvMetric(one('border-wall-pilaster-south-0'))
     };
   }));
+  // The counts are pinned rather than merely non-zero: 5 runs get a coping and a
+  // plinth, and the seeded spacing yields exactly 32 pilasters (south 7, east 9,
+  // west 9, north-left 5, north-right 2). A spacing or band change that silently
+  // drops or doubles the strips is a visible change and must fail here.
   checks.check('the trim covers all five runs with named pieces',
-    trim.groupVisible && trim.pieces.length > 0 &&
-    trim.kinds.coping === 5 && trim.kinds.plinth === 5 && trim.kinds.pilaster > 0,
+    trim.groupVisible && trim.pieces.length === 42 &&
+    trim.kinds.coping === 5 && trim.kinds.plinth === 5 && trim.kinds.pilaster === 32,
     JSON.stringify({ visible: trim.groupVisible, kinds: trim.kinds, total: trim.pieces.length }));
   checks.check('the trim dresses the coping, plinth and pilaster from the stone family',
     trim.wallsTrim === 'textured' && trim.trimMaps.length === 3 && trim.trimTile === 1.6 &&
@@ -3154,17 +3158,40 @@ try {
     metricOk(trim.copingMetric) && metricOk(trim.pilasterMetric),
     JSON.stringify({ coping: trim.coping, copingMetric: trim.copingMetric,
                      pilasterMetric: trim.pilasterMetric, expectedRatio }));
-  const before = (await page.evaluate(() => window.amazingAdventure.quality.tier));
-  await page.evaluate(() => window.amazingAdventure.quality.set('low'));
-  const low = await page.evaluate(() => {
+  // The tier flip must be fully reversible: the trim group drops on `low` and
+  // comes back on `full`, and the adaptive flag the suite found must be put
+  // back, or every later check runs against a pinned tier (and stays on `low`
+  // if the suite had already dropped there). Both halves are asserted, because
+  // a `setQuality` that only ever hides the group would pass the drop test.
+  const before = await page.evaluate(() => {
+    const q = window.amazingAdventure.quality;
+    return { tier: q.tier, adaptive: q.adaptive };
+  });
+  const tierFlip = await page.evaluate(() => {
     const api = window.amazingAdventure;
     const group = api.scene.getObjectByName('border-wall-trim');
-    return { visible: Boolean(group && group.visible), tier: api.quality.tier };
+    const read = () => ({ visible: Boolean(group && group.visible), tier: api.quality.tier });
+    api.quality.set('low');
+    const low = read();
+    api.quality.set('full');
+    const full = read();
+    return { low, full };
   });
-  await page.evaluate((t) => window.amazingAdventure.quality.set(t), before);
-  checks.check('the low tier drops the whole trim band for one visibility flag',
-    low.visible === false && low.tier === 'low',
-    JSON.stringify(low));
+  await page.evaluate((b) => {
+    window.amazingAdventure.quality.set(b.tier);
+    window.amazingAdventure.quality.setAdaptive(b.adaptive);
+  }, before);
+  const restored = await page.evaluate(() => {
+    const q = window.amazingAdventure.quality;
+    return { tier: q.tier, adaptive: q.adaptive };
+  });
+  checks.check('the low tier drops the whole trim band and full brings it back',
+    tierFlip.low.visible === false && tierFlip.low.tier === 'low' &&
+    tierFlip.full.visible === true && tierFlip.full.tier === 'full',
+    JSON.stringify(tierFlip));
+  checks.check('the trim tier flip restores the tier and the adaptive flag',
+    restored.tier === before.tier && restored.adaptive === before.adaptive,
+    JSON.stringify({ before, restored }));
 
   await capture(page, 'round45a-trim.png');
   checks.check('the sky is a vertex-colour gradient dome',
@@ -4545,6 +4572,95 @@ try {
     r94.low.ripples === false && r94.low.moths === false &&
       r94.low.puddles === false && r94.low.shingles === false,
     JSON.stringify(r94.low));
+
+  // The shingles dress the MODELLED roofs. Until Round 103 they were laid on
+  // the three flat procedural stand-in slabs, which upgradeHouse() and
+  // upgradeMarketStalls() hide once the GLBs load, so 44 of 150 strips floated
+  // up to 0.543 m above the gable. This reads every instance matrix out of the
+  // InstancedMesh and checks it against the measured top faces of
+  // assets/house.glb and assets/market_stall.glb, and it checks the strips are
+  // TILTED to lie flush with the slope rather than left flat (a flat strip on a
+  // 28 degree roof is buried at one edge and hovering at the other).
+  const r103 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    let mesh = null;
+    api.scene.traverse((o) => { if (o.name === 'roof-shingles') mesh = o; });
+    if (!mesh) return { missing: true };
+    const m = mesh.instanceMatrix.array;
+    // Measured top faces: the two ends of the line the roof surface follows.
+    const roofs = [
+      { id: 'house-south', x: [-14.5, -6.5], z: [-5.9009, -9.0332], y: [3.0265, 4.6971], pitch: 0.533333 },
+      { id: 'house-north', x: [-14.5, -6.5], z: [-12.0991, -8.9668], y: [3.0265, 4.6971], pitch: 0.533333 },
+      { id: 'east-awning', x: [8.85, 13.15], z: [-2.6, -3.6], y: [0.84, 1.04], pitch: 0.2 },
+      { id: 'west-awning', x: [-12.6125, -9.3875], z: [6.3, 5.55], y: [0.756, 0.936], pitch: 0.24 }
+    ];
+    const surfaceY = (roof, z) =>
+      roof.y[0] + ((z - roof.z[0]) / (roof.z[1] - roof.z[0])) * (roof.y[1] - roof.y[0]);
+    const failures = [];
+    let worst = 0;
+    let worstAt = null;
+    let houseYMin = Infinity;
+    let houseYMax = -Infinity;
+    let tiltWorst = 0;
+    let tiltAt = null;
+    let unroofed = 0;
+    for (let i = 0; i < mesh.count; i += 1) {
+      const o = i * 16;
+      const x = m[o + 12];
+      const y = m[o + 13];
+      const z = m[o + 14];
+      const roof = roofs.find((r) =>
+        x >= r.x[0] - 0.01 && x <= r.x[1] + 0.01 &&
+        z >= Math.min(r.z[0], r.z[1]) - 0.02 && z <= Math.max(r.z[0], r.z[1]) + 0.02);
+      if (!roof) {
+        unroofed += 1;
+        if (failures.length < 6) failures.push({ i, x, y, z, why: 'no roof under it' });
+        continue;
+      }
+      const dev = Math.abs(y - surfaceY(roof, z));
+      if (dev > worst) { worst = dev; worstAt = { i, roof: roof.id, x, y, z, surface: surfaceY(roof, z) }; }
+      if (dev > 0.03 && failures.length < 6) failures.push({ i, roof: roof.id, y, z, dev });
+      if (roof.id.startsWith('house')) {
+        if (y < houseYMin) houseYMin = y;
+        if (y > houseYMax) houseYMax = y;
+      }
+      // The strip's own local +Z (column 2 of the matrix) must point downhill by
+      // pitch / sqrt(1 + pitch^2); read it out of the upper-left 3x3 and
+      // normalise, since the column is scaled by the strip's depth.
+      const cx = m[o + 8];
+      const cy = m[o + 9];
+      const cz = m[o + 10];
+      const len = Math.hypot(cx, cy, cz);
+      const down = len > 0 ? -cy / len : 0;
+      const expected = roof.pitch / Math.sqrt(1 + roof.pitch * roof.pitch);
+      const tiltDev = Math.abs(down - expected);
+      if (tiltDev > tiltWorst) { tiltWorst = tiltDev; tiltAt = { i, roof: roof.id, down, expected }; }
+    }
+    const result = {
+      count: mesh.count,
+      worst: Number(worst.toFixed(4)),
+      worstAt,
+      unroofed,
+      failures,
+      houseSpan: Number((houseYMax - houseYMin).toFixed(4)),
+      tiltWorst: Number(tiltWorst.toFixed(4)),
+      tiltAt
+    };
+    api.quality.set(startTier);
+    api.quality.setAdaptive(startAdaptive);
+    return result;
+  });
+  checks.check('every roof shingle lies on a modelled roof surface',
+    !r103.missing && r103.count === 282 && r103.unroofed === 0 &&
+      r103.worst <= 0.03 && r103.failures.length === 0,
+    JSON.stringify(r103));
+  checks.check('the house shingles climb the gable and lie flush with the slope',
+    !r103.missing && r103.houseSpan > 1.4 && r103.tiltWorst <= 0.02,
+    JSON.stringify({ span: r103.houseSpan, tiltWorst: r103.tiltWorst, tiltAt: r103.tiltAt }));
   await capture(page, 'round94-dressing.png');
 
   // --- Round 95: meadow wildflowers, reeds, courtyard moss -----------------

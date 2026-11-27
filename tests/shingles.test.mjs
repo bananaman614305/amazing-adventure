@@ -17,7 +17,7 @@ import {
   shingleGlowLevel, shingleSpawns, shingleRowCount, shinglesEnabled
 } from '../src/shingles.js';
 
-const FIELDS = ['x', 'y', 'z', 'yaw', 'width', 'depth', 'tone'];
+const FIELDS = ['x', 'y', 'z', 'yaw', 'pitch', 'width', 'depth', 'tone'];
 
 /** A pitched, yawed roof plane used by several tests. */
 const PLANE = { x: 4, z: -2, y: 5, width: 6, depth: 2, yaw: 0.7, pitch: 0.4 };
@@ -166,6 +166,43 @@ test('a descriptor carries the exact field set with finite values', () => {
       assert.ok(Number.isFinite(s[key]), `${key} is not finite`);
     }
   }
+});
+
+test('every descriptor reports its plane pitch so the strip can be tilted', () => {
+  const pitched = shingleSpawns({ planes: [PLANE] });
+  assert.ok(pitched.length > 0);
+  for (const s of pitched) assert.equal(s.pitch, PLANE.pitch);
+  // A flat plane and a junk pitch both read as 0, matching usablePlane's clamp,
+  // so the world's atan(pitch) tilt is 0 rather than a folded roof.
+  const flat = { x: 0, z: 0, y: 1, width: 3, depth: 1, yaw: 0, pitch: 0 };
+  for (const s of shingleSpawns({ planes: [flat] })) assert.equal(s.pitch, 0);
+  for (const junk of [-1, NaN, Infinity, 'x', undefined, null]) {
+    const plane = { ...flat, pitch: junk };
+    for (const s of shingleSpawns({ planes: [plane] })) {
+      assert.equal(s.pitch, 0, `junk pitch ${String(junk)} did not read as flat`);
+    }
+  }
+});
+
+test('the visible depth is the 90% course stretched along the slope', () => {
+  // A strip tilted by atan(pitch) covers 0.9 * H of horizontal run only if its
+  // depth is measured along the slope: 0.9 * H * sqrt(1 + pitch^2). At pitch 0
+  // that is exactly the 0.9 * H the untilted case used, so a flat plane is
+  // unchanged.
+  const slope = Math.sqrt(1 + PLANE.pitch * PLANE.pitch);
+  const expected = SHINGLE_COURSE_HEIGHT * 0.9 * slope;
+  for (const s of shingleSpawns({ planes: [PLANE] })) {
+    assert.ok(Math.abs(s.depth - expected) < 1e-12, `depth ${s.depth} is not ${expected}`);
+  }
+  const flat = { x: 0, z: 0, y: 1, width: 3, depth: 1, yaw: 0, pitch: 0 };
+  for (const s of shingleSpawns({ planes: [flat] })) {
+    assert.ok(Math.abs(s.depth - SHINGLE_COURSE_HEIGHT * 0.9) < 1e-12,
+      `flat depth ${s.depth} is not 0.9 * the course height`);
+  }
+  // The gap between courses stays 10% of the course horizontally, which is the
+  // whole point of the stretch.
+  const horizontalGap = (SHINGLE_COURSE_HEIGHT - expected / slope);
+  assert.ok(Math.abs(horizontalGap - SHINGLE_COURSE_HEIGHT * 0.1) < 1e-12);
 });
 
 test('shingleRowCount agrees with shingleSpawns length for several inputs', () => {

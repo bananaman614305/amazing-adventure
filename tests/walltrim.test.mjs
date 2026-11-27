@@ -12,10 +12,12 @@ import assert from 'node:assert/strict';
 
 import {
   WALL_TRIM, WALL_TRIM_HEIGHT, WALL_TRIM_SEED,
+  WALL_TRIM_WINDOW_PLANE, WALL_TRIM_IVY_PLANE,
   wallRuns, copingFor, plinthFor, pilastersFor, wallTrimLayout, wallTrimEnabled
 } from '../src/walltrim.js';
 import { WORLD_SIZE, HALF } from '../src/terrain.js';
 import { NORTH_WALL_SEGMENTS, GATE } from '../src/areas.js';
+import { WINDOW_MIN_HEIGHT } from '../src/windows.js';
 
 /** Half the wall's 1 m thickness: the boxes straddle the wall line. */
 const WALL_HALF_THICK = 0.5;
@@ -23,8 +25,11 @@ const WALL_HALF_THICK = 0.5;
 /** The wall inner faces stand this far from the centre (16.5 m). */
 const INNER_FACE = HALF - WALL_HALF_THICK;
 
-/** The window/ivy plane the trim must never reach (HALF - 0.52). */
-const WINDOW_PLANE = HALF - 0.52;
+/** The window plane, read from the module rather than re-derived. */
+const WINDOW_PLANE = WALL_TRIM_WINDOW_PLANE;
+
+/** The ivy plane, read from the module rather than re-derived. */
+const IVY_PLANE = WALL_TRIM_IVY_PLANE;
 
 const SIZES = ['size', 'position'];
 
@@ -262,10 +267,18 @@ test('the plinth projects under the keep-clear margin on the inner face', () => 
     assert.ok(inward > 0, `${run.id} plinth does not step proud of the inner face`);
     assert.ok(inward <= WALL_TRIM.keepClear + 1e-9,
       `${run.id} plinth projects ${inward} in, over the ${WALL_TRIM.keepClear} margin`);
-    // The window/ivy plane sits 0.02 m inside the inner face, so a projection
-    // under the margin is the rule that keeps the course off the glass.
-    assert.ok(INNER_FACE - WINDOW_PLANE < WALL_TRIM.keepClear,
-      'the window plane is inside the keep-clear margin');
+    // The plinth steps 0.12 m in, so its inner edge sits in front of both the
+    // window plane (16.48) and the ivy plane (16.44): the gaps are 0.10 m and
+    // 0.06 m respectively, computed from the module's own plane constants.
+    const edge = Math.abs(innerEdgeCoord(run, plinth));
+    assert.ok(edge < WALL_TRIM_WINDOW_PLANE,
+      `${run.id} plinth inner edge ${edge} is not in front of the window plane`);
+    assert.ok(edge < WALL_TRIM_IVY_PLANE,
+      `${run.id} plinth inner edge ${edge} is not in front of the ivy plane`);
+    assert.ok(Math.abs(WALL_TRIM_WINDOW_PLANE - edge - 0.10) < 1e-9,
+      `${run.id} plinth gap to window plane is not 0.10 m`);
+    assert.ok(Math.abs(WALL_TRIM_IVY_PLANE - edge - 0.06) < 1e-9,
+      `${run.id} plinth gap to ivy plane is not 0.06 m`);
   }
 });
 
@@ -277,6 +290,17 @@ test('every pilaster projects under the keep-clear margin on the inner face', ()
       assert.ok(inward > 0, `${run.id} pilaster does not step proud of the inner face`);
       assert.ok(inward <= WALL_TRIM.keepClear + 1e-9,
         `${run.id} pilaster projects ${inward} in, over the ${WALL_TRIM.keepClear} margin`);
+      // The pilaster steps 0.28 m in, so its inner edge sits in front of both
+      // planes: gaps of 0.26 m to the window plane and 0.22 m to the ivy plane.
+      const edge = Math.abs(innerEdgeCoord(run, pilaster));
+      assert.ok(edge < WALL_TRIM_WINDOW_PLANE,
+        `${run.id} pilaster inner edge ${edge} is not in front of the window plane`);
+      assert.ok(edge < WALL_TRIM_IVY_PLANE,
+        `${run.id} pilaster inner edge ${edge} is not in front of the ivy plane`);
+      assert.ok(Math.abs(WALL_TRIM_WINDOW_PLANE - edge - 0.26) < 1e-9,
+        `${run.id} pilaster gap to window plane is not 0.26 m`);
+      assert.ok(Math.abs(WALL_TRIM_IVY_PLANE - edge - 0.22) < 1e-9,
+        `${run.id} pilaster gap to ivy plane is not 0.22 m`);
     }
   }
 });
@@ -362,6 +386,36 @@ test('every layout entry carries finite sizes and positions', () => {
     assert.equal(entry.position.length, 3);
     for (const value of entry.size) assert.ok(value > 0, `${entry.name} has a non-positive size`);
   }
+});
+
+test('the trim band stays below the lowest window', () => {
+  const trimBandTop = WALL_TRIM.plinthHeight + WALL_TRIM.pilasterHeight;
+  assert.equal(trimBandTop, 0.77);
+  assert.ok(trimBandTop < WINDOW_MIN_HEIGHT,
+    `trim band top ${trimBandTop} is not below WINDOW_MIN_HEIGHT ${WINDOW_MIN_HEIGHT}`);
+});
+
+test('per-run pilaster counts are pinned', () => {
+  const runs = wallRuns();
+  const counts = Object.fromEntries(runs.map((run) => [run.id, pilastersFor(run).length]));
+  assert.equal(counts.south, 7, `south pilaster count ${counts.south}`);
+  assert.equal(counts.east, 9, `east pilaster count ${counts.east}`);
+  assert.equal(counts.west, 9, `west pilaster count ${counts.west}`);
+  assert.equal(counts['north-left'], 5, `north-left pilaster count ${counts['north-left']}`);
+  assert.equal(counts['north-right'], 2, `north-right pilaster count ${counts['north-right']}`);
+  const total = runs.reduce((sum, run) => sum + pilastersFor(run).length, 0);
+  assert.equal(total, 32, `total pilaster count ${total}`);
+});
+
+test('the piece total is pinned', () => {
+  const layout = wallTrimLayout();
+  const copings = layout.filter((entry) => entry.kind === 'coping').length;
+  const plinths = layout.filter((entry) => entry.kind === 'plinth').length;
+  const pilasters = layout.filter((entry) => entry.kind === 'pilaster').length;
+  assert.equal(copings, 5, `coping count ${copings}`);
+  assert.equal(plinths, 5, `plinth count ${plinths}`);
+  assert.equal(pilasters, 32, `pilaster count ${pilasters}`);
+  assert.equal(layout.length, 42, `piece total ${layout.length}`);
 });
 
 test('a junk tier reads as the full tier', () => {

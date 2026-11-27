@@ -5584,10 +5584,23 @@ export function buildWorld(renderer) {
   paintContactShadows('day', 'full');
 
   // --- Roof shingles ---------------------------------------------------
+  // The shingle field dresses the MODELLED roofs, not the procedural slabs the
+  // stand-ins use: upgradeHouse() and upgradeMarketStalls() hide those slabs
+  // once the GLBs load, so courses laid on them would float through the real
+  // roof (measured: 44 of 150 strips up to 0.543 m above the gable). These four
+  // planes were measured from assets/house.glb and assets/market_stall.glb --
+  // the house is a gable with its ridge along X at z = -9, each stall a
+  // mono-pitch awning whose high edge is at the back. `y` is the TOP face's
+  // centre height, so a strip lifted SHINGLE_LIFT lands on the roof surface,
+  // and `depth` is the slope's horizontal run (the modelled slope length is
+  // sqrt(depth^2 + (pitch*depth)^2)). The back slope needs yaw = PI so its eave
+  // maps to the module's far edge at v = +depth/2, the edge a positive pitch
+  // tips down; with yaw 0 its eave would land at the ridge.
   const roofPlanes = [
-    { x: -10.5, z: -9, y: 3.3 + 0.3, width: 8, depth: 6, yaw: 0, pitch: 0 },
-    { x: 11, z: -3, y: 2.2 + 0.15, width: 4.4, depth: 2.6, yaw: 0, pitch: 0 },
-    { x: -11, z: 6, y: 1.7 + 0.15, width: 3.4, depth: 2.2, yaw: 0, pitch: 0 }
+    { x: -10.5, z: -7.467059, y: 3.861765, width: 8, depth: 3.132353, yaw: 0, pitch: 0.533333 },
+    { x: -10.5, z: -10.532941, y: 3.861765, width: 8, depth: 3.132353, yaw: Math.PI, pitch: 0.533333 },
+    { x: 11, z: -3.1, y: 0.94, width: 4.3, depth: 1, yaw: 0, pitch: 0.2 },
+    { x: -11, z: 5.925, y: 0.846, width: 3.225, depth: 0.75, yaw: 0, pitch: 0.24 }
   ];
   const shingleSpawnsList = shinglesEnabled('full')
     ? shingleSpawns({ planes: roofPlanes })
@@ -5609,6 +5622,10 @@ export function buildWorld(renderer) {
   const _shPos = new THREE.Vector3();
   const _shScale = new THREE.Vector3();
   const _shQuat = new THREE.Quaternion();
+  const _shYawQuat = new THREE.Quaternion();
+  const _shTiltQuat = new THREE.Quaternion();
+  const _shUp = new THREE.Vector3(0, 1, 0);
+  const _shXAxis = new THREE.Vector3(1, 0, 0);
 
   // Per-instance tone via instance colour.
   const _shColor = new THREE.Color();
@@ -5623,7 +5640,16 @@ export function buildWorld(renderer) {
     for (let i = 0; i < shingleSpawnsList.length; i += 1) {
       const sp = shingleSpawnsList[i];
       _shPos.set(sp.x, sp.y, sp.z);
-      _shQuat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), sp.yaw);
+      // Yaw the strip along its course, then tilt it about its own cross-course
+      // axis so it lies flush with the slope. A rotation about local +X by
+      // atan(pitch) sends local +Z (the strip's far edge, i.e. the eave side)
+      // downward by sin of that angle -- the same direction a positive pitch
+      // means -- and leaves its centre where shingles.js put it, on the
+      // surface. Yaw is applied first (rightmost), so the tilt axis stays the
+      // strip's own long axis whatever the plane's yaw.
+      _shYawQuat.setFromAxisAngle(_shUp, sp.yaw);
+      _shTiltQuat.setFromAxisAngle(_shXAxis, Math.atan(sp.pitch || 0));
+      _shQuat.copy(_shYawQuat).multiply(_shTiltQuat);
       _shScale.set(sp.width, 1, sp.depth);
       _shMatrix.compose(_shPos, _shQuat, _shScale);
       shingleMesh.setMatrixAt(i, _shMatrix);
