@@ -336,6 +336,22 @@ const contextLostReload = $('context-lost-reload');
 
 // --- World, player, state -------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
+// Three's WebGLProgram does `getProgramInfoLog(...).trim()` before it checks
+// the link status, but a null log is legal: the spec allows it for a program
+// with no diagnostics, WebGL hands it back for programs created while the
+// context is lost, and for stale programs after a context restore. Without
+// this shim the `.trim()` on null throws
+// `TypeError: Cannot read properties of null (reading 'trim')` and kills the
+// render loop for good: without it, a phone that dropped its context under
+// memory pressure showed the recovery sheet and then never recovered, even
+// after the browser handed the context back. Return '' for null
+// unconditionally: a program with no log is indistinguishable from one whose
+// log is empty, and three treats an empty log as "nothing to print".
+const rawProgramInfoLog = renderer.getContext().getProgramInfoLog.bind(renderer.getContext());
+renderer.getContext().getProgramInfoLog = (program) => {
+  const log = rawProgramInfoLog(program);
+  return log === null ? '' : log;
+};
 const basePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
 renderer.setPixelRatio(basePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
