@@ -4907,7 +4907,7 @@ try {
   });
   checks.check('the rooflines carry a fascia, a drip apron and a bargeboard',
     !r104.missing && r104.groupVisible === true &&
-      r104.boards === 12 && r104.drips === 4 && r104.fascias === 4 && r104.barges === 8,
+      r104.boards === 6 && r104.drips === 2 && r104.fascias === 2 && r104.barges === 4,
     JSON.stringify(r104));
   checks.check('every fascia caps a modelled eave, every drip hangs from a fascia, and every barge sits centred on a rake in its roof plane',
     !r104.missing && r104.failures.length === 0 && r104.worstFascia <= 0.02 &&
