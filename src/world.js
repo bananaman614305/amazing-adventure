@@ -551,11 +551,6 @@ export function buildWorld(renderer) {
   plazaKerb.visible = kerbEnabled('full');
   scene.add(plazaKerb);
 
-  function paintKerb(tier = environment.quality) {
-    plazaKerb.visible = kerbEnabled(tier);
-    plinthGroup.visible = plinthEnabled(tier);
-  }
-  paintKerb('full');
 
 
   // --- Border walls -------------------------------------------------------
@@ -707,6 +702,12 @@ export function buildWorld(renderer) {
   plinthGroup.add(plinthNear);
   plinthGroup.visible = plinthEnabled('full');
   scene.add(plinthGroup);
+
+  function paintKerb(tier = environment.quality) {
+    plazaKerb.visible = kerbEnabled(tier);
+    plinthGroup.visible = plinthEnabled(tier);
+  }
+  paintKerb('full');
 
 
   // Lane walls: two long sides and a far end, leaving the gate end open.
