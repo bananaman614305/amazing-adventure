@@ -12,21 +12,13 @@
 
 ## Current task
 
-**Round 107 (context-loss robustness) — complete and verified.** The
-`getProgramInfoLog` null shim from round 105 was extended to
-`getShaderInfoLog` (same `.trim()` crash path in three's WebGLProgram) after
-the mobile suite surfaced `TypeError: Cannot read properties of null (reading
-'trim')` on iPhone 13 and iPhone SE. Mobile now 184/184 with zero console
-errors; desktop 369/369 with zero console errors. Round 106 (gutter clash) is
-also verified: gutters lowered to y 2.85..2.97 so eave tiles clear them, new
-browser check 0 overlaps, desktop 369/369 + mobile 184/184. Dist rebuilt at
-8fcb85e. Releases 101-105 still owed; channel is `blocked_infrastructure`.
+**Round 108 in progress.** Pure module `src/kerb.js` + 16 unit tests + world.js
+integration (plaza-kerb torus at y=0.03, four lane-plinth boxes at y=0.02) +
+browser checks (presence, tier drop). Manifest updated (160 files). Commit
+d286b76. Pending: rebuild dist, run desktop + mobile suites once.
 
 ## Next steps
-1. Next graphics milestone: kerb ring around the plaza disc + lane plinth
-   (realism audit gap 5), keeping existing decal heights.
-2. Market-stall fascia/barge vs `MarketAwning` overlaps (2-2.5 cm):
-   re-measure and nudge or document.
-3. Flat-surface dressing: a Steel pass for the cast, doormat/planter-soil
-   albedo; consider a Kaggle steel texture job.
+1. Rebuild dist and run unit + desktop + mobile once at new head.
+2. Market-stall fascia/barge vs MarketAwning overlaps (2-2.5 cm): re-measure and nudge or document.
+3. Flat-surface dressing: Steel pass for the cast, doormat/planter-soil albedo; consider Kaggle steel texture job.
 4. Releases 101-105 when the channel unblocks.
