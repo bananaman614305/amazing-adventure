@@ -200,6 +200,37 @@ test('the roof shingle family names exactly the three shingle maps', () => {
   }
 });
 
+test('a family that omits a map never requests /undefined', async () => {
+  // The steel cast family (round 110) deliberately loads only the normal and
+  // roughness maps, so its `files` object has no `map` key. Before this guard
+  // the loader passed `undefined` to fetch, the browser resolved it relative to
+  // the page and logged `GET /undefined 404` on every boot. A partial family
+  // must simply skip the missing map, load the rest, and request nothing else.
+  const requested = [];
+  const loaded = await loadMaterialTextures({
+    THREE: fakeTHREE,
+    files: { normalMap: 'a_normal.webp', roughnessMap: 'a_rough.webp' },
+    createBitmap: async () => ({ width: 64, height: 64 }),
+    fetchImpl: async (url) => { requested.push(url); return okResponse({}); }
+  });
+  assert.deepEqual(requested.sort(), ['a_normal.webp', 'a_rough.webp'],
+    'only the maps the family names are requested');
+  assert.equal(loaded.map, null, 'the omitted albedo stays null');
+  assert.ok(loaded.normalMap && loaded.roughnessMap, 'the named maps loaded');
+  assert.equal(loaded.anyLoaded, true);
+
+  // Junk urls are skipped the same way rather than stringifying into a path.
+  const junk = [];
+  const none = await loadMaterialTextures({
+    THREE: fakeTHREE,
+    files: { map: null, normalMap: '', roughnessMap: 42 },
+    createBitmap: async () => ({ width: 4, height: 4 }),
+    fetchImpl: async (url) => { junk.push(url); return okResponse({}); }
+  });
+  assert.deepEqual(junk, [], 'no request is made for a junk url');
+  assert.equal(none.anyLoaded, false);
+});
+
 test('the roof shingle family loads through the shared texture pipeline and the clone', async () => {
   // The family uses the same loader as every other set, and cloneTextureFamily
   // must carry all three maps for the InstancedMesh (the world applies the

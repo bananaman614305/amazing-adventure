@@ -3325,7 +3325,7 @@ try {
             hasUv: Boolean(uv),
             tint: o.material.color ? o.material.color.getHexString() : null,
             roughness: Number(Number(o.material.roughness).toFixed(3)),
-            metalness: Number(o.material.metalness).toFixed(3),
+            metalness: Number(Number(o.material.metalness).toFixed(3)),
             image: o.material.map ? o.material.map.image.width : 0,
             // World tile: how many UV units per metre of head, measured on the
             // head's own local width times the rig scale.
@@ -3416,7 +3416,7 @@ try {
           hasUv: Boolean(uv),
           tint: o.material.color ? o.material.color.getHexString() : null,
           roughness: Number(Number(o.material.roughness).toFixed(3)),
-          metalness: Number(o.material.metalness).toFixed(3),
+          metalness: Number(Number(o.material.metalness).toFixed(3)),
           image: o.material.map ? o.material.map.image.width : 0,
           repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
           wrapped: o.material.map
@@ -3471,7 +3471,7 @@ try {
           hasUv: Boolean(uv),
           tint: o.material.color ? o.material.color.getHexString() : null,
           roughness: Number(Number(o.material.roughness).toFixed(3)),
-          metalness: Number(o.material.metalness).toFixed(3),
+          metalness: Number(Number(o.material.metalness).toFixed(3)),
           image: o.material.map ? o.material.map.image.width : 0,
           repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
           wrapped: o.material.map
@@ -3583,7 +3583,7 @@ try {
           hasUv: Boolean(uv),
           tint: o.material.color ? o.material.color.getHexString() : null,
           roughness: Number(Number(o.material.roughness).toFixed(3)),
-          metalness: Number(o.material.metalness).toFixed(3),
+          metalness: Number(Number(o.material.metalness).toFixed(3)),
           image: o.material.map ? o.material.map.image.width : 0,
           repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
           wrapped: o.material.map
@@ -3615,6 +3615,65 @@ try {
                      metalness: [...new Set(castPaper.rows.map((r) => r.metalness))] }));
 
   await capture(page, 'round84-cast-paper.png');
+
+  // --- Round 110: the cast's armour (Steel) -----------------------------------
+  // Halden's helmet, nasal, pauldrons and spear tip are authored with a single
+  // `Steel` material (roughness 0.4 / metalness 0.7, blue-grey) that no earlier
+  // pass dressed. Round 110 dresses it with the lamp metal normal + roughness
+  // maps at a 0.2 m tile and keeps the authored tint (no albedo map, so the
+  // blue-grey is not painted over). Checked live after castReady; the five
+  // meshes must carry exactly the two maps, have projected UVs, keep the tint,
+  // and sit at the family's 0.35 / 0.7 settings.
+  const castSteel = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    await api.castReady;
+    const rows = [];
+    const materials = new Set();
+    for (const npc of api.npcs) {
+      npc.group.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        if ((o.material.name || '') !== 'Steel') return;
+        const uv = o.geometry.getAttribute('uv');
+        materials.add(o.material.uuid);
+        rows.push({
+          key: `${npc.id}/${o.name}`,
+          map: Boolean(o.material.map),
+          normalMap: Boolean(o.material.normalMap),
+          roughnessMap: Boolean(o.material.roughnessMap),
+          hasUv: Boolean(uv),
+          tint: o.material.color ? o.material.color.getHexString() : null,
+          roughness: Number(Number(o.material.roughness).toFixed(3)),
+          metalness: Number(Number(o.material.metalness).toFixed(3)),
+          image: o.material.normalMap ? o.material.normalMap.image.width : 0,
+          dressed: o.userData.steelDressed === true
+        });
+      });
+    }
+    return { rows, materials: materials.size };
+  });
+  const steelKeys = castSteel.rows.map((r) => r.key).sort();
+  checks.check('halden\'s five Steel meshes are dressed with the metal maps',
+    castSteel.rows.length === 5 && castSteel.rows.every((r) => r.normalMap
+      && r.roughnessMap && !r.map && r.hasUv && r.dressed),
+    JSON.stringify({ rows: castSteel.rows.length, keys: steelKeys,
+                    normal: castSteel.rows.filter((r) => r.normalMap).length,
+                    albedoLeak: castSteel.rows.filter((r) => r.map).length }));
+  checks.check('the steel tint survives (no albedo map is painted over it)',
+    castSteel.rows.length > 0 &&
+      castSteel.rows.every((r) => r.tint && r.tint !== 'ffffff'
+        && r.tint === castSteel.rows[0].tint),
+    JSON.stringify([...new Set(castSteel.rows.map((r) => r.tint))]));
+  checks.check('the dressed steel sits at family roughness 0.35 and metalness 0.7',
+    castSteel.rows.every((r) => r.roughness === 0.35 && r.metalness === 0.7),
+    JSON.stringify({ roughness: [...new Set(castSteel.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(castSteel.rows.map((r) => r.metalness))] }));
+  checks.check('the steel map is shared per rig, not cloned per mesh',
+    castSteel.materials <= 6 && castSteel.rows.every((r) => r.image === 512),
+    `${castSteel.materials} materials for ${castSteel.rows.length} meshes; ` +
+    `images ${JSON.stringify([...new Set(castSteel.rows.map((r) => r.image))])}`);
+
+  await capture(page, 'round110-cast-steel.png');
   // --- 28n. The night sky's star field (round 85) -----------------------------
   // A star field sits inside the sky dome. At night it is full opacity and
   // twinkle-bright; at day it is hidden; dusk sits between. Checked live, on

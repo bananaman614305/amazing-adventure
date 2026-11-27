@@ -1647,6 +1647,12 @@ export async function loadMaterialTextures({
   const load = async (url, kind) => {
     try {
       if (!createBitmap) return null; // no decoder available in this context
+      // A partial family (a family that deliberately omits one map, such as the
+      // steel set which has no albedo) leaves that key undefined. Fetching it
+      // would request `/undefined` and log a console 404 in the player's browser
+      // -- noise, and a request the game never meant to make -- so a missing or
+      // non-string url skips that map and the others still load.
+      if (typeof url !== 'string' || url.length === 0) return null;
       const response = await fetchImpl(url);
       if (!response.ok) return null;
       const blob = await response.blob();
