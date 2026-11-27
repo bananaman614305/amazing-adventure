@@ -165,6 +165,23 @@ export const REQUIRED_FILES = [
   'assets/textures/hair_albedo.webp',
   'assets/textures/hair_normal.webp',
   'assets/textures/hair_rough.webp',
+  // Round 111's bespoke ground bakes. These were added to assets.js and shipped
+  // in the repository but missing from this list for a release, which is exactly
+  // the kind of gap that leaves the deployed preview silently flat (the load
+  // fails, the family reports 'flat', and the game still plays). The guard test
+  // in tests/manifest.test.mjs now derives the texture list from assets.js, so a
+  // future family cannot repeat it.
+  'assets/textures/doormat_albedo.webp',
+  'assets/textures/doormat_normal.webp',
+  'assets/textures/doormat_rough.webp',
+  'assets/textures/soil_albedo.webp',
+  'assets/textures/soil_normal.webp',
+  'assets/textures/soil_rough.webp',
+  // The cast's boot leather, referenced by CAST_BOOT_TEXTURE_FILES since round
+  // 82 but never listed here -- same gap, same guard.
+  'assets/textures/leather_albedo.webp',
+  'assets/textures/leather_normal.webp',
+  'assets/textures/leather_rough.webp',
   'vendor/three.module.min.js',
   'vendor/THREE-LICENSE.txt'
 ];
