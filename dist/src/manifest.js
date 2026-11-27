@@ -62,6 +62,7 @@ export const REQUIRED_FILES = [
   'src/wildflowers.js',
   'src/reeds.js',
   'src/moss.js',
+  'src/walltrim.js',
   'src/contactshadows.js',
   'src/ivy.js',
   'src/spray.js',
