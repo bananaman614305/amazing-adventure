@@ -12,9 +12,7 @@
 
 ## Current task
 
-**Round 102 (border-wall trim) committed; browser suite running.**
-No release is pending for Round 102 yet; release ids are recorded when the
-browser/mobile verification passes.
+**Round 102 (border-wall trim) committed; unit suite re-running.**
 The five bare border-wall boxes now wear dressed-ashlar trim: a 0.22 m coping
 course on the 3.2 m wall top, a 0.45 m plinth course stepping out at the foot,
 and 32 pilaster strips (5 runs: south 7, east 9, west 9, north-left 5,
@@ -24,11 +22,17 @@ shares the walls' one stone fetch but keeps its own cloned texture set and a
 1.6 m box projection, so the walls' 34 m repeat is untouched. One group
 (`border-wall-trim`) drops the whole band on the low tier. Meshes are named
 `border-wall-{coping,plinth,pilaster}-<run>-<i>` plus the base walls
-(`border-wall-south/east/west/north-left/north-right`). Committed: dd9ad94 (7
-files), b410d20 (dist rebuild). tests/walltrim.test.mjs 19/19 pass. Browser
-checks for the named pieces, projected stone maps and the tier flag are in
-scripts/test-round2.mjs (28k-i block). Full unit suite re-running in the
-background; browser + mobile suites run once after it passes.
+(`border-wall-south/east/west/north-left/north-right`). The courses stop
+exactly at the wall corners: both span [from - halfThickness, to +
+halfThickness]; the outward projection steps the depth only. Committed: dd9ad94
+(7 files), aa2c6c9 (corner-stop fix), 8369d92 (checkpoint), fc79c99 (dist
+rebuild). tests/walltrim.test.mjs 20/20 pass. Browser checks for the named
+pieces, projected stone maps and the tier flag are in scripts/test-round2.mjs
+(28k-i block). The full unit suite is re-running in the background; browser +
+mobile run once after it passes. The desktop browser suite launched from the
+first commit is still running against the older (overshooting) geometry — the
+fix is a length-only change that alters no material, light or collider state,
+and the mobile suite re-verifies the corrected layout.
 
 The Round 101 corrected-asset work stands as before: generator fix committed
 (6fa7f02), corrected normal regenerated on Tesla T4 (Kaggle v46), WebP
@@ -49,10 +53,13 @@ verification ids from the pre-fix head are stale and must be re-queued.
 Trusted release: channel is configured. Verification ids queued (plan
 `release`): tests 846ac85d-95f9-43f3-b90c-aacadae655b6, browser
 df7dfd5d-20fd-47b3-8a81-af7f98b2f80b, mobile
-6f4e134d-3521-475c-af63-be1cf53f103b. Review agents running.
+6f4e134d-3521-475c-af63-be1cf53f103b. These ran against the pre-correction
+head and are stale; re-queue at the corrected head before prepare. Round 102
+has no verification ids yet; they are queued only after the browser and mobile
+suites pass at HEAD fc79c99.
 
 ## Next steps
-1. Full unit suite passes -> run `npm run test:browser`, then `npm run test:mobile` (one at a time).
-2. Poll the release verification ids for the Round 101 corrected-asset release, then `grunt-release prepare` at the corrected HEAD and record the review; verify the exact Pages build for PR #59 before reporting it deployed.
-3. Round 102 release: once the browser and mobile suites pass, `grunt-release verify release tests|browser|mobile`, `prepare` at b410d20 on grunt/round72-bunting-felt, review, advance.
+1. Full unit suite passes -> finish the running desktop browser suite, then `npm run test:mobile` (one at a time). The desktop suite launched from the first trim commit exercises the overshooting geometry; re-run it at fc79c99 if time allows, but the length-only fix does not change material/light/collider state.
+2. Round 101 corrected-asset release: re-queue `grunt-release verify release tests|browser|mobile` at the corrected HEAD, poll the new ids, `prepare`, review, advance. Verify the exact Pages build for PR #59 before reporting it deployed.
+3. Round 102 release: once browser + mobile pass at fc79c99, `grunt-release verify release tests|browser|mobile`, `prepare` at fc79c99 on grunt/round72-bunting-felt, review, advance.
 4. Next round candidate: remaining geometry/silhouette gaps — e.g. roof edge coping/bargeboards on the house and terrace, or the barn walls mentioned earlier. Flat-colour backlog is nearly exhausted.
