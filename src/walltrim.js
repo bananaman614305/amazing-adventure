@@ -258,7 +258,11 @@ export function wallRuns() {
 export function copingFor(run) {
   const r = usableRun(run) || WALL_RUNS[0];
   const runLength = r.to - r.from;
-  const length = runLength + 2 * WALL_HALF_THICK + WALL_TRIM.copingProjection;
+  // The cap covers the wall face plus one projection outward and nothing along
+  // the run ends: a course stops at the corner rather than growing past the
+  // wall it caps. The earlier draft grew the length too; the unit test pins
+  // the span to [from - halfThickness, to + halfThickness].
+  const length = runLength + 2 * WALL_HALF_THICK;
   const depth = 2 * halfDepth(WALL_TRIM.copingProjection) - WALL_TRIM.copingProjection;
   const height = clampNumber(WALL_TRIM.copingHeight, 0, 1, 0.22);
   // The cap runs from the inner face to the outer face plus its projection, so
@@ -295,8 +299,12 @@ export function copingFor(run) {
  */
 export function plinthFor(run) {
   const r = usableRun(run) || WALL_RUNS[0];
+  // Same discipline as the coping: the foot course stops at the corner rather
+  // than growing along the run, so its span is the wall face [from -
+  // halfThickness, to + halfThickness]. The projection only steps the depth
+  // outward, never the length.
   const runLength = r.to - r.from;
-  const length = runLength + 2 * halfDepth(WALL_TRIM.plinthProjection);
+  const length = runLength + 2 * WALL_HALF_THICK;
   const depth = 2 * halfDepth(WALL_TRIM.plinthProjection);
   const height = clampNumber(WALL_TRIM.plinthHeight, 0, 1, 0.45);
   // Symmetric steps: the centre sits on the wall line, half a projection inside

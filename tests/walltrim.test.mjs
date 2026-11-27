@@ -209,6 +209,25 @@ test('the coping sits exactly on the 3.2 m wall top', () => {
   }
 });
 
+test('the coping and plinth stop at the wall corners rather than growing past the wall', () => {
+  const runs = wallRuns();
+  for (const run of runs) {
+    const along = run.axis === 'x' ? 0 : 2;
+    // The course span is exactly the wall face: the run ends plus one half
+    // thickness each way, never more. A course that grew past the corner would
+    // overshoot the corner itself.
+    for (const kind of ['coping', 'plinth']) {
+      const piece = kind === 'coping' ? copingFor(run) : plinthFor(run);
+      const lo = piece.position[along] - piece.size[along] / 2;
+      const hi = piece.position[along] + piece.size[along] / 2;
+      assert.ok(Math.abs(lo - (run.from - WALL_HALF_THICK)) < 1e-9,
+        `${run.id} ${kind} inner end ${lo} is not the wall corner ${run.from - WALL_HALF_THICK}`);
+      assert.ok(Math.abs(hi - (run.to + WALL_HALF_THICK)) < 1e-9,
+        `${run.id} ${kind} outer end ${hi} is not the wall corner ${run.to + WALL_HALF_THICK}`);
+    }
+  }
+});
+
 test('the coping overhangs the outer face and never reaches the window plane', () => {
   const runs = wallRuns();
   for (const run of runs) {
