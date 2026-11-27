@@ -12,13 +12,13 @@
 
 ## Current task
 
-**Round 108 in progress.** Pure module `src/kerb.js` + 16 unit tests + world.js
-integration (plaza-kerb torus at y=0.03, four lane-plinth boxes at y=0.02) +
-browser checks (presence, tier drop). Manifest updated (160 files). Commit
-d286b76. Pending: rebuild dist, run desktop + mobile suites once.
+**Round 108 verified green.** Kerb ring (plaza-kerb torus) + lane plinth
+(four boxes) integrated; low-tier drop confirmed. Unit 1537/1537, desktop
+373/373, mobile 184/184, zero console errors. Dist rebuilt at 67f2279.
+Next milestone: market-stall fascia/barge vs MarketAwning overlaps.
 
 ## Next steps
-1. Rebuild dist and run unit + desktop + mobile once at new head.
-2. Market-stall fascia/barge vs MarketAwning overlaps (2-2.5 cm): re-measure and nudge or document.
-3. Flat-surface dressing: Steel pass for the cast, doormat/planter-soil albedo; consider Kaggle steel texture job.
+1. Re-measure the market-stall fascia/barge vs MarketAwning overlap and apply a minimal, documented fix.
+2. Flat-surface dressing: Steel pass for the cast (pure module + world.js integration).
+3. Doormat/planter-soil albedo pass.
 4. Releases 101-105 when the channel unblocks.
