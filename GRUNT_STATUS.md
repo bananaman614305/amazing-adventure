@@ -50,6 +50,11 @@ src/walltrim.js's sibling state.
 browser suites must be re-run at HEAD 62aea49 before release. Release
 verification ids from the pre-fix head are stale and must be re-queued.
 
+Cycle notes: the desktop browser suite running now (task ba1vdruf1) was
+launched from the first trim commit dd9ad94, before the corner-stop fix; it
+exercises the overshooting course lengths. A second run at fc79c99 should
+follow the mobile suite if the first passes.
+
 Trusted release: channel is configured. Verification ids queued (plan
 `release`): tests 846ac85d-95f9-43f3-b90c-aacadae655b6, browser
 df7dfd5d-20fd-47b3-8a81-af7f98b2f80b, mobile
@@ -59,7 +64,7 @@ has no verification ids yet; they are queued only after the browser and mobile
 suites pass at HEAD fc79c99.
 
 ## Next steps
-1. Full unit suite passes -> finish the running desktop browser suite, then `npm run test:mobile` (one at a time). The desktop suite launched from the first trim commit exercises the overshooting geometry; re-run it at fc79c99 if time allows, but the length-only fix does not change material/light/collider state.
+1. Full unit suite passes -> finish the running desktop browser suite (started from the first trim commit, so it exercises the overshooting geometry; the length-only fix changes no material/light/collider state), then `npm run test:mobile` at fc79c99 (one at a time).
 2. Round 101 corrected-asset release: re-queue `grunt-release verify release tests|browser|mobile` at the corrected HEAD, poll the new ids, `prepare`, review, advance. Verify the exact Pages build for PR #59 before reporting it deployed. The three stale ids (tests 846ac85d, browser df7dfd5d, mobile 6f4e134d) were queued against the pre-correction head and must not be reused.
 3. Round 102 release: once browser + mobile pass at fc79c99, `grunt-release verify release tests|browser|mobile`, `prepare` at fc79c99 on grunt/round72-bunting-felt, review, advance.
 4. Next round candidate: remaining geometry/silhouette gaps — e.g. roof edge coping/bargeboards on the house and terrace, or the barn walls mentioned earlier. Flat-colour backlog is nearly exhausted.
