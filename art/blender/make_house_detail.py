@@ -138,12 +138,12 @@ def build_detail():
     # the ridge; the front (-y) gutter hangs just outside the wall face.
     for y in (-2.9, 2.9):
         bm = bmesh.new()
-        box(bm, 8.2, 0.12, 0.12, 0, y, 3.05)
+        box(bm, 8.2, 0.12, 0.12, 0, y, 2.85)
         new_mesh_object(f"HouseGutter_{'front' if y < 0 else 'back'}", bm, iron)
 
     # Downspout on the front-right corner (front = -y).
     bm = bmesh.new()
-    box(bm, 0.1, 0.1, 3.0, 3.9, -2.9, 1.5)
+    box(bm, 0.1, 0.1, 2.70, 3.9, -2.9, 1.35)
     new_mesh_object("HouseDownspout", bm, iron)
 
     # Chimney pot on the existing chimney (x=2.2, y=1.0 -> game x=2.2, z=-1.0).

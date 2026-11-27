@@ -5113,6 +5113,202 @@ try {
     JSON.stringify(r96.ripples));
   await capture(page, 'round96-dressing.png');
 
+  // --- Environment maps: the idle scheduler must build on its own ----------
+  // The realism audit found the PMREM environment map was never built in play:
+  // the scheduler queued it through a bare requestIdleCallback, the continuous
+  // render loop starved the idle queue, and scene.environment stayed null for
+  // the whole session. Nothing caught it because every evidence and comparison
+  // script called buildEnvironmentMapNow() itself, masking the dead scheduler.
+  // This check therefore never calls that builder. It asks only what the game
+  // did on its own: the map counter must be non-zero, scene.environment must be
+  // a real PMREM texture, environmentIntensity must be a live positive number,
+  // and a driven phase change (day -> night -> day) must never take the counter
+  // backwards or leave the scene without an environment while the next map is
+  // queued. The block restores the clock and the quality tier however it ends,
+  // so a failure cannot quietly change what the later checks measure.
+  const r105env = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Read the environment texture's own flags rather than inferring from the
+    // build: PMREM output is a WebGLRenderTarget texture, so it carries
+    // isTexture, isRenderTargetTexture and the CubeUV reflection mapping (306).
+    const readEnvironment = () => {
+      const t = api.scene.environment;
+      if (!t) return { present: false, isTexture: false, isRenderTargetTexture: false, mapping: null, hasImage: false };
+      return {
+        present: true,
+        isTexture: t.isTexture === true,
+        isRenderTargetTexture: t.isRenderTargetTexture === true,
+        mapping: typeof t.mapping === 'number' ? t.mapping : null,
+        hasImage: Boolean(t.image)
+      };
+    };
+    // Poll a predicate for a bounded few seconds rather than sleeping a fixed
+    // span: the scheduler has a 1 s idle deadline and a zero-delay first-frame
+    // fallback, and on a software rasteriser the PMREM prefilter itself is slow,
+    // so the only honest question is "did it happen within a few seconds".
+    const waitUntil = async (predicate, timeoutMs) => {
+      const deadline = performance.now() + timeoutMs;
+      while (performance.now() < deadline) {
+        if (predicate()) return true;
+        await sleep(50);
+      }
+      return predicate();
+    };
+    try {
+      // At least one map must exist without this block ever asking for one.
+      await waitUntil(() => api.environmentMapsBuilt() >= 1, 5000);
+      const builtAtStart = api.environmentMapsBuilt();
+      const first = readEnvironment();
+      const firstUuid = api.scene.environment ? api.scene.environment.uuid : null;
+      const intensity = api.scene.environmentIntensity;
+      const bootPhase = api.getClock().phase;
+      // A real phase change through the same public clock the day/night cycle
+      // uses. The applied texture must change (a newly built or cached map is
+      // swapped in), which proves the scene is re-lit rather than left unlit.
+      api.setClock(120); // night
+      const nightApplied = await waitUntil(
+        () => api.scene.environment && api.scene.environment.uuid !== firstUuid, 5000);
+      const night = readEnvironment();
+      const nightBuilt = api.environmentMapsBuilt();
+      const nightPhase = api.getClock().phase;
+      api.setClock(10); // day again
+      const nightUuid = api.scene.environment ? api.scene.environment.uuid : null;
+      const dayApplied = await waitUntil(
+        () => api.scene.environment && api.scene.environment.uuid !== nightUuid, 5000);
+      const day = readEnvironment();
+      const dayBuilt = api.environmentMapsBuilt();
+      const dayPhase = api.getClock().phase;
+      return {
+        built: { start: builtAtStart, night: nightBuilt, day: dayBuilt },
+        first,
+        intensity: Number.isFinite(intensity) ? intensity : null,
+        intensityFinite: Number.isFinite(intensity),
+        applied: { night: nightApplied, day: dayApplied },
+        night,
+        day,
+        phases: { boot: bootPhase, night: nightPhase, day: dayPhase }
+      };
+    } finally {
+      api.setClock(startClock.seconds);
+      api.quality.set(startTier);
+      api.quality.setAdaptive(startAdaptive);
+    }
+  });
+  checks.check('the environment map builds itself after boot without a manual kick',
+    r105env.built.start >= 1 &&
+      r105env.built.night >= r105env.built.start &&
+      r105env.built.day >= r105env.built.night &&
+      r105env.first.present === true && r105env.first.isTexture === true &&
+      (r105env.first.isRenderTargetTexture === true || r105env.first.mapping === 306) &&
+      r105env.intensityFinite === true && r105env.intensity > 0 &&
+      r105env.applied.night === true && r105env.applied.day === true &&
+      r105env.night.present === true && r105env.night.isTexture === true &&
+      r105env.day.present === true && r105env.day.isTexture === true,
+    JSON.stringify({
+      built: r105env.built,
+      intensity: r105env.intensity,
+      applied: r105env.applied,
+      first: r105env.first,
+      night: r105env.night,
+      day: r105env.day,
+      phases: r105env.phases
+    }));
+
+  // --- Round 106: no shingle strip may intersect a gutter box -----------------
+  // Round 105's gutter clash audit measured 22 shingle strips (11 per house
+  // roof) poking ~7 cm through HouseGutter_front/back because the gutter sat
+  // ~7 cm above the eave tile surface. The fix lowers the gutter in
+  // art/blender/make_house_detail.py and re-exports assets/house-detail.glb, so
+  // the tile surface (y ~3.038) now clears the gutter top (y ~3.01). This
+  // check reads every instance matrix out of the `roof-shingles` InstancedMesh
+  // and the world AABB of each `HouseGutter_*` mesh and counts AABB overlaps;
+  // it must be zero. The gutter meshes are children of `house-detail-model`,
+  // so assetsReady() (which awaits upgradeHouseDetail) must resolve first.
+  const r106gutter = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    try {
+      await api.assetsReady();
+      api.scene.updateMatrixWorld(true);
+      const gutters = [];
+      api.scene.traverse((o) => {
+        if (o.isMesh && (o.name === 'HouseGutter_front' || o.name === 'HouseGutter_back')) {
+          o.geometry.computeBoundingBox();
+          const b = o.geometry.boundingBox;
+          const m = o.matrixWorld;
+          const els = m.elements;
+          let min = [Infinity, Infinity, Infinity];
+          let max = [-Infinity, -Infinity, -Infinity];
+          for (let xi = 0; xi < 2; xi += 1)
+            for (let yi = 0; yi < 2; yi += 1)
+              for (let zi = 0; zi < 2; zi += 1) {
+                const lx = xi === 0 ? b.min.x : b.max.x;
+                const ly = yi === 0 ? b.min.y : b.max.y;
+                const lz = zi === 0 ? b.min.z : b.max.z;
+                const wx = els[0] * lx + els[4] * ly + els[8] * lz + els[12];
+                const wy = els[1] * lx + els[5] * ly + els[9] * lz + els[13];
+                const wz = els[2] * lx + els[6] * ly + els[10] * lz + els[14];
+                min[0] = Math.min(min[0], wx); max[0] = Math.max(max[0], wx);
+                min[1] = Math.min(min[1], wy); max[1] = Math.max(max[1], wy);
+                min[2] = Math.min(min[2], wz); max[2] = Math.max(max[2], wz);
+              }
+          gutters.push({ name: o.name, min: min.slice(), max: max.slice() });
+        }
+      });
+      let mesh = null;
+      api.scene.traverse((o) => { if (o.name === 'roof-shingles') mesh = o; });
+      let shingleCount = 0;
+      let overlaps = 0;
+      let worst = 0;
+      if (mesh && mesh.instanceMatrix && mesh.instanceMatrix.array) {
+        const arr = mesh.instanceMatrix.array;
+        shingleCount = mesh.count;
+        for (let i = 0; i < mesh.count; i += 1) {
+          const o = i * 16;
+          let smin = [Infinity, Infinity, Infinity];
+          let smax = [-Infinity, -Infinity, -Infinity];
+          for (let xi = 0; xi < 2; xi += 1)
+            for (let yi = 0; yi < 2; yi += 1)
+              for (let zi = 0; zi < 2; zi += 1) {
+                const lx = xi === 0 ? -0.5 : 0.5;
+                const ly = yi === 0 ? -0.006 : 0.006;
+                const lz = zi === 0 ? -0.5 : 0.5;
+                const wx = arr[o + 0] * lx + arr[o + 4] * ly + arr[o + 8] * lz + arr[o + 12];
+                const wy = arr[o + 1] * lx + arr[o + 5] * ly + arr[o + 9] * lz + arr[o + 13];
+                const wz = arr[o + 2] * lx + arr[o + 6] * ly + arr[o + 10] * lz + arr[o + 14];
+                smin[0] = Math.min(smin[0], wx); smax[0] = Math.max(smax[0], wx);
+                smin[1] = Math.min(smin[1], wy); smax[1] = Math.max(smax[1], wy);
+                smin[2] = Math.min(smin[2], wz); smax[2] = Math.max(smax[2], wz);
+              }
+          for (const g of gutters) {
+            const ox = Math.min(smax[0], g.max[0]) - Math.max(smin[0], g.min[0]);
+            const oy = Math.min(smax[1], g.max[1]) - Math.max(smin[1], g.min[1]);
+            const oz = Math.min(smax[2], g.max[2]) - Math.max(smin[2], g.min[2]);
+            if (ox > 0 && oy > 0 && oz > 0) {
+              overlaps += 1;
+              const pen = Math.min(ox, oy, oz);
+              if (pen > worst) worst = pen;
+            }
+          }
+        }
+      }
+      return { gutters, shingleCount, overlaps, worst };
+    } finally {
+      api.quality.set(startTier);
+      if (startAdaptive) api.quality.setAdaptive(true);
+    }
+  });
+  checks.check('no shingle strip intersects a gutter box',
+    r106gutter.gutters.length === 2 && r106gutter.overlaps === 0,
+    JSON.stringify(r106gutter));
+
   // --- Round 97: dress the terrace furniture ---------------------------------
   // The terrace GLB's timber members and planter stone join the existing wood
   // and house-stone families (only the family tests widen -- the GLB is
