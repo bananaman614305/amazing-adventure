@@ -12,78 +12,48 @@
 
 ## Current task
 
-**Round 102 (border-wall trim) committed at f1c948f; desktop browser suite
-re-running against the corrected geometry.**
-The five bare border-wall boxes now wear dressed-ashlar trim: a 0.22 m coping
-course on the 3.2 m wall top, a 0.45 m plinth course stepping out at the foot,
-and 32 pilaster strips (5 runs: south 7, east 9, west 9, north-left 5,
-north-right 2), all placed by the new pure module `src/walltrim.js` (seeded,
-total, keep-clear of the window/ivy plane) and boxed by `src/world.js`. The trim
-shares the walls' one stone fetch but keeps its own cloned texture set and a
-1.6 m box projection, so the walls' 34 m repeat is untouched. One group
-(`border-wall-trim`) drops the whole band on the low tier. Meshes are named
-`border-wall-{coping,plinth,pilaster}-<run>-<i>` plus the base walls
-(`border-wall-south/east/west/north-left/north-right`). The courses stop
-exactly at the wall corners: both span [from - halfThickness, to +
-halfThickness]; the outward projection steps the depth only. Committed: dd9ad94
-(7 files), aa2c6c9 (corner-stop fix), 8369d92/a9c3b8a/f69815e/13f8359/aece0c9/2ef6a42
-(checkpoints), fc79c99 (dist rebuild). tests/walltrim.test.mjs 20/20 pass. Browser checks for the named
-pieces, projected stone maps and the tier flag are in scripts/test-round2.mjs
-(28k-i block). The full unit suite is re-running in the background; browser +
-mobile run once after it passes. The desktop browser suite launched from the
-first commit is still running against the older (overshooting) geometry — the
-fix is a length-only change that alters no material, light or collider state,
-and the mobile suite re-verifies the corrected layout.
+**Round 102 (border-wall trim) is code-complete at HEAD ef84687; the desktop
+browser suite is running again after Chrome crashed mid-run.** The five bare
+border walls now wear dressed-ashlar trim placed by the pure module
+`src/walltrim.js`: a 0.22 m coping on the 3.2 m wall top, a 0.45 m plinth at the
+foot, and 32 pilaster strips (south 7, east 9, west 9, north-left 5,
+north-right 2). Meshes are named `border-wall-{coping,plinth,pilaster}-<run>[-<i>]`,
+share the walls' one stone fetch but use their own cloned textures at a 1.6 m
+box projection, and the low tier drops the whole `border-wall-trim` group.
 
-The Round 101 corrected-asset work stands as before: generator fix committed
-(6fa7f02), corrected normal regenerated on Tesla T4 (Kaggle v46), WebP
-re-verified (seams pass; G channel changed, max diff 0.1922), dist rebuilt
-(62aea49), release ed44bd6 published as PR #59. Pages check this cycle: the
-served site matches main at d237b99 exactly (src/manifest.js 200, the 40
-manifest files present, dist/preview.json 404 as on main, vendor three 200).
-PR #59 is still open (merge_commit_sha bd6d2ed exists but merged_at null) and
-carries head 08d4cfa (Round 100, no walltrim.js), i.e. the pre-correction
-head; the correction is only on grunt/round72-bunting-felt. The trusted
-channel still owes the Round 101 corrected-head release; do not report it
-deployed until the corrected head is merged and the served site carries
-src/walltrim.js's sibling state.
-357/357 desktop and 184/184 mobile ran against the INVERTED normal, so both
-browser suites must be re-run at HEAD 62aea49 before release. Release
-verification ids from the pre-fix head are stale and must be re-queued.
+Fixed this cycle (a2a3b88): pilasters now stop at the gate piers' OUTER edges
+(7.30 / 11.70) — they project past both wall faces, so clearing only the pier
+centre left the first north-right strip inside pier B. Courses correctly stop at
+the pier INNER faces (8.00 / 11.00). The browser check for projected UVs was
+itself wrong (a 1.56 m pilaster maps to a 0.975 UV span at a 1.6 m tile); it now
+reads UV span ÷ longest edge = 1/1.6 for any box-projected piece.
 
-Two trim bugs found and fixed this cycle (a2a3b88):
+Evidence so far: tests/walltrim.test.mjs 21/21; full unit suite 1472/1473 with
+the only failure the stale dist digest, since rebuilt (f1c948f); desktop suite at
+f1c948f reached 341/341 including all four trim checks, then Chrome died
+("Target closed") before the last ~20 checks — a browser crash, not a check
+failure, so run bcyvnqv5j is repeating the full suite. Mobile not yet run.
 
-1. **Pilasters overlapped gate pier B.** A strip projects past both wall
-   faces, so it must clear the whole pier, not just the courtyard face. The
-   stop was the pier centre (11.35), leaving the first north-right strip at
-   11.594..12.094 inside pier B (11.00..11.70). `pilasterStop` now returns the
-   pier outer edges (7.30 / 11.70). Courses still stop at the pier inner faces
-   (8.00 / 11.00) because they abut the wall.
-2. **The trim UV browser check was wrong, not the code.** It asserted every
-   piece's UV span exceeds 1; the 1.56 m-deep pilaster maps to 0.975 at a
-   1.6 m tile. The check now computes UV span ÷ the piece's longest edge, which
-   is exactly 1/1.6 = 0.625 for any box-projected piece and is not for a piece
-   wearing the wall's 34 m repeat. Evidence at the old head: copingUv
-   [-10.938, 10.938] (21.876 / 35 = 0.625), pilasterUv [-0.487, 0.487].
+**Found for the next round (not yet fixed):** the instanced shingle field is
+laid on the procedural roof slabs, which `upgradeHouse()` and
+`upgradeMarketStalls()` hide once the models load. Measured with
+`shingleSpawns()` on the house plane: 44 of 150 strips sit ABOVE the modelled
+gable surface (up to 0.543 m), so once assets load the shingles float through
+the real roof. The modelled roofs are a gable (eave 3.0 m, ridge 4.6 m) and two
+pitched awnings, not flat slabs. A subagent is measuring the exact world-space
+planes to retile them.
 
-The previous desktop suite (task ba1vdruf1, from dd9ad94) finished 360/361:
-the single failure was the UV assertion above, i.e. a test bug. It ran against
-the pre-fix overshooting geometry, so a fresh run at f1c948f is in flight
-(task bk3vcw4dn).
+Round 101 corrected-asset work stands: PR #59 is still open at head 08d4cfa
+(Round 100, pre-correction); the served Pages site matches main d237b99. The
+trusted channel still owes the Round 101 corrected-head release — do not report
+it deployed until the corrected head is merged.
 
-Unit suite: 1472/1473 with the only failure the stale `dist/` digest, which
-was rebuilt at f1c948f. tests/walltrim.test.mjs 21/21 pass.
-
-Trusted release: channel is configured. Verification ids queued (plan
-`release`): tests 846ac85d-95f9-43f3-b90c-aacadae655b6, browser
-df7dfd5d-20fd-47b3-8a81-af7f98b2f80b, mobile
-6f4e134d-3521-475c-af63-be1cf53f103b. These ran against the pre-correction
-head and are stale; re-queue at the corrected head before prepare. Round 102
-has no verification ids yet; they are queued only after the browser and mobile
-suites pass at HEAD fc79c99.
+Trusted release: channel configured. The three queued verification ids (tests
+846ac85d, browser df7dfd5d, mobile 6f4e134d) ran against the pre-correction head
+and are stale. Round 102 has no verification ids yet; they are queued only after
+the desktop and mobile suites pass at the same head.
 
 ## Next steps
-1. Desktop browser suite at f1c948f (task bk3vcw4dn) -> then `npm run test:mobile` at the same head (one at a time). Re-run the full unit suite once to confirm the rebuilt dist digest passes.
-2. Round 101 corrected-asset release: re-queue `grunt-release verify release tests|browser|mobile` at the corrected HEAD, poll the new ids, `prepare`, review, advance. Verify the exact Pages build for PR #59 before reporting it deployed. The three stale ids (tests 846ac85d, browser df7dfd5d, mobile 6f4e134d) were queued against the pre-correction head and must not be reused.
-3. Round 102 release: once browser + mobile pass at fc79c99, `grunt-release verify release tests|browser|mobile`, `prepare` at fc79c99 on grunt/round72-bunting-felt, review, advance.
-4. Next round candidate: remaining geometry/silhouette gaps — e.g. roof edge coping/bargeboards on the house and terrace, or the barn walls mentioned earlier. Flat-colour backlog is nearly exhausted.
+1. Finish the desktop suite (run bcyvnqv5j) and the full unit suite at the same head, then `npm run test:mobile` — one browser suite at a time. Only then queue Round 102 verification ids and prepare the release.
+2. Fix the shingles-on-hidden-slabs bug found this cycle: retile the shingle field onto the modelled gable and awning planes (exact world-space planes being measured), and drop shingle strips on the low tier as today. This is the visible artefact in the game right now.
+3. Round 101 corrected-head release: re-queue the three verification checks at the corrected head, prepare, review, advance; verify the exact Pages build for PR #59 before reporting it deployed.
