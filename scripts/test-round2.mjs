@@ -2646,40 +2646,32 @@ try {
   // --- 28c. Glass-pane halo follows the hour and the lane (round 119) ---------
   // Round 74 made the panes themselves glow; round 119 gives each lit pane a
   // small additive quad in the air around it, so a hot pane reads as light
-  // scattering in the air rather than the glass being lit from behind. The quad
-  // is one InstancedMesh ('glass-halo') hanging off the pane's registration-
-  // time centre; its material opacity is the glasshalo response curve at the
-  // phase and lane state, and the whole layer drops on the low tier.
+  // scattering in the air rather than the glass being lit from behind. The
+  // quads are two InstancedMeshes -- 'glass-halo' for the six plaza/window
+  // panes, 'glass-halo-lane' for the lane post's pane -- hanging off the
+  // panes' registration-time centres; each mesh's material opacity is the
+  // glasshalo response curve at the phase and lane state, and the whole layer
+  // drops on the low tier.
   const glassHalo = await page.evaluate(async () => {
     const api = window.amazingAdventure;
     await api.assetsReady();
     api.quality.set('full');
     const read = () => {
       const env = api.environment;
-      const mesh = api.scene.getObjectByName('glass-halo');
-      if (!mesh) return null;
+      const plaza = api.scene.getObjectByName('glass-halo');
+      const lane = api.scene.getObjectByName('glass-halo-lane');
+      if (!plaza || !lane) return null;
       return {
-        count: mesh.count,
-        material: mesh.material?.name || null,
-        blending: mesh.material?.blending,
-        opacity: Number(mesh.material?.opacity ?? -1),
-        visible: mesh.visible,
+        plazaCount: plaza.count,
+        laneCount: lane.count,
+        material: plaza.material?.name || null,
+        blending: plaza.material?.blending,
+        plazaOpacity: Number(plaza.material?.opacity ?? -1),
+        plazaVisible: plaza.visible,
+        laneVisible: lane.visible,
         on: env.glassHaloOn,
         haloCount: env.glassHaloCount,
-        // The pane's own emissive intensity is the glass.js glow, written by
-        // applyGlass; the halo's opacity is the glasshalo curve. They must move
-        // together.
-        pane: (() => {
-          const lane = api.scene.getObjectByName('lane-lamp-model');
-          let found = null;
-          api.scene.traverse((o) => {
-            if (found || !o.isMesh || !o.material) return;
-            if ((o.material.name === 'HouseGlass' || o.material.name === 'LampGlass')) {
-              found = { name: o.name, glow: Number(Number(o.material.emissiveIntensity).toFixed(3)) };
-            }
-          });
-          return found;
-        })()
+        haloLaneCount: env.glassHaloLaneCount
       };
     };
     const night = (lit) => {
@@ -2699,53 +2691,59 @@ try {
     return { day, duskDark, nightDark, nightLit, nightLow };
   });
 
-  checks.check('one glass halo quad per registered pane (round 119)',
+  checks.check('one glass halo quad per registered pane, split plaza and lane (round 119)',
     glassHalo.day
-    && glassHalo.day.count === 7
+    && glassHalo.day.plazaCount === 6
+    && glassHalo.day.laneCount === 1
     && glassHalo.day.haloCount === 7
+    && glassHalo.day.haloLaneCount === 1
     && glassHalo.day.material === 'GlassHalo'
     && glassHalo.day.blending === 2
-    && glassHalo.day.visible === false,
+    && glassHalo.day.plazaVisible === false
+    && glassHalo.day.laneVisible === false,
     JSON.stringify(glassHalo.day));
 
   checks.check('the halo follows the hour: dark at day, leading at dusk, full at night',
-    glassHalo.day.visible === false
-    && glassHalo.day.opacity === 0
-    && glassHalo.duskDark.visible === true
-    && glassHalo.duskDark.opacity > 0
-    && glassHalo.duskDark.opacity < 1
-    && glassHalo.nightLit.visible === true
-    && glassHalo.nightLit.opacity === 1
-    && glassHalo.day.pane.glow === 0
-    && glassHalo.nightLit.pane.glow > 0,
-    JSON.stringify({ day: glassHalo.day.opacity, dusk: glassHalo.duskDark.opacity,
-                     night: glassHalo.nightLit.opacity }));
+    glassHalo.day.plazaVisible === false
+    && glassHalo.day.plazaOpacity === 0
+    && glassHalo.duskDark.plazaVisible === true
+    && glassHalo.duskDark.plazaOpacity > 0
+    && glassHalo.duskDark.plazaOpacity < 1
+    && glassHalo.nightLit.plazaVisible === true
+    && glassHalo.nightLit.plazaOpacity === 1,
+    JSON.stringify({ day: glassHalo.day.plazaOpacity, dusk: glassHalo.duskDark.plazaOpacity,
+                     night: glassHalo.nightLit.plazaOpacity }));
 
   checks.check('a dark lane keeps its halo dark at every hour (round 119)',
     // The lane post's pane is the one fixture the player lights, so its halo
     // must not glow over a dark bulb -- and must glow once the round is walked,
-    // over the same hour. The halo's strength is the glasshalo response curve,
-    // which is zero for a dark lane pane at every hour.
-    glassHalo.nightDark.visible === false
-    && glassHalo.nightDark.opacity === 0
-    && glassHalo.duskDark.visible === false
-    && glassHalo.duskDark.opacity === 0
-    && glassHalo.nightLit.visible === true
-    && glassHalo.nightLit.opacity === 1,
-    JSON.stringify({ dark: [glassHalo.nightDark.opacity, glassHalo.nightDark.visible],
-                     dusk: [glassHalo.duskDark.opacity, glassHalo.duskDark.visible],
-                     lit: [glassHalo.nightLit.opacity, glassHalo.nightLit.visible] }));
+    // over the same hour. The lane mesh's strength is the glasshalo response
+    // curve at the lane state, which is zero for a dark lane at every hour.
+    // The plaza panes and the house windows have no such rule: their mesh
+    // follows the hour alone, so it stays lit over a dark lane.
+    glassHalo.nightDark.laneVisible === false
+    && glassHalo.duskDark.laneVisible === false
+    && glassHalo.nightLit.laneVisible === true
+    && glassHalo.nightDark.plazaVisible === true
+    && glassHalo.nightLit.plazaVisible === true,
+    JSON.stringify({ dark: { lane: glassHalo.nightDark.laneVisible, plaza: glassHalo.nightDark.plazaVisible },
+                     dusk: { lane: glassHalo.duskDark.laneVisible, plaza: glassHalo.duskDark.plazaVisible },
+                     lit: { lane: glassHalo.nightLit.laneVisible, plaza: glassHalo.nightLit.plazaVisible } }));
 
   checks.check('the low tier drops the halo and restoring full brings it back',
     // No phase change between the two reads: setQuality itself must re-write the
     // halo, or a tier flip would leave the halo visible on a low tier that has
     // no point lights behind it.
     glassHalo.nightLow.on === false
-    && glassHalo.nightLow.visible === false
+    && glassHalo.nightLow.plazaVisible === false
+    && glassHalo.nightLow.laneVisible === false
     && glassHalo.nightLit.on === true
-    && glassHalo.nightLit.visible === true,
-    JSON.stringify({ low: { on: glassHalo.nightLow.on, visible: glassHalo.nightLow.visible },
-                     full: { on: glassHalo.nightLit.on, visible: glassHalo.nightLit.visible } }));
+    && glassHalo.nightLit.plazaVisible === true
+    && glassHalo.nightLit.laneVisible === true,
+    JSON.stringify({ low: { on: glassHalo.nightLow.on, plaza: glassHalo.nightLow.plazaVisible,
+                            lane: glassHalo.nightLow.laneVisible },
+                     full: { on: glassHalo.nightLit.on, plaza: glassHalo.nightLit.plazaVisible,
+                             lane: glassHalo.nightLit.laneVisible } }));
 
   // Round 64: the north gate piers and lintel. They are the tallest untextured
   // stone in the plaza's main sight line, so they get the same family and the
