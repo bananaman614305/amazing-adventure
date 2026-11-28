@@ -5475,6 +5475,57 @@ try {
     JSON.stringify({ low: r114.low, full: r114.full }));
   await capture(page, 'round114-roomglow.png');
 
+  // --- r115: wet-pavement reflection streaks under plaza lamps -------------
+  const r115 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(120); // night
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const streak = byName('wet-streak');
+    const streakInfo = streak ? {
+      count: streak.count,
+      visible: streak.visible,
+      opacity: Number(streak.material.opacity),
+      materialName: streak.material.name || null
+    } : null;
+    api.setClock(30); // day
+    const streakDayVisible = streak ? streak.visible : null;
+    const streakDayOpacity = streak ? Number(streak.material.opacity) : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = streak ? streak.visible : null;
+    const lowOn = env.wetStreakOn === undefined ? null : env.wetStreakOn;
+    api.quality.set('full');
+    const fullVisible = streak ? streak.visible : null;
+    const fullCount = env.wetStreakCount === undefined ? null : env.wetStreakCount;
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      streak: streakInfo,
+      streakDay: { visible: streakDayVisible, opacity: streakDayOpacity },
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible, count: fullCount }
+    };
+  });
+  checks.check('wet-streak halos exist under the plaza lamps',
+    r115.streak && r115.streak.count > 0 && r115.streak.materialName === 'WetStreak' &&
+      r115.full.visible === true && r115.full.count > 0,
+    JSON.stringify(r115));
+  checks.check('wet-streak strength follows the night',
+    r115.streak.opacity > 0 && r115.streak.visible === true &&
+      r115.streakDay.visible === false && r115.streakDay.opacity === 0,
+    JSON.stringify({ streak: r115.streak, day: r115.streakDay }));
+  checks.check('wet-streak drops on the low tier',
+    r115.low.visible === false && r115.low.on === false && r115.full.visible === true,
+    JSON.stringify({ low: r115.low, full: r115.full }));
+  await capture(page, 'round115-wetstreak.png');
+
 
 
   // --- Environment maps: the idle scheduler must build on its own ----------
