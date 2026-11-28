@@ -3,10 +3,10 @@
   "version": "0.3.0",
   "build": "A living world",
   "entryPoint": "index.html",
-  "workingTreeClean": false,
+  "workingTreeClean": true,
   "fileCount": 179,
-  "sourceDigest": "956eb230e52d4cc7c8b5971d693c2410a9fe60af51e670c163840dab6b6c326b",
-  "digest": "956eb230e52d4cc7c8b5971d693c2410a9fe60af51e670c163840dab6b6c326b",
+  "sourceDigest": "b7436e80ec6b2a6f8105c7bba5507c773a9f368861ce4b60a08403589d72e17a",
+  "digest": "b7436e80ec6b2a6f8105c7bba5507c773a9f368861ce4b60a08403589d72e17a",
   "files": [
     "assets/banner.glb",
     "assets/barrel.glb",

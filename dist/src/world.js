@@ -2144,9 +2144,9 @@ export function buildWorld(renderer) {
           mesh.castShadow = glassCastsShadow(glassKind);
           glassPanes.push({
             mesh, kind: glassKind, lane: true,
-            x: lamp.light.position.x + LAMP_LANTERN_OFFSET,
+            x: aim.lanternX,
             y: LAMP_LANTERN_Y,
-            z: lamp.light.position.z
+            z: aim.lanternZ
           });
         }
         group.add(mesh);
@@ -3314,6 +3314,10 @@ export function buildWorld(renderer) {
       lamps,
       lanePanes: lanes
     };
+    // The halo meshes were created before the panes were registered, so their
+    // descriptors and counts are stale until now. Rebuild and dress them now
+    // that glassPanes is final, so the browser checks see the real counts.
+    if (typeof dressGlassHalos === 'function') dressGlassHalos();
     if (glassPanes.length && environment.phase) {
       environment.applyGlass(environment.phase, {
         laneLit: environment.laneOn,
@@ -5193,23 +5197,39 @@ export function buildWorld(renderer) {
   // the house windows follow the hour alone, but the lane post's pane follows
   // its own bulb, so its halo must stay dark until the round is walked. One
   // shared opacity cannot hold both rules, so the lane pane gets its own mesh.
-  const glassPaneAnchors = glassPanes.map((pane) => ({
-    x: pane.x ?? 0, y: pane.y ?? 0, z: pane.z ?? 0,
-    window: pane.kind === 'window', lane: pane.lane
-  }));
-  // The descriptors are built warm (lit) so a lit lane pane glows the same
-  // amber as its neighbours; the lane rule is enforced by the lane mesh's
-  // opacity in paintGlassHalo, not by the descriptor's colour.
-  const glassPaneDescriptors = glassHaloEnabled('full')
-    ? glassPaneAnchors.map((anchor) => glassHaloDescriptor(
-        anchor.window ? 'window' : 'lamp',
-        { x: anchor.x, y: anchor.y, z: anchor.z },
-        'night',
-        { lit: true })
-      )
-    : [];
-  const glassLaneDescriptors = glassPaneDescriptors.filter((_, i) => glassPaneAnchors[i].lane);
-  const glassPlazaDescriptors = glassPaneDescriptors.filter((_, i) => !glassPaneAnchors[i].lane);
+  // The panes are registered later, during the asset upgrade (upgradeLamps,
+  // upgradeHouse, upgradeLaneLamp), so the halo descriptors cannot be built
+  // here -- glassPanes is still empty at world-build time. Keep them as mutable
+  // module-level arrays and (re)build them in dressGlassHalos(), which
+  // reportGlass() calls once the panes are final. The meshes are created with
+  // a generous capacity so the count can grow without reallocating buffers.
+  let glassPaneAnchors = [];
+  let glassPaneDescriptors = [];
+  let glassLaneDescriptors = [];
+  let glassPlazaDescriptors = [];
+  function buildGlassHaloDescriptors() {
+    glassPaneAnchors = glassPanes.map((pane) => ({
+      x: pane.x ?? 0, y: pane.y ?? 0, z: pane.z ?? 0,
+      window: pane.kind === 'window', lane: pane.lane
+    }));
+    glassPaneDescriptors = glassHaloEnabled('full')
+      ? glassPaneAnchors.map((anchor) => glassHaloDescriptor(
+          anchor.window ? 'window' : 'lamp',
+          { x: anchor.x, y: anchor.y, z: anchor.z },
+          'night',
+          { lit: true })
+        )
+      : [];
+    glassLaneDescriptors = glassPaneDescriptors.filter((_, i) => glassPaneAnchors[i].lane);
+    glassPlazaDescriptors = glassPaneDescriptors.filter((_, i) => !glassPaneAnchors[i].lane);
+  }
+  function dressGlassHalos() {
+    buildGlassHaloDescriptors();
+    if (glassHaloMesh) glassHaloMesh.count = glassPlazaDescriptors.length;
+    if (glassLaneHaloMesh) glassLaneHaloMesh.count = glassLaneDescriptors.length;
+    if (glassHaloMesh) dressGlassHalo(glassHaloMesh, glassPlazaDescriptors);
+    if (glassLaneHaloMesh) dressGlassHalo(glassLaneHaloMesh, glassLaneDescriptors);
+  }
 
   function createGlassHaloTexture(size = 32) {
     if (typeof document === 'undefined' || !document.createElement) return null;
@@ -5247,7 +5267,7 @@ export function buildWorld(renderer) {
   // The plaza/window halos ride one mesh; the lane pane rides its own so its
   // dark state never dims its lit neighbours.
   const glassHaloMesh = new THREE.InstancedMesh(
-    glassHaloGeometry, glassHaloMaterial, Math.max(1, glassPlazaDescriptors.length)
+    glassHaloGeometry, glassHaloMaterial, Math.max(1, 16)
   );
   glassHaloMesh.name = 'glass-halo';
   glassHaloMesh.count = glassPlazaDescriptors.length;
@@ -5255,7 +5275,7 @@ export function buildWorld(renderer) {
   glassHaloMesh.renderOrder = 2;
   scene.add(glassHaloMesh);
   const glassLaneHaloMesh = new THREE.InstancedMesh(
-    glassHaloGeometry, glassHaloMaterial, Math.max(1, glassLaneDescriptors.length)
+    glassHaloGeometry, glassHaloMaterial, Math.max(1, 4)
   );
   glassLaneHaloMesh.name = 'glass-halo-lane';
   glassLaneHaloMesh.count = glassLaneDescriptors.length;
@@ -5287,8 +5307,7 @@ export function buildWorld(renderer) {
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   };
-  dressGlassHalo(glassHaloMesh, glassPlazaDescriptors);
-  dressGlassHalo(glassLaneHaloMesh, glassLaneDescriptors);
+  dressGlassHalos();
 
   function paintGlassHalo(phaseId, laneLit, tier = environment.quality) {
     // The halo strength per pane is the glasshalo response curve at the phase
@@ -7033,8 +7052,8 @@ export function buildWorld(renderer) {
     // and tier flip.
     glassHalo: glassHaloMesh,
     glassHaloLane: glassLaneHaloMesh,
-    glassHaloCount: glassPaneDescriptors.length,
-    glassHaloLaneCount: glassLaneDescriptors.length,
+    get glassHaloCount() { return glassPaneDescriptors.length; },
+    get glassHaloLaneCount() { return glassLaneDescriptors.length; },
     paintGlassHalo(phaseId, laneLit = environment.laneOn) {
       paintGlassHalo(phaseId, laneLit, environment.quality);
     },
