@@ -30,7 +30,7 @@ no console errors: iPhone 13 portrait 9.1fps, Pixel 7 1.2, iPhone SE 1.9, iPhone
 Release channel is still `blocked_infrastructure` (host caps reachable commits
 at 256; branch is 300+ ahead), no release ids pending; PR-only fallback path.
 **Round 112 (night light depth) is implemented and committed; desktop browser
-suite running.** Both pure halves are in: `src/lightspill.js` (warm ground
+suite running after r112 clock fix.** Both pure halves are in: `src/lightspill.js` (warm ground
 pools under lit panes, seeded, per-phase strength via `spillStrength`) and
 `contactShadowYaw` in `src/contactshadows.js` (ellipse aims away from the
 phase sun). Integration in `src/world.js` builds `window-spill`
@@ -41,7 +41,10 @@ paints the spill per frame alongside `updateWindows`. Browser checks
 (`r112` block in `scripts/test-round2.mjs`) cover: spill decals exist and
 match window count, strength follows night (day hidden), low-tier drop, and
 contact yaw day vs dusk differ. Unit suite 1580/1580 on `f0e7437`; dist
-rebuilt. Release channel still `blocked_infrastructure`, PR-only fallback.
+rebuilt. The first desktop run exposed that `api.setClock(22)` is still day
+phase; corrected to `api.setClock(120)` (night) and `api.setClock(30)` (day)
+in `scripts/test-round2.mjs`. Desktop suite rerun in progress (PID 73).
+Release channel still `blocked_infrastructure`, PR-only fallback.
 Pending: desktop + mobile suites, self-review, publish.json update.
 
 ## Next steps
