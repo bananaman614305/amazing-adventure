@@ -79,6 +79,7 @@ export const REQUIRED_FILES = [
   'src/ivy.js',
   'src/spray.js',
   'src/mist.js',
+  'src/haze.js',
   'src/rope.js',
   'src/housing.js',
   'src/sacktie.js',

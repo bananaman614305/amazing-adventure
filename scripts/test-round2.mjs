@@ -4731,6 +4731,7 @@ try {
     const ivy = []; api.scene.traverse((o) => { if (o.name === 'ivy-patch') ivy.push(o); });
     const spray = byName('fountain-spray');
     const mist = byName('ground-mist');
+    const haze = byName('ground-haze');
     // windows night
     api.setClock(150);
     const winNightVisible = windows ? windows.visible : null;
@@ -4740,6 +4741,7 @@ try {
     const lowBf = bfL ? bfL.visible : null;
     const lowWin = windows ? windows.visible : null;
     const lowMotes = motes ? motes.visible : null;
+    const lowHaze = haze ? haze.visible : null;
     api.quality.set('full');
     api.quality.set(startTier);
     if (startAdaptive) api.quality.setAdaptive(true);
@@ -4752,6 +4754,7 @@ try {
       ivy: { count: ivy.length },
       spray: { count: spray ? spray.count : 0 },
       mist: { count: mist ? mist.count : 0 },
+      haze: { count: haze ? haze.count : 0, visibleDay: haze ? haze.visible : null },
       low: { butterflies: lowBf, windows: lowWin, motes: lowMotes }
     };
   });
@@ -4776,8 +4779,12 @@ try {
   checks.check('ground mist exists',
     r93.mist.count > 0,
     JSON.stringify(r93.mist));
+  checks.check('mid-level haze exists and is visible by day',
+    r93.haze.count > 0 && r93.haze.visibleDay === true,
+    JSON.stringify(r93.haze));
   checks.check('butterflies, windows and motes drop on the low tier',
-    r93.low.butterflies === false && r93.low.windows === false && r93.low.motes === false,
+    r93.low.butterflies === false && r93.low.windows === false && r93.low.motes === false
+      && r93.low.haze === false,
     JSON.stringify(r93.low));
   await capture(page, 'round93-dressing.png');
 
