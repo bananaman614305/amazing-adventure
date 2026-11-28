@@ -274,6 +274,11 @@ export function buildWorld(renderer) {
   });
   moonHaloMaterial.name = 'MoonHalo';
   const moonHaloMesh = new THREE.Mesh(moonHaloGeometry, moonHaloMaterial);
+  // The geometry is a unit quad, so a uniform scale of the halo's own radius
+  // makes it span 2x radius around the moon's centre -- wider than the glow
+  // disc (radius 12) but well inside the dome.
+  moonHaloMesh.scale.set(moonHalo ? moonHalo.radius : MOON_GLOW_RADIUS,
+    moonHalo ? moonHalo.radius : MOON_GLOW_RADIUS, 1);
   moonHaloMesh.name = 'sky-moon-halo';
   moonHaloMesh.frustumCulled = false;
   moonHaloMesh.renderOrder = 2;

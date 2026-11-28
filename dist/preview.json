@@ -5,8 +5,8 @@
   "entryPoint": "index.html",
   "workingTreeClean": true,
   "fileCount": 178,
-  "sourceDigest": "7f1f386e4a5cd0eaed97b88a422bf0a19dfd2855e38820b289169d78c555b613",
-  "digest": "7f1f386e4a5cd0eaed97b88a422bf0a19dfd2855e38820b289169d78c555b613",
+  "sourceDigest": "7e33b048cfb88446adc5c6cb779bd12028466ffdb583809a4f446ed56cd00844",
+  "digest": "7e33b048cfb88446adc5c6cb779bd12028466ffdb583809a4f446ed56cd00844",
   "files": [
     "assets/banner.glb",
     "assets/barrel.glb",
