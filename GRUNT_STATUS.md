@@ -12,28 +12,34 @@
 
 ## Current task
 
-**Round 120 implemented, browser verification in flight (mid-level atmospheric
-haze).** Pure module `src/haze.js` (seed 0x3c8e1f, 18 descriptors) owns seeded
-area-uniform spawn positions, bounded two-sine horizontal drift plus a small
-vertical bob, phase opacity (day 0.25, dusk 0.85, night 0.5) and the low-tier
-disable. `tests/haze.test.mjs` has 24 unit cases. `src/world.js` builds one
-`InstancedMesh` named `ground-haze` with a soft `MeshBasicMaterial` at y=1.2–4
-and sizes 6–14; `paintHaze()` follows phase and tier, `updateHaze(dt)` advances
-the drift; `src/main.js` calls it per frame. The environment handle exposes
-`haze`, `hazeCount`, `paintHaze`, `updateHaze`, `hazeOn`; `setQuality()`
-repaints from the current phase. Manifest regenerated (180 files) and `dist/`
-rebuilt/committed after the sources.
-
-Unit suite at the exact rebuilt-dist HEAD: **1704/1704 passed**.
+**Round 120 complete (mid-level atmospheric haze).** Pure module `src/haze.js`
+(seed 0x3c8e1f, 18 descriptors) owns seeded area-uniform spawn positions,
+bounded two-sine horizontal drift plus a small vertical bob, phase opacity
+(day 0.25, dusk 0.85, night 0.5) and the low-tier disable. `tests/haze.test.mjs`
+has 24 unit cases. `src/world.js` builds one `InstancedMesh` named
+`ground-haze` with a soft `MeshBasicMaterial` at y=1.2–4 and sizes 6–14;
+`paintHaze()` follows phase and tier, `updateHaze(dt)` advances the drift;
+`src/main.js` calls it per frame. The environment handle exposes `haze`,
+`hazeCount`, `paintHaze`, `updateHaze`, `hazeOn`; `setQuality()` repaints from
+the current phase. Manifest regenerated (180 files) and `dist/` rebuilt and
+committed after the sources.
 
 The first desktop browser run exposed two harness defects (not game bugs):
-the r93 day-haze visibility was sampled after the clock/phase restore, and
-the returned low-tier evidence omitted the new haze flag. Both are fixed in
-commit 71e7ec6. A full desktop rerun is in progress; mobile follows after it.
+the r93 day-haze visibility was sampled after the clock/phase restore, and the
+returned low-tier evidence omitted the new haze flag. Both are fixed in commit
+71e7ec6 and the full suites were rerun.
+
+Checks at exact HEAD 3f3d771: `node --test tests/*.test.mjs` **1704/1704
+passed**; desktop browser suite **411/411 checks passed** with haze evidence
+`{"count":18,"visibleDay":true}` and low tier `haze:false`; mobile suite
+**184/184 checks passed** across four device profiles; no console errors in
+either browser suite. Trusted exact-head verification receipts also succeeded
+for tests (20c994bb), browser (b05641f8) and mobile (ef562c40), all exit 0.
+Publication fallback refreshed to 3f3d771.
 
 ## Next steps
-1. Finish round-120 verification: confirm the desktop rerun, run the mobile
-   suite once, then refresh `publish.json` to the final exact HEAD and record
-   the exact check counts here.
+1. Pick round 121: continue the graphics-realism priority with the next
+   distinct beat (soft-edged haze quads, stronger material response in the
+   middle distance, or another cohesive environment improvement).
 2. Keep rounds 101-120 batched for `grunt-release` while the host commit cap
    blocks it; keep `publish.json` current per round.
