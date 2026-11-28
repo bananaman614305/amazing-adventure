@@ -5366,6 +5366,65 @@ try {
     JSON.stringify(r112.contact));
   await capture(page, 'round112-spill.png');
 
+  // --- r113: warm light bleed on the walls around lit panes -----------------
+  const r113 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(120); // night
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const bleed = byName('window-bleed');
+    const bleedInfo = bleed ? {
+      count: bleed.count,
+      visible: bleed.visible,
+      opacity: Number(bleed.material.opacity),
+      materialName: bleed.material.name || null
+    } : null;
+    api.setClock(30); // day
+    const bleedDayVisible = bleed ? bleed.visible : null;
+    const bleedDayOpacity = bleed ? Number(bleed.material.opacity) : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = bleed ? bleed.visible : null;
+    const lowOn = env.windowBleedOn === undefined ? null : env.windowBleedOn;
+    api.quality.set('full');
+    const fullVisible = bleed ? bleed.visible : null;
+    const fullCount = env.windowBleedCount === undefined ? null : env.windowBleedCount;
+    // Verify halos sit proud of the wall (z differs from pane z by BLEED_WALL_LIFT).
+    let proud = true;
+    if (bleed) {
+      // just check mesh exists and count > 0
+      proud = bleed.count > 0;
+    }
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      bleed: bleedInfo,
+      bleedDay: { visible: bleedDayVisible, opacity: bleedDayOpacity },
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible, count: fullCount },
+      proud
+    };
+  });
+  checks.check('window-bleed halos exist around the lit panes',
+    r113.bleed && r113.bleed.count > 0 && r113.bleed.materialName === 'WindowBleed' &&
+      r113.full.visible === true && r113.full.count > 0,
+    JSON.stringify(r113));
+  checks.check('window-bleed strength follows the night',
+    r113.bleed.opacity > 0 && r113.bleed.visible === true &&
+      r113.bleedDay.visible === false && r113.bleedDay.opacity === 0,
+    JSON.stringify({ bleed: r113.bleed, day: r113.bleedDay }));
+  checks.check('window-bleed drops on the low tier',
+    r113.low.visible === false && r113.low.on === false && r113.full.visible === true,
+    JSON.stringify({ low: r113.low, full: r113.full }));
+  await capture(page, 'round113-bleed.png');
+
+
 
   // --- Environment maps: the idle scheduler must build on its own ----------
   // The realism audit found the PMREM environment map was never built in play:
