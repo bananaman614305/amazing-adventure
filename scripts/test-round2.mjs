@@ -4712,7 +4712,7 @@ try {
     JSON.stringify({ day: dr.smokeDay, dusk: dr.smokeDusk, night: dr.smokeNight, low: dr.smokeLow }));
   await capture(page, 'round92-dressing.png');
 
-  // --- Round 93: butterflies, windows, litter, motes, ivy, spray, mist ----
+  // --- Round 93: butterflies, windows, litter, motes, ivy, spray, mist, haze ----
   const r93 = await page.evaluate(async () => {
     const api = window.amazingAdventure;
     const env = api.environment;
@@ -4732,6 +4732,10 @@ try {
     const spray = byName('fountain-spray');
     const mist = byName('ground-mist');
     const haze = byName('ground-haze');
+    // Day visibility must be sampled here: api.setClock(150) below repaints
+    // the phase and restores it at the end, so reading haze.visible later
+    // would describe the suite's starting clock, not the day we set above.
+    const hazeVisibleDay = haze ? haze.visible : null;
     // windows night
     api.setClock(150);
     const winNightVisible = windows ? windows.visible : null;
@@ -4754,8 +4758,8 @@ try {
       ivy: { count: ivy.length },
       spray: { count: spray ? spray.count : 0 },
       mist: { count: mist ? mist.count : 0 },
-      haze: { count: haze ? haze.count : 0, visibleDay: haze ? haze.visible : null },
-      low: { butterflies: lowBf, windows: lowWin, motes: lowMotes }
+      haze: { count: haze ? haze.count : 0, visibleDay: hazeVisibleDay },
+      low: { butterflies: lowBf, windows: lowWin, motes: lowMotes, haze: lowHaze }
     };
   });
   checks.check('daytime butterflies exist',
