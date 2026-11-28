@@ -12,23 +12,21 @@
 
 ## Current task
 
-**Round 114 is implemented (pure + integration + browser checks) but not yet
-verified.** Warm interior glow behind lit windows: pure module
-`src/roomglow.js` (seeded mulberry32; `roomGlowStrength`, `roomGlowEnabled`,
-`roomGlowDecals` — one glow per lit pane, sized from pane warmth, jittered
-centre, wider-than-tall rectangle, per-glow opacity) plus integration in
-`src/world.js` (`room-glow` InstancedMesh, normal blend, recessed behind the
-pane, low-tier drop, per-phase opacity) wired through `src/main.js` and the
-environment handle. Browser checks (r114 block in `scripts/test-round2.mjs`)
-cover: halos exist count=12, strength follows night, drops on low tier. Unit
-suite 1607/1607 (tests 1607, pass 1607) on the pre-dist head. Dist not yet
-rebuilt for round 114.
+**Rounds 113 and 114 closed out.** Round 113 (warm light bleed on walls) and
+round 114 (warm interior glow behind panes) are complete and verified: pure
+modules `src/windowbleed.js` and `src/roomglow.js`, integration in `src/world.js`
+(`window-bleed` and `room-glow` InstancedMeshes), wired through `src/main.js`
+and the environment handle, browser checks r113 and r114. Self-review caught a
+real bug in round 113 (`bleedMaterial` missing `vertexColors = true`) fixed
+before release. Unit suite 1607/1607. Desktop browser 393/393 (all r113 + r114
+checks green). Mobile 184/184 (iPhone 13 portrait 9.5fps, Pixel 7 1.4, iPhone SE
+2.1, iPhone 13 landscape 1.4; no console errors). Dist rebuilt at `37b234f`.
+publish.json refreshed at `37b234f`. Release channel still `blocked_infrastructure`,
+PR-only fallback, no release ids pending.
 
 ## Next steps
-1. Rebuild dist for round 114 and commit it (tree must be clean for the build).
-2. Run desktop browser suite on the round-114 head; confirm all three r114 checks
-   pass and accept the known adaptive-resolution timing flake if it recurs.
-3. Run mobile suite once on the round-114 head.
-4. Self-review round 114 (especially vertexColors on the room-glow material and
-   the recess direction vs the pane's face normal).
-5. Refresh publish.json for round 114 at the committed HEAD and checkpoint.
+1. Choose round 115: next highest-impact visual depth. Candidates: wet-pavement
+   reflection streaks at night (lamp light streaking on damp cobble), or
+   interior room glow colour variation per window.
+2. Keep the 101-114 release batched for `grunt-release` once the host commit cap
+   is lifted; until then keep `publish.json` current per round.
