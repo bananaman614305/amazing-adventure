@@ -41,6 +41,7 @@ export const REQUIRED_FILES = [
   'src/atmosphere.js',
   'src/stars.js',
   'src/moon.js',
+  'src/moonhalo.js',
   'src/clouds.js',
   'src/moonlight.js',
   'src/cloudshadow.js',

@@ -5679,6 +5679,83 @@ try {
     }));
   await capture(page, 'round117-lamphalo.png');
 
+  // --- r118: atmospheric halo around the moon disc -------------------------
+  const r118 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    // The halo hangs off the moon disc group, so the check reaches it through
+    // the group's children rather than expecting it at scene root.
+    const moonDisc = byName('sky-moon-group');
+    const halo = moonDisc ? moonDisc.children.find((c) => c.name === 'sky-moon-halo') : null;
+    const haloInfo = halo ? {
+      visible: halo.visible,
+      materialName: halo.material.name || null,
+      blending: halo.material.blending
+    } : null;
+    const haloOn = env.moonHaloOn === undefined ? null : env.moonHaloOn;
+    api.setClock(120); // night
+    const nightVisible = halo ? halo.visible : null;
+    const nightOpacity = halo ? halo.material.opacity : null;
+    api.setClock(90); // dusk
+    const duskVisible = halo ? halo.visible : null;
+    const duskOpacity = halo ? halo.material.opacity : null;
+    api.setClock(30); // day
+    const dayVisible = halo ? halo.visible : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = halo ? halo.visible : null;
+    const lowOn = env.moonHaloOn === undefined ? null : env.moonHaloOn;
+    api.quality.set('full');
+    const fullVisible = halo ? halo.visible : null;
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      halo: haloInfo,
+      haloOn: haloOn,
+      nightVisible: nightVisible,
+      nightOpacity: nightOpacity,
+      duskVisible: duskVisible,
+      duskOpacity: duskOpacity,
+      dayVisible: dayVisible,
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible }
+    };
+  });
+  checks.check('moon-halo mesh hangs off the moon disc',
+    r118.halo !== null && r118.halo.materialName === 'MoonHalo' &&
+      r118.halo.blending === 2 && // THREE.AdditiveBlending
+      r118.haloOn === true,
+    JSON.stringify({
+      materialName: r118.halo ? r118.halo.materialName : null,
+      blending: r118.halo ? r118.halo.blending : null,
+      haloOn: r118.haloOn
+    }));
+  checks.check('moon-halo strength follows the night',
+    r118.dayVisible === false && r118.nightVisible === true &&
+      r118.nightOpacity > r118.duskOpacity && r118.duskOpacity > 0,
+    JSON.stringify({
+      dayVisible: r118.dayVisible,
+      duskVisible: r118.duskVisible,
+      duskOpacity: r118.duskOpacity,
+      nightVisible: r118.nightVisible,
+      nightOpacity: r118.nightOpacity
+    }));
+  checks.check('moon-halo drops on the low tier',
+    r118.low.visible === false && r118.low.on === false &&
+      r118.full.visible === true,
+    JSON.stringify({
+      low: { visible: r118.low.visible, on: r118.low.on },
+      full: { visible: r118.full.visible }
+    }));
+  await capture(page, 'round118-moonhalo.png');
+
 
 
   // --- Environment maps: the idle scheduler must build on its own ----------
