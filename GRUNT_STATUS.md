@@ -26,7 +26,7 @@ dist rebuilt.
 
 Checks: unit 1668/1668; desktop browser 406/406 exit 0 (three new r118
 checks: mesh/material/blending/haloOn, strength follows night, low-tier drop).
-Mobile suite not yet rerun this round (round 117 mobile result still pending).
+Mobile suite 184/184 exit 0 at clean head b96d417 (round 118).
 
 ## Next steps
 1. Refresh `/worker/state/outbox/publish.json` at the clean exact HEAD 34eff9f,
