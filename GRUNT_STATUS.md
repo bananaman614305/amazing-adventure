@@ -29,13 +29,16 @@ the r93 day-haze visibility was sampled after the clock/phase restore, and the
 returned low-tier evidence omitted the new haze flag. Both are fixed in commit
 71e7ec6 and the full suites were rerun.
 
-Checks at exact HEAD 3f3d771: `node --test tests/*.test.mjs` **1704/1704
-passed**; desktop browser suite **411/411 checks passed** with haze evidence
-`{"count":18,"visibleDay":true}` and low tier `haze:false`; mobile suite
-**184/184 checks passed** across four device profiles; no console errors in
-either browser suite. Trusted exact-head verification receipts also succeeded
-for tests (20c994bb), browser (b05641f8) and mobile (ef562c40), all exit 0.
-Publication fallback refreshed to 3f3d771.
+Checks at verified code HEAD 3f3d771: `node --test tests/*.test.mjs`
+**1704/1704 passed**; desktop browser suite **411/411 checks passed** with haze
+evidence `{"count":18,"visibleDay":true}` and low tier `haze:false`; mobile
+suite **184/184 checks passed** across four device profiles; no console errors
+in either browser suite. Trusted exact-head verification receipts also
+succeeded for tests (20c994bb), browser (b05641f8) and mobile (ef562c40), all
+exit 0. Final HEAD a74ae28 adds only this checkpoint; fresh exact-head checks
+were queued (tests 1dea810e completed exit 0, browser 0211af48 and mobile
+53f301a4 still in flight at the checkpoint). Publication fallback refreshed to
+the final committed HEAD a74ae28.
 
 ## Next steps
 1. Pick round 121: continue the graphics-realism priority with the next
