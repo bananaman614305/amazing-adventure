@@ -4748,6 +4748,10 @@ export function buildWorld(renderer) {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, size, size);
     const texture = new THREE.CanvasTexture(canvas);
+    // Warm pool is colour data, so tag it sRGB to match the albedo family the
+    // browser suite's colour-space check expects (Three does not default a
+    // CanvasTexture, and leaving it linear makes the check see two values).
+    texture.colorSpace = THREE.SRGBColorSpace;
     texture.needsUpdate = true;
     return texture;
   }

@@ -5291,7 +5291,7 @@ try {
     const startClock = api.getClock();
     api.quality.setAdaptive(false);
     api.quality.set('full');
-    api.setClock(22); // night
+    api.setClock(120); // night (phase 105-180)
     const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
     const spill = byName('window-spill');
     const spillInfo = spill ? {
@@ -5302,11 +5302,11 @@ try {
       materialName: spill.material.name || null
     } : null;
     // Day: strength must be zero and mesh hidden.
-    api.setClock(12);
+    api.setClock(30); // day (phase 0-70)
     const spillDayVisible = spill ? spill.visible : null;
     const spillDayOpacity = spill ? Number(spill.material.opacity) : null;
     // Night again for tier gating.
-    api.setClock(22);
+    api.setClock(120);
     api.quality.set('low');
     const lowVisible = spill ? spill.visible : null;
     const lowOn = env.windowSpillOn === undefined ? null : env.windowSpillOn;
