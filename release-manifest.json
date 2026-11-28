@@ -72,6 +72,7 @@
     "src/lightspill.js",
     "src/windowbleed.js",
     "src/roomglow.js",
+    "src/roomtone.js",
     "src/wetstreak.js",
     "src/kerb.js",
     "src/paving.js",

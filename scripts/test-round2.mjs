@@ -5526,6 +5526,86 @@ try {
     JSON.stringify({ low: r115.low, full: r115.full }));
   await capture(page, 'round115-wetstreak.png');
 
+  // --- r116: per-window interior light tones -------------------------------
+  const r116 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(120); // night
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const glow = byName('room-glow');
+    const glowInfo = glow ? {
+      count: glow.count,
+      visible: glow.visible,
+      materialName: glow.material.name || null
+    } : null;
+    const tones = env.roomTones;
+    const tonesInfo = Array.isArray(tones) ? {
+      length: tones.length,
+      allValid: tones.every((t) => Number.isInteger(t) && t >= 0 && t <= 0xffffff),
+      first: tones.slice(0, 4).map((t) => '0x' + t.toString(16).padStart(6, '0'))
+    } : null;
+    const spread = env.roomToneSpread ? {
+      count: env.roomToneSpread.count,
+      distinct: env.roomToneSpread.distinct
+    } : null;
+    const roomGlowCount = env.roomGlowCount === undefined ? null : env.roomGlowCount;
+    api.setClock(30); // day
+    const glowDayVisible = glow ? glow.visible : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = glow ? glow.visible : null;
+    const lowOn = env.roomGlowOn === undefined ? null : env.roomGlowOn;
+    const lowTonesLength = Array.isArray(env.roomTones) ? env.roomTones.length : null;
+    api.quality.set('full');
+    const fullVisible = glow ? glow.visible : null;
+    const fullDistinct = env.roomToneSpread ? env.roomToneSpread.distinct : null;
+    const fullTonesLength = Array.isArray(env.roomTones) ? env.roomTones.length : null;
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      glow: glowInfo,
+      tones: tonesInfo,
+      spread: spread,
+      roomGlowCount: roomGlowCount,
+      glowDay: { visible: glowDayVisible },
+      low: { visible: lowVisible, on: lowOn, tonesLength: lowTonesLength },
+      full: { visible: fullVisible, distinct: fullDistinct, tonesLength: fullTonesLength }
+    };
+  });
+  checks.check('room-tone palette reaches the windows at night',
+    r116.tones !== null && r116.tones.allValid &&
+      r116.roomGlowCount !== null && r116.tones.length === r116.roomGlowCount &&
+      r116.tones.length > 0 && r116.spread !== null && r116.spread.count > 0,
+    JSON.stringify({
+      length: r116.tones ? r116.tones.length : null,
+      count: r116.spread ? r116.spread.count : null,
+      distinct: r116.spread ? r116.spread.distinct : null,
+      first: r116.tones ? r116.tones.first : null
+    }));
+  checks.check('room-tone varies between rooms',
+    r116.spread !== null && r116.spread.distinct >= 3 &&
+      r116.glow !== null && r116.glow.visible === true && r116.glow.materialName === 'RoomGlow',
+    JSON.stringify({
+      distinct: r116.spread ? r116.spread.distinct : null,
+      count: r116.spread ? r116.spread.count : null,
+      meshVisible: r116.glow ? r116.glow.visible : null,
+      materialName: r116.glow ? r116.glow.materialName : null
+    }));
+  checks.check('room-tone drops with the room glow on the low tier',
+    r116.low.visible === false && r116.low.on === false &&
+      r116.full.visible === true && r116.full.distinct >= 3,
+    JSON.stringify({
+      low: { visible: r116.low.visible, on: r116.low.on, tonesLength: r116.low.tonesLength },
+      full: { visible: r116.full.visible, distinct: r116.full.distinct }
+    }));
+  await capture(page, 'round116-roomtone.png');
+
 
 
   // --- Environment maps: the idle scheduler must build on its own ----------
