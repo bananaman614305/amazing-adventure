@@ -87,6 +87,7 @@ export const REQUIRED_FILES = [
   'src/onboard.js',
   'src/glb.js',
   'src/glass.js',
+  'src/glasshalo.js',
   'src/water.js',
   'src/assets.js',
   'assets/fountain.glb',

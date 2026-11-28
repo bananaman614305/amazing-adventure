@@ -4,6 +4,7 @@ import { MOON_DISTANCE, MOON_CORE_RADIUS, MOON_GLOW_RADIUS, MOON_COLOR,
   MOON_PHASE_VISIBILITY, moonVisibility, MOON_POSITION, moonDiscPosition,
   MOON_GLOW_OPACITY } from './moon.js';
 import { moonHaloDescriptor, moonHaloStrength, moonHaloEnabled } from './moonhalo.js';
+import { glassHaloDescriptor, glassHaloStrength, glassHaloEnabled } from './glasshalo.js';
 import { CLOUD_COUNT, CLOUD_FIELD_RADIUS, CLOUD_SEED, cloudPositions,
   CLOUD_PHASE_OPACITY, cloudOpacity, CLOUD_BASE_COLOR, cloudColor,
   cloudSize, cloudDrift } from './clouds.js';
@@ -1585,12 +1586,15 @@ export function buildWorld(renderer) {
   // own sampler state.
   const familyTextures = {};
   // Every glass pane the models contribute (house windows and lamp housings).
-  // Each entry is { mesh, kind, lane }, and applyGlass() writes the pane's
-  // colour, reflectivity and glow for the current hour. `lane` is captured at
-  // registration: it marks the one fixture whose bulb is the player's to light
-  // (the lane post), so its pane stays dark until the round is walked. Windows
-  // and the four plaza lamps ignore it. The bunting lanterns are procedural
-  // (LanternHousing/LanternBulb), carry no glass and register nothing.
+  // Each entry is { mesh, kind, lane, x, y, z }, and applyGlass() writes the
+  // pane's colour, reflectivity and glow for the current hour. `lane` is
+  // captured at registration: it marks the one fixture whose bulb is the
+  // player's to light (the lane post), so its pane stays dark until the round
+  // is walked. Windows and the four plaza lamps ignore it. `x`/`y`/`z` are the
+  // pane's registration-time centre, the halo quad's anchor; capturing it here
+  // means applyGlass never reads a live matrix when it dresses the pane. The
+  // bunting lanterns are procedural (LanternHousing/LanternBulb), carry no
+  // glass and register nothing.
   const glassPanes = [];
   let lampAssetPromise = null;
   // One fetch of the quarried stone family, shared by the border walls and the
@@ -1963,7 +1967,15 @@ export function buildWorld(renderer) {
           const glassKind = glassKindFor(material.name || '');
           if (glassKind) {
             mesh.castShadow = glassCastsShadow(glassKind);
-            glassPanes.push({ mesh, kind: glassKind, lane: false });
+            // The halo hangs on the lamp head, so anchor the pane where its bulb
+            // actually is: the post's light position plus the lantern offset
+            // (see the lamp-halo build below).
+            glassPanes.push({
+              mesh, kind: glassKind, lane: false,
+              x: lamp.light.position.x + LAMP_LANTERN_OFFSET,
+              y: LAMP_LANTERN_Y,
+              z: lamp.light.position.z
+            });
           }
         }
         // The model's arm reaches +0.6 m in local x and the lantern hangs at
@@ -2130,7 +2142,12 @@ export function buildWorld(renderer) {
               ? material.clone() : material);
           mesh.material = paneMaterial;
           mesh.castShadow = glassCastsShadow(glassKind);
-          glassPanes.push({ mesh, kind: glassKind, lane: true });
+          glassPanes.push({
+            mesh, kind: glassKind, lane: true,
+            x: lamp.light.position.x + LAMP_LANTERN_OFFSET,
+            y: LAMP_LANTERN_Y,
+            z: lamp.light.position.z
+          });
         }
         group.add(mesh);
       }
@@ -2342,10 +2359,14 @@ export function buildWorld(renderer) {
         mesh.receiveShadow = true;
         // Glass panes: the window boxes and shutters have no glass, but the
         // material names are scanned so a future pane still gets registered.
+        // No pane has shipped in this model yet, but a pane that does will
+        // still get its halo anchor from the mesh like the house pass.
         const glassKind = glassKindFor(material.name || '');
         if (glassKind) {
           mesh.castShadow = glassCastsShadow(glassKind);
-          glassPanes.push({ mesh, kind: glassKind, lane: false });
+          const centre = mesh.position.clone().add(group.position);
+          centre.y += 1.4;
+          glassPanes.push({ mesh, kind: glassKind, lane: false, x: centre.x, y: centre.y, z: centre.z });
         }
         group.add(mesh);
       }
@@ -3248,11 +3269,14 @@ export function buildWorld(renderer) {
         // Round 74: the two window panes follow the hour. They are not a lamp
         // pane (no bulb sits behind them), so they glow from dusk even before
         // the lane's lanterns are lit. Keeping castShadow is the window frame's
-        // silhouette; see glass.js.
+        // silhouette; see glass.js. The halo anchor is the pane's centre on the
+        // house: the mesh's local offset plus the group's position, ~1.4 m up.
         const glassKind = glassKindFor(material.name || '');
         if (glassKind) {
           mesh.castShadow = glassCastsShadow(glassKind);
-          glassPanes.push({ mesh, kind: glassKind, lane: false });
+          const centre = mesh.position.clone().add(group.position);
+          centre.y += 1.4;
+          glassPanes.push({ mesh, kind: glassKind, lane: false, x: centre.x, y: centre.y, z: centre.z });
         }
       }
       // The model's front (+y in Blender) exports to +z, matching the house's
@@ -5156,6 +5180,105 @@ export function buildWorld(renderer) {
   paintLampHalo('day', 0, 'full');
 
 
+  // --- Warm halo around each lit glass pane ---------------------------------
+  // Round 119: the pane itself is already emissive (applyGlass), but an emissive
+  // reads as the glass being lit from behind, not the pane scattering light in
+  // the air around it. One small additive quad per pane carries that: the halo
+  // spreads the pane's warmth into a pool whose width is the pane's body (a
+  // house window paints a wide, flat pool; a thin lamp shell a narrow column).
+  // The quad hangs on the pane's registration-time centre, so it stays on the
+  // pane after the asset swap without a live matrix read at paint time, and it
+  // is invisible in daylight (the response curve is zero by the phase).
+  // One quad per pane, dropped on the low tier like the lamp halos.
+  const glassPaneAnchors = glassPanes.map((pane) => ({
+    x: pane.x ?? 0, y: pane.y ?? 0, z: pane.z ?? 0,
+    window: pane.kind === 'window', lane: pane.lane
+  }));
+  const glassPaneDescriptors = glassHaloEnabled('full')
+    ? glassPaneAnchors.map((anchor) => glassHaloDescriptor(
+        anchor.window ? 'window' : 'lamp',
+        { x: anchor.x, y: anchor.y, z: anchor.z },
+        'night',
+        { lit: !anchor.lane })
+      )
+    : [];
+
+  function createGlassHaloTexture(size = 32) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(255,220,150,0.85)');
+    g.addColorStop(0.4, 'rgba(255,190,120,0.45)');
+    g.addColorStop(0.8, 'rgba(255,160,90,0.15)');
+    g.addColorStop(1, 'rgba(255,140,70,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  const glassHaloGeometry = new THREE.PlaneGeometry(1, 1);
+  const glassHaloMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: createGlassHaloTexture(),
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: true,
+    blending: THREE.AdditiveBlending
+  });
+  glassHaloMaterial.name = 'GlassHalo';
+  glassHaloMaterial.vertexColors = true;
+  const glassHaloMesh = new THREE.InstancedMesh(
+    glassHaloGeometry, glassHaloMaterial, Math.max(1, glassPaneDescriptors.length)
+  );
+  glassHaloMesh.name = 'glass-halo';
+  glassHaloMesh.count = glassPaneDescriptors.length;
+  glassHaloMesh.frustumCulled = false;
+  glassHaloMesh.renderOrder = 2;
+  scene.add(glassHaloMesh);
+
+  const _ghMatrix = new THREE.Matrix4();
+  const _ghPos = new THREE.Vector3();
+  const _ghScale = new THREE.Vector3();
+  const _ghQuat = new THREE.Quaternion();
+  const _ghWarm = new THREE.Color(1, 0.82, 0.55);
+  for (let i = 0; i < glassPaneDescriptors.length; i += 1) {
+    const halo = glassPaneDescriptors[i];
+    _ghPos.set(halo.x, halo.y, halo.z);
+    _ghQuat.identity();
+    // Width is the pane's body; thickness flattens the window pool so it reads
+    // as a body of glass rather than a lamp column.
+    _ghScale.set(halo.width, halo.thickness, halo.width);
+    _ghMatrix.compose(_ghPos, _ghQuat, _ghScale);
+    glassHaloMesh.setMatrixAt(i, _ghMatrix);
+    // The halo carries the pane's tint warmth as its colour: fully warm at
+    // night, neutral at day (the day halo is invisible anyway, the response
+    // curve is zero).
+    _ghWarm.setHSL(0.08, 0.75, 0.5).lerp(new THREE.Color(1, 1, 1), 1 - halo.tintWarmth);
+    glassHaloMesh.setColorAt(i, _ghWarm);
+  }
+  glassHaloMesh.instanceMatrix.needsUpdate = true;
+  if (glassHaloMesh.instanceColor) glassHaloMesh.instanceColor.needsUpdate = true;
+
+  function paintGlassHalo(phaseId, laneLit, tier = environment.quality) {
+    // The halo strength per pane is the glasshalo response curve at the phase
+    // and lane state; the painted quad's own opacity scales with it, and a
+    // dark lane pane's halo stays invisible no matter the hour.
+    const strength = glassHaloStrength(phaseId, laneLit);
+    glassHaloMaterial.opacity = strength;
+    glassHaloMesh.visible = glassHaloEnabled(tier) && strength > 0;
+  }
+  paintGlassHalo('day', false, 'full');
+
+
   // --- Warm window-light spill pools on the ground -------------------------
   const spillAnchors = windowSpawnsList.map((spawn, i) => {
     const face = windowFaces[i];
@@ -6876,6 +6999,18 @@ export function buildWorld(renderer) {
     get lampHaloOn() {
       return lampHaloEnabled(environment.quality);
     },
+    // Round 119: warm halo around each lit glass pane. `glassHalo` is the
+    // InstancedMesh so a browser check can count the panes by name; its
+    // material opacity is the glasshalo response curve at the phase and lane
+    // state, re-derived by paintGlassHalo on every phase and tier flip.
+    glassHalo: glassHaloMesh,
+    glassHaloCount: glassPaneDescriptors.length,
+    paintGlassHalo(phaseId, laneLit = environment.laneOn) {
+      paintGlassHalo(phaseId, laneLit, environment.quality);
+    },
+    get glassHaloOn() {
+      return glassHaloEnabled(environment.quality);
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -6959,6 +7094,7 @@ export function buildWorld(renderer) {
       if (environment.paintWetStreak) environment.paintWetStreak(environment.phase);
       if (environment.paintLampHalo) environment.paintLampHalo(environment.phase);
       if (environment.paintMoonHalo) environment.paintMoonHalo(environment.phase);
+      if (environment.paintGlassHalo) environment.paintGlassHalo(environment.phase, environment.laneOn);
       if (environment.paintIvy) environment.paintIvy(environment.phase);
       if (environment.paintSpray) environment.paintSpray(environment.phase);
       if (environment.paintMist) environment.paintMist(environment.phase);
@@ -7060,18 +7196,22 @@ export function buildWorld(renderer) {
       return next;
     },
     /**
-     * Writes the current hour to every registered pane.
+     * Writes the current hour to every registered pane, and to the pane halo
+     * that hangs off it.
      *
      * Called from applyPhase() (and from setQuality() when the tier flips) so
      * the glass can never disagree with the lighting it is reflecting. The
-     * numbers come from `glass.js`, which is pure and unit-tested; this only
-     * writes them to the materials. `kind` decides the curve: a window follows
-     * the hour alone, a lamp pane follows its own bulb too, so the lane post
-     * stays dark until its round is walked.
+     * numbers come from `glass.js` (the tint, pure and unit-tested) and
+     * `glasshalo.js` (the response shape); this only writes them to the
+     * materials. `kind` decides the curve: a window follows the hour alone, a
+     * lamp pane follows its own bulb too, so the lane post stays dark until its
+     * round is walked.
      *
      * `low` dims the glow to a constant because the low tier turns the point
-     * lights off; a full night bloom over a dark lamp would read as a bug.
-     * Returns what it wrote, for the evidence scripts to hold to the curve.
+     * lights off; a full night bloom over a dark lamp would read as a bug. The
+     * halo follows the same rule: the response curve already reads 0.6 at low,
+     * so the halo quad's opacity and the pane's emissive stay in step. Returns
+     * what it wrote, for the evidence scripts to hold to the curve.
      */
     applyGlass(phaseId, { laneLit = true, low = environment.quality === 'low' } = {}) {
       const applied = { window: 0, lamp: 0, lit: 0, dark: 0 };
@@ -7093,6 +7233,14 @@ export function buildWorld(renderer) {
         // environment.lamps). This pass never touches a bulb.
         applied[pane.kind] += 1;
         if (state.emissiveIntensity > 0) applied.lit += 1; else applied.dark += 1;
+      }
+      // The halo is one additive quad per pane; its strength is the same lane
+      // rule as the pane's, so a dark lane pane's halo stays dark at every
+      // hour, and its material opacity is the glasshalo response curve at the
+      // phase. `paintGlassHalo` re-derives this from the same arguments, so a
+      // tier flip in setQuality never leaves the halo behind the glass.
+      if (typeof paintGlassHalo === 'function') {
+        paintGlassHalo(phaseId, laneLit, environment.quality);
       }
       environment.glassPhase = phaseId;
       return applied;
@@ -7288,6 +7436,7 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintRoomGlow) environment.paintRoomGlow(phaseId);
   if (environment.paintWetStreak) environment.paintWetStreak(phaseId);
   if (environment.paintLampHalo) environment.paintLampHalo(phaseId);
+  if (environment.paintGlassHalo) environment.paintGlassHalo(phaseId, laneOn);
   if (environment.paintIvy) environment.paintIvy(phaseId);
   if (environment.paintSpray) environment.paintSpray(phaseId);
   if (environment.paintMist) environment.paintMist(phaseId);
