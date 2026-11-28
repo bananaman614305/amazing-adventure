@@ -52,6 +52,7 @@ import { shadowDecals, shadowOpacity, shadowsEnabled, SHADOW_DECAL_LIFT, contact
 import { spillDecals, spillStrength, spillEnabled, SPILL_DECAL_LIFT, SPILL_MIN_RADIUS, SPILL_MAX_RADIUS } from './lightspill.js';
 import { bleedDecals, bleedStrength, bleedEnabled, BLEED_WALL_LIFT, BLEED_MIN_RADIUS, BLEED_MAX_RADIUS } from './windowbleed.js';
 import { roomGlowDecals, roomGlowStrength, roomGlowEnabled, ROOMGLOW_RECESS } from './roomglow.js';
+import { roomToneFor, roomToneSpread as roomToneSpreadOf } from './roomtone.js';
 import { wetStreakDecals, wetStreakStrength, wetStreakEnabled, WETSTREAK_LIFT } from './wetstreak.js';
 import { plazaKerbSpec, lanePlinthSpec, kerbEnabled, plinthEnabled, PLAZA_KERB_MAJOR, PLAZA_KERB_TUBE, PLAZA_KERB_SEGMENTS, PLAZA_KERB_TUBE_SEGMENTS } from './kerb.js';
 import { WALL_TRIM, wallTrimLayout, wallTrimEnabled } from './walltrim.js';
@@ -4832,6 +4833,16 @@ export function buildWorld(renderer) {
   });
   const roomGlowSpawnsList = roomGlowEnabled('full') ? roomGlowDecals(roomGlowAnchors) : [];
 
+  // Round 116: one interior light colour per window. Round 114 gave every pane
+  // the same warm tone, which made a row of lit windows read as a printed
+  // pattern; real rooms differ by lamp, hearth and candle. The tone is keyed to
+  // the glow's own position, so it survives a rebuild and does not reshuffle
+  // when the window order changes. The opacity still rides the instance colour,
+  // so the two multiply as before.
+  const roomToneAnchors = roomGlowSpawnsList.map((glow) => ({ x: glow.x, y: glow.y, z: glow.z }));
+  const roomToneHexes = roomToneAnchors.map((anchor) => roomToneFor(anchor).hex);
+  const roomToneSpread = roomToneSpreadOf(roomToneAnchors);
+
   function createRoomGlowTexture(size = 64) {
     if (typeof document === 'undefined' || !document.createElement) return null;
     const canvas = document.createElement('canvas');
@@ -4893,7 +4904,7 @@ export function buildWorld(renderer) {
     _rgScale.set(glow.width, glow.height, 1);
     _rgMatrix.compose(_rgPos, _rgQuat, _rgScale);
     roomGlowMesh.setMatrixAt(i, _rgMatrix);
-    _rgColor.setHex(0xffc07a).multiplyScalar(glow.opacity);
+    _rgColor.setHex(roomToneHexes[i]).multiplyScalar(glow.opacity);
     roomGlowMesh.setColorAt(i, _rgColor);
   }
   roomGlowMesh.instanceMatrix.needsUpdate = true;
@@ -6681,6 +6692,11 @@ export function buildWorld(renderer) {
     get roomGlowOn() {
       return roomGlowEnabled(environment.quality);
     },
+    // Round 116: the interior light colour of each window, and how much variety
+    // that colour set actually has. Read-only: the browser check asserts a
+    // village of windows does not glow in one identical tone.
+    roomTones: roomToneHexes.slice(),
+    roomToneSpread: { count: roomToneSpread.count, distinct: roomToneSpread.distinct },
     // Round 115: wet-pavement reflection streaks under plaza lamps.
     wetStreak: wetStreakMesh,
     wetStreakCount: wetStreakSpawnsList.length,
