@@ -51,6 +51,7 @@ import { mossSpawns, mossDarkness, mossGlowLevel, mossEnabled,
 import { shadowDecals, shadowOpacity, shadowsEnabled, SHADOW_DECAL_LIFT, contactShadowYaw } from './contactshadows.js';
 import { spillDecals, spillStrength, spillEnabled, SPILL_DECAL_LIFT, SPILL_MIN_RADIUS, SPILL_MAX_RADIUS } from './lightspill.js';
 import { bleedDecals, bleedStrength, bleedEnabled, BLEED_WALL_LIFT, BLEED_MIN_RADIUS, BLEED_MAX_RADIUS } from './windowbleed.js';
+import { roomGlowDecals, roomGlowStrength, roomGlowEnabled, ROOMGLOW_RECESS } from './roomglow.js';
 import { plazaKerbSpec, lanePlinthSpec, kerbEnabled, plinthEnabled, PLAZA_KERB_MAJOR, PLAZA_KERB_TUBE, PLAZA_KERB_SEGMENTS, PLAZA_KERB_TUBE_SEGMENTS } from './kerb.js';
 import { WALL_TRIM, wallTrimLayout, wallTrimEnabled } from './walltrim.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
@@ -4818,6 +4819,93 @@ export function buildWorld(renderer) {
   }
   paintBleed('day', 0, 'full');
 
+  // --- Warm interior glow behind the panes ---------------------------------
+  // A soft warm rectangle sitting just behind each lit pane, so a window reads
+  // as a lit room seen through glass rather than a glowing sticker on stone.
+  // One instanced quad per pane, slightly larger and slightly recessed, soft
+  // warm gradient, normal blending so it shows through the glass. Per-frame
+  // cost is the material opacity write. Positions follow the window schedule.
+  const roomGlowAnchors = windowSpawnsList.map((spawn, i) => {
+    const face = windowFaces[i];
+    return { x: face.px, y: spawn.y, z: face.pz, warmth: spawn.warmth, size: 1.0 };
+  });
+  const roomGlowSpawnsList = roomGlowEnabled('full') ? roomGlowDecals(roomGlowAnchors) : [];
+
+  function createRoomGlowTexture(size = 64) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(255,210,140,0.85)');
+    g.addColorStop(0.4, 'rgba(255,190,110,0.5)');
+    g.addColorStop(0.75, 'rgba(255,170,90,0.18)');
+    g.addColorStop(1, 'rgba(255,150,70,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  const roomGlowGeometry = new THREE.PlaneGeometry(1, 1);
+  const roomGlowMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: createRoomGlowTexture(),
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: true
+  });
+  roomGlowMaterial.name = 'RoomGlow';
+  const roomGlowMesh = new THREE.InstancedMesh(
+    roomGlowGeometry, roomGlowMaterial, Math.max(1, roomGlowSpawnsList.length)
+  );
+  roomGlowMesh.name = 'room-glow';
+  roomGlowMesh.count = roomGlowSpawnsList.length;
+  roomGlowMesh.frustumCulled = false;
+  roomGlowMesh.renderOrder = -1;
+  scene.add(roomGlowMesh);
+
+  const _rgMatrix = new THREE.Matrix4();
+  const _rgPos = new THREE.Vector3();
+  const _rgScale = new THREE.Vector3();
+  const _rgQuat = new THREE.Quaternion();
+  const _rgUp = new THREE.Vector3(0, 1, 0);
+  const _rgColor = new THREE.Color(0xffc07a);
+  for (let i = 0; i < roomGlowSpawnsList.length; i += 1) {
+    const glow = roomGlowSpawnsList[i];
+    const face = faceForWindow(glow.x, glow.z);
+    _rgQuat.setFromAxisAngle(_rgUp, Math.atan2(face.nx, face.nz));
+    _rgPos.set(
+      glow.x - face.nx * ROOMGLOW_RECESS,
+      glow.y,
+      glow.z - face.nz * ROOMGLOW_RECESS
+    );
+    _rgScale.set(glow.width, glow.height, 1);
+    _rgMatrix.compose(_rgPos, _rgQuat, _rgScale);
+    roomGlowMesh.setMatrixAt(i, _rgMatrix);
+    _rgColor.setHex(0xffc07a).multiplyScalar(glow.opacity);
+    roomGlowMesh.setColorAt(i, _rgColor);
+  }
+  roomGlowMesh.instanceMatrix.needsUpdate = true;
+  if (roomGlowMesh.instanceColor) roomGlowMesh.instanceColor.needsUpdate = true;
+  roomGlowMaterial.vertexColors = true;
+
+  function paintRoomGlow(phaseId, night, tier = environment.quality) {
+    const coarse = (phaseId === 'dusk' ? 0.18 : phaseId === 'night' ? 0.62 : 0);
+    const n = Number.isFinite(night) ? Math.min(1, Math.max(0, night)) : coarse;
+    const strength = roomGlowStrength(phaseId, n);
+    roomGlowMaterial.opacity = strength;
+    roomGlowMesh.visible = roomGlowSpawnsList.length > 0 && roomGlowEnabled(tier) && strength > 0;
+  }
+  paintRoomGlow('day', 0, 'full');
+
+
   // --- Warm window-light spill pools on the ground -------------------------
   const spillAnchors = windowSpawnsList.map((spawn, i) => {
     const face = windowFaces[i];
@@ -6498,6 +6586,15 @@ export function buildWorld(renderer) {
     get windowBleedOn() {
       return bleedEnabled(environment.quality);
     },
+    // Round 114: warm interior glow behind lit panes.
+    roomGlow: roomGlowMesh,
+    roomGlowCount: roomGlowSpawnsList.length,
+    paintRoomGlow(phaseId, night) {
+      paintRoomGlow(phaseId, night, environment.quality);
+    },
+    get roomGlowOn() {
+      return roomGlowEnabled(environment.quality);
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -6577,6 +6674,7 @@ export function buildWorld(renderer) {
       if (environment.paintWindows) environment.paintWindows(environment.phase);
       if (environment.paintWindowSpill) environment.paintWindowSpill(environment.phase);
       if (environment.paintWindowBleed) environment.paintWindowBleed(environment.phase);
+      if (environment.paintRoomGlow) environment.paintRoomGlow(environment.phase);
       if (environment.paintIvy) environment.paintIvy(environment.phase);
       if (environment.paintSpray) environment.paintSpray(environment.phase);
       if (environment.paintMist) environment.paintMist(environment.phase);
