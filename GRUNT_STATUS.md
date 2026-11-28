@@ -12,21 +12,31 @@
 
 ## Current task
 
-**Rounds 113 and 114 closed out.** Round 113 (warm light bleed on walls) and
-round 114 (warm interior glow behind panes) are complete and verified: pure
-modules `src/windowbleed.js` and `src/roomglow.js`, integration in `src/world.js`
-(`window-bleed` and `room-glow` InstancedMeshes), wired through `src/main.js`
-and the environment handle, browser checks r113 and r114. Self-review caught a
-real bug in round 113 (`bleedMaterial` missing `vertexColors = true`) fixed
-before release. Unit suite 1607/1607. Desktop browser 393/393 (all r113 + r114
-checks green). Mobile 184/184 (iPhone 13 portrait 9.5fps, Pixel 7 1.4, iPhone SE
-2.1, iPhone 13 landscape 1.4; no console errors). Dist rebuilt at `37b234f`.
-publish.json refreshed at `37b234f`. Release channel still `blocked_infrastructure`,
-PR-only fallback, no release ids pending.
+**Round 115 done (wet-pavement reflection streaks).** Pure module
+`src/wetstreak.js` (seeded per-lamp streak: position/length/width/angle/opacity,
+strength by phase, dropped on `low`), unit tests `tests/wetstreak.test.mjs` (12
+cases), integration in `src/world.js` as the `wet-streak` InstancedMesh
+(additive, `vertexColors = true`, sRGB gradient texture, `WETSTREAK_LIFT`),
+environment handle (`wetStreak`, `wetStreakCount`, `paintWetStreak`,
+`wetStreakOn`), wiring in `src/main.js` at both syncPhase and the per-frame
+update, and — new this round — all three paint calls from rounds 113/114/115
+(`paintWindowBleed`, `paintRoomGlow`, `paintWetStreak`) now also run inside
+`applyPhase()`, closing a gap where a phase change relied only on main.js.
+`paintWetStreak` is re-derived in `setQuality`. Self-review clean (vertexColors
+set before instance colour writes; texture `colorSpace` sRGB).
+
+Checks: unit 1619/1619; desktop browser 396/396 exit 0 (three new r115 checks
+green: mesh/material/count, night strength vs zero by day, low-tier drop).
+Mobile suite running this cycle as background task `brw64q24f` — result to be
+recorded next checkpoint. Dist rebuilt and committed at `913d5d0`; browser
+checks committed at `609ee92`.
 
 ## Next steps
-1. Choose round 115: next highest-impact visual depth. Candidates: wet-pavement
-   reflection streaks at night (lamp light streaking on damp cobble), or
-   interior room glow colour variation per window.
-2. Keep the 101-114 release batched for `grunt-release` once the host commit cap
-   is lifted; until then keep `publish.json` current per round.
+1. Round 116: interior room-glow colour variation per window (so lit rooms do
+   not all glow the same warm tone), or real glass response on the largest flat
+   surfaces (HouseGlass 4.63 m², LampGlass 4.5 m²). Pick whichever reads best
+   against the r113-115 night look.
+2. Record the mobile result for round 115 when `brw64q24f` finishes, then
+   refresh `/worker/state/outbox/publish.json` at the clean exact HEAD.
+3. Keep rounds 101-115 batched for `grunt-release` once the host commit cap is
+   lifted; keep `publish.json` current per round until then.
