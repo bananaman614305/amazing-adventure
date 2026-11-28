@@ -54,6 +54,7 @@ import { bleedDecals, bleedStrength, bleedEnabled, BLEED_WALL_LIFT, BLEED_MIN_RA
 import { roomGlowDecals, roomGlowStrength, roomGlowEnabled, ROOMGLOW_RECESS } from './roomglow.js';
 import { roomToneFor, roomToneSpread as roomToneSpreadOf } from './roomtone.js';
 import { wetStreakDecals, wetStreakStrength, wetStreakEnabled, WETSTREAK_LIFT } from './wetstreak.js';
+import { lampHalos, lampHaloStrength, lampHaloEnabled, lampHaloSpread as lampHaloSpreadOf } from './lamphalo.js';
 import { plazaKerbSpec, lanePlinthSpec, kerbEnabled, plinthEnabled, PLAZA_KERB_MAJOR, PLAZA_KERB_TUBE, PLAZA_KERB_SEGMENTS, PLAZA_KERB_TUBE_SEGMENTS } from './kerb.js';
 import { WALL_TRIM, wallTrimLayout, wallTrimEnabled } from './walltrim.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
@@ -5003,6 +5004,94 @@ export function buildWorld(renderer) {
 
 
 
+  // --- Atmospheric halo around the plaza lamp heads -------------------------
+  // A soft additive quad per lit lamp head, wider than tall, so a lamp reads as
+  // light scattering in the air rather than a hard emissive sphere. Position
+  // follows the modelled bulb (post-upgrade coords) so the halo stays on the
+  // head after the asset swap. Per-frame cost is the material opacity write.
+  // The halo wraps the modelled bulb, whose final coords are the stand-in coords
+  // plus the lantern offset (see loadLampAsset). Anchoring to those coords keeps
+  // the halo on the head after the asset swap rather than on the hidden sphere.
+  const lampHaloAnchors = lamps.map((lamp) => ({
+    x: lamp.light.position.x + LAMP_LANTERN_OFFSET,
+    y: LAMP_LANTERN_Y,
+    z: lamp.light.position.z,
+    warmth: 0.9
+  }));
+  const lampHaloSpawnsList = lampHaloEnabled('full') ? lampHalos(lampHaloAnchors) : [];
+  const lampHaloSpread = lampHaloSpreadOf(lampHaloAnchors);
+
+  function createLampHaloTexture(size = 64) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(255,230,180,0.9)');
+    g.addColorStop(0.35, 'rgba(255,200,140,0.5)');
+    g.addColorStop(0.7, 'rgba(255,180,110,0.18)');
+    g.addColorStop(1, 'rgba(255,160,90,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  const lampHaloGeometry = new THREE.PlaneGeometry(1, 1);
+  const lampHaloMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: createLampHaloTexture(),
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: true,
+    blending: THREE.AdditiveBlending
+  });
+  lampHaloMaterial.name = 'LampHalo';
+  lampHaloMaterial.vertexColors = true;
+  const lampHaloMesh = new THREE.InstancedMesh(
+    lampHaloGeometry, lampHaloMaterial, Math.max(1, lampHaloSpawnsList.length)
+  );
+  lampHaloMesh.name = 'lamp-halo';
+  lampHaloMesh.count = lampHaloSpawnsList.length;
+  lampHaloMesh.frustumCulled = false;
+  lampHaloMesh.renderOrder = 2;
+  scene.add(lampHaloMesh);
+
+  const _lhMatrix = new THREE.Matrix4();
+  const _lhPos = new THREE.Vector3();
+  const _lhScale = new THREE.Vector3();
+  const _lhQuat = new THREE.Quaternion();
+  const _lhUp = new THREE.Vector3(0, 1, 0);
+  const _lhColor = new THREE.Color(0xffc07a);
+  for (let i = 0; i < lampHaloSpawnsList.length; i += 1) {
+    const halo = lampHaloSpawnsList[i];
+    _lhPos.set(halo.x, halo.y, halo.z);
+    _lhQuat.identity();
+    _lhScale.set(halo.radius, halo.radius * halo.stretch, halo.radius);
+    _lhMatrix.compose(_lhPos, _lhQuat, _lhScale);
+    lampHaloMesh.setMatrixAt(i, _lhMatrix);
+    _lhColor.setHex(halo.tint).multiplyScalar(halo.opacity);
+    lampHaloMesh.setColorAt(i, _lhColor);
+  }
+  lampHaloMesh.instanceMatrix.needsUpdate = true;
+  if (lampHaloMesh.instanceColor) lampHaloMesh.instanceColor.needsUpdate = true;
+
+  function paintLampHalo(phaseId, night, tier = environment.quality) {
+    const coarse = (phaseId === 'dusk' ? 0.18 : phaseId === 'night' ? 0.62 : 0);
+    const n = Number.isFinite(night) ? Math.min(1, Math.max(0, night)) : coarse;
+    const strength = lampHaloStrength(phaseId, n);
+    lampHaloMaterial.opacity = strength;
+    lampHaloMesh.visible = lampHaloSpawnsList.length > 0 && lampHaloEnabled(tier) && strength > 0;
+  }
+  paintLampHalo('day', 0, 'full');
+
+
   // --- Warm window-light spill pools on the ground -------------------------
   const spillAnchors = windowSpawnsList.map((spawn, i) => {
     const face = windowFaces[i];
@@ -6706,6 +6795,16 @@ export function buildWorld(renderer) {
     get wetStreakOn() {
       return wetStreakEnabled(environment.quality);
     },
+    // Round 117: atmospheric halo around the plaza lamp heads.
+    lampHalo: lampHaloMesh,
+    lampHaloCount: lampHaloSpawnsList.length,
+    lampHaloSpread: { count: lampHaloSpread.count, distinct: lampHaloSpread.distinct },
+    paintLampHalo(phaseId, night) {
+      paintLampHalo(phaseId, night, environment.quality);
+    },
+    get lampHaloOn() {
+      return lampHaloEnabled(environment.quality);
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -6787,6 +6886,7 @@ export function buildWorld(renderer) {
       if (environment.paintWindowBleed) environment.paintWindowBleed(environment.phase);
       if (environment.paintRoomGlow) environment.paintRoomGlow(environment.phase);
       if (environment.paintWetStreak) environment.paintWetStreak(environment.phase);
+      if (environment.paintLampHalo) environment.paintLampHalo(environment.phase);
       if (environment.paintIvy) environment.paintIvy(environment.phase);
       if (environment.paintSpray) environment.paintSpray(environment.phase);
       if (environment.paintMist) environment.paintMist(environment.phase);
@@ -7112,6 +7212,7 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintWindowBleed) environment.paintWindowBleed(phaseId);
   if (environment.paintRoomGlow) environment.paintRoomGlow(phaseId);
   if (environment.paintWetStreak) environment.paintWetStreak(phaseId);
+  if (environment.paintLampHalo) environment.paintLampHalo(phaseId);
   if (environment.paintIvy) environment.paintIvy(phaseId);
   if (environment.paintSpray) environment.paintSpray(phaseId);
   if (environment.paintMist) environment.paintMist(phaseId);

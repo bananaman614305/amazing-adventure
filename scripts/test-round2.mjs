@@ -5606,6 +5606,79 @@ try {
     }));
   await capture(page, 'round116-roomtone.png');
 
+  // --- r117: atmospheric halo around the plaza lamp heads ------------------
+  const r117 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(120); // night
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const halo = byName('lamp-halo');
+    const haloInfo = halo ? {
+      count: halo.count,
+      visible: halo.visible,
+      materialName: halo.material.name || null,
+      blending: halo.material.blending
+    } : null;
+    const spread = env.lampHaloSpread ? {
+      count: env.lampHaloSpread.count,
+      distinct: env.lampHaloSpread.distinct
+    } : null;
+    const lampHaloCount = env.lampHaloCount === undefined ? null : env.lampHaloCount;
+    api.setClock(30); // day
+    const haloDayVisible = halo ? halo.visible : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = halo ? halo.visible : null;
+    const lowOn = env.lampHaloOn === undefined ? null : env.lampHaloOn;
+    api.quality.set('full');
+    const fullVisible = halo ? halo.visible : null;
+    const fullCount = env.lampHaloCount === undefined ? null : env.lampHaloCount;
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      halo: haloInfo,
+      spread: spread,
+      lampHaloCount: lampHaloCount,
+      haloDay: { visible: haloDayVisible },
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible, count: fullCount }
+    };
+  });
+  checks.check('lamp-halo mesh exists around the plaza lamps',
+    r117.halo !== null && r117.halo.count > 0 && r117.halo.materialName === 'LampHalo' &&
+      r117.lampHaloCount !== null && r117.lampHaloCount === r117.halo.count,
+    JSON.stringify({
+      count: r117.halo ? r117.halo.count : null,
+      envCount: r117.lampHaloCount,
+      materialName: r117.halo ? r117.halo.materialName : null
+    }));
+  checks.check('lamp-halo varies tint between lamps',
+    r117.spread !== null && r117.spread.count >= 3 && r117.spread.distinct >= 2,
+    JSON.stringify({
+      count: r117.spread ? r117.spread.count : null,
+      distinct: r117.spread ? r117.spread.distinct : null
+    }));
+  checks.check('lamp-halo strength follows the night',
+    r117.haloDay.visible === false && r117.halo !== null && r117.halo.visible === true,
+    JSON.stringify({
+      dayVisible: r117.haloDay ? r117.haloDay.visible : null,
+      nightVisible: r117.halo ? r117.halo.visible : null
+    }));
+  checks.check('lamp-halo drops on the low tier',
+    r117.low.visible === false && r117.low.on === false &&
+      r117.full.visible === true,
+    JSON.stringify({
+      low: { visible: r117.low.visible, on: r117.low.on },
+      full: { visible: r117.full.visible }
+    }));
+  await capture(page, 'round117-lamphalo.png');
+
 
 
   // --- Environment maps: the idle scheduler must build on its own ----------

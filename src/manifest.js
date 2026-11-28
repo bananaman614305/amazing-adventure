@@ -72,6 +72,7 @@ export const REQUIRED_FILES = [
   'src/roomglow.js',
   'src/roomtone.js',
   'src/wetstreak.js',
+  'src/lamphalo.js',
   'src/kerb.js',
   'src/paving.js',
   'src/ivy.js',
