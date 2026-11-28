@@ -4862,6 +4862,9 @@ export function buildWorld(renderer) {
     fog: true
   });
   roomGlowMaterial.name = 'RoomGlow';
+  // Instance colours carry each glow's own opacity, so the shader must read
+  // them; without vertexColors every glow would render at full brightness.
+  roomGlowMaterial.vertexColors = true;
   const roomGlowMesh = new THREE.InstancedMesh(
     roomGlowGeometry, roomGlowMaterial, Math.max(1, roomGlowSpawnsList.length)
   );
@@ -4894,7 +4897,6 @@ export function buildWorld(renderer) {
   }
   roomGlowMesh.instanceMatrix.needsUpdate = true;
   if (roomGlowMesh.instanceColor) roomGlowMesh.instanceColor.needsUpdate = true;
-  roomGlowMaterial.vertexColors = true;
 
   function paintRoomGlow(phaseId, night, tier = environment.quality) {
     const coarse = (phaseId === 'dusk' ? 0.18 : phaseId === 'night' ? 0.62 : 0);
