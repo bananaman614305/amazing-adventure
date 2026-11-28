@@ -12,43 +12,36 @@
 
 ## Current task
 
-**Round 119 in flight (warm halo around each lit glass pane).** Pure module
-`src/glasshalo.js` (seed 0x4e7ab21d), 12 unit cases. Integration in
-`src/world.js`: two additive InstancedMesh layers — `glass-halo` (plaza/window
-panes) and `glass-halo-lane` (lane post's pane), `GlassHalo` material, sRGB
-radial gradient, vertex colors, renderOrder 2. Environment handle
-(`glassHalo`, `glassHaloLane`, counts, `paintGlassHalo`, `glassHaloOn`);
-setQuality paint list re-paints; low tier drops layer.
+**Round 119 complete (warm halo around each lit glass pane).** Pure module
+`src/glasshalo.js` (seed 0x4e7ab21d), 12 unit cases. `src/world.js` holds two
+additive InstancedMesh layers — `glass-halo` (six plaza/window panes) and
+`glass-halo-lane` (the lane post's pane) — `GlassHalo` material, sRGB radial
+gradient, vertex colors, renderOrder 2. Environment handle exposes
+`glassHalo`, `glassHaloLane`, counts, `paintGlassHalo`, `glassHaloOn`;
+setQuality repaints; the low tier drops the layer.
 
-Two bugs diagnosed in the desktop suite (run 5, 375/410, 36 FAILs):
-(1) halo descriptors were built at world-build time while `glassPanes` was
-still empty → counts stayed 0 forever. Fixed: descriptors are now built
-lazily in `dressGlassHalos()`, called from `reportGlass()` once the panes
-are final; meshes created with capacity 16/4 and counts set at dress time;
-`glassHaloCount`/`glassHaloLaneCount` made getters so they track the rebuilt
-arrays. Unit suite green (1679/1680, the lone fail is the stale dist digest).
+Two bugs found and fixed in the desktop suite:
+1. Halo descriptors were built at world-build time while `glassPanes` was
+   still empty → counts stuck at 0. Descriptors are now built lazily in
+   `dressGlassHalos()`, called from `reportGlass()` when the panes are final;
+   meshes have capacity 16/4 and counts are set at dress time; counts are
+   getters so they track the rebuilt arrays.
+2. The round-119 lane-pane anchor used a non-existent `lamp` variable inside
+   `upgradeLaneLamp()` (that function's local is `aim`), throwing a
+   ReferenceError inside the `Promise.all` and rejecting the entire
+   loadAssets chain. The anchor now uses `aim.lanternX`/`aim.lanternZ`.
+   A focused headless probe showed zero console errors and a fully dressed
+   world (propWood textured, laneLamp model, glass 7 panes / 2 windows /
+   5 lamps / 1 lane pane, halo counts 7/1).
 
-Bug B still open: the sequential `.then` chain after `Promise.all` in
-`loadAssets()` aborts, so propWood/rope/housing/sackTie/noticeFace/water/
-boardPaper/terrace stay flat, laneLamp stays 'stand-in', and glassDetail is
-null in the browser. The round-119 diff touched no asset-chain code, so the
-abort must come from something the halo change feeds into the chain (most
-likely `reportGlass()` → `environment.applyGlass()` → `paintGlassHalo()`,
-which now runs against arrays that were empty before). Need to capture
-console errors and bisect.
-
-Checks so far: unit 1679/1680 (preview digest stale). Desktop rerun pending
-against the Bug-A fix; mobile suite after.
+Checks: desktop **410/410 checks passed**, mobile **184/184 checks passed**
+with no console errors at clean HEAD 52f0d42. Unit 1679/1680 before the dist
+rebuild; the lone failure was the expected stale-digest assertion, and the
+rebuilt dist is committed. Publication fallback refreshed at 52f0d42.
 
 ## Next steps
-1. Confirm desktop suite (expect 410/410 with 4 new r119 checks) and then
-   run the mobile suite (one browser suite at a time); record both in
-   GRUNT_STATUS.md.
-2. Refresh `/worker/state/outbox/publish.json` at the clean exact HEAD
-   aa6d0f2, then commit the GRUNT_STATUS.md checkpoint.
-3. Round 120: pick the next highest-impact graphics beat against the r113-119
-   night look — candidates: ground-level fog/mist layering, per-lamp
-   shadow/occlusion, or water surface motion. Choose whichever reads best in
-   the saved screenshots.
-4. Keep rounds 101-118 batched for `grunt-release` once the host commit cap is
-   lifted; keep `publish.json` current per round until then.
+1. Round 120: pick the next graphics beat (ground fog/mist layering, lamp
+   shadow/occlusion, or water surface motion) and implement with the usual
+   pure-module → unit → integration → manifest → browser → dist pattern.
+2. Keep rounds 101-119 batched for `grunt-release` while the host commit cap
+   blocks it; keep `publish.json` current per round.
