@@ -5424,6 +5424,57 @@ try {
     JSON.stringify({ low: r113.low, full: r113.full }));
   await capture(page, 'round113-bleed.png');
 
+  // --- r114: warm interior glow behind lit panes ---------------------------
+  const r114 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(120); // night
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const glow = byName('room-glow');
+    const glowInfo = glow ? {
+      count: glow.count,
+      visible: glow.visible,
+      opacity: Number(glow.material.opacity),
+      materialName: glow.material.name || null
+    } : null;
+    api.setClock(30); // day
+    const glowDayVisible = glow ? glow.visible : null;
+    const glowDayOpacity = glow ? Number(glow.material.opacity) : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = glow ? glow.visible : null;
+    const lowOn = env.roomGlowOn === undefined ? null : env.roomGlowOn;
+    api.quality.set('full');
+    const fullVisible = glow ? glow.visible : null;
+    const fullCount = env.roomGlowCount === undefined ? null : env.roomGlowCount;
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      glow: glowInfo,
+      glowDay: { visible: glowDayVisible, opacity: glowDayOpacity },
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible, count: fullCount }
+    };
+  });
+  checks.check('room-glow halos exist behind the lit panes',
+    r114.glow && r114.glow.count > 0 && r114.glow.materialName === 'RoomGlow' &&
+      r114.full.visible === true && r114.full.count > 0,
+    JSON.stringify(r114));
+  checks.check('room-glow strength follows the night',
+    r114.glow.opacity > 0 && r114.glow.visible === true &&
+      r114.glowDay.visible === false && r114.glowDay.opacity === 0,
+    JSON.stringify({ glow: r114.glow, day: r114.glowDay }));
+  checks.check('room-glow drops on the low tier',
+    r114.low.visible === false && r114.low.on === false && r114.full.visible === true,
+    JSON.stringify({ low: r114.low, full: r114.full }));
+  await capture(page, 'round114-roomglow.png');
+
 
 
   // --- Environment maps: the idle scheduler must build on its own ----------
