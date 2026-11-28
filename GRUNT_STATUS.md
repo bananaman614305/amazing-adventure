@@ -12,27 +12,30 @@
 
 ## Current task
 
-**Round 117 done (atmospheric lamp halos).** Pure module `src/lamphalo.js`
-(seed 0x2e7c4a11: per-lamp halo descriptor with radius/opacity/stretch/tint,
-lampHaloStrength by phase (day 0, dusk 0.45x night fraction, night 1x),
-lampHaloEnabled drops on low, positional hash for tint/squash, 20 unit
-cases), integration in `src/world.js` as the `lamp-halo` InstancedMesh
-(additive, vertexColors, sRGB gradient texture), environment handle
-(`lampHalo`, `lampHaloCount`, `lampHaloSpread`, `paintLampHalo`,
-`lampHaloOn`), wiring in `src/main.js` syncPhase + per-frame update, and
-paint call inside `applyPhase` and `setQuality`. Manifest + dist rebuilt.
+**Round 118 done (atmospheric moon halo).** Pure module `src/moonhalo.js`
+(seed 0x7a3f1c9b: per-moon halo descriptor with radius/opacity/tint, positional
+hash for tint, `moonHaloStrength` by phase (day 0, dusk DUSK_BASE x night
+fraction, night 1x, clamped), `moonHaloEnabled` drops on low), 14 unit cases
+(totality guards + determinism). Integration in `src/world.js` as a single
+additive `sky-moon-halo` PlaneGeometry quad hung off the `sky-moon-group`
+(sRGB radial gradient texture, fog off, DoubleSide, additive blending,
+renderOrder 2, radius-driven uniform scale), environment handle
+(`moonHalo`, `paintMoonHalo`, `moonHaloOn`), wiring in `src/main.js` syncPhase +
+per-frame update, paint calls inside `applyPhase` and `setQuality`. Manifest +
+dist rebuilt.
 
-Checks: unit 1654/1654; desktop browser 403/403 exit 0 (four new r117
-checks: mesh/material/count, tint variety, night strength vs day, low-tier
-drop). Mobile suite running this cycle at clean head 73b4d04
-(background task); result to be recorded next checkpoint.
+Checks: unit 1668/1668; desktop browser 406/406 exit 0 (three new r118
+checks: mesh/material/blending/haloOn, strength follows night, low-tier drop).
+Mobile suite not yet rerun this round (round 117 mobile result still pending).
 
 ## Next steps
-1. Record the mobile result for round 117 when the background suite finishes,
-   then refresh `/worker/state/outbox/publish.json` at the clean exact HEAD.
-2. Round 118: pick the next highest-impact graphics beat against the r113-117
+1. Refresh `/worker/state/outbox/publish.json` at the clean exact HEAD 34eff9f,
+   then commit the GRUNT_STATUS.md checkpoint.
+2. Record the mobile result for round 118 when the mobile suite finishes (one
+   browser suite at a time), then prepare the release round.
+3. Round 119: pick the next highest-impact graphics beat against the r113-118
    night look — candidates: real glass response polish (HouseGlass 4.63 m2,
-   LampGlass 4.5 m2), or ground-level fog/mist layering, or per-lamp
+   LampGlass 4.5 m2), ground-level fog/mist layering, or per-lamp
    shadow/occlusion. Choose whichever reads best in the saved screenshots.
-3. Keep rounds 101-117 batched for `grunt-release` once the host commit cap is
+4. Keep rounds 101-118 batched for `grunt-release` once the host commit cap is
    lifted; keep `publish.json` current per round until then.
