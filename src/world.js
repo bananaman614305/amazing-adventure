@@ -5599,9 +5599,34 @@ export function buildWorld(renderer) {
   const hazeSpawnsList = hazeEnabled('full')
     ? hazeSpawns({ count: HAZE_COUNT })
     : [];
+
+  // A soft radial falloff for the haze quads, so they read as soft atmosphere
+  // instead of hard-edged sheets. Same canvas-gradient helper as the smoke and
+  // plaza AO maps; a null canvas (no DOM) simply leaves hard edges rather than
+  // throwing.
+  function createHazeTexture(size = 64) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.5)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
   const hazeGeometry = new THREE.PlaneGeometry(1, 1);
   const hazeMaterial = new THREE.MeshBasicMaterial({
     color: 0xe8eef7, transparent: true, opacity: HAZE_MAX_OPACITY,
+    alphaMap: createHazeTexture(),
     depthWrite: false, side: THREE.DoubleSide, fog: true
   });
   hazeMaterial.name = 'GroundHaze';
@@ -5617,7 +5642,7 @@ export function buildWorld(renderer) {
     for (let i = 0; i < hazeSpawnsList.length; i += 1) {
       const spawn = hazeSpawnsList[i];
       const p = hazeDrift(spawn, time);
-      _gPos.set(p.x, spawn.y, p.z);
+      _gPos.set(p.x, p.y, p.z);
       _gScale.setScalar(spawn.size);
       _gMatrix.compose(_gPos, _gQuat, _gScale);
       hazeMesh.setMatrixAt(i, _gMatrix);
