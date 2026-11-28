@@ -4767,6 +4767,10 @@ export function buildWorld(renderer) {
     blending: THREE.AdditiveBlending
   });
   bleedMaterial.name = 'WindowBleed';
+  // Instance colours carry each halo's own opacity, so the shader must read
+  // them; without vertexColors the per-halo strength would be ignored (and every
+  // halo would render at the same full brightness, white instead of warm).
+  bleedMaterial.vertexColors = true;
   const bleedMesh = new THREE.InstancedMesh(
     bleedGeometry, bleedMaterial, Math.max(1, bleedSpawnsList.length)
   );
@@ -4782,8 +4786,6 @@ export function buildWorld(renderer) {
   const _blQuat = new THREE.Quaternion();
   const _blUp = new THREE.Vector3(0, 1, 0);
   const _blColor = new THREE.Color(0xffc07a);
-  const _blFlat = new THREE.Quaternion();
-  _blFlat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0);
   for (let i = 0; i < bleedSpawnsList.length; i += 1) {
     const halo = bleedSpawnsList[i];
     // The halo lies on the same wall face as its pane. The face normal comes
