@@ -50,6 +50,7 @@ import { mossSpawns, mossDarkness, mossGlowLevel, mossEnabled,
   MOSS_SEAM_WIDTH, MOSS_DECAL_LIFT } from './moss.js';
 import { shadowDecals, shadowOpacity, shadowsEnabled, SHADOW_DECAL_LIFT, contactShadowYaw } from './contactshadows.js';
 import { spillDecals, spillStrength, spillEnabled, SPILL_DECAL_LIFT, SPILL_MIN_RADIUS, SPILL_MAX_RADIUS } from './lightspill.js';
+import { bleedDecals, bleedStrength, bleedEnabled, BLEED_WALL_LIFT, BLEED_MIN_RADIUS, BLEED_MAX_RADIUS } from './windowbleed.js';
 import { plazaKerbSpec, lanePlinthSpec, kerbEnabled, plinthEnabled, PLAZA_KERB_MAJOR, PLAZA_KERB_TUBE, PLAZA_KERB_SEGMENTS, PLAZA_KERB_TUBE_SEGMENTS } from './kerb.js';
 import { WALL_TRIM, wallTrimLayout, wallTrimEnabled } from './walltrim.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
@@ -4722,11 +4723,100 @@ export function buildWorld(renderer) {
   }
   paintWindows('day', 0);
 
+  // --- Warm window-light bleed on the walls --------------------------------
+  // A soft warm halo on the wall around each lit pane, so a window reads as
+  // light pouring out of a room rather than a glowing sticker on stone. One
+  // instanced additive quad per pane, slightly larger than the pane and sitting
+  // a hair proud of the wall face, with a soft radial gradient; per-frame cost
+  // is the material opacity write. Positions follow the window schedule.
+  const bleedAnchors = windowSpawnsList.map((spawn, i) => {
+    const face = windowFaces[i];
+    return { x: face.px, y: spawn.y, z: face.pz, warmth: spawn.warmth, radius: 0.9 };
+  });
+  const bleedSpawnsList = bleedEnabled('full') ? bleedDecals(bleedAnchors) : [];
+
+  function createBleedTexture(size = 64) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(255,220,150,0.9)');
+    g.addColorStop(0.35, 'rgba(255,200,120,0.55)');
+    g.addColorStop(0.7, 'rgba(255,180,90,0.18)');
+    g.addColorStop(1, 'rgba(255,160,70,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  const bleedGeometry = new THREE.PlaneGeometry(1, 1);
+  const bleedMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: createBleedTexture(),
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: true,
+    blending: THREE.AdditiveBlending
+  });
+  bleedMaterial.name = 'WindowBleed';
+  const bleedMesh = new THREE.InstancedMesh(
+    bleedGeometry, bleedMaterial, Math.max(1, bleedSpawnsList.length)
+  );
+  bleedMesh.name = 'window-bleed';
+  bleedMesh.count = bleedSpawnsList.length;
+  bleedMesh.frustumCulled = false;
+  bleedMesh.renderOrder = 0;
+  scene.add(bleedMesh);
+
+  const _blMatrix = new THREE.Matrix4();
+  const _blPos = new THREE.Vector3();
+  const _blScale = new THREE.Vector3();
+  const _blQuat = new THREE.Quaternion();
+  const _blUp = new THREE.Vector3(0, 1, 0);
+  const _blColor = new THREE.Color(0xffc07a);
+  const _blFlat = new THREE.Quaternion();
+  _blFlat.setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0);
+  for (let i = 0; i < bleedSpawnsList.length; i += 1) {
+    const halo = bleedSpawnsList[i];
+    // The halo lies on the same wall face as its pane. The face normal comes
+    // from faceForWindow on the halo's (already wall-plane) coordinates, so the
+    // orientation matches the pane's: yaw atan2(nx, nz). The quad is nudged
+    // outward along the face normal by BLEED_WALL_LIFT so it beats z-fighting
+    // with the wall behind it.
+    const face = faceForWindow(halo.x, halo.z);
+    _blQuat.setFromAxisAngle(_blUp, Math.atan2(face.nx, face.nz));
+    _blPos.set(
+      halo.x + face.nx * BLEED_WALL_LIFT,
+      halo.y,
+      halo.z + face.nz * BLEED_WALL_LIFT
+    );
+    _blScale.set(halo.radius * 2, halo.radius * 2, 1);
+    _blMatrix.compose(_blPos, _blQuat, _blScale);
+    bleedMesh.setMatrixAt(i, _blMatrix);
+    _blColor.setHex(0xffc07a).multiplyScalar(halo.opacity);
+    bleedMesh.setColorAt(i, _blColor);
+  }
+  bleedMesh.instanceMatrix.needsUpdate = true;
+  if (bleedMesh.instanceColor) bleedMesh.instanceColor.needsUpdate = true;
+
+  function paintBleed(phaseId, night, tier = environment.quality) {
+    const coarse = (phaseId === 'dusk' ? 0.18 : phaseId === 'night' ? 0.62 : 0);
+    const n = Number.isFinite(night) ? Math.min(1, Math.max(0, night)) : coarse;
+    const strength = bleedStrength(phaseId, n);
+    bleedMaterial.opacity = strength;
+    bleedMesh.visible = bleedSpawnsList.length > 0 && bleedEnabled(tier) && strength > 0;
+  }
+  paintBleed('day', 0, 'full');
+
   // --- Warm window-light spill pools on the ground -------------------------
-  // One soft warm pool under every lit pane, on the ground under the wall face
-  // it sits on. The positions come from the window schedule projected onto the
-  // nearest inner face (same projection as the panes), so a pool and its pane
-  // stay in lockstep. The strength follows the night through spillStrength().
   const spillAnchors = windowSpawnsList.map((spawn, i) => {
     const face = windowFaces[i];
     return { x: face.px, z: face.pz, warmth: spawn.warmth };
@@ -6397,6 +6487,15 @@ export function buildWorld(renderer) {
     get windowSpillOn() {
       return spillEnabled(environment.quality);
     },
+    // Round 113: warm light bleed on the walls around lit panes.
+    windowBleed: bleedMesh,
+    windowBleedCount: bleedSpawnsList.length,
+    paintWindowBleed(phaseId, night) {
+      paintBleed(phaseId, night, environment.quality);
+    },
+    get windowBleedOn() {
+      return bleedEnabled(environment.quality);
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -6475,6 +6574,7 @@ export function buildWorld(renderer) {
       if (environment.paintMotes) environment.paintMotes(environment.phase);
       if (environment.paintWindows) environment.paintWindows(environment.phase);
       if (environment.paintWindowSpill) environment.paintWindowSpill(environment.phase);
+      if (environment.paintWindowBleed) environment.paintWindowBleed(environment.phase);
       if (environment.paintIvy) environment.paintIvy(environment.phase);
       if (environment.paintSpray) environment.paintSpray(environment.phase);
       if (environment.paintMist) environment.paintMist(environment.phase);

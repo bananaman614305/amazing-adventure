@@ -68,6 +68,7 @@ export const REQUIRED_FILES = [
   'src/walltrim.js',
   'src/contactshadows.js',
   'src/lightspill.js',
+  'src/windowbleed.js',
   'src/kerb.js',
   'src/paving.js',
   'src/ivy.js',
