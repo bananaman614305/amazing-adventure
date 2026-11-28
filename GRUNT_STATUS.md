@@ -12,36 +12,28 @@
 
 ## Current task
 
-**Round 119 complete (warm halo around each lit glass pane).** Pure module
-`src/glasshalo.js` (seed 0x4e7ab21d), 12 unit cases. `src/world.js` holds two
-additive InstancedMesh layers — `glass-halo` (six plaza/window panes) and
-`glass-halo-lane` (the lane post's pane) — `GlassHalo` material, sRGB radial
-gradient, vertex colors, renderOrder 2. Environment handle exposes
-`glassHalo`, `glassHaloLane`, counts, `paintGlassHalo`, `glassHaloOn`;
-setQuality repaints; the low tier drops the layer.
+**Round 120 implemented, browser verification in flight (mid-level atmospheric
+haze).** Pure module `src/haze.js` (seed 0x3c8e1f, 18 descriptors) owns seeded
+area-uniform spawn positions, bounded two-sine horizontal drift plus a small
+vertical bob, phase opacity (day 0.25, dusk 0.85, night 0.5) and the low-tier
+disable. `tests/haze.test.mjs` has 24 unit cases. `src/world.js` builds one
+`InstancedMesh` named `ground-haze` with a soft `MeshBasicMaterial` at y=1.2–4
+and sizes 6–14; `paintHaze()` follows phase and tier, `updateHaze(dt)` advances
+the drift; `src/main.js` calls it per frame. The environment handle exposes
+`haze`, `hazeCount`, `paintHaze`, `updateHaze`, `hazeOn`; `setQuality()`
+repaints from the current phase. Manifest regenerated (180 files) and `dist/`
+rebuilt/committed after the sources.
 
-Two bugs found and fixed in the desktop suite:
-1. Halo descriptors were built at world-build time while `glassPanes` was
-   still empty → counts stuck at 0. Descriptors are now built lazily in
-   `dressGlassHalos()`, called from `reportGlass()` when the panes are final;
-   meshes have capacity 16/4 and counts are set at dress time; counts are
-   getters so they track the rebuilt arrays.
-2. The round-119 lane-pane anchor used a non-existent `lamp` variable inside
-   `upgradeLaneLamp()` (that function's local is `aim`), throwing a
-   ReferenceError inside the `Promise.all` and rejecting the entire
-   loadAssets chain. The anchor now uses `aim.lanternX`/`aim.lanternZ`.
-   A focused headless probe showed zero console errors and a fully dressed
-   world (propWood textured, laneLamp model, glass 7 panes / 2 windows /
-   5 lamps / 1 lane pane, halo counts 7/1).
+Unit suite at the exact rebuilt-dist HEAD: **1704/1704 passed**.
 
-Checks: desktop **410/410 checks passed**, mobile **184/184 checks passed**
-with no console errors at clean HEAD 52f0d42. Unit 1679/1680 before the dist
-rebuild; the lone failure was the expected stale-digest assertion, and the
-rebuilt dist is committed. Publication fallback refreshed at 52f0d42.
+The first desktop browser run exposed two harness defects (not game bugs):
+the r93 day-haze visibility was sampled after the clock/phase restore, and
+the returned low-tier evidence omitted the new haze flag. Both are fixed in
+commit 71e7ec6. A full desktop rerun is in progress; mobile follows after it.
 
 ## Next steps
-1. Round 120: pick the next graphics beat (ground fog/mist layering, lamp
-   shadow/occlusion, or water surface motion) and implement with the usual
-   pure-module → unit → integration → manifest → browser → dist pattern.
-2. Keep rounds 101-119 batched for `grunt-release` while the host commit cap
+1. Finish round-120 verification: confirm the desktop rerun, run the mobile
+   suite once, then refresh `publish.json` to the final exact HEAD and record
+   the exact check counts here.
+2. Keep rounds 101-120 batched for `grunt-release` while the host commit cap
    blocks it; keep `publish.json` current per round.
