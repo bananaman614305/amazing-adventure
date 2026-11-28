@@ -12,31 +12,27 @@
 
 ## Current task
 
-**Round 115 done (wet-pavement reflection streaks).** Pure module
-`src/wetstreak.js` (seeded per-lamp streak: position/length/width/angle/opacity,
-strength by phase, dropped on `low`), unit tests `tests/wetstreak.test.mjs` (12
-cases), integration in `src/world.js` as the `wet-streak` InstancedMesh
-(additive, `vertexColors = true`, sRGB gradient texture, `WETSTREAK_LIFT`),
-environment handle (`wetStreak`, `wetStreakCount`, `paintWetStreak`,
-`wetStreakOn`), wiring in `src/main.js` at both syncPhase and the per-frame
-update, and — new this round — all three paint calls from rounds 113/114/115
-(`paintWindowBleed`, `paintRoomGlow`, `paintWetStreak`) now also run inside
-`applyPhase()`, closing a gap where a phase change relied only on main.js.
-`paintWetStreak` is re-derived in `setQuality`. Self-review clean (vertexColors
-set before instance colour writes; texture `colorSpace` sRGB).
+**Round 117 done (atmospheric lamp halos).** Pure module `src/lamphalo.js`
+(seed 0x2e7c4a11: per-lamp halo descriptor with radius/opacity/stretch/tint,
+lampHaloStrength by phase (day 0, dusk 0.45x night fraction, night 1x),
+lampHaloEnabled drops on low, positional hash for tint/squash, 20 unit
+cases), integration in `src/world.js` as the `lamp-halo` InstancedMesh
+(additive, vertexColors, sRGB gradient texture), environment handle
+(`lampHalo`, `lampHaloCount`, `lampHaloSpread`, `paintLampHalo`,
+`lampHaloOn`), wiring in `src/main.js` syncPhase + per-frame update, and
+paint call inside `applyPhase` and `setQuality`. Manifest + dist rebuilt.
 
-Checks: unit 1619/1619; desktop browser 396/396 exit 0 (three new r115 checks
-green: mesh/material/count, night strength vs zero by day, low-tier drop).
-Mobile suite running this cycle as background task `brw64q24f` — result to be
-recorded next checkpoint. Dist rebuilt and committed at `913d5d0`; browser
-checks committed at `609ee92`.
+Checks: unit 1654/1654; desktop browser 403/403 exit 0 (four new r117
+checks: mesh/material/count, tint variety, night strength vs day, low-tier
+drop). Mobile suite running this cycle at clean head 73b4d04
+(background task); result to be recorded next checkpoint.
 
 ## Next steps
-1. Round 116: interior room-glow colour variation per window (so lit rooms do
-   not all glow the same warm tone), or real glass response on the largest flat
-   surfaces (HouseGlass 4.63 m², LampGlass 4.5 m²). Pick whichever reads best
-   against the r113-115 night look.
-2. Record the mobile result for round 115 when `brw64q24f` finishes, then
-   refresh `/worker/state/outbox/publish.json` at the clean exact HEAD.
-3. Keep rounds 101-115 batched for `grunt-release` once the host commit cap is
+1. Record the mobile result for round 117 when the background suite finishes,
+   then refresh `/worker/state/outbox/publish.json` at the clean exact HEAD.
+2. Round 118: pick the next highest-impact graphics beat against the r113-117
+   night look — candidates: real glass response polish (HouseGlass 4.63 m2,
+   LampGlass 4.5 m2), or ground-level fog/mist layering, or per-lamp
+   shadow/occlusion. Choose whichever reads best in the saved screenshots.
+3. Keep rounds 101-117 batched for `grunt-release` once the host commit cap is
    lifted; keep `publish.json` current per round until then.
