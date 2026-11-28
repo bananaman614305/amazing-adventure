@@ -40,9 +40,18 @@ were queued (tests 1dea810e completed exit 0, browser 0211af48 and mobile
 53f301a4 still in flight at the checkpoint). Publication fallback refreshed to
 the final committed HEAD a74ae28.
 
+Known caveats from the round-120 audit (not blockers for play): `placeHaze()`
+uses `spawn.y` rather than the bobbed `hazeDrift().y`, so the tiny vertical bob
+is computed but not yet rendered; the haze quads are plain planes with no alpha
+map (very faint at 0.015 day opacity, but hard-edged if inspected closely); and
+the "never throws" claim is true for ordinary junk values but not an adversarial
+Proxy whose `get` trap throws. The first two are the natural round-121 polish;
+the third matches the older mist module and needs no gameplay change.
+
 ## Next steps
-1. Pick round 121: continue the graphics-realism priority with the next
-   distinct beat (soft-edged haze quads, stronger material response in the
-   middle distance, or another cohesive environment improvement).
-2. Keep rounds 101-120 batched for `grunt-release` while the host commit cap
+1. Round 121: finish the haze layer — render `hazeDrift().y` and give the
+   quads a soft alpha falloff, unit-test the contract, rerun the suites.
+2. Continue the graphics-realism priority with the next distinct beat after
+   the haze polish (stronger material response or cohesive environment work).
+3. Keep rounds 101-120 batched for `grunt-release` while the host commit cap
    blocks it; keep `publish.json` current per round.
