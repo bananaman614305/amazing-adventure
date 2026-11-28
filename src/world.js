@@ -7466,7 +7466,6 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintRoomGlow) environment.paintRoomGlow(phaseId);
   if (environment.paintWetStreak) environment.paintWetStreak(phaseId);
   if (environment.paintLampHalo) environment.paintLampHalo(phaseId);
-  if (environment.paintGlassHalo) environment.paintGlassHalo(phaseId, laneOn);
   if (environment.paintIvy) environment.paintIvy(phaseId);
   if (environment.paintSpray) environment.paintSpray(phaseId);
   if (environment.paintMist) environment.paintMist(phaseId);
@@ -7541,7 +7540,8 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   }
   // Round 74: the glass follows the same phase and the same lane state as the
   // lights behind it, so a lit lamp always has a lit pane and a dark lane never
-  // glows. One call, after the lights are settled.
+  // glows. One call, after the lights are settled. applyGlass re-paints the
+  // halo with the same settled lane state.
   environment.laneOn = laneOn;
   if (environment.applyGlass) {
     environment.applyGlass(phaseId, { laneLit: laneOn, low: environment.quality === 'low' });
