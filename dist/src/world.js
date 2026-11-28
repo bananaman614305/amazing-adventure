@@ -52,6 +52,7 @@ import { shadowDecals, shadowOpacity, shadowsEnabled, SHADOW_DECAL_LIFT, contact
 import { spillDecals, spillStrength, spillEnabled, SPILL_DECAL_LIFT, SPILL_MIN_RADIUS, SPILL_MAX_RADIUS } from './lightspill.js';
 import { bleedDecals, bleedStrength, bleedEnabled, BLEED_WALL_LIFT, BLEED_MIN_RADIUS, BLEED_MAX_RADIUS } from './windowbleed.js';
 import { roomGlowDecals, roomGlowStrength, roomGlowEnabled, ROOMGLOW_RECESS } from './roomglow.js';
+import { wetStreakDecals, wetStreakStrength, wetStreakEnabled, WETSTREAK_LIFT } from './wetstreak.js';
 import { plazaKerbSpec, lanePlinthSpec, kerbEnabled, plinthEnabled, PLAZA_KERB_MAJOR, PLAZA_KERB_TUBE, PLAZA_KERB_SEGMENTS, PLAZA_KERB_TUBE_SEGMENTS } from './kerb.js';
 import { WALL_TRIM, wallTrimLayout, wallTrimEnabled } from './walltrim.js';
 import { WORLD_SIZE, HALF, TERRACE, STEP_HEIGHT, KEY_SPOT, KEY_PICKUP_RANGE, BENCH, floorHeightAt } from './terrain.js';
@@ -4907,6 +4908,89 @@ export function buildWorld(renderer) {
   }
   paintRoomGlow('day', 0, 'full');
 
+  // --- Wet-pavement reflection streaks under the plaza lamps ----------------
+  // A long warm streak on the paving under each plaza lamp, so a lamp reads as
+  // light skidding across damp cobble rather than a point in the air. One
+  // instanced additive quad per lamp, elongated and aimed by the seeded
+  // scatter, lifted a hair off the paving. Per-frame cost is the material
+  // opacity write. Positions follow the plaza lamp list.
+  const wetStreakAnchors = [[7,7],[-7,7],[7,-7],[-7,-7]].map(([x,z]) => ({
+    x, z, warmth: 0.9, length: 2.4
+  }));
+  const wetStreakSpawnsList = wetStreakEnabled('full') ? wetStreakDecals(wetStreakAnchors) : [];
+
+  function createWetStreakTexture(size = 64) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const g = ctx.createLinearGradient(0, size/2, size, size/2);
+    g.addColorStop(0, 'rgba(255,200,120,0)');
+    g.addColorStop(0.25, 'rgba(255,210,140,0.25)');
+    g.addColorStop(0.5, 'rgba(255,220,160,0.55)');
+    g.addColorStop(0.75, 'rgba(255,210,140,0.25)');
+    g.addColorStop(1, 'rgba(255,200,120,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  const wetStreakGeometry = new THREE.PlaneGeometry(1, 1);
+  const wetStreakMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: createWetStreakTexture(),
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: true,
+    blending: THREE.AdditiveBlending
+  });
+  wetStreakMaterial.name = 'WetStreak';
+  wetStreakMaterial.vertexColors = true;
+  const wetStreakMesh = new THREE.InstancedMesh(
+    wetStreakGeometry, wetStreakMaterial, Math.max(1, wetStreakSpawnsList.length)
+  );
+  wetStreakMesh.name = 'wet-streak';
+  wetStreakMesh.count = wetStreakSpawnsList.length;
+  wetStreakMesh.frustumCulled = false;
+  wetStreakMesh.renderOrder = 1;
+  scene.add(wetStreakMesh);
+
+  const _wsMatrix = new THREE.Matrix4();
+  const _wsPos = new THREE.Vector3();
+  const _wsScale = new THREE.Vector3();
+  const _wsQuat = new THREE.Quaternion();
+  const _wsUp = new THREE.Vector3(0, 1, 0);
+  const _wsColor = new THREE.Color(0xffc07a);
+  for (let i = 0; i < wetStreakSpawnsList.length; i += 1) {
+    const streak = wetStreakSpawnsList[i];
+    _wsQuat.setFromAxisAngle(_wsUp, streak.angle);
+    _wsPos.set(streak.x, WETSTREAK_LIFT, streak.z);
+    _wsScale.set(streak.length, streak.width, 1);
+    _wsMatrix.compose(_wsPos, _wsQuat, _wsScale);
+    wetStreakMesh.setMatrixAt(i, _wsMatrix);
+    _wsColor.setHex(0xffc07a).multiplyScalar(streak.opacity);
+    wetStreakMesh.setColorAt(i, _wsColor);
+  }
+  wetStreakMesh.instanceMatrix.needsUpdate = true;
+  if (wetStreakMesh.instanceColor) wetStreakMesh.instanceColor.needsUpdate = true;
+
+  function paintWetStreak(phaseId, night, tier = environment.quality) {
+    const coarse = (phaseId === 'dusk' ? 0.18 : phaseId === 'night' ? 0.62 : 0);
+    const n = Number.isFinite(night) ? Math.min(1, Math.max(0, night)) : coarse;
+    const strength = wetStreakStrength(phaseId, n);
+    wetStreakMaterial.opacity = strength;
+    wetStreakMesh.visible = wetStreakSpawnsList.length > 0 && wetStreakEnabled(tier) && strength > 0;
+  }
+  paintWetStreak('day', 0, 'full');
+
+
 
   // --- Warm window-light spill pools on the ground -------------------------
   const spillAnchors = windowSpawnsList.map((spawn, i) => {
@@ -6597,6 +6681,15 @@ export function buildWorld(renderer) {
     get roomGlowOn() {
       return roomGlowEnabled(environment.quality);
     },
+    // Round 115: wet-pavement reflection streaks under plaza lamps.
+    wetStreak: wetStreakMesh,
+    wetStreakCount: wetStreakSpawnsList.length,
+    paintWetStreak(phaseId, night) {
+      paintWetStreak(phaseId, night, environment.quality);
+    },
+    get wetStreakOn() {
+      return wetStreakEnabled(environment.quality);
+    },
     // The centre the shadow box was built around. applyPhase offsets the sun's
     // position by this so the light keeps its authored direction while the
     // frustum stays pointed at the middle of the whole world, lane included.
@@ -6677,6 +6770,7 @@ export function buildWorld(renderer) {
       if (environment.paintWindowSpill) environment.paintWindowSpill(environment.phase);
       if (environment.paintWindowBleed) environment.paintWindowBleed(environment.phase);
       if (environment.paintRoomGlow) environment.paintRoomGlow(environment.phase);
+      if (environment.paintWetStreak) environment.paintWetStreak(environment.phase);
       if (environment.paintIvy) environment.paintIvy(environment.phase);
       if (environment.paintSpray) environment.paintSpray(environment.phase);
       if (environment.paintMist) environment.paintMist(environment.phase);
@@ -6999,6 +7093,9 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintMotes) environment.paintMotes(phaseId);
   if (environment.paintWindows) environment.paintWindows(phaseId);
   if (environment.paintWindowSpill) environment.paintWindowSpill(phaseId);
+  if (environment.paintWindowBleed) environment.paintWindowBleed(phaseId);
+  if (environment.paintRoomGlow) environment.paintRoomGlow(phaseId);
+  if (environment.paintWetStreak) environment.paintWetStreak(phaseId);
   if (environment.paintIvy) environment.paintIvy(phaseId);
   if (environment.paintSpray) environment.paintSpray(phaseId);
   if (environment.paintMist) environment.paintMist(phaseId);
