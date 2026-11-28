@@ -70,6 +70,7 @@ export const REQUIRED_FILES = [
   'src/lightspill.js',
   'src/windowbleed.js',
   'src/roomglow.js',
+  'src/wetstreak.js',
   'src/kerb.js',
   'src/paving.js',
   'src/ivy.js',
