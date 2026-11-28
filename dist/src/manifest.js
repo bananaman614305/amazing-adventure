@@ -69,6 +69,7 @@ export const REQUIRED_FILES = [
   'src/contactshadows.js',
   'src/lightspill.js',
   'src/windowbleed.js',
+  'src/roomglow.js',
   'src/kerb.js',
   'src/paving.js',
   'src/ivy.js',

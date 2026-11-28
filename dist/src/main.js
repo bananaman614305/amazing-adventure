@@ -671,6 +671,7 @@ function syncPhase(force = false) {
   if (environment.updateWindows) environment.updateWindows(nightFraction(clockSeconds));
   if (environment.paintWindowSpill) environment.paintWindowSpill(environment.phase, nightFraction(clockSeconds));
   if (environment.paintWindowBleed) environment.paintWindowBleed(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintRoomGlow) environment.paintRoomGlow(environment.phase, nightFraction(clockSeconds));
   setNPCRoutine(npcs, phase.id);
   clockPhase.textContent = phase.label;
   // The drone shifts root and level with the time of day.
@@ -1961,6 +1962,7 @@ function frame() {
   if (environment.updateWindows) environment.updateWindows(nightFraction(clockSeconds));
   if (environment.paintWindowSpill) environment.paintWindowSpill(environment.phase, nightFraction(clockSeconds));
   if (environment.paintWindowBleed) environment.paintWindowBleed(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintRoomGlow) environment.paintRoomGlow(environment.phase, nightFraction(clockSeconds));
   if (environment.updateIvy) environment.updateIvy(dt);
   if (environment.updateSpray) environment.updateSpray(dt);
   if (environment.updateMist) environment.updateMist(dt);
