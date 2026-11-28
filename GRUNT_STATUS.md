@@ -13,31 +13,39 @@
 ## Current task
 
 **Round 119 in flight (warm halo around each lit glass pane).** Pure module
-`src/glasshalo.js` (seed 0x4e7ab21d: per-pane descriptor {width, thickness,
-tintWarmth, response, wander}, width 1.6 window / 0.55 lamp, thickness 0.62 /
-0.35, tintWarmth 0.9 x response, response curve day 0 / dusk 0.9 / night 1,
-dark lane pane 0 at every hour, wander seeded by positional hash <= 0.25),
-12 unit cases. Integration in `src/world.js`: one additive InstancedMesh quad
-per registered pane (`glass-halo`, GlassHalo material, sRGB radial gradient,
-vertex colors from tintWarmth, renderOrder 2), anchored at the pane's
-registration-time centre; `applyGlass` re-derives the halo opacity from the
-same phase and lane state as the pane's own glow; environment handle
-(`glassHalo`, `glassHaloCount`, `paintGlassHalo`, `glassHaloOn`); both the
-applyPhase and setQuality paint lists re-paint it; the low tier drops the
-layer. Browser checks in scripts/test-round2.mjs: 7 quads, one per pane;
-opacity follows the hour; a dark lane keeps its halo dark at every hour; the
-low tier drops the layer. Manifest + dist rebuilt. Sources committed at
-c01918e, dist at b239386.
+`src/glasshalo.js` (seed 0x4e7ab21d), 12 unit cases. Integration in
+`src/world.js`: two additive InstancedMesh layers — `glass-halo` (plaza/window
+panes) and `glass-halo-lane` (lane post's pane), `GlassHalo` material, sRGB
+radial gradient, vertex colors, renderOrder 2. Environment handle
+(`glassHalo`, `glassHaloLane`, counts, `paintGlassHalo`, `glassHaloOn`);
+setQuality paint list re-paints; low tier drops layer.
 
-Checks so far: unit 1680/1680 (incl. 12 glasshalo, preview digest matches).
-Desktop browser suite running; mobile suite next.
+Two bugs diagnosed in the desktop suite (run 5, 375/410, 36 FAILs):
+(1) halo descriptors were built at world-build time while `glassPanes` was
+still empty → counts stayed 0 forever. Fixed: descriptors are now built
+lazily in `dressGlassHalos()`, called from `reportGlass()` once the panes
+are final; meshes created with capacity 16/4 and counts set at dress time;
+`glassHaloCount`/`glassHaloLaneCount` made getters so they track the rebuilt
+arrays. Unit suite green (1679/1680, the lone fail is the stale dist digest).
+
+Bug B still open: the sequential `.then` chain after `Promise.all` in
+`loadAssets()` aborts, so propWood/rope/housing/sackTie/noticeFace/water/
+boardPaper/terrace stay flat, laneLamp stays 'stand-in', and glassDetail is
+null in the browser. The round-119 diff touched no asset-chain code, so the
+abort must come from something the halo change feeds into the chain (most
+likely `reportGlass()` → `environment.applyGlass()` → `paintGlassHalo()`,
+which now runs against arrays that were empty before). Need to capture
+console errors and bisect.
+
+Checks so far: unit 1679/1680 (preview digest stale). Desktop rerun pending
+against the Bug-A fix; mobile suite after.
 
 ## Next steps
 1. Confirm desktop suite (expect 410/410 with 4 new r119 checks) and then
    run the mobile suite (one browser suite at a time); record both in
    GRUNT_STATUS.md.
 2. Refresh `/worker/state/outbox/publish.json` at the clean exact HEAD
-   b239386, then commit the GRUNT_STATUS.md checkpoint.
+   aa6d0f2, then commit the GRUNT_STATUS.md checkpoint.
 3. Round 120: pick the next highest-impact graphics beat against the r113-119
    night look — candidates: ground-level fog/mist layering, per-lamp
    shadow/occlusion, or water surface motion. Choose whichever reads best in
