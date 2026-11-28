@@ -38,6 +38,8 @@ import { spraySpawns, sprayGlowLevel, sprayDrop, sprayEnabled, SPRAY_COUNT,
   SPRAY_MAX_OPACITY } from './spray.js';
 import { mistSpawns, mistOpacity, mistDrift, mistEnabled, MIST_COUNT,
   MIST_MAX_OPACITY } from './mist.js';
+import { hazeSpawns, hazeOpacity, hazeDrift, hazeEnabled, HAZE_COUNT,
+  HAZE_MAX_OPACITY } from './haze.js';
 import { rippleSpawns, rippleRing, rippleGlowLevel, ripplesEnabled,
   RIPPLE_COUNT, RIPPLE_RINGS_PER_SITE, RIPPLE_WATER_Y, RIPPLE_MAX_OPACITY } from './ripples.js';
 import { mothSpawns, mothFlight, mothGlowLevel, mothsEnabled, MOTH_COUNT } from './moths.js';
@@ -5591,6 +5593,57 @@ export function buildWorld(renderer) {
     placeMist(mistTime);
   }
 
+  // --- Mid-level haze (ground-haze) ---------------------------------------
+  // A second, higher, larger, fainter layer above the ground mist, giving
+  // depth to the middle distance. One instanced draw call.
+  const hazeSpawnsList = hazeEnabled('full')
+    ? hazeSpawns({ count: HAZE_COUNT })
+    : [];
+  const hazeGeometry = new THREE.PlaneGeometry(1, 1);
+  const hazeMaterial = new THREE.MeshBasicMaterial({
+    color: 0xe8eef7, transparent: true, opacity: HAZE_MAX_OPACITY,
+    depthWrite: false, side: THREE.DoubleSide, fog: true
+  });
+  hazeMaterial.name = 'GroundHaze';
+  const hazeMesh = new THREE.InstancedMesh(
+    hazeGeometry, hazeMaterial, Math.max(1, hazeSpawnsList.length)
+  );
+  hazeMesh.name = 'ground-haze';
+  hazeMesh.count = hazeSpawnsList.length;
+  hazeMesh.frustumCulled = false;
+  scene.add(hazeMesh);
+
+  function placeHaze(time) {
+    for (let i = 0; i < hazeSpawnsList.length; i += 1) {
+      const spawn = hazeSpawnsList[i];
+      const p = hazeDrift(spawn, time);
+      _gPos.set(p.x, spawn.y, p.z);
+      _gScale.setScalar(spawn.size);
+      _gMatrix.compose(_gPos, _gQuat, _gScale);
+      hazeMesh.setMatrixAt(i, _gMatrix);
+    }
+    hazeMesh.instanceMatrix.needsUpdate = true;
+  }
+  placeHaze(0);
+
+  function paintHaze(phaseId, tier = 'full') {
+    const glow = hazeOpacity(phaseId);
+    hazeMaterial.opacity = HAZE_MAX_OPACITY * glow;
+    hazeMesh.visible = glow > 0 && hazeSpawnsList.length > 0
+      && hazeEnabled(tier);
+  }
+  paintHaze('day');
+
+  let hazeTime = 0;
+  function updateHaze(dt) {
+    if (!hazeEnabled(environment.quality)) return;
+    if (!hazeSpawnsList.length) return;
+    const step = Number.isFinite(dt) && dt > 0 ? Math.min(dt, 0.1) : 0;
+    hazeTime += step;
+    if (!hazeMesh.visible) return;
+    placeHaze(hazeTime);
+  }
+
   // --- Fountain ripples -----------------------------------------------
   // One InstancedMesh of flat rings lying RIPPLE_WATER_Y above the water disc,
   // clustered around the jet (RIPPLE_SITE_RADIUS). Each site carries
@@ -6826,6 +6879,17 @@ export function buildWorld(renderer) {
     get mistOn() {
       return mistEnabled(environment.quality);
     },
+    haze: hazeMesh,
+    hazeCount: hazeSpawnsList.length,
+    paintHaze(phaseId) {
+      paintHaze(phaseId, environment.quality);
+    },
+    updateHaze(dt) {
+      updateHaze(dt);
+    },
+    get hazeOn() {
+      return hazeEnabled(environment.quality);
+    },
     // Round 94: fountain ripples.
     ripples: rippleMesh,
     rippleCount: rippleInstances.length,
@@ -7147,6 +7211,7 @@ export function buildWorld(renderer) {
       if (environment.paintIvy) environment.paintIvy(environment.phase);
       if (environment.paintSpray) environment.paintSpray(environment.phase);
       if (environment.paintMist) environment.paintMist(environment.phase);
+      if (environment.paintHaze) environment.paintHaze(environment.phase);
       if (environment.paintRipples) environment.paintRipples(environment.phase);
       if (environment.paintMoths) environment.paintMoths(environment.phase);
       if (environment.paintPuddles) environment.paintPuddles(environment.phase);
@@ -7488,6 +7553,7 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   if (environment.paintIvy) environment.paintIvy(phaseId);
   if (environment.paintSpray) environment.paintSpray(phaseId);
   if (environment.paintMist) environment.paintMist(phaseId);
+  if (environment.paintHaze) environment.paintHaze(phaseId);
   if (environment.paintRipples) environment.paintRipples(phaseId);
   if (environment.paintMoths) environment.paintMoths(phaseId);
   if (environment.paintPuddles) environment.paintPuddles(phaseId);
