@@ -3,6 +3,7 @@ import { buildStarField, starFieldOpacity, starTwinkle } from './stars.js';
 import { MOON_DISTANCE, MOON_CORE_RADIUS, MOON_GLOW_RADIUS, MOON_COLOR,
   MOON_PHASE_VISIBILITY, moonVisibility, MOON_POSITION, moonDiscPosition,
   MOON_GLOW_OPACITY } from './moon.js';
+import { moonHaloDescriptor, moonHaloStrength, moonHaloEnabled } from './moonhalo.js';
 import { CLOUD_COUNT, CLOUD_FIELD_RADIUS, CLOUD_SEED, cloudPositions,
   CLOUD_PHASE_OPACITY, cloudOpacity, CLOUD_BASE_COLOR, cloudColor,
   cloudSize, cloudDrift } from './clouds.js';
@@ -227,6 +228,64 @@ export function buildWorld(renderer) {
   moonDisc.renderOrder = -1;
   moonDisc.add(moonGlow, moonCore);
   scene.add(moonDisc);
+
+  // --- Atmospheric halo around the moon disc ---------------------------------
+  // The moon core and glow already give the night sky its shape, but a real moon
+  // has a bright core and a wide, faint glow that comes from light scattering in
+  // the upper atmosphere, fading to nothing well beyond the disc. The halo is a
+  // single additive quad on the moon's own centre, wider than the glow, with a
+  // cool blue-white tint, its strength driven by the phase so it is gone in
+  // daylight and full at night. It rides on the same painted sphere as the disc
+  // (fog off, additive), so it cannot smear a halo across the sky dome when the
+  // moon is low: the quad has a limited world size and the material stops
+  // blending with distance. One halo per moon, and only on the full tier --
+  // the transparency-heavy additive pass is dropped on low like the lamp halos.
+  const moonHaloAnchor = { x: 0, y: 0, z: 0 };
+  const moonHalo = moonHaloDescriptor(moonHaloAnchor);
+  function createMoonHaloTexture(size = 64) {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(216,228,255,0.55)');
+    g.addColorStop(0.4, 'rgba(200,215,255,0.28)');
+    g.addColorStop(0.8, 'rgba(190,205,255,0.12)');
+    g.addColorStop(1, 'rgba(180,195,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.needsUpdate = true;
+    return texture;
+  }
+  const moonHaloGeometry = new THREE.PlaneGeometry(1, 1);
+  const moonHaloMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: createMoonHaloTexture(),
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: false,
+    blending: THREE.AdditiveBlending
+  });
+  moonHaloMaterial.name = 'MoonHalo';
+  const moonHaloMesh = new THREE.Mesh(moonHaloGeometry, moonHaloMaterial);
+  moonHaloMesh.name = 'sky-moon-halo';
+  moonHaloMesh.frustumCulled = false;
+  moonHaloMesh.renderOrder = 2;
+  moonDisc.add(moonHaloMesh);
+  function paintMoonHalo(phaseId, night, tier = environment.quality) {
+    const coarse = (phaseId === 'dusk' ? 0.18 : phaseId === 'night' ? 0.62 : 0);
+    const n = Number.isFinite(night) ? Math.min(1, Math.max(0, night)) : coarse;
+    const strength = moonHaloStrength(phaseId, n);
+    moonHaloMaterial.opacity = strength;
+    moonHaloMesh.visible = moonHalo != null && moonHaloEnabled(tier) && strength > 0;
+  }
+  paintMoonHalo('day', 0, 'full');
 
   // The cloud layer: soft discs on the inside of the dome, drifting slowly.
   const cloudGroup = new THREE.Group();
@@ -6427,6 +6486,13 @@ export function buildWorld(renderer) {
     paintSun,
     paintMoon,
     paintClouds,
+    moonHalo: moonHaloMesh,
+    paintMoonHalo(phaseId, night) {
+      paintMoonHalo(phaseId, night, environment.quality);
+    },
+    get moonHaloOn() {
+      return moonHaloEnabled(environment.quality);
+    },
     paintHorizon,
     horizonRidge,
     sunDisc,
@@ -6887,6 +6953,7 @@ export function buildWorld(renderer) {
       if (environment.paintRoomGlow) environment.paintRoomGlow(environment.phase);
       if (environment.paintWetStreak) environment.paintWetStreak(environment.phase);
       if (environment.paintLampHalo) environment.paintLampHalo(environment.phase);
+      if (environment.paintMoonHalo) environment.paintMoonHalo(environment.phase);
       if (environment.paintIvy) environment.paintIvy(environment.phase);
       if (environment.paintSpray) environment.paintSpray(environment.phase);
       if (environment.paintMist) environment.paintMist(environment.phase);
@@ -7185,6 +7252,9 @@ export function applyPhase(environment, phaseId, laneLit = true) {
   }
   if (environment.paintMoon) {
     environment.paintMoon(moonVisibility(phaseId));
+  }
+  if (environment.paintMoonHalo) {
+    environment.paintMoonHalo(phaseId);
   }
   if (environment.paintClouds) {
     environment.paintClouds(phaseId);
