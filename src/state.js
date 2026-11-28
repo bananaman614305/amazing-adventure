@@ -14,7 +14,8 @@ export const ITEMS = {
   arrears_pouch: { name: 'Pouch of Arrears', description: 'Three weeks of lane toll money, sewn into a canvas pouch. Mara is owed this.' },
   keeper_receipt: { name: 'Keeper’s Receipt', description: 'Mara’s mark, dated and countersigned. Proof the plaza took the arrears in full.' },
   keeper_note: { name: 'Keeper’s Note', description: 'Mara’s writing, forgiving the lane’s arrears this quarter. Wren will not like the reason.' },
-  night_order: { name: 'Night Order', description: 'Oswin’s paper chit for two lanterns before the moon is up, signed in his own hand.' }
+  night_order: { name: 'Night Order', description: 'Oswin’s paper chit for two lanterns before the moon is up, signed in his own hand.' },
+  rope: { name: 'Coil of Rope', description: 'Oswin’s good hemp rope. Strong enough to hold a gate shut.' }
 };
 
 export const QUEST_ORDER = ['lanterns', 'key', 'cheer', 'toll', 'ledger', 'arrears', 'nightlight'];
@@ -97,7 +98,7 @@ export const QUESTS = {
   // --- Late faction chores (round 60) --------------------------------------
   // Two short errands that only become reachable in the last third of the game,
   // so the ending is not one faction’s story. They deliberately live outside
-  // QUEST_ORDER: the six-quest spine stays six quests, while a player who did
+  // QUEST_ORDER: the seven-quest spine stays seven quests, while a player who did
   // the side work still gets the recognition for it.
   wicks: {
     title: 'The Wick Round', giver: 'mara',
@@ -341,6 +342,62 @@ export function removeItem(state, itemId) {
 export function inventoryItems(state) {
   return state.inventory.map((id) => ({ id, ...ITEMS[id] }));
 }
+
+// --- Oswin's stall: a priced purchase ---------------------------------------
+// One real sink for the coins the game hands out. The rope is bought once and
+// owned forever: there is no dawn reset and no restock, so it cannot be farmed
+// into coins or standing. It costs coins and grants an item, nothing more.
+export const OSWIN_WARES = [
+  { id: 'rope', price: 3 }
+];
+
+export function buyOswinWare(state, itemId) {
+  const ware = OSWIN_WARES.find((w) => w.id === itemId);
+  if (!ware) return noChange('Oswin does not stock that.');
+  if (hasItem(state, itemId)) return noChange('You already carry that.');
+  if (coins(state) < ware.price) {
+    return noChange(`Oswin shakes his head. “${ware.price} coins, or nothing.”`);
+  }
+  addCoins(state, -ware.price);
+  addItem(state, itemId);
+  return { changed: true, message: `Bought ${ITEMS[itemId].name} for ${ware.price} coins.` };
+}
+
+// --- Favours the game actually honours --------------------------------------
+// The plaza hands out three tokens of gratitude — Mara's word, Oswin's marker,
+// Pip's ribbon — and until now only Oswin's marker did anything (it lifted his
+// refusal). These two redeem a real, one-time payoff and are then spent, so they
+// cannot be farmed. Pip's ribbon stays a keepsake: Pip is a child, and a ribbon
+// you wear is the favour.
+export const KEEPER_PROMISE_REWARD = { coins: 2, factionId: 'keepers', delta: 10 };
+export const TRADER_MARKER_REWARD = { coins: 2, factionId: 'trade', delta: 10 };
+
+export function redeemKeeperPromise(state) {
+  if (!hasItem(state, 'keeper_promise')) return noChange('Mara owes you nothing right now.');
+  removeItem(state, 'keeper_promise');
+  addCoins(state, KEEPER_PROMISE_REWARD.coins);
+  const standing = applyStanding(state, { factionId: KEEPER_PROMISE_REWARD.factionId, delta: KEEPER_PROMISE_REWARD.delta });
+  return {
+    changed: true,
+    message: `Mara honours her word: +${KEEPER_PROMISE_REWARD.coins} coins. ${standing.message}`.trim(),
+    topic: 'promise_redeemed',
+    opinion: 1
+  };
+}
+
+export function redeemTraderMarker(state) {
+  if (!hasItem(state, 'oswin_marker')) return noChange('Oswin owes you nothing right now.');
+  removeItem(state, 'oswin_marker');
+  addCoins(state, TRADER_MARKER_REWARD.coins);
+  const standing = applyStanding(state, { factionId: TRADER_MARKER_REWARD.factionId, delta: TRADER_MARKER_REWARD.delta });
+  return {
+    changed: true,
+    message: `Oswin honours the marker: +${TRADER_MARKER_REWARD.coins} coins. ${standing.message}`.trim(),
+    topic: 'marker_redeemed',
+    opinion: 1
+  };
+}
+
 
 // --- Reputation actions (quest-level consequences) ------------------------
 

@@ -3,11 +3,38 @@ import * as THREE from 'three';
 import { floorHeightAt } from './world.js';
 import {
   CAST_ASSETS, projectBoxGeometry, loadCast, loadMaterialTextures,
-  CLOTH_TEXTURE_FILES, SKIN_TEXTURE_FILES, HAIR_TEXTURE_FILES
+  CLOTH_TEXTURE_FILES, SKIN_TEXTURE_FILES, HAIR_TEXTURE_FILES, FELT_TEXTURE_FILES,
+  LEATHER_TEXTURE_FILES, PAPER_TEXTURE_FILES, WOOD_TEXTURE_FILES
 } from './assets.js';
 import {
   CAST_SKIN_FAMILIES, castSkinFamilyFor, castSkinParams, shouldDressCastSkin
 } from './skin.js';
+import {
+  CAST_ACCENT_FAMILIES, castAccentFamilyFor, castAccentParams, shouldDressCastAccent,
+  CAST_ACCENT_TILE_METERS
+} from './accent.js';
+export { CAST_ACCENT_TILE_METERS } from './accent.js';
+
+import {
+  CAST_BOOT_FAMILIES, castBootFamilyFor, castBootParams, shouldDressCastBoot,
+  CAST_BOOT_TILE_METERS
+} from './boot.js';
+export { CAST_BOOT_TILE_METERS } from './boot.js';
+import {
+  CAST_PAPER_FAMILIES, castPaperFamilyFor, castPaperParams, shouldDressCastPaper,
+  CAST_PAPER_TILE_METERS
+} from './paper.js';
+export { CAST_PAPER_TILE_METERS } from './paper.js';
+import {
+  CAST_STEEL_FAMILIES, castSteelFamilyFor, castSteelParams, shouldDressCastSteel,
+  CAST_STEEL_TILE_METERS
+} from './steel.js';
+export { CAST_STEEL_TILE_METERS } from './steel.js';
+import {
+  CAST_WOOD_FAMILIES, castWoodFamilyFor, castWoodParams, shouldDressCastWood,
+  CAST_WOOD_TILE_METERS
+} from './woodprop.js';
+export { CAST_WOOD_TILE_METERS } from './woodprop.js';
 
 // Round 67: the metre scale the cast coats are box-projected at. It is the
 // cloth PROP_FAMILY's tile (see assets.js), so a cast coat, a lane sack and any
@@ -707,3 +734,485 @@ export function findNearestNPC(npcs, playerPosition) {
 }
 
 export { TALK_RANGE };
+
+// ---------------------------------------------------------------------------
+// Round 81: the cast's accent bands.
+//
+// The accent material is the per-NPC dye (mara's gold sash, oswin's red scarf,
+// pip's green leg wraps, halden's grey tabard, sable's violet cloak, wren's
+// amber collar) -- 2.38 m2 across 9 meshes. It is the largest still-flat cast
+// surface the materials audit finds, and it is the same kind of surface as the
+// lane bunting (felted fabric at 0.1-0.2 m) so it reuses the neutral felt maps
+// rather than a new set. The rules live in src/accent.js.
+// ---------------------------------------------------------------------------
+
+/** The downloaded map set, keyed by the family id in src/accent.js. */
+export const CAST_ACCENT_TEXTURE_FILES = FELT_TEXTURE_FILES;
+
+/**
+ * Dresses every mesh whose authored material belongs to a cast accent family.
+ *
+ * Maps are cloned once per *material*, not once per mesh: all Accent meshes in
+ * one rig share the material object the GLB reader built, so a per-mesh clone
+ * would allocate duplicate map sets for one draw. The first mesh through a
+ * material sets it up; later meshes only get their own projected UVs.
+ */
+export function dressCastAccent(npcs, textures, { THREE } = {}) {
+  const dressed = [];
+  const perFamily = { accent: 0 };
+  let seams = 0;
+  let anyLoaded = false;
+  if (!THREE || !textures) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  const family = CAST_ACCENT_FAMILIES[0];
+  if (!shouldDressCastAccent(family, textures)) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  anyLoaded = true;
+
+  const materialFamilies = new Map();
+
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const fam = castAccentFamilyFor(material && material.name);
+      if (!fam) return;
+      if (!shouldDressCastAccent(fam, textures)) return;
+
+      const scale = accumulatedScale(mesh);
+      const split = projectBoxGeometry({
+        THREE, geometry: mesh.geometry, tileMeters: fam.tileMeters / scale
+      });
+      if (split.seams > 0) seams += split.seams;
+
+      if (materialFamilies.get(material) !== fam) {
+        const params = castAccentParams(fam);
+        for (const key of ['map', 'normalMap', 'roughnessMap']) {
+          const texture = textures[key];
+          if (!texture) continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        material.roughness = params.roughness;
+        material.metalness = params.metalness;
+        material.needsUpdate = true;
+        materialFamilies.set(material, fam);
+      }
+
+      mesh.userData.accentDressed = true;
+      perFamily.accent += 1;
+      dressed.push({ npc: npc.id, name: mesh.name, family: 'accent', tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, perFamily, anyLoaded };
+}
+
+/**
+ * Loads the felt maps and dresses the cast's accent bands with them.
+ * Never throws.
+ */
+export async function upgradeCastAccent(npcs, { THREE, fetchImpl = fetch, textures = null } = {}) {
+  if (!THREE || !npcs || !npcs.length) {
+    return { dressed: 0, meshes: [], anyLoaded: false, perFamily: { accent: 0 } };
+  }
+  let loadedTextures = textures;
+  if (!loadedTextures) {
+    try {
+      loadedTextures = await loadMaterialTextures({ THREE, files: CAST_ACCENT_TEXTURE_FILES, fetchImpl });
+    } catch {
+      loadedTextures = null;
+    }
+  }
+  return dressCastAccent(npcs, loadedTextures, { THREE });
+}
+
+// ---------------------------------------------------------------------------
+// Round 82: the cast's boots.
+//
+// The boot material is the per-NPC leather (1.49 m2 across 18 meshes on five
+// of the six rigs; mara is robed to the ground and has none). It reuses the
+// generated leather maps rather than a new set. The rules live in src/boot.js.
+// ---------------------------------------------------------------------------
+
+/** The downloaded map set, keyed by the family id in src/boot.js. */
+export const CAST_BOOT_TEXTURE_FILES = LEATHER_TEXTURE_FILES;
+
+/**
+ * Dresses every mesh whose authored material belongs to a cast boot family.
+ *
+ * Maps are cloned once per *material*, not once per mesh: all Boot meshes in
+ * one rig share the material object the GLB reader built, so a per-mesh clone
+ * would allocate duplicate map sets for one draw. The first mesh through a
+ * material sets it up; later meshes only get their own projected UVs.
+ */
+export function dressCastBoot(npcs, textures, { THREE } = {}) {
+  const dressed = [];
+  const perFamily = { boot: 0 };
+  let seams = 0;
+  let anyLoaded = false;
+  if (!THREE || !textures) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  const family = CAST_BOOT_FAMILIES[0];
+  if (!shouldDressCastBoot(family, textures)) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  anyLoaded = true;
+
+  const materialFamilies = new Map();
+
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const fam = castBootFamilyFor(material && material.name);
+      if (!fam) return;
+      if (!shouldDressCastBoot(fam, textures)) return;
+
+      const scale = accumulatedScale(mesh);
+      const split = projectBoxGeometry({
+        THREE, geometry: mesh.geometry, tileMeters: fam.tileMeters / scale
+      });
+      if (split.seams > 0) seams += split.seams;
+
+      if (materialFamilies.get(material) !== fam) {
+        const params = castBootParams(fam);
+        for (const key of ['map', 'normalMap', 'roughnessMap']) {
+          const texture = textures[key];
+          if (!texture) continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        material.roughness = params.roughness;
+        material.metalness = params.metalness;
+        material.needsUpdate = true;
+        materialFamilies.set(material, fam);
+      }
+
+      mesh.userData.bootDressed = true;
+      perFamily.boot += 1;
+      dressed.push({ npc: npc.id, name: mesh.name, family: 'boot', tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, perFamily, anyLoaded };
+}
+
+/**
+ * Loads the leather maps and dresses the cast's boots with them.
+ * Never throws.
+ */
+export async function upgradeCastBoot(npcs, { THREE, fetchImpl = fetch, textures = null } = {}) {
+  if (!THREE || !npcs || !npcs.length) {
+    return { dressed: 0, meshes: [], anyLoaded: false, perFamily: { boot: 0 } };
+  }
+  let loadedTextures = textures;
+  if (!loadedTextures) {
+    try {
+      loadedTextures = await loadMaterialTextures({ THREE, files: CAST_BOOT_TEXTURE_FILES, fetchImpl });
+    } catch {
+      loadedTextures = null;
+    }
+  }
+  return dressCastBoot(npcs, loadedTextures, { THREE });
+}
+
+// ---------------------------------------------------------------------------
+// Round 84: the cast's paper props.
+//
+// Oswin's apron and Wren's ledger pages are authored with a material named
+// `Paper` -- the same word as the job board, but a different surface scale, so
+// it is its own family (CAST_PAPER_FAMILIES in src/paper.js). It reuses the
+// generated paper maps rather than a new set.
+// ---------------------------------------------------------------------------
+
+/** The downloaded map set, keyed by the family id in src/paper.js. */
+export const CAST_PAPER_TEXTURE_FILES = PAPER_TEXTURE_FILES;
+
+/**
+ * Dresses every mesh whose authored material belongs to a cast paper family.
+ *
+ * Maps are cloned once per *material*, not once per mesh: all Paper meshes in
+ * one rig share the material object the GLB reader built, so a per-mesh clone
+ * would allocate duplicate map sets for one draw. The first mesh through a
+ * material sets it up; later meshes only get their own projected UVs. The
+ * paper albedo is already cream, so the tint stays white (keepTint is false in
+ * src/paper.js) or the cream would multiply down to brown.
+ */
+export function dressCastPaper(npcs, textures, { THREE } = {}) {
+  const dressed = [];
+  const perFamily = { castPaper: 0 };
+  let seams = 0;
+  let anyLoaded = false;
+  if (!THREE || !textures) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  const family = CAST_PAPER_FAMILIES[0];
+  if (!shouldDressCastPaper(family, textures)) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  anyLoaded = true;
+
+  const materialFamilies = new Map();
+
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const fam = castPaperFamilyFor(material && material.name);
+      if (!fam) return;
+      if (!shouldDressCastPaper(fam, textures)) return;
+
+      const scale = accumulatedScale(mesh);
+      const split = projectBoxGeometry({
+        THREE, geometry: mesh.geometry, tileMeters: fam.tileMeters / scale
+      });
+      if (split.seams > 0) seams += split.seams;
+
+      if (materialFamilies.get(material) !== fam) {
+        const params = castPaperParams(fam);
+        for (const key of ['map', 'normalMap', 'roughnessMap']) {
+          const texture = textures[key];
+          if (!texture) continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        material.roughness = params.roughness;
+        material.metalness = params.metalness;
+        if (params.keepTint === false) {
+          // The paper albedo is already cream: force the tint white or the
+          // authored cream multiplies down to brown.
+          material.color.set(0xffffff);
+        }
+        material.needsUpdate = true;
+        materialFamilies.set(material, fam);
+      }
+
+      mesh.userData.paperDressed = true;
+      perFamily.castPaper += 1;
+      dressed.push({ npc: npc.id, name: mesh.name, family: 'castPaper', tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, perFamily, anyLoaded };
+}
+
+/**
+ * Loads the paper maps and dresses the cast's paper props with them.
+ * Never throws.
+ */
+export async function upgradeCastPaper(npcs, { THREE, fetchImpl = fetch, textures = null } = {}) {
+  if (!THREE || !npcs || !npcs.length) {
+    return { dressed: 0, meshes: [], anyLoaded: false, perFamily: { castPaper: 0 } };
+  }
+  let loadedTextures = textures;
+  if (!loadedTextures) {
+    try {
+      loadedTextures = await loadMaterialTextures({ THREE, files: CAST_PAPER_TEXTURE_FILES, fetchImpl });
+    } catch {
+      loadedTextures = null;
+    }
+  }
+  return dressCastPaper(npcs, loadedTextures, { THREE });
+}
+
+// ---------------------------------------------------------------------------
+// Round 110: the cast's armour. Halden's helmet, nasal, pauldrons and spear tip
+// are authored with a material named `Steel` at roughness 0.4 / metalness 0.7 and
+// previously matched no family, so they stayed flat (0.86 m2 of untextured
+// armour, the worst flat metal in the scene). The rules live in src/steel.js.
+// It reuses the generated lamp metal normal + roughness maps rather than a new
+// set: the lamp albedo is painted iron and would contaminate the authored
+// blue-grey tint, so the albedo is deliberately omitted (keepTint stays true).
+// ---------------------------------------------------------------------------
+
+/** The downloaded map set, keyed by the family id in src/steel.js. */
+export const CAST_STEEL_TEXTURE_FILES = {
+  normalMap: 'assets/textures/lamp_normal.webp',
+  roughnessMap: 'assets/textures/lamp_rough.webp'
+};
+
+/**
+ * Dresses every mesh whose authored material belongs to a cast steel family.
+ *
+ * Maps are cloned once per *material*, not once per mesh: all Steel meshes in
+ * one rig share the material object the GLB reader built, so a per-mesh clone
+ * would allocate duplicate map sets for one draw. The first mesh through a
+ * material sets it up; later meshes only get their own projected UVs. Only the
+ * normal and roughness maps are attached (no albedo), so the authored blue-grey
+ * tint survives untouched.
+ */
+export function dressCastSteel(npcs, textures, { THREE } = {}) {
+  const dressed = [];
+  const perFamily = { steel: 0 };
+  let seams = 0;
+  let anyLoaded = false;
+  if (!THREE || !textures) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  const family = CAST_STEEL_FAMILIES[0];
+  if (!shouldDressCastSteel(family, textures)) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  anyLoaded = true;
+
+  const materialFamilies = new Map();
+
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const fam = castSteelFamilyFor(material && material.name);
+      if (!fam) return;
+      if (!shouldDressCastSteel(fam, textures)) return;
+
+      const scale = accumulatedScale(mesh);
+      const split = projectBoxGeometry({
+        THREE, geometry: mesh.geometry, tileMeters: fam.tileMeters / scale
+      });
+      if (split.seams > 0) seams += split.seams;
+
+      if (materialFamilies.get(material) !== fam) {
+        const params = castSteelParams(fam);
+        for (const key of ['normalMap', 'roughnessMap']) {
+          const texture = textures[key];
+          if (!texture) continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        material.roughness = params.roughness;
+        material.metalness = params.metalness;
+        material.needsUpdate = true;
+        materialFamilies.set(material, fam);
+      }
+
+      mesh.userData.steelDressed = true;
+      perFamily.steel += 1;
+      dressed.push({ npc: npc.id, name: mesh.name, family: 'steel', tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, perFamily, anyLoaded };
+}
+
+/**
+ * Loads the lamp metal maps and dresses the cast's armour with them.
+ * Never throws.
+ */
+export async function upgradeCastSteel(npcs, { THREE, fetchImpl = fetch, textures = null } = {}) {
+  if (!THREE || !npcs || !npcs.length) {
+    return { dressed: 0, meshes: [], anyLoaded: false, perFamily: { steel: 0 } };
+  }
+  let loadedTextures = textures;
+  if (!loadedTextures) {
+    try {
+      loadedTextures = await loadMaterialTextures({ THREE, files: CAST_STEEL_TEXTURE_FILES, fetchImpl });
+    } catch {
+      loadedTextures = null;
+    }
+  }
+  return dressCastSteel(npcs, loadedTextures, { THREE });
+}
+
+// Round 111: the cast's carried timber (mara's lantern pole, pip's hoop, halden's
+// spear shaft, wren's ledger board). The rules live in src/woodprop.js. It reuses
+// the crate/barrel plank maps (WOOD_TEXTURE_FILES) so the cast props read as the
+// same workshop timber as the plaza crates; the albedo carries the wood colour so
+// the tint is replaced rather than multiplied (keepTint false).
+// ---------------------------------------------------------------------------
+export const CAST_WOOD_TEXTURE_FILES = WOOD_TEXTURE_FILES;
+
+export function dressCastWood(npcs, textures, { THREE } = {}) {
+  const dressed = [];
+  const perFamily = { wood: 0 };
+  let seams = 0;
+  let anyLoaded = false;
+  if (!THREE || !textures) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  const family = CAST_WOOD_FAMILIES[0];
+  if (!shouldDressCastWood(family, textures)) {
+    return { dressed: 0, meshes: dressed, seams: 0, perFamily, anyLoaded: false };
+  }
+  anyLoaded = true;
+
+  const materialFamilies = new Map();
+
+  for (const npc of npcs) {
+    if (!npc.group) continue;
+    npc.group.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      const material = mesh.material;
+      const fam = castWoodFamilyFor(material && material.name);
+      if (!fam) return;
+      if (!shouldDressCastWood(fam, textures)) return;
+
+      const scale = accumulatedScale(mesh);
+      const split = projectBoxGeometry({
+        THREE, geometry: mesh.geometry, tileMeters: fam.tileMeters / scale
+      });
+      if (split.seams > 0) seams += split.seams;
+
+      if (materialFamilies.get(material) !== fam) {
+        const params = castWoodParams(fam);
+        for (const key of ['map', 'normalMap', 'roughnessMap']) {
+          const texture = textures[key];
+          if (!texture) continue;
+          const copy = texture.clone();
+          copy.needsUpdate = true;
+          copy.wrapS = THREE.RepeatWrapping;
+          copy.wrapT = THREE.RepeatWrapping;
+          copy.repeat.set(1, 1);
+          material[key] = copy;
+        }
+        // keepTint is false for wood: the reused albedo carries the colour, so
+        // the material tint must be white or the grain is double-tinted.
+        material.color.setHex(0xffffff);
+        material.roughness = params.roughness;
+        material.metalness = params.metalness;
+        material.needsUpdate = true;
+        materialFamilies.set(material, fam);
+      }
+
+      mesh.userData.woodDressed = true;
+      perFamily.wood += 1;
+      dressed.push({ npc: npc.id, name: mesh.name, family: 'wood', tint: material.color.getHex() });
+    });
+  }
+  return { dressed: dressed.length, meshes: dressed, seams, perFamily, anyLoaded };
+}
+
+export async function upgradeCastWood(npcs, { THREE, fetchImpl = fetch, textures = null } = {}) {
+  if (!THREE || !npcs || !npcs.length) {
+    return { dressed: 0, meshes: [], anyLoaded: false, perFamily: { wood: 0 } };
+  }
+  let loadedTextures = textures;
+  if (!loadedTextures) {
+    try {
+      loadedTextures = await loadMaterialTextures({ THREE, files: CAST_WOOD_TEXTURE_FILES, fetchImpl });
+    } catch {
+      loadedTextures = null;
+    }
+  }
+  return dressCastWood(npcs, loadedTextures, { THREE });
+}
+

@@ -44,6 +44,45 @@ export const PLAZA_FLOOR_TEXTURE_FILES = {
   roughnessMap: 'assets/textures/plaza_floor_rough.webp'
 };
 
+/**
+ * The second-generation plaza flagstone family (round 100).
+ *
+ * This is the same plaza paving read as PLAZA_FLOOR_TEXTURE_FILES, re-authored
+ * with staggered joints, a per-stone warm/cool tint and deeper relief so the
+ * floor no longer reads as one regular grid underfoot. It is deliberately a
+ * separate set of files rather than a replacement: keeping the round-61 maps in
+ * place means that first set stays reproducible, and the browser check can tell
+ * the two generations apart (and prove the v2 set actually loaded) instead of
+ * seeing one silently overwrite the other.
+ */
+export const PLAZA_FLOOR_V2_TEXTURE_FILES = {
+  map: 'assets/textures/plaza_floor_v2_albedo.webp',
+  normalMap: 'assets/textures/plaza_floor_v2_normal.webp',
+  roughnessMap: 'assets/textures/plaza_floor_v2_rough.webp'
+};
+
+/**
+ * The roof shingles' own tile family.
+ *
+ * The shingles are an InstancedMesh of a 1 x 1 m box, each instance scaled to
+ * its plane's width/depth, and the plane's top face carries BoxGeometry's
+ * authored 0..1 UVs. So a 1 m tile is one repeat across every instance: no
+ * repeat count, no box projection, no per-instance UV work. That makes this
+ * family structurally different from the box-projected ones (the plaza,
+ * terrace, prop families): applyTextureFamily is called with a 1 x 1 m span and
+ * 1 m tile, and the texture's repeat lands at 1:1.
+ *
+ * A separate set from ROOF_TEXTURE_FILES (the `HouseRoof`/`MarketRoof`/
+ * `StallRoof` materials): the timber family reads as timber on the modelled
+ * gables, but the flat shingle geometry is its own warm-tan surface, so it gets
+ * its own set rather than borrowing planks.
+ */
+export const ROOF_SHINGLE_TEXTURE_FILES = {
+  map: 'assets/textures/roof_shingle_albedo.webp',
+  normalMap: 'assets/textures/roof_shingle_normal.webp',
+  roughnessMap: 'assets/textures/roof_shingle_rough.webp'
+};
+
 export const GRASS_TEXTURE_FILES = {
   map: 'assets/textures/grass_albedo.webp',
   normalMap: 'assets/textures/grass_normal.webp',
@@ -54,6 +93,13 @@ export const HOUSE_ASSET = 'assets/house.glb';
 
 /** Authored size of the house trim model (roof span 8 x 6, chimney to 5.33). */
 export const HOUSE_MODEL_SIZE = { width: 8.1, depth: 6.2, height: 5.33 };
+
+export const HOUSE_DETAIL_ASSET = 'assets/house-detail.glb';
+
+/** Authored size of the house detail overlay: shutters, window boxes, front
+ *  step, guttering and chimney pot. The overlay sits on the existing house, so
+ *  its footprint may not exceed the house's roof span (8 x 6). */
+export const HOUSE_DETAIL_MODEL_SIZE = { width: 8.2, depth: 6.2, height: 5.8 };
 
 export const GATE_DOOR_ASSET = 'assets/gate_door.glb';
 
@@ -85,6 +131,21 @@ export const BENCH_ASSET = 'assets/bench.glb';
 
 /** Authored size of the bench model. */
 export const BENCH_MODEL_SIZE = { width: 2.2, depth: 0.7, height: 1.05 };
+
+/**
+ * The north terrace's furniture: a timber pergola with top beams and cross
+ * slats, plus two stone planters with inset soil tops. The terrace was a bare
+ * slab until this asset gave it a silhouette someone built and uses, so the
+ * north end reads as a place rather than as ground.
+ *
+ * Authored around the footprint centre with the ground at y = 0 and the front
+ * facing glTF +Z (the plaza), so world.js sets position only, no rotation.
+ */
+export const TERRACE_DETAIL_ASSET = 'assets/terrace-detail.glb';
+
+/** Authored size of the terrace furniture: the pergola's footprint and height.
+ *  The planters sit inside it, so they need no separate extent. */
+export const TERRACE_DETAIL_MODEL_SIZE = { width: 3.4, depth: 2.6, height: 2.7 };
 
 export const NOTICE_ASSET = 'assets/notice.glb';
 
@@ -127,6 +188,18 @@ export const WOOD_TEXTURE_FILES = {
   map: 'assets/textures/wood_albedo.webp',
   normalMap: 'assets/textures/wood_normal.webp',
   roughnessMap: 'assets/textures/wood_rough.webp'
+};
+
+export const DOORMAT_TEXTURE_FILES = {
+  map: 'assets/textures/doormat_albedo.webp',
+  normalMap: 'assets/textures/doormat_normal.webp',
+  roughnessMap: 'assets/textures/doormat_rough.webp'
+};
+
+export const SOIL_TEXTURE_FILES = {
+  map: 'assets/textures/soil_albedo.webp',
+  normalMap: 'assets/textures/soil_normal.webp',
+  roughnessMap: 'assets/textures/soil_rough.webp'
 };
 
 export const PLASTER_TEXTURE_FILES = {
@@ -255,6 +328,54 @@ export const FELT_TEXTURE_FILES = {
 };
 
 /**
+ * Leather family for the modelled cast's boots (`Boot`, 18 meshes, 1.49 m2).
+ *
+ * The boots are small (0.15 x 0.25 x 0.19 m) and authored as flat dark
+ * grey-brown (#726c66) with no UVs, so they are box-projected at boot scale
+ * rather than sharing a larger family's tile. The albedo is neutral so the
+ * authored boot colour survives tinting; the maps supply relief and
+ * self-shadowing only.
+ */
+export const LEATHER_TEXTURE_FILES = {
+  map: 'assets/textures/leather_albedo.webp',
+  normalMap: 'assets/textures/leather_normal.webp',
+  roughnessMap: 'assets/textures/leather_rough.webp'
+};
+
+/**
+ * Paper family for the job board (Round 83).
+ *
+ * The plaza work board's face (BoardFace, 1.2 x 0.9 m) and its three pinned
+ * slips (BoardPaper) are authored as flat cream (#d8c9a8 / #f2ead6) planes.
+ * A fibrous paper/parchment albedo with gentle tooth at a 0.3 m tile reads as
+ * pinned paper rather than a flat colour, and the slips share the same map.
+ *
+ * The albedo is cream with faint fibre variation, so the material tint must
+ * stay white or the cream gets multiplied down; the family carries no authored
+ * hue of its own.
+ */
+export const PAPER_TEXTURE_FILES = {
+  map: 'assets/textures/paper_albedo.webp',
+  normalMap: 'assets/textures/paper_normal.webp',
+  roughnessMap: 'assets/textures/paper_rough.webp'
+};
+
+/**
+ * Rope family for the lane bunting's rope strand (`LaneRope`).
+ *
+ * The 3 thin boxes (2 cm diameter, 1.92 m2 total) that span the lane were
+ * authored as flat brown (#6b5236) with no maps and no UVs. A 2 cm rope should
+ * read as laid fibre, so it gets a procedural twisted-fibre map at a 0.08 m
+ * tile (see ROPE_TILE_METERS / src/rope.js). The albedo is neutral grey-brown
+ * so the authored brown survives tinting (keepTint true).
+ */
+export const ROPE_TEXTURE_FILES = {
+  map: 'assets/textures/rope_albedo.webp',
+  normalMap: 'assets/textures/rope_normal.webp',
+  roughnessMap: 'assets/textures/rope_rough.webp'
+};
+
+/**
  * Metres per felt tile, in UV space.
  *
  * Chosen against the thing that actually has to read as felt: a bunting pennant
@@ -347,7 +468,13 @@ export const PROP_FAMILIES = [
   },
   {
     id: 'wood',
-    test: /wood/i,
+    // Round 97: the terrace furniture's timber members
+    // (TerraceTimber, TerraceTimberDark) join the plank family. `timber` is added
+    // to the pattern rather than a new family, because the pergola reads as the
+    // same workshop timber as the crates and benches. Tested after `bark` so a
+    // future `BarkTimber` (none exists today) would still win bark; `BarkWood`
+    // contains `Wood` but not `Timber`, so the ordering is unchanged in practice.
+    test: /wood|timber/i,
     files: WOOD_TEXTURE_FILES,
     tileMeters: 1.5,
     roughness: 0.78
@@ -369,10 +496,38 @@ export const PROP_FAMILIES = [
     // name. The tile matches TERRACE_TEXTURE_TILE_METERS, which is declared
     // further down this file, hence the literal.
     id: 'stone',
-    test: /housestone/i,
+    // Round 97: the terrace planters' stone (TerraceStone) joins the house
+    // trim family. The pattern stays anchored (`housestone` OR `terracestone`)
+    // rather than a broad /stone/, so the fountain's `Stone`/`StoneDark` and any
+    // future `Stone*` material keep their own tinted pass -- see the test that
+    // pins StoneDark as flat.
+    test: /housestone|terracestone/i,
     files: STONE_TEXTURE_FILES,
     tileMeters: 1.6,
     roughness: 0.9
+  },
+  {
+    // Round 111: the house front step's coir mat. Tight on purpose: only the
+    // modelled house's `HouseDoormat` mesh carries this material, and a broad
+    // /doormat|mat/ would risk swallowing a future `FloorMat` that keeps its own
+    // pass. Reuses the bespoke doormat_* bake; the albedo carries the coir
+    // colour, so keepTint stays false.
+    id: 'doormat',
+    test: /^housedoormat$/i,
+    files: DOORMAT_TEXTURE_FILES,
+    tileMeters: 0.35,
+    roughness: 0.92
+  },
+  {
+    // Round 111: the terrace planters' soil tops. Tight on purpose: only the two
+    // `TerracePlanter*Soil` meshes carry `TerraceSoil`. Reuses the bespoke
+    // soil_* bake (damp earth, clumps + pebbles); keepTint false because the
+    // albedo carries the earth colour.
+    id: 'soil',
+    test: /^terracesoil$/i,
+    files: SOIL_TEXTURE_FILES,
+    tileMeters: 0.25,
+    roughness: 0.78
   },
   {
     // Round 70: painted ironwork. The barrel hoops, crate bands, bench
@@ -774,6 +929,45 @@ export function plazaFloorMaterialParams(texturesLoaded) {
  * stonework ends up with one texel density.
  */
 export const TERRACE_TEXTURE_TILE_METERS = 1.6;
+
+/**
+ * Metres covered by one plaza-floor texture tile.
+ *
+ * The plaza is a CircleGeometry disc of radius 9 m, so it is 18 m across. A 3 m
+ * tile laid over that 18 m span gives 6 repeats in each direction, which is the
+ * density the flagstones are authored for: each slab ends up a little under a
+ * metre across once the tile's own courses are counted. Kept as a named constant
+ * next to TERRACE_TEXTURE_TILE_METERS so the world and the browser check project
+ * the plaza at one agreed scale rather than each re-deriving it.
+ */
+export const PLAZA_TEXTURE_TILE_METERS = 3;
+
+/**
+ * Metres of plaza floor the texture family spans, in each direction.
+ *
+ * This is the disc's full width -- 18 m across, from the 9 m radius -- and it is
+ * what plazaFloorRepeat() divides by PLAZA_TEXTURE_TILE_METERS to get the 6x6
+ * repeat. Naming the span (rather than passing 18 at the call site) keeps the
+ * "18 m disc, 3 m tile, 6 repeats" relationship written down in one place.
+ */
+export const PLAZA_TEXTURE_SPAN_METERS = 18;
+
+/**
+ * The texture repeat the plaza floor uses, as { repeatX, repeatY }.
+ *
+ * The single source of truth both the world's upgradePlazaFloor() and the browser
+ * check read, so the disc is dressed at 6x6 by construction rather than by two
+ * hand-written numbers that could drift. Pure and dependency-free: it delegates
+ * to textureRepeat(), which guards non-finite input, and the default argument
+ * keeps it total when called with no argument.
+ */
+export function plazaFloorRepeat() {
+  return textureRepeat(
+    PLAZA_TEXTURE_SPAN_METERS,
+    PLAZA_TEXTURE_SPAN_METERS,
+    PLAZA_TEXTURE_TILE_METERS
+  );
+}
 
 /**
  * Material settings for the north terrace's built stone.
@@ -1352,6 +1546,71 @@ export async function loadHouse({ THREE, loadGlb, url = HOUSE_ASSET, fetchImpl =
   }
 }
 
+/**
+ * Loads the house-detail GLB. Same contract: never throws. The overlay sits on
+ * the existing house, so its footprint may not exceed the house's roof span
+ * (8 x 6) and nothing may sink below the ground plane.
+ */
+export async function loadHouseDetail({ THREE, loadGlb, url = HOUSE_DETAIL_ASSET, fetchImpl = fetch } = {}) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const footprint = fountainFootprint(meshes);
+    if (!footprint) {
+      return { ok: false, reason: 'no geometry', url };
+    }
+    const reachX = Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX));
+    const reachZ = Math.max(Math.abs(footprint.minZ), Math.abs(footprint.maxZ));
+    if (reachX > HOUSE_DETAIL_MODEL_SIZE.width / 2 + 0.05 ||
+        reachZ > HOUSE_DETAIL_MODEL_SIZE.depth / 2 + 0.05 ||
+        footprint.minY < -0.01 ||
+        footprint.maxY > HOUSE_DETAIL_MODEL_SIZE.height + 0.05) {
+      return { ok: false, reason: 'house detail exceeds its footprint', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
+/**
+ * Loads the terrace-detail GLB. Same contract as the others: never throws,
+ * refuses a model whose footprint exceeds the authored box (3.4 x 2.6 x 2.7)
+ * or whose geometry sinks below the ground plane. The posts carry colliders at
+ * fixed offsets in world.js, so a model that outgrew its box would silently
+ * stand outside its own collision boxes -- the footprint check is what keeps
+ * the asset honest against the collider.
+ */
+export async function loadTerraceDetail({ THREE, loadGlb, url = TERRACE_DETAIL_ASSET, fetchImpl = fetch } = {}) {
+  try {
+    const response = await fetchImpl(url);
+    if (!response.ok) {
+      return { ok: false, reason: `status ${response.status}`, url };
+    }
+    const buffer = await response.arrayBuffer();
+    const meshes = loadGlb(buffer, THREE);
+    const footprint = fountainFootprint(meshes);
+    if (!footprint) {
+      return { ok: false, reason: 'no geometry', url };
+    }
+    const reachX = Math.max(Math.abs(footprint.minX), Math.abs(footprint.maxX));
+    const reachZ = Math.max(Math.abs(footprint.minZ), Math.abs(footprint.maxZ));
+    if (reachX > TERRACE_DETAIL_MODEL_SIZE.width / 2 + 0.05 ||
+        reachZ > TERRACE_DETAIL_MODEL_SIZE.depth / 2 + 0.05 ||
+        footprint.minY < -0.01 ||
+        footprint.maxY > TERRACE_DETAIL_MODEL_SIZE.height + 0.05) {
+      return { ok: false, reason: 'terrace detail exceeds its footprint', footprint, url };
+    }
+    return { ok: true, meshes, footprint, url, bytes: buffer.byteLength };
+  } catch (error) {
+    return { ok: false, reason: String(error && error.message ? error.message : error), url };
+  }
+}
+
 /** Cast model per NPC id; loaded by loadCast. */
 export const CAST_ASSETS = {
   mara: 'assets/npc_mara.glb',
@@ -1423,6 +1682,12 @@ export async function loadMaterialTextures({
   const load = async (url, kind) => {
     try {
       if (!createBitmap) return null; // no decoder available in this context
+      // A partial family (a family that deliberately omits one map, such as the
+      // steel set which has no albedo) leaves that key undefined. Fetching it
+      // would request `/undefined` and log a console 404 in the player's browser
+      // -- noise, and a request the game never meant to make -- so a missing or
+      // non-string url skips that map and the others still load.
+      if (typeof url !== 'string' || url.length === 0) return null;
       const response = await fetchImpl(url);
       if (!response.ok) return null;
       const blob = await response.blob();
@@ -1435,6 +1700,12 @@ export async function loadMaterialTextures({
       // truthiness -- a falsy check would silently skip the linear maps.
       if (space !== undefined) texture.colorSpace = space;
       texture.needsUpdate = true;
+      // The loader never sees `document` (and neither does `createImageBitmap`),
+      // so the bitmap the GPU samples has no src string of its own. Tests that
+      // want to know WHICH family a material ended up with must read it here
+      // rather than off the texture's image -- this is the only place that
+      // knows the family a texture came from.
+      texture.userData.sourceUrl = url;
       return texture;
     } catch {
       return null;
@@ -1480,12 +1751,18 @@ export const loadStoneTextures = loadMaterialTextures;
 export const PLAZA_AO_MAP_CHANNEL = 0;
 
 /**
- * AO strength for the plaza floor, per quality tier. The map only multiplies
- * indirect light (see aomap_fragment.glsl.js), so it is a grounding hint for
- * grazing angles rather than a shadow; it is disabled outright on the low tier.
+ * AO strength for the plaza floor. The map only multiplies indirect light (see
+ * aomap_fragment.glsl.js), so it is a grounding hint for grazing angles rather
+ * than a shadow. It is a static 256x256 texture multiply on the same UVs as the
+ * flagstone map and costs no per-frame work, so round 105 dropped the tier
+ * split: the low tier now keeps the authored 0.85 along with the prop vertex
+ * colour contact darkening, which is baked into geometry's `color` attribute.
+ * The low tier only drops the sun shadow pass and the per-frame decal fields.
+ * `low` is still accepted for backwards compatibility but no longer changes the
+ * result, so `plazaAoMapIntensity({ low: true })` returns 0.85 too.
  */
 export function plazaAoMapIntensity({ low = false } = {}) {
-  return low ? 0 : 0.85;
+  return 0.85;
 }
 
 /**
@@ -1592,7 +1869,7 @@ export const plazaAoMapChannel = () => PLAZA_AO_MAP_CHANNEL;
 export const plazaAoIntensity = plazaAoMapIntensity;
 export const plazaAoMapIntensityValue = plazaAoMapIntensity;
 export function plazaAoMapIntensityForQuality(tier) {
-  return plazaAoMapIntensity({ low: tier === 'low' });
+  return plazaAoMapIntensity();
 }
 export const createPlazaAoMap = createPlazaAoTexture;
 export const bakePlazaAoMap = createPlazaAoTexture;

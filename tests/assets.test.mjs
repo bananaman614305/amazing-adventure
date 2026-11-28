@@ -18,9 +18,15 @@ import {
   BANNER_ASSET, BANNER_MODEL_SIZE, BANNER_TEXTURE_FILES, loadBanner,
   CLOTH_TEXTURE_FILES, FELT_TEXTURE_FILES, FELT_FAMILY, BUNTING_TILE_METERS,
   WATER_TEXTURE_FILES, WATER_TILE_METERS,
+  PLAZA_FLOOR_V2_TEXTURE_FILES, PLAZA_TEXTURE_TILE_METERS,
+  PLAZA_TEXTURE_SPAN_METERS, plazaFloorRepeat, ROOF_SHINGLE_TEXTURE_FILES,
   PLAZA_AO_MAP_CHANNEL, plazaAoMapIntensity, plazaAoMapIntensityForQuality,
-  createPlazaAoTexture, contactDarkeningColors, applyContactDarkeningGeometry
+  createPlazaAoTexture, contactDarkeningColors, applyContactDarkeningGeometry,
+  TERRACE_DETAIL_ASSET, TERRACE_DETAIL_MODEL_SIZE, loadTerraceDetail,
+  HOUSE_DETAIL_ASSET, HOUSE_DETAIL_MODEL_SIZE, loadHouseDetail
 } from '../src/assets.js';
+import { parseGlb, glbToMeshes } from '../src/glb.js';
+import { TERRACE } from '../src/terrain.js';
 
 // Minimal fake Three.js: only what these functions touch.
 const ROOT = resolve(import.meta.dirname, '..');
@@ -36,7 +42,7 @@ const fakeTHREE = {
     computeBoundingSphere() {}
   },
   BufferAttribute: class { constructor(array, itemSize) { this.array = array; this.itemSize = itemSize; } },
-  Texture: class { constructor(image) { this.image = image; } }
+  Texture: class { constructor(image) { this.image = image; this.userData = {}; } }
 };
 
 const okResponse = (body) => ({ ok: true, status: 200, arrayBuffer: async () => body, blob: async () => body });
@@ -115,6 +121,156 @@ test('the plaza floor maps are all present on disk', () => {
   for (const url of Object.values(PLAZA_FLOOR_TEXTURE_FILES)) {
     assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${url} exists`);
   }
+});
+
+test('the plaza v2 family names exactly the three v2 webp maps and is its own object', () => {
+  // The second-generation set is a separate family, not an alias: if a regression
+  // pointed PLAZA_FLOOR_V2_TEXTURE_FILES at the round-61 object, the browser check
+  // could no longer tell the two generations apart and v2 would silently render
+  // the old maps. So assert both the exact paths and object identity.
+  assert.deepEqual(PLAZA_FLOOR_V2_TEXTURE_FILES, {
+    map: 'assets/textures/plaza_floor_v2_albedo.webp',
+    normalMap: 'assets/textures/plaza_floor_v2_normal.webp',
+    roughnessMap: 'assets/textures/plaza_floor_v2_rough.webp'
+  });
+  assert.deepEqual(Object.keys(PLAZA_FLOOR_V2_TEXTURE_FILES).sort(),
+    ['map', 'normalMap', 'roughnessMap']);
+  assert.notEqual(PLAZA_FLOOR_V2_TEXTURE_FILES, PLAZA_FLOOR_TEXTURE_FILES,
+    'v2 must be a distinct object, not an alias of the round-61 family');
+  // And no map may be shared with the first-generation set.
+  const v1 = new Set(Object.values(PLAZA_FLOOR_TEXTURE_FILES));
+  for (const url of Object.values(PLAZA_FLOOR_V2_TEXTURE_FILES)) {
+    assert.equal(v1.has(url), false, `${url} is a v2 map, not a reused round-61 one`);
+  }
+});
+
+test('the plaza spans 18 m at a 3 m tile, so the repeat is 6x6 and stays total', () => {
+  // The disc is 18 m across (9 m radius); a 3 m tile over that span is 6 repeats.
+  assert.equal(PLAZA_TEXTURE_TILE_METERS, 3);
+  assert.equal(PLAZA_TEXTURE_SPAN_METERS, 18);
+  assert.deepEqual(plazaFloorRepeat(), { repeatX: 6, repeatY: 6 });
+  // The single source of truth reads the same whatever the caller passes, and a
+  // missing argument must not throw.
+  assert.deepEqual(plazaFloorRepeat(true), { repeatX: 6, repeatY: 6 });
+  assert.deepEqual(plazaFloorRepeat(false), { repeatX: 6, repeatY: 6 });
+  assert.deepEqual(plazaFloorRepeat(undefined), { repeatX: 6, repeatY: 6 });
+  // It guards non-finite input exactly the way textureRepeat does, because it is
+  // textureRepeat: plazaFloorRepeat takes no numeric args, so totality is proven by
+  // the no-arg call above and the guard is pinned against textureRepeat directly.
+  assert.deepEqual(plazaFloorRepeat(),
+    textureRepeat(PLAZA_TEXTURE_SPAN_METERS, PLAZA_TEXTURE_SPAN_METERS, PLAZA_TEXTURE_TILE_METERS));
+  const guarded = textureRepeat(NaN, undefined, NaN);
+  assert.ok(Number.isFinite(guarded.repeatX) && Number.isFinite(guarded.repeatY),
+    'textureRepeat guards non-finite input the way plazaFloorRepeat relies on');
+});
+
+test('every shipped plaza flagstone map, both generations, is on disk', () => {
+  // The manifest test only forces src/ files to be listed, so a texture path that
+  // is named but never shipped would 404 at runtime and show up as a silently
+  // flat plaza. Both generations are checked because the v2 path falls back to
+  // the round-61 set, and that fallback is only real if its files exist too.
+  for (const url of [...Object.values(PLAZA_FLOOR_TEXTURE_FILES),
+    ...Object.values(PLAZA_FLOOR_V2_TEXTURE_FILES)]) {
+    assert.ok(existsSync(new URL(`../${url}`, import.meta.url)), `${url} exists`);
+    assert.ok(url.endsWith('.webp'), `${url} ships as WebP, not PNG`);
+  }
+});
+
+test('the roof shingle family names exactly the three shingle maps', () => {
+  // The shingle family is its own object with its own three files: a set that
+  // drifted onto the timber ROOF_TEXTURE_FILES would dress the shingles as
+  // planks, and a regression aliasing it would make the two families share
+  // one download, so the paths are pinned literally.
+  assert.deepEqual(ROOF_SHINGLE_TEXTURE_FILES, {
+    map: 'assets/textures/roof_shingle_albedo.webp',
+    normalMap: 'assets/textures/roof_shingle_normal.webp',
+    roughnessMap: 'assets/textures/roof_shingle_rough.webp'
+  });
+  assert.deepEqual(Object.keys(ROOF_SHINGLE_TEXTURE_FILES).sort(),
+    ['map', 'normalMap', 'roughnessMap']);
+  for (const url of Object.values(ROOF_SHINGLE_TEXTURE_FILES)) {
+    assert.match(url, /^assets\/textures\/roof_shingle_\w+\.webp$/,
+      `${url} is a served relative WebP path`);
+  }
+  // Separate from the timber family: shingles and gables are different reads,
+  // so a shared map would mean they were really the same surface.
+  const timber = new Set(Object.values(ROOF_TEXTURE_FILES));
+  for (const url of Object.values(ROOF_SHINGLE_TEXTURE_FILES)) {
+    assert.equal(timber.has(url), false, `${url} is not a timber map`);
+  }
+});
+
+test('a family that omits a map never requests /undefined', async () => {
+  // The steel cast family (round 110) deliberately loads only the normal and
+  // roughness maps, so its `files` object has no `map` key. Before this guard
+  // the loader passed `undefined` to fetch, the browser resolved it relative to
+  // the page and logged `GET /undefined 404` on every boot. A partial family
+  // must simply skip the missing map, load the rest, and request nothing else.
+  const requested = [];
+  const loaded = await loadMaterialTextures({
+    THREE: fakeTHREE,
+    files: { normalMap: 'a_normal.webp', roughnessMap: 'a_rough.webp' },
+    createBitmap: async () => ({ width: 64, height: 64 }),
+    fetchImpl: async (url) => { requested.push(url); return okResponse({}); }
+  });
+  assert.deepEqual(requested.sort(), ['a_normal.webp', 'a_rough.webp'],
+    'only the maps the family names are requested');
+  assert.equal(loaded.map, null, 'the omitted albedo stays null');
+  assert.ok(loaded.normalMap && loaded.roughnessMap, 'the named maps loaded');
+  assert.equal(loaded.anyLoaded, true);
+
+  // Junk urls are skipped the same way rather than stringifying into a path.
+  const junk = [];
+  const none = await loadMaterialTextures({
+    THREE: fakeTHREE,
+    files: { map: null, normalMap: '', roughnessMap: 42 },
+    createBitmap: async () => ({ width: 4, height: 4 }),
+    fetchImpl: async (url) => { junk.push(url); return okResponse({}); }
+  });
+  assert.deepEqual(junk, [], 'no request is made for a junk url');
+  assert.equal(none.anyLoaded, false);
+});
+
+test('the roof shingle family loads through the shared texture pipeline and the clone', async () => {
+  // The family uses the same loader as every other set, and cloneTextureFamily
+  // must carry all three maps for the InstancedMesh (the world applies the
+  // family once, with a 1 m tile on a 1 m box).
+  const requested = [];
+  const loaded = await loadMaterialTextures({
+    THREE: fakeTHREE,
+    files: ROOF_SHINGLE_TEXTURE_FILES,
+    createBitmap: async () => ({ width: 512, height: 512 }),
+    fetchImpl: async (url) => { requested.push(url); return okResponse({}); }
+  });
+  assert.equal(loaded.anyLoaded, true);
+  assert.deepEqual(requested.sort(), Object.values(ROOF_SHINGLE_TEXTURE_FILES).sort(),
+    'all three shingle maps are attempted');
+  assert.ok(loaded.map && loaded.normalMap && loaded.roughnessMap,
+    'the full set survived the load');
+  // Every map records its source on userData so the browser check can read
+  // which family reached the shingle material.
+  for (const key of ['map', 'normalMap', 'roughnessMap']) {
+    assert.equal(loaded[key].userData.sourceUrl, ROOF_SHINGLE_TEXTURE_FILES[key],
+      `${key} records its source url`);
+  }
+
+  // The clone gives the shared box its own sampler state and keeps all three
+  // maps; a null family (the flat fallback) clones to all-null.
+  // The fake Texture has no clone, so give the loaded maps one the way the
+  // existing clone test does; the world's textures are real THREE.Texture
+  // objects, which clone by construction.
+  for (const key of ['map', 'normalMap', 'roughnessMap']) {
+    loaded[key].clone = function clone() { return { ...this }; };
+  }
+  const clone = cloneTextureFamily(loaded);
+  assert.notEqual(clone.map, loaded.map, 'the map is a distinct object');
+  assert.ok(clone.map && clone.normalMap && clone.roughnessMap,
+    'the clone carries every map');
+  const empty = cloneTextureFamily({ map: null, normalMap: null, roughnessMap: null, anyLoaded: false });
+  assert.equal(empty.map, null);
+  assert.equal(empty.normalMap, null);
+  assert.equal(empty.roughnessMap, null);
+  assert.equal(empty.anyLoaded, false);
 });
 
 test('the terrace reuses the wall stone family instead of a third set of maps', () => {
@@ -717,6 +873,22 @@ test('the lamp maps load through the shared texture pipeline', async () => {
     'normal/rough maps must not be decoded as colour');
 });
 
+test('a loaded texture records its source url on userData', async () => {
+  // The plaza is dressed from an ImageBitmap, which has no src string of its
+  // own; without a loader-side record the only way to know which family a
+  // material actually got is the asset-state flag, which cannot distinguish
+  // v2 from the fallback set.
+  const loaded = await loadMaterialTextures({
+    THREE: fakeTHREE,
+    files: LAMP_TEXTURE_FILES,
+    createBitmap: async () => ({ width: 8, height: 8 }),
+    fetchImpl: async (url) => okResponse({})
+  });
+  assert.equal(loaded.map.userData.sourceUrl, LAMP_TEXTURE_FILES.map);
+  assert.equal(loaded.normalMap.userData.sourceUrl, LAMP_TEXTURE_FILES.normalMap);
+  assert.equal(loaded.roughnessMap.userData.sourceUrl, LAMP_TEXTURE_FILES.roughnessMap);
+});
+
 test('a missing lamp map degrades to the authored flat material', async () => {
   const loaded = await loadMaterialTextures({
     THREE: fakeTHREE,
@@ -781,6 +953,15 @@ test('propFamilyFor picks the family from the authored material name', () => {
   // families, dressed from the committed brick and stone wall maps.
   assert.equal(propFamilyFor('HouseBrick').id, 'brick');
   assert.equal(propFamilyFor('HouseStone').id, 'stone');
+  // Round 97: the terrace furniture's timber members join the wood family and
+  // its planter stone joins the house trim stone family. The GLB is unchanged;
+  // only the family tests widen.
+  assert.equal(propFamilyFor('TerraceTimber').id, 'wood');
+  assert.equal(propFamilyFor('TerraceTimberDark').id, 'wood');
+  assert.equal(propFamilyFor('TerraceStone').id, 'stone');
+  // Round 111: bespoke ground families.
+  assert.equal(propFamilyFor('HouseDoormat').id, 'doormat');
+  assert.equal(propFamilyFor('TerraceSoil').id, 'soil');
   // Round 70: the painted-iron prop family. Every iron name the shipped GLBs
   // carry, except the lane lantern (already dressed by upgradeLaneLamp()).
   for (const name of ['BarrelIron', 'BenchIron', 'CrateIron', 'DoorIron',
@@ -813,8 +994,12 @@ test('material names that are not props stay flat', () => {
     // materials audit can attribute their area (an unnamed material used to
     // collapse six unrelated surfaces into one 10.65 m2 row). Naming them is
     // also a claim that they are deliberately flat: each matches no family.
-    'LanternHousing', 'LanternBulb', 'BoardFace',
-    'BoardPaper', 'NoticeFaceLane', 'NpcMarker',
+    'LanternHousing', 'LanternBulb',
+    // Round 111: TerraceSoil and HouseDoormat now carry bespoke families
+    // (doormat/soil), so they are no longer in the must-stay-flat list.
+    // Round 83 dresses the job board's BoardFace and BoardPaper with the paper
+    // family (src/paper.js), so they are no longer in the must-stay-flat list.
+    'NoticeFaceLane', 'NpcMarker',
     // The bunting rope used to borrow `LaneWood`, which made three visible 2 cm
     // ropes report as planked wood while keeping their authored per-face UVs.
     // Its own name must never pick up a family.
@@ -1250,16 +1435,19 @@ test('every asset helper world.js calls is actually imported', () => {
 
 // --- Round 69: baked plaza AO + prop contact darkening -----------------------
 
-test('the plaza AO map binds to channel 0 and dims with the quality tier', () => {
+test('the plaza AO map binds to channel 0 and stays on at every tier', () => {
   // CircleGeometry only carries `uv`; an aoMap that expected uv1 would sample
   // garbage (or fail to compile on some drivers). Channel 0 is the contract.
   assert.equal(PLAZA_AO_MAP_CHANNEL, 0);
-  // The map multiplies indirect light only, so a modest intensity is enough of
-  // a grounding cue; zero on the low tier keeps the cost off tight budgets.
+  // The map only multiplies indirect light, is static, and costs no per-frame
+  // work, so the tier split was removed and only the sun shadow pass plus the
+  // per-frame decal fields remain tier-gated. The low tier keeps the authored
+  // 0.85 along with the prop vertex colour contact darkening.
   const full = plazaAoMapIntensity({ low: false });
   assert.ok(full > 0 && full <= 1, `full-tier intensity out of range: ${full}`);
-  assert.equal(plazaAoMapIntensity({ low: true }), 0);
-  assert.equal(plazaAoMapIntensityForQuality('low'), 0);
+  assert.equal(full, 0.85, 'authored plaza AO intensity is pinned at 0.85');
+  assert.equal(plazaAoMapIntensity({ low: true }), full);
+  assert.equal(plazaAoMapIntensityForQuality('low'), full);
   assert.equal(plazaAoMapIntensityForQuality('full'), full);
 });
 
@@ -1298,4 +1486,369 @@ test('applyContactDarkeningGeometry writes a color attribute sized to the mesh',
   assert.equal(applyContactDarkeningGeometry({ THREE: fakeTHREE, geometry: null }), 0);
   const empty = new fakeTHREE.BufferGeometry();
   assert.equal(applyContactDarkeningGeometry({ THREE: fakeTHREE, geometry: empty }), 0);
+});
+
+// The terrace furniture loader is a second footprint-checked asset, but unlike
+// the fountain it has no collider of its own: world.js places the pergola posts
+// at fixed offsets and registers their colliders by hand. So the check that
+// matters here is against the authored box and against the slab the furniture
+// stands on -- a re-authored model that outgrows either would silently stand
+// outside its collision and clip the terrace lip.
+test('the terrace furniture is authored to fit the north terrace slab', () => {
+  assert.equal(TERRACE_DETAIL_ASSET, 'assets/terrace-detail.glb');
+  assert.deepEqual(TERRACE_DETAIL_MODEL_SIZE, { width: 3.4, depth: 2.6, height: 2.7 });
+
+  // The north terrace is a 12 x 3.3 slab (TERRACE spans x -6..6, z -16.5..-13.2).
+  // Asserting the model against those numbers, not just against 3.4 x 2.6, is
+  // what makes a future re-authoring that outgrows the terrace fail here rather
+  // than in a browser at the lip.
+  // Rounded to the centimetre: 3.3 stored as a difference of two doubles is
+  // 3.3000000000000007, and the oddity of the mantissa is not the point.
+  assert.equal(Math.round((TERRACE.maxX - TERRACE.minX) * 100) / 100, 12);
+  assert.equal(Math.round((TERRACE.maxZ - TERRACE.minZ) * 100) / 100, 3.3);
+  assert.ok(TERRACE_DETAIL_MODEL_SIZE.width <= TERRACE.maxX - TERRACE.minX,
+    'the pergola is narrower than the terrace');
+  assert.ok(TERRACE_DETAIL_MODEL_SIZE.depth <= TERRACE.maxZ - TERRACE.minZ,
+    'and shallower, so it sits inside the slab rather than overhanging it');
+  // It must also clear the terrace height, since it stands on the slab and the
+  // player's head still has to pass under the slats at the far edge.
+  assert.ok(TERRACE_DETAIL_MODEL_SIZE.height > TERRACE.height);
+});
+
+// The real asset's extents, read off the committed GLB. Held here so the fake
+// meshes below describe the same model the shipped file does, and so a test that
+// drifts from the asset is visible as a number, not a mystery failure.
+const TERRACE_MESH_BOXES = {
+  TerracePergola: { min: { x: -1.7, y: 0, z: -1.3 }, max: { x: 1.7, y: 2.58, z: 1.3 } },
+  TerracePergolaSlats: { min: { x: -1.26, y: 2.58, z: -1.3 }, max: { x: 1.26, y: 2.7, z: 1.3 } },
+  TerracePlanterA: { min: { x: -1.45, y: 0, z: -1.15 }, max: { x: -0.55, y: 0.44, z: -0.65 } },
+  TerracePlanterASoil: { min: { x: -1.4, y: 0.44, z: -1.1 }, max: { x: -0.6, y: 0.5, z: -0.7 } },
+  TerracePlanterB: { min: { x: 0.55, y: 0, z: -1.15 }, max: { x: 1.45, y: 0.44, z: -0.65 } },
+  TerracePlanterBSoil: { min: { x: 0.6, y: 0.44, z: -1.1 }, max: { x: 1.4, y: 0.5, z: -0.7 } }
+};
+
+const terraceMeshes = (boxes = TERRACE_MESH_BOXES) =>
+  Object.entries(boxes).map(([name, box]) => ({ name, geometry: { boundingBox: box } }));
+
+test('a successful terrace-detail load reports its real footprint and size', async () => {
+  const result = await loadTerraceDetail({
+    THREE: fakeTHREE,
+    loadGlb: () => terraceMeshes(),
+    fetchImpl: async () => okResponse(new ArrayBuffer(13388))
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.bytes, 13388);
+  assert.equal(result.url, TERRACE_DETAIL_ASSET);
+  // The reported footprint is the pergola's footprint, so it must match the
+  // authored box to the centimetre -- rounding rather than an exact equality
+  // keeps the check about the numbers, not about float noise in a fake.
+  const round2 = (v) => Math.round(v * 100) / 100;
+  assert.equal(round2(result.footprint.width), TERRACE_DETAIL_MODEL_SIZE.width);
+  assert.equal(round2(result.footprint.depth), TERRACE_DETAIL_MODEL_SIZE.depth);
+  assert.equal(round2(result.footprint.height), TERRACE_DETAIL_MODEL_SIZE.height);
+  assert.equal(result.meshes.length, 6, 'all six parts are handed back to the world');
+});
+
+test('a terrace model that outgrows its footprint is refused rather than clipping', async () => {
+  const cases = {
+    // Wider than 3.4: the posts would stand outside their fixed colliders.
+    wider: { ...TERRACE_MESH_BOXES, TerracePergola: { min: { x: -2, y: 0, z: -1.3 }, max: { x: 2, y: 2.58, z: 1.3 } } },
+    // Deeper than 2.6: it would overhang the terrace lip.
+    deeper: { ...TERRACE_MESH_BOXES, TerracePergola: { min: { x: -1.7, y: 0, z: -1.6 }, max: { x: 1.7, y: 2.58, z: 1.6 } } },
+    // Sunk below the ground plane: the slab would z-fight or bury the planters.
+    sunk: { ...TERRACE_MESH_BOXES, TerracePlanterA: { min: { x: -1.45, y: -0.2, z: -1.15 }, max: { x: -0.55, y: 0.44, z: -0.65 } } },
+    // Taller than 2.7: the slats would foul the headroom the terrace assumes.
+    taller: { ...TERRACE_MESH_BOXES, TerracePergolaSlats: { min: { x: -1.26, y: 2.58, z: -1.3 }, max: { x: 1.26, y: 3.2, z: 1.3 } } }
+  };
+  for (const [label, boxes] of Object.entries(cases)) {
+    const result = await loadTerraceDetail({
+      THREE: fakeTHREE,
+      loadGlb: () => terraceMeshes(boxes),
+      fetchImpl: async () => okResponse(new ArrayBuffer(64))
+    });
+    assert.equal(result.ok, false, `${label} is refused`);
+    assert.match(result.reason, /exceeds its footprint/, `${label} says why`);
+  }
+});
+
+test('a failed terrace-detail load reports why, and never throws', async () => {
+  const missing = await loadTerraceDetail({
+    THREE: fakeTHREE, loadGlb: () => [],
+    fetchImpl: async () => failResponse(404)
+  });
+  assert.equal(missing.ok, false);
+  assert.match(missing.reason, /404/);
+
+  // A parser that throws must surface its own message, not swallow it: a corrupt
+  // GLB and an offline fetch are different bugs and the log should say which.
+  const corrupt = await loadTerraceDetail({
+    THREE: fakeTHREE, loadGlb: () => { throw new Error('not a GLB file'); },
+    fetchImpl: async () => okResponse(new ArrayBuffer(8))
+  });
+  assert.equal(corrupt.ok, false);
+  assert.match(corrupt.reason, /not a GLB/);
+
+  // An empty mesh list has no footprint at all, so the loader must say so rather
+  // than divide by an empty extent.
+  const empty = await loadTerraceDetail({
+    THREE: fakeTHREE, loadGlb: () => [],
+    fetchImpl: async () => okResponse(new ArrayBuffer(8))
+  });
+  assert.equal(empty.ok, false);
+  assert.match(empty.reason, /no geometry/);
+});
+
+// The house detail overlay is a second footprint-checked asset, but unlike the
+// house trim it has no collider of its own: the trim's roof/door boxes are
+// already hidden, and the overlay simply rides on top. So the check that matters
+// here is against the house's roof span (8 x 6) and against the trim height
+// (5.33), not against a fountain-style collider. A re-authored model that
+// outgrows the roof would silently float past the eaves.
+test('the house detail is authored to fit the merchant house roof', () => {
+  assert.equal(HOUSE_DETAIL_ASSET, 'assets/house-detail.glb');
+  assert.deepEqual(HOUSE_DETAIL_MODEL_SIZE, { width: 8.2, depth: 6.2, height: 5.8 });
+
+  // The house trim's roof overhangs to 8 x 6 (see make_house.py); the overlay
+  // may overhang by 0.1 m per side for the gutter and downspout, but must not
+  // exceed that. Asserted against the literal roof span so a future re-author
+  // that outgrows the roof fails here rather than in a browser at the eaves.
+  assert.ok(HOUSE_DETAIL_MODEL_SIZE.width <= 8.2 + 0.001,
+    'the overlay is no wider than the roof plus a small gutter allowance');
+  assert.ok(HOUSE_DETAIL_MODEL_SIZE.depth <= 6.2 + 0.001,
+    'and no deeper, so it sits inside the roof span');
+  // It must clear the trim's chimney cap (5.33), since the pot stacks on top.
+  assert.ok(HOUSE_DETAIL_MODEL_SIZE.height > 5.33);
+});
+
+// The real asset's extents, read off the committed GLB. Held here so the fake
+// meshes below describe the same model the shipped file does.
+const HOUSE_DETAIL_MESH_BOXES = {
+  'HouseShutter_-2.0_-1': { min: { x: -2.76, y: 1.05, z: 2.49 }, max: { x: -2.54, y: 2.35, z: 2.55 } },
+  'HouseShutter_-2.0_1': { min: { x: -1.46, y: 1.05, z: 2.49 }, max: { x: -1.24, y: 2.35, z: 2.55 } },
+  'HouseShutter_2.0_-1': { min: { x: 1.24, y: 1.05, z: 2.49 }, max: { x: 1.46, y: 2.35, z: 2.55 } },
+  'HouseShutter_2.0_1': { min: { x: 2.54, y: 1.05, z: 2.49 }, max: { x: 2.76, y: 2.35, z: 2.55 } },
+  'HouseWindowBox_-2.0': { min: { x: -2.45, y: 0.91, z: 2.275 }, max: { x: -1.55, y: 1.09, z: 2.525 } },
+  'HouseWindowBox_2.0': { min: { x: 1.55, y: 0.91, z: 2.275 }, max: { x: 2.45, y: 1.09, z: 2.525 } },
+  HouseFrontStep: { min: { x: -0.8, y: 0, z: 1.6 }, max: { x: 0.8, y: 0.15, z: 2.4 } },
+  HouseDoormat: { min: { x: -0.5, y: 0.15, z: 1.7 }, max: { x: 0.5, y: 0.17, z: 2.3 } },
+  HouseGutter_front: { min: { x: -4.1, y: 2.99, z: 2.84 }, max: { x: 4.1, y: 3.11, z: 2.96 } },
+  HouseGutter_back: { min: { x: -4.1, y: 2.99, z: -2.96 }, max: { x: 4.1, y: 3.11, z: -2.84 } },
+  HouseDownspout: { min: { x: 3.85, y: 0, z: 2.85 }, max: { x: 3.95, y: 3.0, z: 2.95 } },
+  HouseChimneyPot: { min: { x: 1.88, y: 5.25, z: -1.32 }, max: { x: 2.52, y: 5.7, z: -0.68 } }
+};
+
+const houseDetailMeshes = (boxes = HOUSE_DETAIL_MESH_BOXES) =>
+  Object.entries(boxes).map(([name, box]) => ({ name, geometry: { boundingBox: box } }));
+
+test('a successful house-detail load reports its real footprint and size', async () => {
+  const result = await loadHouseDetail({
+    THREE: fakeTHREE,
+    loadGlb: () => houseDetailMeshes(),
+    fetchImpl: async () => okResponse(new ArrayBuffer(15836))
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.bytes, 15836);
+  assert.equal(result.url, HOUSE_DETAIL_ASSET);
+  const round2 = (v) => Math.round(v * 100) / 100;
+  // Footprint is the widest part (the 8.2 m gutter) and the chimney-pot top;
+  // the z span is 5.92 because the gutters sit at +/-2.96, inside the 6.2 box.
+  assert.equal(round2(result.footprint.width), HOUSE_DETAIL_MODEL_SIZE.width);
+  assert.equal(round2(result.footprint.depth), 5.92);
+  assert.ok(result.footprint.depth <= HOUSE_DETAIL_MODEL_SIZE.depth);
+  assert.equal(round2(result.footprint.height), 5.7);
+  assert.ok(result.footprint.height <= HOUSE_DETAIL_MODEL_SIZE.height);
+  assert.equal(result.meshes.length, 12, 'all twelve parts are handed back to the world');
+});
+
+test('a house-detail model that outgrows its footprint is refused rather than clipping', async () => {
+  const cases = {
+    // Wider than 8.2: the gutter would float past the roof edge.
+    wider: { ...HOUSE_DETAIL_MESH_BOXES, HouseGutter_front: { min: { x: -4.5, y: 2.99, z: 2.84 }, max: { x: 4.5, y: 3.11, z: 2.96 } } },
+    // Deeper than 6.2: it would overhang the eaves.
+    deeper: { ...HOUSE_DETAIL_MESH_BOXES, HouseGutter_back: { min: { x: -4.1, y: 2.99, z: -3.4 }, max: { x: 4.1, y: 3.11, z: -2.84 } } },
+    // Sunk below the ground plane: the step would bury itself.
+    sunk: { ...HOUSE_DETAIL_MESH_BOXES, HouseFrontStep: { min: { x: -0.8, y: -0.2, z: 1.6 }, max: { x: 0.8, y: 0.15, z: 2.4 } } },
+    // Taller than 5.8: the pot would float above the chimney.
+    taller: { ...HOUSE_DETAIL_MESH_BOXES, HouseChimneyPot: { min: { x: 1.88, y: 5.25, z: -1.32 }, max: { x: 2.52, y: 6.2, z: -0.68 } } }
+  };
+  for (const [label, boxes] of Object.entries(cases)) {
+    const result = await loadHouseDetail({
+      THREE: fakeTHREE,
+      loadGlb: () => houseDetailMeshes(boxes),
+      fetchImpl: async () => okResponse(new ArrayBuffer(64))
+    });
+    assert.equal(result.ok, false, `${label} is refused`);
+    assert.match(result.reason, /exceeds its footprint/, `${label} says why`);
+  }
+});
+
+test('a failed house-detail load reports why, and never throws', async () => {
+  const missing = await loadHouseDetail({
+    THREE: fakeTHREE, loadGlb: () => [],
+    fetchImpl: async () => failResponse(404)
+  });
+  assert.equal(missing.ok, false);
+  assert.match(missing.reason, /404/);
+
+  const corrupt = await loadHouseDetail({
+    THREE: fakeTHREE, loadGlb: () => { throw new Error('not a GLB file'); },
+    fetchImpl: async () => okResponse(new ArrayBuffer(8))
+  });
+  assert.equal(corrupt.ok, false);
+  assert.match(corrupt.reason, /not a GLB/);
+
+  const empty = await loadHouseDetail({
+    THREE: fakeTHREE, loadGlb: () => [],
+    fetchImpl: async () => okResponse(new ArrayBuffer(8))
+  });
+  assert.equal(empty.ok, false);
+  assert.match(empty.reason, /no geometry/);
+});
+
+test('the shipped terrace-detail GLB parses and matches the authored box', async () => {
+  const file = join(ROOT, 'assets/terrace-detail.glb');
+  assert.ok(existsSync(file), 'the asset is committed');
+  const bytes = readFileSync(file);
+  assert.ok(bytes.byteLength >= 8 * 1024, `the file is real geometry (${bytes.byteLength} bytes)`);
+
+  // A local, slightly richer fake: the shared one stubs computeBoundingBox, and
+  // this test needs the real bounds the GLB describes. Extended here rather than
+  // in the shared object so the other tests keep their no-op stub.
+  class BoundsGeometry {
+    constructor() { this.attributes = {}; }
+    setAttribute(n, a) { this.attributes[n] = a; }
+    setIndex(a) { this.index = a; }
+    computeVertexNormals() {}
+    computeBoundingBox() {
+      const p = this.attributes.position.array;
+      const min = { x: Infinity, y: Infinity, z: Infinity };
+      const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+      for (let i = 0; i < p.length; i += 3) {
+        min.x = Math.min(min.x, p[i]); max.x = Math.max(max.x, p[i]);
+        min.y = Math.min(min.y, p[i + 1]); max.y = Math.max(max.y, p[i + 1]);
+        min.z = Math.min(min.z, p[i + 2]); max.z = Math.max(max.z, p[i + 2]);
+      }
+      this.boundingBox = { min, max };
+    }
+    computeBoundingSphere() {}
+  }
+  const extendedFake = { ...fakeTHREE, BufferGeometry: BoundsGeometry };
+
+  // Copy into a standalone ArrayBuffer: readFileSync hands back a Buffer whose
+  // backing store may be shared, and parseGlb takes a DataView over it.
+  const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const parsed = parseGlb(arrayBuffer);
+  const meshes = glbToMeshes(parsed, extendedFake);
+
+  assert.deepEqual(
+    meshes.map((m) => m.name),
+    ['TerracePergola', 'TerracePergolaSlats', 'TerracePlanterA',
+      'TerracePlanterASoil', 'TerracePlanterB', 'TerracePlanterBSoil'],
+    'the six authored parts are present and named'
+  );
+
+  let triangles = 0;
+  for (const mesh of meshes) {
+    assert.ok(mesh.material && typeof mesh.material.name === 'string' && mesh.material.name.length > 0,
+      `${mesh.name} carries a named material so a texture family can find it`);
+    assert.ok(mesh.geometry.index, `${mesh.name} is indexed`);
+    triangles += mesh.geometry.index.array.length / 3;
+  }
+  assert.ok(triangles < 400, `the furniture stays low-poly (${triangles} triangles)`);
+
+  // The combined footprint must fit the authored box: this is the same check the
+  // loader makes at runtime, held against the file actually on disk.
+  const footprint = fountainFootprint(meshes);
+  assert.ok(footprint.width <= TERRACE_DETAIL_MODEL_SIZE.width + 0.01,
+    `width ${footprint.width} fits ${TERRACE_DETAIL_MODEL_SIZE.width}`);
+  assert.ok(footprint.depth <= TERRACE_DETAIL_MODEL_SIZE.depth + 0.01,
+    `depth ${footprint.depth} fits ${TERRACE_DETAIL_MODEL_SIZE.depth}`);
+  assert.ok(footprint.height <= TERRACE_DETAIL_MODEL_SIZE.height + 0.01,
+    `height ${footprint.height} fits ${TERRACE_DETAIL_MODEL_SIZE.height}`);
+  assert.ok(footprint.minY >= -0.01, 'nothing sinks below the ground plane');
+
+  // And the loader itself accepts the real file, so the two halves agree.
+  const result = await loadTerraceDetail({
+    THREE: extendedFake,
+    loadGlb: (buf) => glbToMeshes(parseGlb(buf), extendedFake),
+    fetchImpl: async () => okResponse(arrayBuffer)
+  });
+  assert.equal(result.ok, true, `the shipped asset loads (${result.reason || 'ok'})`);
+  assert.equal(result.bytes, bytes.byteLength);
+  assert.equal(result.url, TERRACE_DETAIL_ASSET);
+});
+
+test('the shipped house-detail GLB parses and matches the authored box', async () => {
+  const file = join(ROOT, 'assets/house-detail.glb');
+  assert.ok(existsSync(file), 'the asset is committed');
+  const bytes = readFileSync(file);
+  assert.ok(bytes.byteLength >= 8 * 1024, `the file is real geometry (${bytes.byteLength} bytes)`);
+
+  // A local, slightly richer fake: the shared one stubs computeBoundingBox, and
+  // this test needs the real bounds the GLB describes. Extended here rather than
+  // in the shared object so the other tests keep their no-op stub.
+  class BoundsGeometry {
+    constructor() { this.attributes = {}; }
+    setAttribute(n, a) { this.attributes[n] = a; }
+    setIndex(a) { this.index = a; }
+    computeVertexNormals() {}
+    computeBoundingBox() {
+      const p = this.attributes.position.array;
+      const min = { x: Infinity, y: Infinity, z: Infinity };
+      const max = { x: -Infinity, y: -Infinity, z: -Infinity };
+      for (let i = 0; i < p.length; i += 3) {
+        min.x = Math.min(min.x, p[i]); max.x = Math.max(max.x, p[i]);
+        min.y = Math.min(min.y, p[i + 1]); max.y = Math.max(max.y, p[i + 1]);
+        min.z = Math.min(min.z, p[i + 2]); max.z = Math.max(max.z, p[i + 2]);
+      }
+      this.boundingBox = { min, max };
+    }
+    computeBoundingSphere() {}
+  }
+  const extendedFake = { ...fakeTHREE, BufferGeometry: BoundsGeometry };
+
+  // Copy into a standalone ArrayBuffer: readFileSync hands back a Buffer whose
+  // backing store may be shared, and parseGlb takes a DataView over it.
+  const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const parsed = parseGlb(arrayBuffer);
+  const meshes = glbToMeshes(parsed, extendedFake);
+
+  assert.deepEqual(
+    meshes.map((m) => m.name),
+    ['HouseShutter_-2.0_-1', 'HouseShutter_-2.0_1', 'HouseShutter_2.0_-1',
+      'HouseShutter_2.0_1', 'HouseWindowBox_-2.0', 'HouseWindowBox_2.0',
+      'HouseFrontStep', 'HouseDoormat', 'HouseGutter_front', 'HouseGutter_back',
+      'HouseDownspout', 'HouseChimneyPot'],
+    'the twelve authored parts are present and named'
+  );
+
+  let triangles = 0;
+  for (const mesh of meshes) {
+    assert.ok(mesh.material && typeof mesh.material.name === 'string' && mesh.material.name.length > 0,
+      `${mesh.name} carries a named material so a texture family can find it`);
+    assert.ok(mesh.geometry.index, `${mesh.name} is indexed`);
+    triangles += mesh.geometry.index.array.length / 3;
+  }
+  assert.ok(triangles < 300, `the detail stays low-poly (${triangles} triangles)`);
+
+  // The combined footprint must fit the authored box: this is the same check the
+  // loader makes at runtime, held against the file actually on disk.
+  const footprint = fountainFootprint(meshes);
+  assert.ok(footprint.width <= HOUSE_DETAIL_MODEL_SIZE.width + 0.01,
+    `width ${footprint.width} fits ${HOUSE_DETAIL_MODEL_SIZE.width}`);
+  assert.ok(footprint.depth <= HOUSE_DETAIL_MODEL_SIZE.depth + 0.01,
+    `depth ${footprint.depth} fits ${HOUSE_DETAIL_MODEL_SIZE.depth}`);
+  assert.ok(footprint.height <= HOUSE_DETAIL_MODEL_SIZE.height + 0.01,
+    `height ${footprint.height} fits ${HOUSE_DETAIL_MODEL_SIZE.height}`);
+  assert.ok(footprint.minY >= -0.01, 'nothing sinks below the ground plane');
+
+  // And the loader itself accepts the real file, so the two halves agree.
+  const result = await loadHouseDetail({
+    THREE: extendedFake,
+    loadGlb: (buf) => glbToMeshes(parseGlb(buf), extendedFake),
+    fetchImpl: async () => okResponse(arrayBuffer)
+  });
+  assert.equal(result.ok, true, `the shipped asset loads (${result.reason || 'ok'})`);
+  assert.equal(result.bytes, bytes.byteLength);
+  assert.equal(result.url, HOUSE_DETAIL_ASSET);
 });

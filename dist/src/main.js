@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { buildWorld, applyPhase, KEY_SPOT, KEY_PICKUP_RANGE, floorHeightAt, TERRACE, STEP_HEIGHT, BENCH } from './world.js';
+import { buildWorld, applyPhase, KEY_SPOT, KEY_PICKUP_RANGE, floorHeightAt, surfaceHeightAt, TERRACE, STEP_HEIGHT, BENCH } from './world.js';
 import { Player } from './player.js';
-import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, upgradeCastSkin, animateCast, TALK_RANGE } from './npcs.js';
+import { createNPCs, updateNPCs, setNPCRoutine, upgradeNPCs, upgradeCastCloth, upgradeCastSkin, upgradeCastAccent, upgradeCastBoot, upgradeCastPaper, upgradeCastSteel, upgradeCastWood, animateCast, TALK_RANGE } from './npcs.js';
 import { welcome } from './onboard.js';
 import {
   createInitialState,
@@ -35,7 +35,7 @@ import {
   noteExchange,
   AMBIENT_CHANCE
 } from './ambient.js';
-import { phaseAt, clockLabel, wrapClock, nextPhaseStart } from './daynight.js';
+import { phaseAt, clockLabel, wrapClock, nextPhaseStart, nightFraction } from './daynight.js';
 import { loadGlb } from './glb.js';
 import { createAdaptiveResolution, MIN_RATIO } from './perf.js';
 import { createQualityTier, QUALITY_LOW, QUALITY_FULL } from './quality.js';
@@ -71,6 +71,7 @@ const epilogueEl = $('epilogue');
 const epilogueTitle = $('epilogue-title');
 const epilogueOpening = $('epilogue-opening');
 const epilogueBranches = $('epilogue-branches');
+const epilogueSidework = $('epilogue-sidework');
 const epilogueClosers = $('epilogue-closers');
 const epilogueClosing = $('epilogue-closing');
 const epilogueClose = $('epilogue-close');
@@ -335,6 +336,28 @@ const contextLostReload = $('context-lost-reload');
 
 // --- World, player, state -------------------------------------------------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
+// Three's WebGLProgram does `getProgramInfoLog(...).trim()` before it checks
+// the link status, but a null log is legal: the spec allows it for a program
+// with no diagnostics, WebGL hands it back for programs created while the
+// context is lost, and for stale programs after a context restore. Without
+// this shim the `.trim()` on null throws
+// `TypeError: Cannot read properties of null (reading 'trim')` and kills the
+// render loop for good: without it, a phone that dropped its context under
+// memory pressure showed the recovery sheet and then never recovered, even
+// after the browser handed the context back. Return '' for null
+// unconditionally: a program with no log is indistinguishable from one whose
+// log is empty, and three treats an empty log as "nothing to print".
+const gl = renderer.getContext();
+const rawProgramInfoLog = gl.getProgramInfoLog.bind(gl);
+gl.getProgramInfoLog = (program) => {
+  const log = rawProgramInfoLog(program);
+  return log === null ? '' : log;
+};
+const rawShaderInfoLog = gl.getShaderInfoLog.bind(gl);
+gl.getShaderInfoLog = (shader) => {
+  const log = rawShaderInfoLog(shader);
+  return log === null ? '' : log;
+};
 const basePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
 renderer.setPixelRatio(basePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -521,8 +544,33 @@ function scheduleEnvironmentMap(phaseId) {
   envMapScheduled = true;
   // requestIdleCallback is not available everywhere; a zero-delay timeout does
   // the same job of getting off the phase-change frame.
+  //
+  // The deadline is not optional. A plain requestIdleCallback waits for the
+  // browser to report an idle period, and the continuous requestAnimationFrame
+  // loop means that never happens: measured on this build, a bare callback was
+  // still unfulfilled after 8 s and the environment map was never built in
+  // play, so every metal, glass and water surface went unreflected. A 1 s
+  // deadline guarantees the build a slot without pulling PMREM work into the
+  // frame that repaints the sky.
   const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
-  idle(() => buildPendingEnvironmentMap());
+  idle(() => buildPendingEnvironmentMap(), { timeout: 1000 });
+}
+
+// The idle queue alone is not enough for the opening seconds of play: even a
+// deadline can land a second in, and the first view of the plaza is the one a
+// player judges. So once the first frame has been rendered -- the shaders are
+// compiled and the cost of one more task is no longer on the critical path --
+// the current phase's map is built on a zero-delay timeout if it is still
+// missing. Both paths funnel through buildPendingEnvironmentMap, which caches
+// per phase and clears pendingEnvPhase, so whichever runs first wins and the
+// other is a no-op; nothing can build twice.
+let firstFrameRendered = false;
+function ensureFirstEnvironmentMap() {
+  if (envMapsBuilt > 0) return;
+  if (!pendingEnvPhase) pendingEnvPhase = currentPhase;
+  setTimeout(() => {
+    if (envMapsBuilt === 0) buildPendingEnvironmentMap();
+  }, 0);
 }
 const npcs = createNPCs(scene);
 // Upgrade the cast from procedural figures to the modelled rigs in the
@@ -549,7 +597,30 @@ const castReady = upgradeNPCs(npcs, { THREE, loadGlb })
       .catch((error) => Object.assign(summary, { cloth: { dressed: 0, reason: String(error) } }))
       .then(() => upgradeCastSkin(npcs, { THREE }))
       .then((skin) => Object.assign(summary, { skin }))
-      .catch((error) => Object.assign(summary, { skin: { dressed: 0, reason: String(error) } }));
+      .catch((error) => Object.assign(summary, { skin: { dressed: 0, reason: String(error) } }))
+      .then(() => upgradeCastAccent(npcs, { THREE }))
+      .then((accent) => Object.assign(summary, { accent }))
+      .catch((error) => Object.assign(summary, { accent: { dressed: 0, reason: String(error) } }))
+      // Round 82: boots last, for the same settle-point reason.
+      .then(() => upgradeCastBoot(npcs, { THREE }))
+      .then((boot) => Object.assign(summary, { boot }))
+      .catch((error) => Object.assign(summary, { boot: { dressed: 0, reason: String(error) } }))
+      // Round 84: the cast's paper props (Oswin's apron, Wren's ledger pages),
+      // after boots on the same chain so `await castReady` still sees the
+      // fully dressed cast.
+      .then(() => upgradeCastPaper(npcs, { THREE }))
+      .then((paper) => Object.assign(summary, { paper }))
+      .catch((error) => Object.assign(summary, { paper: { dressed: 0, reason: String(error) } }))
+      // Round 110: the cast's armour (halden's helmet, nasal, pauldrons and
+      // spear tip) picks up the lamp metal normal + roughness maps.
+      .then(() => upgradeCastSteel(npcs, { THREE }))
+      .then((steel) => Object.assign(summary, { steel }))
+      .catch((error) => Object.assign(summary, { steel: { dressed: 0, reason: String(error) } }))
+      // Round 111: the cast's carried timber (mara's pole, pip's hoop, halden's
+      // spear shaft, wren's ledger board) picks up the crate plank maps.
+      .then(() => upgradeCastWood(npcs, { THREE }))
+      .then((wood) => Object.assign(summary, { wood }))
+      .catch((error) => Object.assign(summary, { wood: { dressed: 0, reason: String(error) } }));
   })
   .catch((error) => {
     return { loaded: 0, total: npcs.length, mode: 'boxes', reason: String(error) };
@@ -593,6 +664,17 @@ function syncPhase(force = false) {
   // phase constant, and a harness that jumps the clock then reads the fog in
   // the same tick should see the blended value, not the constant.
   applyAtmosphere(environment, clockSeconds);
+  // Round 93: the lit windows need the clock, not just the phase, because a
+  // bedtime falls inside a phase. syncPhase() is what a harness's setClock()
+  // runs, so refining here makes a forced clock paint the right village at once
+  // rather than waiting for the next frame.
+  if (environment.updateWindows) environment.updateWindows(nightFraction(clockSeconds));
+  if (environment.paintWindowSpill) environment.paintWindowSpill(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintWindowBleed) environment.paintWindowBleed(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintRoomGlow) environment.paintRoomGlow(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintWetStreak) environment.paintWetStreak(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintLampHalo) environment.paintLampHalo(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintMoonHalo) environment.paintMoonHalo(environment.phase, nightFraction(clockSeconds));
   setNPCRoutine(npcs, phase.id);
   clockPhase.textContent = phase.label;
   // The drone shifts root and level with the time of day.
@@ -738,6 +820,13 @@ function showEpilogue(epilogue) {
   epilogueBranches.innerHTML = epilogue.branchesUnrecorded
     ? `${branchHtml}<p class="epilogue-line">Some of what you did here was not written down, and the record of it is gone.</p>`
     : branchHtml;
+  // The late faction chores sit outside the main quest list, so they get their
+  // own block. It stays empty (no heading, no blank space) for a player who
+  // never took them, and never claims a chore that was only half-walked.
+  epilogueSidework.innerHTML = (epilogue.sidework || [])
+    .map((line) => `<p class="epilogue-line">${escapeHtml(line.text)}</p>`)
+    .join('');
+  epilogueSidework.hidden = epilogueSidework.innerHTML === '';
   epilogueClosers.innerHTML = epilogue.closers
     .map((closer) => `<p class="epilogue-standing"><strong>${escapeHtml(closer.name)}.</strong> ${escapeHtml(closer.text)}</p>`)
     .join('');
@@ -1848,6 +1937,51 @@ function frame() {
   // Round 75: the fountain's ripples travel. One call, after the phase has
   // settled so a phase jump cannot leave the surface on the wrong tick.
   if (environment.updateWater) environment.updateWater(dt);
+  // Round 85: the star field twinkles once per frame, next to the water it
+  // shares the sky with.
+  if (environment.updateStars) environment.updateStars(dt);
+  // Round 88: the cloud layer drifts once per frame.
+  if (environment.updateClouds) environment.updateClouds(dt);
+  // Round 98: the near passer clouds drift with the same frame, and skip
+  // themselves entirely when the layer is off (low tier, or night).
+  if (environment.updatePassers) environment.updatePassers(dt);
+  // Round 90: the meadow leans in the same wind field, once per frame (full
+  // tier only -- setQuality switches the sway off on low).
+  if (environment.updateMeadow) environment.updateMeadow(dt);
+  // Round 91: the bunting and banner cloth flutter once per frame (full tier).
+  if (environment.updateFlutter) environment.updateFlutter(dt);
+  // Round 91: the night firefly field drifts and blinks once per frame.
+  if (environment.updateFireflies) environment.updateFireflies(dt);
+  // Round 92: the daytime bird flock orbits and flaps, and the chimney columns
+  // climb. Both are instanced-quad passes and both stop on the low tier.
+  if (environment.updateBirds) environment.updateBirds(dt);
+  if (environment.updateSmoke) environment.updateSmoke(dt);
+  // Round 93: the daytime butterflies and the drifting dust motes are per-frame
+  // instanced passes; both stop on the low tier. The lit windows are not a
+  // per-frame pass -- their schedule only moves when a bedtime passes, so the
+  // call is cheap and the guard lives inside updateWindows.
+  if (environment.updateButterflies) environment.updateButterflies(dt);
+  if (environment.updateMotes) environment.updateMotes(dt);
+  if (environment.updateWindows) environment.updateWindows(nightFraction(clockSeconds));
+  if (environment.paintWindowSpill) environment.paintWindowSpill(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintWindowBleed) environment.paintWindowBleed(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintRoomGlow) environment.paintRoomGlow(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintWetStreak) environment.paintWetStreak(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintLampHalo) environment.paintLampHalo(environment.phase, nightFraction(clockSeconds));
+  if (environment.paintMoonHalo) environment.paintMoonHalo(environment.phase, nightFraction(clockSeconds));
+  if (environment.updateIvy) environment.updateIvy(dt);
+  if (environment.updateSpray) environment.updateSpray(dt);
+  if (environment.updateMist) environment.updateMist(dt);
+  if (environment.updateHaze) environment.updateHaze(dt);
+  // Round 94: fountain ripples travel, night moths orbit the lantern heads, puddles
+  // shimmer and roof shingles are static (paint only).
+  if (environment.updateRipples) environment.updateRipples(dt);
+  if (environment.updateMoths) environment.updateMoths(dt);
+  if (environment.updatePuddles) environment.updatePuddles(dt);
+  // Round 95: the wildflower and reed clumps sway in the same wind field. Both
+  // are per-frame instanced passes and both stop on the low tier.
+  if (environment.updateWildflowers) environment.updateWildflowers(dt);
+  if (environment.updateReeds) environment.updateReeds(dt);
   updateNPCs(npcs, dt, player.position);
   checkDuskWatch();
   maybeStartAmbient(dt);
@@ -1897,6 +2031,14 @@ function frame() {
   }
 
   renderer.render(scene, camera);
+
+  // The first rendered frame is the earliest safe moment to prefilter the
+  // environment map: shaders are compiled, and this is where the "no idle slot
+  // ever arrives" fallback starts (see ensureFirstEnvironmentMap).
+  if (!firstFrameRendered) {
+    firstFrameRendered = true;
+    ensureFirstEnvironmentMap();
+  }
 
   // Adapt resolution from the real frame time, not the clamped game delta. The
   // first few frames are dropped by the controller itself so shader compiles do
@@ -1976,6 +2118,11 @@ window.amazingAdventure = {
   scene,
   camera,
   environment,
+  // The paved surface under a point, which is not the same as the walking floor:
+  // the plaza disc, the lane floor and the terrace stand at three different
+  // heights. Round 105 places every ground overlay on it, so the browser suite
+  // can recompute where a decal should have gone instead of pinning one height.
+  surfaceHeightAt,
   // Lets a test (or a bug report) ask what actually shipped rather than guessing.
   assetState: () => environment.assetState,
   assetsReady: () => assetsReady,

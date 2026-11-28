@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 
 import {
   CYCLE_SECONDS, PHASES, wrapClock, phaseAt, phaseProgress, phaseRemaining,
-  clockLabel, nextPhaseStart, lanternsLit
+  clockLabel, nextPhaseStart, lanternsLit, nightFraction
 } from '../src/daynight.js';
 
 test('the cycle wraps in both directions', () => {
@@ -69,4 +69,34 @@ test('lanterns are only lit at dusk and night', () => {
   assert.equal(lanternsLit(10), false);
   assert.equal(lanternsLit(80), true);
   assert.equal(lanternsLit(150), true);
+});
+
+test('the night fraction advances smoothly from dusk into night', () => {
+  // Day is exactly 0: nothing is lit while the sun is up.
+  assert.equal(nightFraction(0), 0);
+  assert.equal(nightFraction(69.99), 0);
+  // Dusk starts the ramp at 0 and hands over to night at a quarter.
+  assert.equal(nightFraction(70), 0);
+  assert.ok(nightFraction(87.5) > 0.1 && nightFraction(87.5) < 0.15);
+  assert.ok(nightFraction(104.99) > 0.24 && nightFraction(104.99) <= 0.25);
+  // Night carries the remaining three quarters and ends at 1.
+  assert.ok(nightFraction(105) >= 0.25 && nightFraction(105) < 0.26);
+  assert.ok(nightFraction(150) > 0.55 && nightFraction(150) <= 0.7);
+  assert.ok(nightFraction(179.99) > 0.99 && nightFraction(179.99) <= 1);
+});
+
+test('the night fraction is monotonic across the dark half and total on junk', () => {
+  let previous = -1;
+  for (let t = 70; t < CYCLE_SECONDS; t += 0.5) {
+    const value = nightFraction(t);
+    assert.ok(Number.isFinite(value));
+    assert.ok(value >= 0 && value <= 1);
+    assert.ok(value >= previous, `night fraction went backwards at ${t}`);
+    previous = value;
+  }
+  assert.equal(nightFraction(NaN), 0);
+  assert.equal(nightFraction(undefined), 0);
+  assert.equal(nightFraction('night'), 0);
+  // A negative or over-cycle clock wraps rather than reading as junk.
+  assert.equal(nightFraction(CYCLE_SECONDS + 10), nightFraction(10));
 });

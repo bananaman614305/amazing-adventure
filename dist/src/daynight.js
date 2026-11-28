@@ -61,3 +61,31 @@ export function nextPhaseStart(seconds) {
 export function lanternsLit(seconds) {
   return phaseAt(seconds).id !== 'day';
 }
+
+/**
+ * How far through the dark half of the cycle it is, in [0, 1].
+ *
+ * Several schedules are not phase-shaped but night-shaped: a cottage window is
+ * lit from dusk until its owner goes to bed, and "goes to bed" is a point in the
+ * evening, not a phase boundary. The window schedule therefore needs one number
+ * that advances smoothly from 0 at dusk's first minute to 1 as night ends, so a
+ * pane can go out at 0.4 without waiting for the next phase to start.
+ *
+ * Dusk carries the first quarter of the ramp and night the remaining three
+ * quarters. That split is deliberate: dusk is the short, busy part of the
+ * evening (lanterns are lit, people are still about), while the long night is
+ * when the village goes quiet, so most bedtimes should fall inside it. The day
+ * is exactly 0, because a window that is not lit cannot be "later in the night".
+ *
+ * Total: a junk clock reads as 0 rather than NaN, so a caller can paint from it
+ * without a guard.
+ */
+export function nightFraction(seconds) {
+  const t = wrapClock(seconds);
+  const phase = phaseAt(t);
+  const progress = (t - phase.start) / (phase.end - phase.start);
+  const safe = Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0;
+  if (phase.id === 'dusk') return 0.25 * safe;
+  if (phase.id === 'night') return 0.25 + 0.75 * safe;
+  return 0;
+}

@@ -11,8 +11,9 @@
 //   2. Per-vertex contact darkening on dressed stone/wood props: vertices below
 //      a short ramp above the ground are darkened, upper geometry untouched.
 //
-// Both must degrade to nothing on the low tier, because the low tier exists to
-// keep mobile frames cheap and neither cue is worth a shadow-pass-sized cost.
+// The plaza AO map and the prop vertex-colour contact darkening are static cues
+// (a texture multiply and a baked colour attribute), so they stay on at every
+// tier; only the sun shadow pass and the per-frame decal fields drop on low.
 //
 // Nothing here claims a picture was looked at. Every check is a live
 // scene-graph measurement after a real boot, or a pure check on the same
@@ -40,8 +41,8 @@ checks.check('the plaza AO map is bound to UV channel 0, not uv1',
 const fullIntensity = plazaAoMapIntensity({ low: false });
 checks.check('the plaza AO intensity is a visible but modest fraction of indirect light',
   fullIntensity > 0 && fullIntensity <= 1, `${fullIntensity}`);
-checks.check('the low tier disables plaza AO entirely',
-  plazaAoMapIntensity({ low: true }) === 0, 'zero intensity, no extra sampling cost worth keeping');
+checks.check('the low tier keeps the plaza AO (static texture multiply, no per-frame cost)',
+  plazaAoMapIntensity({ low: true }) === fullIntensity, `${fullIntensity}`);
 
 {
   // A 1.2 m prop: base dark, mid partial, top full.
@@ -206,8 +207,8 @@ try {
     const compare = await page.evaluate(async () => {
       const api = window.amazingAdventure;
       // The adaptive loop drops tiers when the frame time spikes (software
-      // rendering does), which zeroes the AO intensity, so pin full quality
-      // before comparing and stop the loop from undoing it.
+      // rendering does), which would still change the shadow pass, so pin full
+      // quality before comparing and stop the loop from undoing it.
       api.quality.set('full');
       let plaza = null;
       api.scene.traverse((object) => {
@@ -263,7 +264,7 @@ try {
     }
   }
 
-  // --- Low tier: both cues must switch off, not merely get cheaper ----------
+  // --- Low tier: static cues stay on; only the shadow pass + decal fields drop -
   const low = await page.evaluate(async () => {
     const api = window.amazingAdventure;
     api.quality.set('low');
@@ -295,10 +296,11 @@ try {
   });
   report.lowTier = low;
   checks.check('low tier sets the body quality tag', low.tierTag === 'low', `dataset.quality=${low.tierTag}`);
-  checks.check('low tier zeroes the plaza AO intensity',
-    low.aoMapIntensity === 0, `intensity ${low.aoMapIntensity}`);
-  checks.check('low tier turns prop vertex colours off',
-    low.props > 0 && low.withVertexColors === 0,
+  checks.check('low tier keeps the authored plaza AO intensity (static texture multiply, no per-frame cost)',
+    Math.abs((low.aoMapIntensity ?? 0) - fullIntensity) <= 1e-9,
+    `intensity ${low.aoMapIntensity} vs ${fullIntensity}`);
+  checks.check('low tier keeps prop vertex colours on every mesh that carries a colour attribute (static baked cue)',
+    low.props > 0 && low.withVertexColors === low.props,
     `${low.withVertexColors}/${low.props} still on`);
 
   // Restore the full tier and prove the cues come back, so the switch is a

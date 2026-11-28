@@ -160,3 +160,7 @@ vite.config.ts.timestamp-*
 .nx/cache
 .nx/workspace-data
 .nx/migrate-runs
+
+# Claude Code subagent worktrees are scratch space, never part of the game.
+# (CLAUDE.md, .claude/settings.json and .claude/agents/ DO belong in the repo.)
+.claude/worktrees/

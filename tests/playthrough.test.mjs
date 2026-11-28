@@ -59,6 +59,20 @@ test('the ending is reachable by real play, with branches recorded', () => {
   assert.equal(epilogue.branches.length, 3, 'all three branching quests were resolved');
 });
 
+test('the late faction chores can be walked by real play, and the ending says so', () => {
+  // The wick round and the gate tally are optional, and deliberately outside
+  // QUEST_ORDER. That makes them easy to strand: nothing fails if the dialogue
+  // never offers them. Walk them through the real menus and check the ending
+  // gives the player credit for the work.
+  const { state, ended } = runPlaythrough({ chores: true });
+  assert.equal(questStatus(state, 'tally'), 'done', 'Halden\'s gate tally is walkable');
+  assert.equal(questStatus(state, 'wicks'), 'done', 'Mara\'s wick round is walkable');
+  assert.equal(storyComplete(state), true, 'the spine is still finished');
+  assert.deepEqual(ended.sidework.map((line) => line.choreId), ['wicks', 'tally'],
+    'the ending names both chores, in a stable order');
+  assert.equal(ended.branches.length, 3, 'the side work does not disturb the branch record');
+});
+
 test('paying the market toll does not make the game unwinnable', () => {
   // This is the regression test for the soft-lock. Paying is a legitimate choice
   // the menu offers, so it must not be a trap.
@@ -198,7 +212,7 @@ test('no reachable game state is a dead end, not just the one route I played', (
   // end, which looks like a finding and is only a truncation. So the cap is set
   // above the real graph (~33k states) and the result is checked for truncation
   // before any of its numbers are believed.
-  const result = findDeadEnds({ maxStates: 60000 });
+  const result = findDeadEnds({ maxStates: 200000 });
   assert.equal(result.truncated, false, 'the search finished; a capped run is not a proof');
   assert.ok(result.explored > 100, `the search actually covered ground, found ${result.explored}`);
   assert.equal(result.startReachable, true, 'the game is winnable from the start');

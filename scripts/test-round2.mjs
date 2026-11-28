@@ -372,7 +372,7 @@ try {
   const looks = await page.evaluate(() => {
     const { environment, setClock } = window.amazingAdventure;
     const sample = () => ({
-      sky: environment.scene.background.getHexString(),
+      sky: environment.scene.background?.getHexString?.(),
       sun: Number(environment.sun.intensity.toFixed(2)),
       lamps: Number(environment.lamps[0].light.intensity.toFixed(1)),
       phase: window.amazingAdventure.getClock().phase
@@ -1419,16 +1419,29 @@ try {
   });
   await new Promise((r) => setTimeout(r, 400));
 
-  const epilogueShot = await page.evaluate(() => ({
-    overlay: !document.getElementById('epilogue').hidden,
-    section: !document.getElementById('ending-section').hidden,
-    title: document.getElementById('epilogue-title').textContent,
-    branches: [...document.querySelectorAll('#epilogue-branches .epilogue-line')].map((e) => e.textContent),
-    closers: [...document.querySelectorAll('#epilogue-closers .epilogue-standing')].map((e) => e.textContent)
-  }));
+  const epilogueShot = await page.evaluate(async () => {
+    const s = await import('./src/state.js');
+    return {
+      overlay: !document.getElementById('epilogue').hidden,
+      section: !document.getElementById('ending-section').hidden,
+      title: document.getElementById('epilogue-title').textContent,
+      opening: document.getElementById('epilogue-opening').textContent,
+      questTotal: s.QUEST_ORDER.length,
+      branches: [...document.querySelectorAll('#epilogue-branches .epilogue-line')].map((e) => e.textContent),
+      closers: [...document.querySelectorAll('#epilogue-closers .epilogue-standing')].map((e) => e.textContent)
+    };
+  });
   checks.check('finishing the story shows the epilogue',
     epilogueShot.overlay === true && epilogueShot.section === true && epilogueShot.title.length > 0 && epilogueShot.branches.length === 3,
     JSON.stringify({ overlay: epilogueShot.overlay, branches: epilogueShot.branches.length }));
+
+  // The rendered opening used to say "Six errands" while the game had seven
+  // quests. Check the page's own text against the live QUEST_ORDER length, so a
+  // stale count cannot ship even if the pure test is skipped.
+  const numberWords = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+  checks.check('the rendered ending counts the quests the game has',
+    epilogueShot.opening.startsWith(`${numberWords[epilogueShot.questTotal - 1]} errands,`),
+    `opening "${epilogueShot.opening.slice(0, 22)}" vs ${epilogueShot.questTotal} quests`);
 
   checks.check('the epilogue reports the branches actually taken, not the others',
     epilogueShot.branches.some((b) => /kept the trader’s name out/i.test(b)) &&
@@ -1442,6 +1455,41 @@ try {
     JSON.stringify(epilogueShot.closers.map((c) => c.slice(0, 45))));
 
   await capture(page, 'round12-ending.png');
+
+  // The late chores (wicks, tally) are outside QUEST_ORDER, so the ending only
+  // mentions them when they were walked. Check both halves in the real overlay:
+  // silent when not taken, one honest line when done, and the main branch list
+  // unchanged either way.
+  const sideworkEmpty = await page.evaluate(() =>
+    document.querySelectorAll('#epilogue-sidework .epilogue-line').length);
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const s = await import('./src/state.js');
+    api.getState().quests.wicks = 'done';
+    // Re-render the overlay from the journal button, since endingSeen is sticky.
+    document.getElementById('epilogue').hidden = true;
+    document.getElementById('ending-open').click();
+    return s.CHORE_ORDER;
+  });
+  await new Promise((r) => setTimeout(r, 300));
+  const sideworkWalked = await page.evaluate(() => ({
+    lines: [...document.querySelectorAll('#epilogue-sidework .epilogue-line')].map((e) => e.textContent),
+    branches: document.querySelectorAll('#epilogue-branches .epilogue-line').length
+  }));
+  checks.check('the ending stays quiet about side work that was never walked',
+    sideworkEmpty === 0, `${sideworkEmpty} lines`);
+  checks.check('the ending remembers a walked wick round without disturbing the branches',
+    sideworkWalked.lines.length === 1 && /wick round/i.test(sideworkWalked.lines[0]) &&
+    sideworkWalked.branches === 3,
+    JSON.stringify({ lines: sideworkWalked.lines.length, branches: sideworkWalked.branches }));
+  await capture(page, 'round80-ending-sidework.png');
+  await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    api.getState().quests.wicks = 'none';
+    document.getElementById('epilogue').hidden = true;
+    document.getElementById('ending-open').click();
+  });
+  await new Promise((r) => setTimeout(r, 250));
 
   // The ending can be dismissed and reopened from the journal.
   await page.evaluate(() => document.getElementById('epilogue-close').click());
@@ -2035,9 +2083,22 @@ try {
 
   // --- 28. The modelled fountain and stone textures --------------------------
   // Await the settle point rather than sleeping: assets are an upgrade loaded in
-  // the background, so timing is not something a test should guess at.
-  const assets = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+  // the background, so timing is not something a test should guess at. The plaza
+  // AO intensity is set when the floor is dressed, and a slow headless run may
+  // have already dropped adaptive quality to low by the time assetsReady() fires
+  // -- so pin full for the samples and restore afterwards, the same pattern the
+  // moon/cloud checks below already use.
+  const assets = await page.evaluate(async () => {
     const api = window.amazingAdventure;
+    const restore = (() => {
+      const wasAdaptive = api.quality.adaptive;
+      const wasTier = api.quality.tier;
+      api.quality.setAdaptive(false);
+      api.quality.set('full');
+      return () => { api.quality.set(wasTier); if (wasAdaptive) api.quality.setAdaptive(true); };
+    })();
+    try {
+      return await api.assetsReady().then(() => {
     const model = api.scene.getObjectByName('fountain-model');
     const standin = api.scene.getObjectByName('fountain-standin');
     let parts = 0;
@@ -2057,7 +2118,9 @@ try {
         reach = Math.max(reach, Math.abs(b.min.x), Math.abs(b.max.x), Math.abs(b.min.z), Math.abs(b.max.z));
       });
     }
-    const plaza = api.scene.children.find((o) => o.isMesh && o.geometry.type === 'CircleGeometry');
+    const plaza = api.scene.getObjectByName('plaza-floor') ||
+      api.scene.children.find((o) => o.isMesh && o.geometry.type === 'CircleGeometry' &&
+        o.name !== 'ground-cloud-shadows' && o.name !== 'contact-shadows');
     // The terrace stone: named in world.js so this check does not have to guess
     // which grey box is which. Two treads (slab + ramp deck) and the upright
     // kerb/parapet band.
@@ -2070,7 +2133,7 @@ try {
         normal: Boolean(m.normalMap),
         rough: Boolean(m.roughnessMap),
         repeat: m.map ? [m.map.repeat.x, m.map.repeat.y] : null,
-        color: m.color.getHexString(),
+        color: m.color?.getHexString?.(),
         metalness: m.metalness
       };
     };
@@ -2105,8 +2168,45 @@ try {
         normal: Boolean(plaza.material.normalMap),
         rough: Boolean(plaza.material.roughnessMap),
         repeat: plaza.material.map ? [plaza.material.map.repeat.x, plaza.material.map.repeat.y] : null,
-        color: plaza.material.color.getHexString()
+        color: plaza.material.color?.getHexString?.()
       } : null,
+      // Round 100: the plaza was re-dressed from the second-generation flagstone
+      // set. The mesh is still the same CircleGeometry, so its UVs run 0..1 and
+      // the tiling lives on the texture repeat — the span is reported as evidence
+      // that the upgrade did not quietly switch to metre projection. The AO cue
+      // is baked into the set, so it is read straight off the material; the low
+      // tier drops it by design.
+      plazaSet: api.assetState().plazaFloorDetail || null,
+      plazaAo: Boolean(plaza && plaza.material && plaza.material.aoMap),
+      plazaAoIntensity: plaza && plaza.material ? plaza.material.aoMapIntensity : null,
+      plazaUvSpan: plaza ? uvSpan(plaza) : null,
+      // Read the loader's own record rather than the texture image: the plaza is
+      // dressed from an ImageBitmap (no src string survives on it), so the only
+      // way to know WHICH family actually reached the material is the
+      // userData.sourceUrl the loader wrote at load time. The asset-state flag
+      // only says the upgrade ran; this says which file won.
+      plazaTextureSet: (() => {
+        const t = plaza && plaza.material && plaza.material.map;
+        const src = (t && t.userData && t.userData.sourceUrl) || '';
+        return { src: String(src).split('/').pop(), isV2: String(src).includes('plaza_floor_v2_albedo') };
+      })(),
+      // Round 101: the roof shingles. The `roof-shingles` InstancedMesh shares
+      // one material across every instance, so the check reads that one material
+      // and proves the new tile family reached it. The src is the loader's own
+      // userData.sourceUrl record (the ImageBitmap has no src string of its
+      // own), so this says which family actually dressed the roof.
+      shingles: (() => {
+        const mesh = api.scene.getObjectByName('roof-shingles');
+        const m = mesh && mesh.material;
+        if (!m) return null;
+        const src = (m.map && m.map.userData && m.map.userData.sourceUrl) || '';
+        return {
+          map: Boolean(m.map),
+          normal: Boolean(m.normalMap),
+          rough: Boolean(m.roughnessMap),
+          src: String(src).split('/').pop()
+        };
+      })(),
       terrace: {
         tread: describe(named('terrace-tread')),
         ramp: describe(named('terrace-ramp')),
@@ -2128,8 +2228,12 @@ try {
         kerbUvSpan: uvSpan(kerbs[0]),
         parapetUvSpan: uvSpan(parapets[0])
       }
-    };
-  }));
+    }
+    });
+    } finally {
+      restore();
+    }
+  });
 
   checks.check('the modelled fountain replaces the procedural stand-in',
     assets.state.fountain === 'model' && assets.modelPresent && !assets.standinPresent,
@@ -2152,6 +2256,38 @@ try {
     assets.plazaMaps && assets.plazaMaps.repeat[0] === 6 &&
     assets.plazaMaps.repeat[1] === 6 && assets.plazaMaps.color === 'ffffff',
     JSON.stringify({ repeat: assets.plazaMaps && assets.plazaMaps.repeat, color: assets.plazaMaps && assets.plazaMaps.color }));
+
+  // Round 100: the flagstone v2 set. The three checks above prove *a* flagstone
+  // material is bound; these prove it is the second-generation set and that the
+  // loader's own record of the upgrade agrees with what reached the material.
+  checks.check('the plaza is dressed from the second-generation flagstone set',
+    assets.plazaTextureSet && assets.plazaTextureSet.isV2 === true,
+    JSON.stringify({ src: assets.plazaTextureSet && assets.plazaTextureSet.src,
+                     isV2: assets.plazaTextureSet && assets.plazaTextureSet.isV2 }));
+
+  checks.check('the plaza upgrade reports its texture set, tile and repeat',
+    assets.plazaSet && assets.plazaSet.set === 'v2' && assets.plazaSet.tileMeters === 3 &&
+    Array.isArray(assets.plazaSet.repeat) &&
+    assets.plazaSet.repeat[0] === 6 && assets.plazaSet.repeat[1] === 6 &&
+    assets.plazaSet.maps && assets.plazaSet.maps.length === 3,
+    JSON.stringify(assets.plazaSet));
+
+  // Round 101: the roof shingles wear the new tile family. The plaza checks
+  // above prove *a* material is bound and the v2 family reached it; this one
+  // proves the `roof-shingles` InstancedMesh's shared material is dressed from
+  // the shingle family and that the loader's own source record agrees.
+  checks.check('the roof shingles wear the new tile family',
+    assets.state.shingle === 'textured' && assets.shingles &&
+    assets.shingles.map && assets.shingles.normal && assets.shingles.rough &&
+    String(assets.shingles.src || '').includes('roof_shingle_albedo'),
+    JSON.stringify({ state: assets.state.shingle, shingle: assets.shingles }));
+
+  // The AO map is dropped on the low tier by design, so the check pins the full
+  // tier first. The assets evaluation restored the tier and adaptive flag it
+  // found, so nothing further is needed here.
+  checks.check('the plaza keeps its baked AO cue on the full tier',
+    assets.plazaAo === true && assets.plazaAoIntensity > 0,
+    JSON.stringify({ ao: assets.plazaAo, intensity: assets.plazaAoIntensity }));
 
   // Round 62: the north terrace is the largest untextured grey mass left in the
   // plaza view. Tread, ramp deck and parapet share the wall stone family but must
@@ -2232,7 +2368,7 @@ try {
         normal: Boolean(m.normalMap),
         rough: Boolean(m.roughnessMap),
         repeat: m.map ? [m.map.repeat.x, m.map.repeat.y] : null,
-        color: m.color.getHexString(),
+        color: m.color?.getHexString?.(),
         metalness: m.metalness,
         roughness: Number(m.roughness.toFixed(3))
       };
@@ -2262,7 +2398,7 @@ try {
       // ~21% luma, so a multiplier in this band is a visible tone shift without
       // washing the map out; 255 would mean the two stones render identically.
       darkColorLuma: (() => {
-        const hex = found.FountainPlinthLower?.material?.color?.getHexString();
+        const hex = found.FountainPlinthLower?.material?.color?.getHexString?.();
         if (!hex) return null;
         const r = parseInt(hex.slice(0, 2), 16);
         const g = parseInt(hex.slice(2, 4), 16);
@@ -2362,8 +2498,8 @@ try {
         panes.push({
           mesh: o.name,
           material: name,
-          color: o.material.color.getHexString(),
-          emissive: o.material.emissive.getHexString(),
+          color: o.material.color?.getHexString?.(),
+          emissive: o.material.emissive?.getHexString?.(),
           glow: Number(Number(o.material.emissiveIntensity).toFixed(3)),
           metalness: Number(Number(o.material.metalness).toFixed(3)),
           roughness: Number(Number(o.material.roughness).toFixed(3)),
@@ -2507,6 +2643,108 @@ try {
     JSON.stringify(glass.nightLit.filter((p) => p.material === 'LampGlass')
       .map((p) => [p.mesh, p.lane, p.matId.slice(0, 8)])));
 
+  // --- 28c. Glass-pane halo follows the hour and the lane (round 119) ---------
+  // Round 74 made the panes themselves glow; round 119 gives each lit pane a
+  // small additive quad in the air around it, so a hot pane reads as light
+  // scattering in the air rather than the glass being lit from behind. The
+  // quads are two InstancedMeshes -- 'glass-halo' for the six plaza/window
+  // panes, 'glass-halo-lane' for the lane post's pane -- hanging off the
+  // panes' registration-time centres; each mesh's material opacity is the
+  // glasshalo response curve at the phase and lane state, and the whole layer
+  // drops on the low tier.
+  const glassHalo = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    api.quality.set('full');
+    const read = () => {
+      const env = api.environment;
+      const plaza = api.scene.getObjectByName('glass-halo');
+      const lane = api.scene.getObjectByName('glass-halo-lane');
+      if (!plaza || !lane) return null;
+      return {
+        plazaCount: plaza.count,
+        laneCount: lane.count,
+        material: plaza.material?.name || null,
+        blending: plaza.material?.blending,
+        plazaOpacity: Number(plaza.material?.opacity ?? -1),
+        plazaVisible: plaza.visible,
+        laneVisible: lane.visible,
+        on: env.glassHaloOn,
+        haloCount: env.glassHaloCount,
+        haloLaneCount: env.glassHaloLaneCount
+      };
+    };
+    const night = (lit) => {
+      api.getState().flags.laneLanternsLit = lit;
+      api.setClock(140);
+      return read();
+    };
+    const day = (() => { api.getState().flags.laneLanternsLit = false; api.setClock(20); return read(); })();
+    const duskDark = (() => { api.getState().flags.laneLanternsLit = false; api.setClock(85); return read(); })();
+    const nightDark = night(false);
+    const nightLit = night(true);
+    api.quality.set('low');
+    const nightLow = read();
+    api.quality.set('full');
+    api.getState().flags.laneLanternsLit = false;
+    api.setClock(20);
+    return { day, duskDark, nightDark, nightLit, nightLow };
+  });
+
+  checks.check('one glass halo quad per registered pane, split plaza and lane (round 119)',
+    glassHalo.day
+    && glassHalo.day.plazaCount === 6
+    && glassHalo.day.laneCount === 1
+    && glassHalo.day.haloCount === 7
+    && glassHalo.day.haloLaneCount === 1
+    && glassHalo.day.material === 'GlassHalo'
+    && glassHalo.day.blending === 2
+    && glassHalo.day.plazaVisible === false
+    && glassHalo.day.laneVisible === false,
+    JSON.stringify(glassHalo.day));
+
+  checks.check('the halo follows the hour: dark at day, leading at dusk, full at night',
+    glassHalo.day.plazaVisible === false
+    && glassHalo.day.plazaOpacity === 0
+    && glassHalo.duskDark.plazaVisible === true
+    && glassHalo.duskDark.plazaOpacity > 0
+    && glassHalo.duskDark.plazaOpacity < 1
+    && glassHalo.nightLit.plazaVisible === true
+    && glassHalo.nightLit.plazaOpacity === 1,
+    JSON.stringify({ day: glassHalo.day.plazaOpacity, dusk: glassHalo.duskDark.plazaOpacity,
+                     night: glassHalo.nightLit.plazaOpacity }));
+
+  checks.check('a dark lane keeps its halo dark at every hour (round 119)',
+    // The lane post's pane is the one fixture the player lights, so its halo
+    // must not glow over a dark bulb -- and must glow once the round is walked,
+    // over the same hour. The lane mesh's strength is the glasshalo response
+    // curve at the lane state, which is zero for a dark lane at every hour.
+    // The plaza panes and the house windows have no such rule: their mesh
+    // follows the hour alone, so it stays lit over a dark lane.
+    glassHalo.nightDark.laneVisible === false
+    && glassHalo.duskDark.laneVisible === false
+    && glassHalo.nightLit.laneVisible === true
+    && glassHalo.nightDark.plazaVisible === true
+    && glassHalo.nightLit.plazaVisible === true,
+    JSON.stringify({ dark: { lane: glassHalo.nightDark.laneVisible, plaza: glassHalo.nightDark.plazaVisible },
+                     dusk: { lane: glassHalo.duskDark.laneVisible, plaza: glassHalo.duskDark.plazaVisible },
+                     lit: { lane: glassHalo.nightLit.laneVisible, plaza: glassHalo.nightLit.plazaVisible } }));
+
+  checks.check('the low tier drops the halo and restoring full brings it back',
+    // No phase change between the two reads: setQuality itself must re-write the
+    // halo, or a tier flip would leave the halo visible on a low tier that has
+    // no point lights behind it.
+    glassHalo.nightLow.on === false
+    && glassHalo.nightLow.plazaVisible === false
+    && glassHalo.nightLow.laneVisible === false
+    && glassHalo.nightLit.on === true
+    && glassHalo.nightLit.plazaVisible === true
+    && glassHalo.nightLit.laneVisible === true,
+    JSON.stringify({ low: { on: glassHalo.nightLow.on, plaza: glassHalo.nightLow.plazaVisible,
+                            lane: glassHalo.nightLow.laneVisible },
+                     full: { on: glassHalo.nightLit.on, plaza: glassHalo.nightLit.plazaVisible,
+                             lane: glassHalo.nightLit.laneVisible } }));
+
   // Round 64: the north gate piers and lintel. They are the tallest untextured
   // stone in the plaza's main sight line, so they get the same family and the
   // same metre projection as the walls they stand in.
@@ -2535,7 +2773,7 @@ try {
         normal: Boolean(m.normalMap),
         rough: Boolean(m.roughnessMap),
         repeat: m.map ? [m.map.repeat.x, m.map.repeat.y] : null,
-        color: m.color.getHexString(),
+        color: m.color?.getHexString?.(),
         metalness: m.metalness
       };
     };
@@ -2628,7 +2866,7 @@ try {
       models,
       bulbs: bulbs.length,
       hiddenStandins,
-      emissive: bulbs[0] ? bulbs[0].material.emissive.getHexString() : null,
+      emissive: bulbs[0] ? bulbs[0].material.emissive?.getHexString?.() : null,
       intensity: bulbs[0] ? bulbs[0].material.emissiveIntensity : null,
       // Identity, not equality: two materials with the same numbers can still be
       // one object, and that sharing is what darkened the plaza posts.
@@ -2747,6 +2985,29 @@ try {
     house.state.house === 'model' && house.models === 1 && house.hidden === 2,
     JSON.stringify({ state: house.state.house, models: house.models,
                     hidden: house.hidden }));
+  // --- 28g-ii. The modelled house detail overlay ----------------------------
+  const houseDetail = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    let detailModels = 0;
+    const detailNames = [];
+    api.scene.traverse((o) => {
+      if (o.name === 'house-detail-model') detailModels += 1;
+      if (o.isMesh && o.parent && o.parent.name === 'house-detail-model') detailNames.push(o.name);
+    });
+    const st = api.assetState();
+    return {
+      state: st.houseOverlay,
+      detail: st.houseOverlayDetail,
+      models: detailModels,
+      names: detailNames.sort(),
+      y: (() => { let y = null; api.scene.traverse((o) => { if (o.name === 'house-detail-model') y = o.position.y; }); return y; })()
+    };
+  }));
+  checks.check('the modelled house detail overlay rides the house origin',
+    houseDetail.state === 'model' && houseDetail.models === 1 && houseDetail.y === 0 &&
+      houseDetail.detail && houseDetail.detail.parts >= 12,
+    JSON.stringify({ state: houseDetail.state, models: houseDetail.models,
+                    y: houseDetail.y, detail: houseDetail.detail }));
 
   await capture(page, 'round41-house.png');
   // --- 28h. Prop models wear their material families ------------------------
@@ -2907,6 +3168,134 @@ try {
   checks.check('the border walls wear the stone family',
     plaza.walls === 'textured' && plaza.wallMaps.length === 3,
     JSON.stringify({ walls: plaza.walls, maps: plaza.wallMaps }));
+  // --- 28k-i. The border-wall trim -------------------------------------------
+  // The coping course, plinth course and pilaster strips that turn the bare wall
+  // boxes into dressed ashlar. Named pieces, shared box-projected UVs, one group
+  // the low tier drops.
+  const trim = await page.evaluate(() => window.amazingAdventure.assetsReady().then(() => {
+    const api = window.amazingAdventure;
+    const state = api.assetState();
+    const group = api.scene.getObjectByName('border-wall-trim');
+    const pieces = [];
+    group && group.traverse((o) => { if (o.isMesh) pieces.push(o.name); });
+    const one = (name) => group && group.getObjectByName(name);
+    const describe = (mesh) => {
+      if (!mesh || !mesh.material) return null;
+      const m = mesh.material;
+      return {
+        map: Boolean(m.map), normal: Boolean(m.normalMap),
+        rough: Boolean(m.roughnessMap), repeat: m.map ? [m.map.repeat.x, m.map.repeat.y] : null,
+        color: m.color ? m.color.getHexString() : null, metalness: m.metalness
+      };
+    };
+    const uvSpan = (mesh) => {
+      const uv = mesh && mesh.geometry && mesh.geometry.getAttribute &&
+        mesh.geometry.getAttribute('uv');
+      if (!uv) return null;
+      let min = Infinity; let max = -Infinity;
+      for (let i = 0; i < uv.count * 2; i += 1) {
+        const v = uv.array[i];
+        if (v < min) min = v;
+        if (v > max) max = v;
+      }
+      return [Number(min.toFixed(3)), Number(max.toFixed(3))];
+    };
+    // A box-projected piece maps every face by metres / tile, so the widest UV
+    // span across the piece equals its longest edge over the tile size. That
+    // ratio is the metric projection's fingerprint: a piece wearing the wall's
+    // own repeat would carry the wall's span instead.
+    const uvMetric = (mesh) => {
+      const span = uvSpan(mesh);
+      if (!span || !mesh.geometry) return null;
+      mesh.geometry.computeBoundingBox();
+      const box = mesh.geometry.boundingBox;
+      const size = box.max.clone().sub(box.min);
+      const maxDim = Math.max(size.x, size.y, size.z);
+      return { span, maxDim: Number(maxDim.toFixed(3)),
+               ratio: Number(((span[1] - span[0]) / maxDim).toFixed(4)) };
+    };
+    return {
+      wallsTrim: state.wallsTrim,
+      trimMaps: state.wallsTrimDetail ? state.wallsTrimDetail.maps : [],
+      trimTile: state.wallsTrimDetail ? state.wallsTrimDetail.tileMeters : null,
+      trimMeshes: state.wallsTrimDetail ? state.wallsTrimDetail.meshes : null,
+      groupVisible: Boolean(group && group.visible),
+      pieces,
+      kinds: { coping: pieces.filter((n) => n.includes('-coping-')).length,
+               plinth: pieces.filter((n) => n.includes('-plinth-')).length,
+               pilaster: pieces.filter((n) => n.includes('-pilaster-')).length },
+      coping: describe(one('border-wall-coping-south')),
+      plinth: describe(one('border-wall-plinth-south')),
+      pilaster: describe(one('border-wall-pilaster-south-0')),
+      copingUv: uvSpan(one('border-wall-coping-south')),
+      pilasterUv: uvSpan(one('border-wall-pilaster-south-0')),
+      copingMetric: uvMetric(one('border-wall-coping-south')),
+      pilasterMetric: uvMetric(one('border-wall-pilaster-south-0'))
+    };
+  }));
+  // The counts are pinned rather than merely non-zero: 5 runs get a coping and a
+  // plinth, and the seeded spacing yields exactly 32 pilasters (south 7, east 9,
+  // west 9, north-left 5, north-right 2). A spacing or band change that silently
+  // drops or doubles the strips is a visible change and must fail here.
+  checks.check('the trim covers all five runs with named pieces',
+    trim.groupVisible && trim.pieces.length === 42 &&
+    trim.kinds.coping === 5 && trim.kinds.plinth === 5 && trim.kinds.pilaster === 32,
+    JSON.stringify({ visible: trim.groupVisible, kinds: trim.kinds, total: trim.pieces.length }));
+  checks.check('the trim dresses the coping, plinth and pilaster from the stone family',
+    trim.wallsTrim === 'textured' && trim.trimMaps.length === 3 && trim.trimTile === 1.6 &&
+    trim.trimMeshes === trim.pieces.length,
+    JSON.stringify({ wallsTrim: trim.wallsTrim, maps: trim.trimMaps,
+                     tile: trim.trimTile, meshes: trim.trimMeshes }));
+  // The metric projection's fingerprint is UV metres per world metre: a face
+  // maps at exactly 1 / tileMeters, so the widest UV span over the piece's
+  // longest edge is 1/1.6 = 0.625. A piece still wearing the wall's own repeat
+  // (or a UV span under 1, i.e. not projected at all) misses that ratio.
+  const expectedRatio = 1 / 1.6;
+  const metricOk = (metric) => metric &&
+    Math.abs(metric.ratio - expectedRatio) < 0.01;
+  checks.check('the trim pieces wear the projected stone maps, not the wall repeat',
+    trim.coping && trim.coping.map && trim.coping.normal && trim.coping.rough &&
+    trim.plinth && trim.plinth.map && trim.pilaster && trim.pilaster.map &&
+    trim.coping.repeat[0] === 1 && trim.coping.repeat[1] === 1 &&
+    metricOk(trim.copingMetric) && metricOk(trim.pilasterMetric),
+    JSON.stringify({ coping: trim.coping, copingMetric: trim.copingMetric,
+                     pilasterMetric: trim.pilasterMetric, expectedRatio }));
+  // The tier flip must be fully reversible: the trim group drops on `low` and
+  // comes back on `full`, and the adaptive flag the suite found must be put
+  // back, or every later check runs against a pinned tier (and stays on `low`
+  // if the suite had already dropped there). Both halves are asserted, because
+  // a `setQuality` that only ever hides the group would pass the drop test.
+  const before = await page.evaluate(() => {
+    const q = window.amazingAdventure.quality;
+    return { tier: q.tier, adaptive: q.adaptive };
+  });
+  const tierFlip = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    const group = api.scene.getObjectByName('border-wall-trim');
+    const read = () => ({ visible: Boolean(group && group.visible), tier: api.quality.tier });
+    api.quality.set('low');
+    const low = read();
+    api.quality.set('full');
+    const full = read();
+    return { low, full };
+  });
+  await page.evaluate((b) => {
+    window.amazingAdventure.quality.set(b.tier);
+    window.amazingAdventure.quality.setAdaptive(b.adaptive);
+  }, before);
+  const restoredQuality = await page.evaluate(() => {
+    const q = window.amazingAdventure.quality;
+    return { tier: q.tier, adaptive: q.adaptive };
+  });
+  checks.check('the low tier drops the whole trim band and full brings it back',
+    tierFlip.low.visible === false && tierFlip.low.tier === 'low' &&
+    tierFlip.full.visible === true && tierFlip.full.tier === 'full',
+    JSON.stringify(tierFlip));
+  checks.check('the trim tier flip restores the tier and the adaptive flag',
+    restoredQuality.tier === before.tier && restoredQuality.adaptive === before.adaptive,
+    JSON.stringify({ before, restored: restoredQuality }));
+
+  await capture(page, 'round45a-trim.png');
   checks.check('the sky is a vertex-colour gradient dome',
     plaza.dome && plaza.dome.vertexColors && plaza.dome.colorCount > 100,
     JSON.stringify(plaza.dome));
@@ -3036,9 +3425,9 @@ try {
             key, family: /^Skin$/i.test(name) ? 'skin' : 'hair',
             maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
             hasUv: Boolean(uv),
-            tint: o.material.color.getHexString(),
+            tint: o.material.color ? o.material.color.getHexString() : null,
             roughness: Number(Number(o.material.roughness).toFixed(3)),
-            metalness: Number(o.material.metalness).toFixed(3),
+            metalness: Number(Number(o.material.metalness).toFixed(3)),
             image: o.material.map ? o.material.map.image.width : 0,
             // World tile: how many UV units per metre of head, measured on the
             // head's own local width times the rig scale.
@@ -3106,7 +3495,2972 @@ try {
       .map((r) => [r.key.split('/')[0], Number(r.headTile.toFixed(3))])));
 
   await capture(page, 'round76-cast-skin.png');
-  // --- 28n. Vegetation: trees stand in, upgrade to models --------------------
+  // --- 28m2b. The cast's accent bands (round 81) ----------------------------
+  // The nine Accent meshes (sashes, scarves, tabard, cloak band, collar, leg
+  // wraps — 2.38 m2, the largest still-flat cast surface the audit found) are
+  // dressed with the neutral felt maps at a 0.18 m physical tile, keeping each
+  // NPC's authored dye. Checked on the live scene, after the real boot chain.
+  const accents = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    await api.castReady;
+    const rows = [];
+    const materials = new Set();
+    for (const npc of api.npcs) {
+      npc.group.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        if (!/^Accent$/i.test(o.material.name || '')) return;
+        const uv = o.geometry.getAttribute('uv');
+        materials.add(o.material.uuid);
+        rows.push({
+          key: `${npc.id}/${o.name}`,
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+          hasUv: Boolean(uv),
+          tint: o.material.color ? o.material.color.getHexString() : null,
+          roughness: Number(Number(o.material.roughness).toFixed(3)),
+          metalness: Number(Number(o.material.metalness).toFixed(3)),
+          image: o.material.map ? o.material.map.image.width : 0,
+          repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+          wrapped: o.material.map
+            ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+          dressed: o.userData.accentDressed === true
+        });
+      });
+    }
+    return { rows, materials: materials.size };
+  });
+  checks.check('all 9 cast accent meshes wear the three felt maps',
+    accents.rows.length === 9 && accents.rows.every((r) => r.maps === 3 && r.hasUv
+      && r.image === 512 && r.dressed),
+    JSON.stringify({ rows: accents.rows.length,
+                    maps: [...new Set(accents.rows.map((r) => r.maps))],
+                    images: [...new Set(accents.rows.map((r) => r.image))] }));
+  checks.check('the accent map is one per rig and tiles by projection, not repeat',
+    accents.materials === 6 && accents.rows.every((r) => r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    `${accents.materials} materials for ${accents.rows.length} meshes; ` +
+    JSON.stringify([...new Set(accents.rows.map((r) => JSON.stringify(r.repeat)))]) );
+  checks.check('six characters keep six distinct accent dyes under one felt set',
+    new Set(accents.rows.map((r) => r.tint)).size === 6
+      && accents.rows.every((r) => r.tint !== 'ffffff'),
+    JSON.stringify([...new Set(accents.rows.map((r) => r.tint))]));
+  checks.check('the dressed accents sit at felt roughness, not the authored 0.6',
+    accents.rows.every((r) => r.roughness === 0.9 && Number(r.metalness) === 0),
+    JSON.stringify({ roughness: [...new Set(accents.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(accents.rows.map((r) => r.metalness))] }));
+
+  await capture(page, 'round81-cast-accent.png');
+  // --- 28m2c. The cast's boots (round 82) ------------------------------------
+  // The eighteen Boot meshes (oswin, pip, halden, sable, wren — the robed
+  // Keeper's rig has no boots) are dressed with the round 82 leather maps at
+  // a 0.2 m physical tile, keeping each NPC's authored boot tint. Checked on
+  // the live scene, after the real boot chain.
+  const boots = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    await api.castReady;
+    const rows = [];
+    const materials = new Set();
+    for (const npc of api.npcs) {
+      npc.group.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        if (!/^Boot$/i.test(o.material.name || '')) return;
+        const uv = o.geometry.getAttribute('uv');
+        materials.add(o.material.uuid);
+        rows.push({
+          key: `${npc.id}/${o.name}`,
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+          hasUv: Boolean(uv),
+          tint: o.material.color ? o.material.color.getHexString() : null,
+          roughness: Number(Number(o.material.roughness).toFixed(3)),
+          metalness: Number(Number(o.material.metalness).toFixed(3)),
+          image: o.material.map ? o.material.map.image.width : 0,
+          repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+          wrapped: o.material.map
+            ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+          dressed: o.userData.bootDressed === true
+        });
+      });
+    }
+    return { rows, materials: materials.size };
+  });
+  checks.check('all 18 cast boot meshes wear the three leather maps',
+    boots.rows.length === 18 && boots.rows.every((r) => r.maps === 3 && r.hasUv
+      && r.image === 512 && r.dressed),
+    JSON.stringify({ rows: boots.rows.length,
+                    maps: [...new Set(boots.rows.map((r) => r.maps))],
+                    images: [...new Set(boots.rows.map((r) => r.image))] }));
+  checks.check('the leather map is one per rig and tiles by projection, not repeat',
+    boots.materials === 5 && boots.rows.every((r) => r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    `${boots.materials} materials for ${boots.rows.length} meshes; ` +
+    JSON.stringify([...new Set(boots.rows.map((r) => JSON.stringify(r.repeat)))]));
+  checks.check('the booted five keep their own boot tints, and Mara wears none',
+    boots.rows.every((r) => r.tint !== 'ffffff')
+      && !boots.rows.some((r) => r.key.startsWith('mara/')),
+    JSON.stringify([...new Set(boots.rows.map((r) => r.key.split('/')[0]))]));
+  checks.check('the dressed boots sit at leather roughness 0.9, not metal',
+    boots.rows.every((r) => r.roughness === 0.9 && Number(r.metalness) === 0),
+    JSON.stringify({ roughness: [...new Set(boots.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(boots.rows.map((r) => r.metalness))] }));
+
+  await capture(page, 'round82-cast-boot.png');
+  // --- 28m2d. The job board's paper (round 83) -----------------------------
+  // The job board's face (BoardFace, 1 mesh, 2.16 m2) and its three pinned
+  // slips (BoardPaper, 3 meshes, 0.4 m2) are dressed with the round 83 paper
+  // maps at a 0.3 m physical tile; the cream albedo stands alone (white tint).
+  // Checked on the live scene, after the real asset chain.
+  const paper = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const rows = [];
+    const materials = new Set();
+    api.scene.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      if (!/^(BoardFace|BoardPaper)$/i.test(o.material.name || '')) return;
+      const uv = o.geometry.getAttribute('uv');
+      materials.add(o.material.uuid);
+      rows.push({
+        name: o.name,
+        materialName: o.material.name,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+        hasUv: Boolean(uv),
+        tint: o.material.color ? o.material.color.getHexString() : null,
+        roughness: Number(Number(o.material.roughness).toFixed(3)),
+        metalness: Number(o.material.metalness).toFixed(3),
+        image: o.material.map ? o.material.map.image.width : 0,
+        repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+        wrapped: o.material.map
+          ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+        dressed: o.userData.boardPaperDressed === true
+      });
+    });
+    const st = typeof api.assetState === 'function' ? api.assetState() : api.assetState;
+    return { rows, materials: materials.size, assetState: st.boardPaper, detail: st.boardPaperDetail };
+  });
+  checks.check('all 4 job-board meshes wear the three paper maps',
+    paper.rows.length === 4 && paper.rows.every((r) => r.maps === 3 && r.hasUv
+      && r.image === 512 && r.dressed),
+    JSON.stringify({ rows: paper.rows.length,
+                    maps: [...new Set(paper.rows.map((r) => r.maps))],
+                    images: [...new Set(paper.rows.map((r) => r.image))] }));
+  checks.check('the paper map is one per mesh group and tiles by projection, not repeat',
+    paper.materials >= 1 && paper.rows.every((r) => r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    `${paper.materials} materials for ${paper.rows.length} meshes; ` +
+    JSON.stringify([...new Set(paper.rows.map((r) => JSON.stringify(r.repeat)))]));
+  checks.check('the paper face keeps a white tint (cream albedo stands alone)',
+    paper.rows.every((r) => r.tint === 'ffffff'),
+    JSON.stringify([...new Set(paper.rows.map((r) => r.tint))]));
+  checks.check('the dressed paper sits at paper roughness 0.9, not metal',
+    paper.rows.every((r) => r.roughness === 0.9 && Number(r.metalness) === 0),
+    JSON.stringify({ roughness: [...new Set(paper.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(paper.rows.map((r) => r.metalness))] }));
+  checks.check('assetState reports the board paper as textured',
+    paper.assetState === 'textured',
+    JSON.stringify({ assetState: paper.assetState, detail: paper.detail }));
+
+  await capture(page, 'round83-job-board-paper.png');
+  // --- 28m2e. The cast's paper props (round 84) -------------------------------
+  // One Paper mesh on each of three rigs -- oswin's Apron, sable's PropMap
+  // and wren's PropLedgerPages -- all carry the round 83
+  // paper maps at a 0.3 m physical tile, with a forced white tint so the cream
+  // albedo stands alone. Checked on the live scene, after the real boot chain
+  // (upgradeCastPaper runs at the end of castReady).
+  const castPaper = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    await api.castReady;
+    const rows = [];
+    const materials = new Set();
+    for (const npc of api.npcs) {
+      npc.group.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        if (!/^Paper$/i.test(o.material.name || '')) return;
+        const uv = o.geometry.getAttribute('uv');
+        materials.add(o.material.uuid);
+        rows.push({
+          key: `${npc.id}/${o.name}`,
+          maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+          hasUv: Boolean(uv),
+          tint: o.material.color ? o.material.color.getHexString() : null,
+          roughness: Number(Number(o.material.roughness).toFixed(3)),
+          metalness: Number(Number(o.material.metalness).toFixed(3)),
+          image: o.material.map ? o.material.map.image.width : 0,
+          repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+          wrapped: o.material.map
+            ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+          dressed: o.userData.paperDressed === true
+        });
+      });
+    }
+    return { rows, materials: materials.size };
+  });
+  checks.check('all 3 cast Paper meshes wear the three paper maps',
+    castPaper.rows.length === 3 && castPaper.rows.every((r) => r.maps === 3 && r.hasUv
+      && r.image === 512 && r.dressed),
+    JSON.stringify({ rows: castPaper.rows.length,
+                    maps: [...new Set(castPaper.rows.map((r) => r.maps))],
+                    images: [...new Set(castPaper.rows.map((r) => r.image))],
+                    keys: castPaper.rows.map((r) => r.key) }));
+  checks.check('the paper map is one per rig and tiles by projection, not repeat',
+    castPaper.materials >= 1 && castPaper.rows.every((r) => r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    `${castPaper.materials} materials for ${castPaper.rows.length} meshes; ` +
+    JSON.stringify([...new Set(castPaper.rows.map((r) => JSON.stringify(r.repeat)))]));
+  checks.check('the cast paper keeps a white tint (cream albedo stands alone)',
+    castPaper.rows.every((r) => r.tint === 'ffffff'),
+    JSON.stringify([...new Set(castPaper.rows.map((r) => r.tint))]));
+  checks.check('the dressed cast paper sits at paper roughness 0.9, not metal',
+    castPaper.rows.every((r) => r.roughness === 0.9 && Number(r.metalness) === 0),
+    JSON.stringify({ roughness: [...new Set(castPaper.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(castPaper.rows.map((r) => r.metalness))] }));
+
+  await capture(page, 'round84-cast-paper.png');
+
+  // --- Round 110: the cast's armour (Steel) -----------------------------------
+  // Halden's helmet, nasal, pauldrons and spear tip are authored with a single
+  // `Steel` material (roughness 0.4 / metalness 0.7, blue-grey) that no earlier
+  // pass dressed. Round 110 dresses it with the lamp metal normal + roughness
+  // maps at a 0.2 m tile and keeps the authored tint (no albedo map, so the
+  // blue-grey is not painted over). Checked live after castReady; the five
+  // meshes must carry exactly the two maps, have projected UVs, keep the tint,
+  // and sit at the family's 0.35 / 0.7 settings.
+  const castSteel = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    await api.castReady;
+    const rows = [];
+    const materials = new Set();
+    for (const npc of api.npcs) {
+      npc.group.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        if ((o.material.name || '') !== 'Steel') return;
+        const uv = o.geometry.getAttribute('uv');
+        materials.add(o.material.uuid);
+        rows.push({
+          key: `${npc.id}/${o.name}`,
+          map: Boolean(o.material.map),
+          normalMap: Boolean(o.material.normalMap),
+          roughnessMap: Boolean(o.material.roughnessMap),
+          hasUv: Boolean(uv),
+          tint: o.material.color ? o.material.color.getHexString() : null,
+          roughness: Number(Number(o.material.roughness).toFixed(3)),
+          metalness: Number(Number(o.material.metalness).toFixed(3)),
+          image: o.material.normalMap ? o.material.normalMap.image.width : 0,
+          dressed: o.userData.steelDressed === true
+        });
+      });
+    }
+    return { rows, materials: materials.size };
+  });
+  const steelKeys = castSteel.rows.map((r) => r.key).sort();
+  checks.check('halden\'s five Steel meshes are dressed with the metal maps',
+    castSteel.rows.length === 5 && castSteel.rows.every((r) => r.normalMap
+      && r.roughnessMap && !r.map && r.hasUv && r.dressed),
+    JSON.stringify({ rows: castSteel.rows.length, keys: steelKeys,
+                    normal: castSteel.rows.filter((r) => r.normalMap).length,
+                    albedoLeak: castSteel.rows.filter((r) => r.map).length }));
+  checks.check('the steel tint survives (no albedo map is painted over it)',
+    castSteel.rows.length > 0 &&
+      castSteel.rows.every((r) => r.tint && r.tint !== 'ffffff'
+        && r.tint === castSteel.rows[0].tint),
+    JSON.stringify([...new Set(castSteel.rows.map((r) => r.tint))]));
+  checks.check('the dressed steel sits at family roughness 0.35 and metalness 0.7',
+    castSteel.rows.every((r) => r.roughness === 0.35 && r.metalness === 0.7),
+    JSON.stringify({ roughness: [...new Set(castSteel.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(castSteel.rows.map((r) => r.metalness))] }));
+  checks.check('the steel map is shared per rig, not cloned per mesh',
+    castSteel.materials <= 6 && castSteel.rows.every((r) => r.image === 512),
+    `${castSteel.materials} materials for ${castSteel.rows.length} meshes; ` +
+    `images ${JSON.stringify([...new Set(castSteel.rows.map((r) => r.image))])}`);
+
+  await capture(page, 'round110-cast-steel.png');
+
+  // --- Round 111: ground dressing + the cast's carried wood -------------------
+  // Two surfaces were still flat: the house doormat (a bespoke coir albedo) and
+  // the terrace planters' inset soil tops. The plaza prop-family pass
+  // (upgradePropFamilies) now dresses them, and a new cast pass dresses the
+  // four `WoodP` props the cast carries (PropPole, PropHoop, PropSpear,
+  // PropLedger). Checked live after both settle points: each surface must carry
+  // the three maps, have a uv attribute, be marked by its pass, and sit at the
+  // family's settings. The doormat and soil ship a coloured albedo, so their
+  // tint must be white; the cast wood keeps the wood family's 0.78 / 0. The
+  // block pins the tier and disables adaptive switching inside a try/finally so
+  // the page is handed back exactly as the later checks expect.
+  const r111 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    try {
+      await api.assetsReady();
+      await api.castReady;
+
+      // The doormat: one mesh under the house-detail group.
+      const house = api.scene.getObjectByName('house-detail-model');
+      let doormat = null;
+      if (house) {
+        house.traverse((o) => {
+          if (o.isMesh && o.name === 'HouseDoormat') doormat = o;
+        });
+      }
+      const describe = (o) => {
+        if (!o) return null;
+        const uv = o.geometry && o.geometry.getAttribute('uv');
+        const m = o.material || {};
+        return {
+          found: true,
+          map: Boolean(m.map),
+          normalMap: Boolean(m.normalMap),
+          roughnessMap: Boolean(m.roughnessMap),
+          hasUv: Boolean(uv),
+          propFamily: o.userData ? (o.userData.propFamily || null) : null,
+          woodDressed: o.userData ? o.userData.woodDressed === true : false,
+          tint: m.color ? m.color.getHexString() : null,
+          roughness: Number(Number(m.roughness).toFixed(3)),
+          metalness: Number(Number(m.metalness).toFixed(3))
+        };
+      };
+      const doormatRow = describe(doormat);
+
+      // The two planter soil tops under the terrace-furniture group.
+      const furniture = api.scene.getObjectByName('terrace-furniture-model');
+      const soilRows = [];
+      if (furniture) {
+        furniture.traverse((o) => {
+          if (o.isMesh && (o.name === 'TerracePlanterASoil'
+            || o.name === 'TerracePlanterBSoil')) {
+            soilRows.push(Object.assign({ mesh: o.name }, describe(o)));
+          }
+        });
+      }
+
+      // The cast's four WoodP props, identified by material name. They sit on
+      // two different rigs; record how many distinct map images they share
+      // rather than asserting a tight count.
+      const woodRows = [];
+      const woodImages = new Set();
+      for (const npc of api.npcs) {
+        npc.group.traverse((o) => {
+          if (!o.isMesh || !o.material) return;
+          if ((o.material.name || '') !== 'WoodP') return;
+          const row = describe(o);
+          row.key = `${npc.id}/${o.name}`;
+          woodRows.push(row);
+          if (o.material.map && o.material.map.image) {
+            woodImages.add(o.material.map.image.width);
+          }
+        });
+      }
+
+      return {
+        doormat: doormatRow,
+        soil: soilRows,
+        wood: woodRows,
+        woodImageCount: woodImages.size
+      };
+    } finally {
+      api.quality.set(startTier);
+      if (startAdaptive) api.quality.setAdaptive(true);
+    }
+  });
+  checks.check('r111 the doormat carries bespoke coir maps and a uv set',
+    r111.doormat && r111.doormat.found === true && r111.doormat.map
+      && r111.doormat.normalMap && r111.doormat.roughnessMap && r111.doormat.hasUv
+      && r111.doormat.propFamily === 'doormat' && r111.doormat.tint === 'ffffff',
+    JSON.stringify(r111.doormat));
+  checks.check('r111 both planter soil tops carry bespoke maps and a uv set',
+    r111.soil.length === 2 && r111.soil.every((r) => r.found && r.map && r.normalMap
+      && r.roughnessMap && r.hasUv && r.propFamily === 'soil' && r.tint === 'ffffff'),
+    JSON.stringify(r111.soil));
+  checks.check('r111 the four cast WoodP props are dressed at wood 0.78 / 0',
+    r111.wood.length === 4 && r111.wood.every((r) => r.found && r.map && r.normalMap
+      && r.roughnessMap && r.hasUv && r.woodDressed && r.tint === 'ffffff'
+      && r.roughness === 0.78 && r.metalness === 0) && r111.woodImageCount <= 4,
+    JSON.stringify({ rows: r111.wood.length, images: r111.woodImageCount,
+      keys: r111.wood.map((r) => r.key).sort() }));
+
+  await capture(page, 'round111-ground-dressing.png');
+  // --- 28n. The night sky's star field (round 85) -----------------------------
+  // A star field sits inside the sky dome. At night it is full opacity and
+  // twinkle-bright; at day it is hidden; dusk sits between. Checked live, on
+  // the scene the real boot built.
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    api.setClock(150); // deep night
+    api.player.placeAt(0, 11, 0, -0.05, -0.6);
+  });
+  await new Promise((r) => setTimeout(r, 900));
+  const starNight = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    let mesh = null;
+    let star = null;
+    api.scene.traverse((o) => { if (o.name === 'sky-stars') mesh = o; });
+    if (mesh) star = mesh.geometry.getAttribute('position');
+    const material = mesh ? mesh.material : null;
+    const seen = [];
+    if (star) {
+      for (let i = 0; i < star.count; i += 1) {
+        seen.push(star.getY(i));
+      }
+    }
+    return {
+      opacity: material ? material.opacity : null,
+      visible: mesh ? mesh.visible : null,
+      count: star ? star.count : 0,
+      radius: star ? seen.reduce((m, v) => Math.max(m, Math.abs(v)), 0) : 0,
+      // Twinkle ran for a second: the size must have moved off its base 0.9.
+      size: material ? material.size : null
+    };
+  });
+  const starInfo = { night: starNight };
+  await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    api.setClock(10); // day
+  });
+  await new Promise((r) => setTimeout(r, 700));
+  const starDay = await page.evaluate(() => {
+    const api = window.amazingAdventure;
+    let mesh = null;
+    api.scene.traverse((o) => { if (o.name === 'sky-stars') mesh = o; });
+    const material = mesh ? mesh.material : null;
+    return { opacity: material ? material.opacity : null, visible: mesh ? mesh.visible : null };
+  });
+  starInfo.day = starDay;
+  checks.check('the star field is opaque and fully populated at night',
+    starInfo.night.opacity === 1 && starInfo.night.visible === true
+      && starInfo.night.count === 260 && starInfo.night.radius > 110,
+    JSON.stringify({ opacity: starInfo.night.opacity, visible: starInfo.night.visible,
+                     count: starInfo.night.count, radius: starInfo.night.radius }));
+  checks.check('the star field twinkles (its size moved off the base 0.9)',
+    starInfo.night.size !== null && starInfo.night.size !== 0.9,
+    JSON.stringify({ size: starInfo.night.size }));
+  checks.check('the star field is hidden at day',
+    starInfo.day.opacity === 0 && starInfo.day.visible === false,
+    JSON.stringify({ opacity: starInfo.day.opacity, visible: starInfo.day.visible }));
+  await capture(page, 'round85-stars.png');
+
+  // --- 28n1. Round 89: moon disc, cloud layer, ridge and lighting ------------
+  // Four additions that together make the night read as a place: the moon disc,
+  // the drifting cloud layer, the distant ridge on the skyline, and the two
+  // lighting changes (a cool moonlight key at night, a slow cloud dapple on the
+  // daylight sun). All checked live, on the real booted scene.
+  const skyDressing = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    // The dapple is deliberately off on the low tier (it is a whole-scene
+    // lighting effect and the low tier exists to stop paying for those). This
+    // headless run is slow enough that adaptive quality may already have
+    // dropped, so pin full quality for the samples and restore it afterwards.
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.set('full');
+    const byName = (name) => {
+      let found = null;
+      api.scene.traverse((o) => { if (o.name === name) found = o; });
+      return found;
+    };
+    const sample = (phaseSeconds) => {
+      api.setClock(phaseSeconds);
+      const moonGroup = byName('sky-moon-group');
+      const moonCore = byName('sky-moon');
+      const cloudGroup = byName('sky-clouds');
+      const ridge = byName('sky-horizon');
+      const clouds = [];
+      if (cloudGroup) {
+        for (const child of cloudGroup.children) {
+          clouds.push({
+            opacity: child.material.opacity,
+            color: child.material.color?.getHexString?.(),
+            y: child.position.y,
+            rotY: child.rotation.y
+          });
+        }
+      }
+      const ridgePos = ridge ? ridge.geometry.getAttribute('position') : null;
+      let ridgeMaxY = -Infinity;
+      let ridgeMinY = Infinity;
+      if (ridgePos) {
+        for (let i = 0; i < ridgePos.count; i += 1) {
+          const y = ridgePos.getY(i);
+          ridgeMaxY = Math.max(ridgeMaxY, y);
+          ridgeMinY = Math.min(ridgeMinY, y);
+        }
+      }
+      // The ridge is vertex-coloured (ridge line -> haze at the foot), so the
+      // material colour stays white and the per-phase tint lives in the buffer.
+      // Read the average of the ridge-line vertices, which is what the eye sees
+      // as the silhouette colour.
+      const ridgeColors = ridge ? ridge.geometry.getAttribute('color') : null;
+      let ridgeTint = null;
+      if (ridgeColors && ridgePos) {
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < ridgeColors.count; i += 1) {
+          // Vertex order per segment is [foot, foot, ridge, foot, ridge, ridge],
+          // so indices 2, 4 and 5 are the ridge line.
+          if (i % 6 < 2) continue;
+          r += ridgeColors.getX(i);
+          g += ridgeColors.getY(i);
+          b += ridgeColors.getZ(i);
+          n += 1;
+        }
+        if (n > 0) {
+          ridgeTint = [r / n, g / n, b / n]
+            .map((c) => Math.round(c * 255).toString(16).padStart(2, '0')).join('');
+        }
+      }
+      return {
+        phase: api.getClock().phase,
+        moonVisible: moonGroup ? moonGroup.visible : null,
+        moonOpacity: moonCore ? moonCore.material.opacity : null,
+        moonColor: moonCore ? moonCore.material.color?.getHexString?.() : null,
+        cloudVisible: cloudGroup ? cloudGroup.visible : null,
+        cloudCount: clouds.length,
+        cloudOpacity: clouds.length ? clouds[0].opacity : null,
+        cloudColor: clouds.length ? clouds[0].color : null,
+        cloudsSitHigh: clouds.every((c) => c.y > 4),
+        ridgeVisible: ridge ? ridge.visible : null,
+        ridgeCount: ridgePos ? ridgePos.count : 0,
+        ridgeTint,
+        ridgeOpacity: ridge ? ridge.material.opacity : null,
+        ridgeMaxY,
+        ridgeMinY,
+        moonLight: env.moon
+          ? { intensity: Number(env.moon.intensity.toFixed(3)), visible: env.moon.visible,
+              castsShadow: env.moon.castShadow, color: env.moon.color?.getHexString?.() }
+          : null,
+        sunIntensity: Number(env.sun.intensity.toFixed(3)),
+        cloudDim: typeof env.cloudDim === 'number' ? Number(env.cloudDim.toFixed(3)) : null
+      };
+    };
+    const day = sample(10);
+    const night = sample(150);
+    // The dapple moves on its own clock, and the whole cycle is minutes long, so
+    // sampling a second of wall clock would look flat. Drive the cloud clock
+    // directly instead: one call with a large step, then read what the sun did.
+    api.setClock(20);
+    const dims = [];
+    if (env.updateCloudDapple) {
+      for (let i = 0; i < 6; i += 1) {
+        dims.push(env.updateCloudDapple());
+        // Advance the layer's own clock through the private updater; the same
+        // function the frame loop calls, so this is the real path.
+        env.updateClouds(12);
+      }
+    }
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    return { day, night, dims, startTier, startAdaptive };
+  });
+
+  const sd = skyDressing;
+  checks.check('the moon disc is out at night and hidden by day',
+    sd.night.moonVisible === true && sd.night.moonOpacity === 1 &&
+      sd.day.moonVisible === false && sd.day.moonOpacity === 0,
+    JSON.stringify({ night: [sd.night.moonVisible, sd.night.moonOpacity],
+                     day: [sd.day.moonVisible, sd.day.moonOpacity] }));
+  checks.check('the moon is cool white, not the sun disc\'s warm tint',
+    sd.night.moonColor === 'd8e4ff' && sd.day.moonColor === 'd8e4ff',
+    JSON.stringify({ night: sd.night.moonColor, day: sd.day.moonColor }));
+  checks.check('the cloud layer is present, high on the dome, and dims by night',
+    sd.day.cloudVisible === true && sd.day.cloudCount === 14 && sd.day.cloudsSitHigh &&
+      sd.day.cloudOpacity > sd.night.cloudOpacity && sd.night.cloudVisible === true,
+    JSON.stringify({ count: sd.day.cloudCount, high: sd.day.cloudsSitHigh,
+                     day: sd.day.cloudOpacity, night: sd.night.cloudOpacity,
+                     nightVisible: sd.night.cloudVisible }));
+  // Geometry contract: the foot sits 30 m below ground (hidden behind the wall
+  // and the ground disc) and hilltops land 8-20 m above ground, clear of the
+  // 3.2 m border wall. The ribbon is two triangles per segment.
+  checks.check('the ridge ring is built, sits on the skyline and fades per phase',
+    sd.day.ridgeVisible === true && sd.day.ridgeCount === 96 * 2 * 3 &&
+      Math.abs(sd.day.ridgeMinY + 30) < 0.01 &&
+      sd.day.ridgeMaxY > 8 && sd.day.ridgeMaxY < 20 &&
+      sd.day.ridgeTint !== null && sd.day.ridgeTint !== sd.night.ridgeTint &&
+      sd.day.ridgeOpacity > 0 && sd.day.ridgeOpacity < 1 &&
+      sd.night.ridgeOpacity > 0 && sd.night.ridgeOpacity < 1,
+    JSON.stringify({ count: sd.day.ridgeCount, maxY: sd.day.ridgeMaxY,
+                     minY: sd.day.ridgeMinY, dayTint: sd.day.ridgeTint,
+                     nightTint: sd.night.ridgeTint, dayOpacity: sd.day.ridgeOpacity,
+                     nightOpacity: sd.night.ridgeOpacity }));
+  checks.check('the moonlight key lights the plaza at night and is off by day',
+    sd.night.moonLight.visible === true && sd.night.moonLight.intensity > 0.2 &&
+      sd.day.moonLight.visible === false && sd.day.moonLight.intensity === 0 &&
+      sd.night.moonLight.castsShadow === false,
+    JSON.stringify({ night: sd.night.moonLight, day: sd.day.moonLight }));
+  checks.check('the cloud dapple dims the daylight sun, but never past the cap',
+    sd.dims.every((d) => d <= 1 && d >= 0.8) &&
+      Math.max(...sd.dims) - Math.min(...sd.dims) > 0.001,
+    JSON.stringify(sd.dims.map((d) => Number(d.toFixed(3)))));
+  await capture(page, 'round89-sky-dressing.png');
+
+  // --- 28n5. Passing clouds (round 98) -------------------------------------
+  // Round 98 hangs five nearby cloud discs over the plaza and gives each one a
+  // soft footprint shadow on the ground, so a clear day has something drifting
+  // across it at walking pace. Both halves are driven by the same pure drift
+  // module. This block proves the layer is live on the booted scene: the discs
+  // stand overhead at the day opacity, the shadows sit on the ground inside the
+  // walkable world, the drift really moves them, the low tier drops the whole
+  // layer, and the night phase hides it until the clock returns to day.
+  const passers = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    // The layer only exists on the full tier, and this slow headless run may
+    // already have dropped to low, so pin full for the samples and restore the
+    // starting tier and adaptive flag afterwards.
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.set('full');
+    api.setClock(10);
+
+    const byName = (name) => {
+      let found = null;
+      api.scene.traverse((o) => { if (o.name === name) found = o; });
+      return found;
+    };
+    // The instance matrix is 16 floats per instance: columns 12..14 are the
+    // translation. The scale is not readable from single cells -- the disc is
+    // rotated flat about X, so the authored scale lands on different cells --
+    // so it is read as the length of each basis column instead, which is what a
+    // zero-scaled instance would collapse. Reading the raw buffer avoids needing
+    // a THREE.Matrix4 inside the page.
+    const readShadows = (mesh) => {
+      if (!mesh) return [];
+      const a = mesh.instanceMatrix.array;
+      const out = [];
+      for (let i = 0; i < mesh.count; i += 1) {
+        const b = i * 16;
+        const sx = Math.hypot(a[b], a[b + 1], a[b + 2]);
+        const sy = Math.hypot(a[b + 4], a[b + 5], a[b + 6]);
+        const sz = Math.hypot(a[b + 8], a[b + 9], a[b + 10]);
+        out.push({
+          x: a[b + 12],
+          y: a[b + 13],
+          z: a[b + 14],
+          sx,
+          sy,
+          sz,
+          zeroScaled: !(sx > 1e-6 && sy > 1e-6 && sz > 1e-6)
+        });
+      }
+      return out;
+    };
+
+    const group = byName('sky-cloud-passers');
+    const shadows = byName('ground-cloud-shadows');
+    const discs = [];
+    if (group) {
+      for (const child of group.children) {
+        discs.push({
+          name: child.name,
+          visible: child.visible,
+          y: child.position.y,
+          opacity: child.material ? child.material.opacity : null,
+          color: child.material && child.material.color
+            ? child.material.color.getHexString() : null
+        });
+      }
+    }
+    const instances = readShadows(shadows);
+    const day = {
+      groupVisible: group ? group.visible : null,
+      discCount: discs.length,
+      discs,
+      shadowVisible: shadows ? shadows.visible : null,
+      shadowCount: shadows ? shadows.count : null,
+      shadowOpacity: shadows && shadows.material ? shadows.material.opacity : null,
+      instances,
+      // The contract puts the footprints at y ~= 0.03 on the ground; recorded
+      // here so a regression in the height shows up in the evidence even though
+      // the check itself is about the walkable footprint.
+      nearGround: instances.every((inst) => Math.abs(inst.y - 0.03) < 1e-3)
+    };
+
+    // Advance the drift by a long step through the same updater the frame loop
+    // calls, so a change proves the shadows actually move rather than merely
+    // exist. Re-read the mesh by name afterwards for the same reason the tier
+    // flips re-read below: a re-derived layer must still be found by name.
+    // The updater caps a single step (a backgrounded tab must not teleport the
+    // shadows), so drive a few seconds of frames the way the loop would.
+    if (env.updatePassers) {
+      for (let k = 0; k < 120; k += 1) env.updatePassers(0.1);
+    }
+    const driftedShadows = byName('ground-cloud-shadows');
+    const drifted = readShadows(driftedShadows);
+
+    // Low tier: the draw calls are dropped, so both halves must go invisible.
+    api.quality.set('low');
+    const lowGroup = byName('sky-cloud-passers');
+    const lowShadows = byName('ground-cloud-shadows');
+    const low = {
+      groupVisible: lowGroup ? lowGroup.visible : null,
+      shadowVisible: lowShadows ? lowShadows.visible : null
+    };
+
+    // ...and both must come back when full quality re-derives the paint.
+    api.quality.set('full');
+    const fullGroup = byName('sky-cloud-passers');
+    const fullShadows = byName('ground-cloud-shadows');
+    const restored = {
+      groupVisible: fullGroup ? fullGroup.visible : null,
+      shadowVisible: fullShadows ? fullShadows.visible : null
+    };
+
+    // Night: the layer is hidden outright, then returns with the day.
+    api.setClock(150);
+    const nightGroup = byName('sky-cloud-passers');
+    const nightShadows = byName('ground-cloud-shadows');
+    const night = {
+      groupVisible: nightGroup ? nightGroup.visible : null,
+      shadowVisible: nightShadows ? nightShadows.visible : null,
+      discOpacity: nightGroup && nightGroup.children[0] && nightGroup.children[0].material
+        ? nightGroup.children[0].material.opacity : null
+    };
+    api.setClock(10);
+    const dayGroup = byName('sky-cloud-passers');
+    const dayShadows = byName('ground-cloud-shadows');
+    const backToDay = {
+      groupVisible: dayGroup ? dayGroup.visible : null,
+      shadowVisible: dayShadows ? dayShadows.visible : null
+    };
+
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    return { startTier, startAdaptive, day, drifted, low, restored, night, backToDay };
+  });
+
+  const pc = passers;
+  // How many of the five footprints moved between the two drift samples. A
+  // translation change in any axis counts; the drift is a slow lateral wander,
+  // so x and z are the ones expected to move.
+  const driftedCount = pc.day.instances.reduce((n, a, i) => {
+    const b = pc.drifted[i];
+    if (!b) return n;
+    const delta = Math.abs(b.x - a.x) + Math.abs(b.y - a.y) + Math.abs(b.z - a.z);
+    return n + (delta > 1e-6 ? 1 : 0);
+  }, 0);
+  checks.check('the passing cloud layer stands overhead at day on full',
+    pc.day.groupVisible === true && pc.day.discCount === 5 &&
+      pc.day.discs.every((d) => d.name === 'sky-cloud-passer' && d.visible !== false &&
+        Math.abs(d.opacity - 0.4) < 1e-6 && d.color === 'ffffff'),
+    JSON.stringify({ groupVisible: pc.day.groupVisible, count: pc.day.discCount,
+                     discs: pc.day.discs }));
+  checks.check('the passers throw five ground shadows inside the walkable world',
+    pc.day.shadowVisible === true && pc.day.shadowCount === 5 &&
+      pc.day.instances.length === 5 &&
+      Math.abs(pc.day.shadowOpacity - 0.14) <= 1e-6 &&
+      pc.day.instances.every((inst) => !inst.zeroScaled &&
+        Math.abs(inst.x) <= 26 && Math.abs(inst.z) <= 26),
+    JSON.stringify({ visible: pc.day.shadowVisible, count: pc.day.shadowCount,
+                     opacity: pc.day.shadowOpacity, nearGround: pc.day.nearGround,
+                     instances: pc.day.instances }));
+  checks.check('the passer drift moves the shadows and a low tier hides the whole layer',
+    driftedCount > 0 && pc.low.groupVisible === false && pc.low.shadowVisible === false &&
+      pc.restored.groupVisible === true && pc.restored.shadowVisible === true,
+    JSON.stringify({ drifted: driftedCount, low: pc.low, restored: pc.restored,
+                     before: pc.day.instances.map((i) => [i.x, i.y, i.z]),
+                     after: pc.drifted.map((i) => [i.x, i.y, i.z]) }));
+  checks.check('the passer layer follows the day cycle',
+    pc.night.groupVisible === false && pc.night.shadowVisible === false &&
+      pc.backToDay.groupVisible === true && pc.backToDay.shadowVisible === true,
+    JSON.stringify({ night: pc.night, day: pc.backToDay }));
+  await capture(page, 'round98-cloud-passers.png');
+
+  // --- 28n3. The meadow (round 90) -----------------------------------------
+  // Round 90 stands grass tufts on the ring so the lawn has a silhouette instead
+  // of reading as a painted floor. The meadow is four InstancedMeshes (one per
+  // blade variant) placed by the pure scatter module and swayed by the pure wind
+  // field. This check proves the live scene really has them, that they stand on
+  // the ground outside the paving, that the wind moves the instances on the full
+  // tier and that the low tier stops the sway, and that the phase tint darkens
+  // the grass at night.
+  const meadow = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.set('full');
+
+    const byName = (name) => {
+      let found = null;
+      api.scene.traverse((o) => { if (o.name === name) found = o; });
+      return found;
+    };
+    const group = byName('meadow');
+    const variants = [];
+    if (group) {
+      for (const child of group.children) {
+        if (!child.isInstancedMesh) continue;
+        variants.push({
+          name: child.name,
+          variant: child.userData.meadowVariant,
+          count: child.count,
+          // A tuft's base geometry is TUFT_BLADES * 3 vertices (5 blades).
+          vertexCount: child.geometry.getAttribute('position').count,
+          hasColor: Boolean(child.geometry.getAttribute('color')),
+          doubleSided: child.material.side === 2
+        });
+      }
+    }
+    const totalInstances = variants.reduce((sum, v) => sum + v.count, 0);
+
+    // Walk the instances of every variant and confirm each stands at y=0 (on the
+    // ground), inside the border walls, and off the plaza paving. The instance
+    // matrices live in `instanceMatrix.array` as 16 floats per instance, with the
+    // translation in columns 12..14 -- reading the raw buffer avoids needing a
+    // THREE.Matrix4 inside the page.
+    let offGround = 0;
+    let onPaving = 0;
+    let outside = 0;
+    let sampled = 0;
+    for (const v of variants) {
+      const mesh = byName(v.name);
+      if (!mesh) continue;
+      const e = mesh.instanceMatrix.array;
+      const step = Math.max(1, Math.floor(mesh.count / 60));
+      for (let i = 0; i < mesh.count; i += step) {
+        const base = i * 16;
+        const x = e[base + 12];
+        const y = e[base + 13];
+        const z = e[base + 14];
+        sampled += 1;
+        if (Math.abs(y) > 1e-4) offGround += 1;
+        if (Math.abs(x) > 16.5 || Math.abs(z) > 16.5) outside += 1;
+        // The plaza disc is r=9 at the origin; a tuft inside it would grow
+        // through the paving.
+        if (Math.hypot(x, z) < 8.5) onPaving += 1;
+      }
+    }
+
+    // Nothing should grow through a prop. The stall and crate footprints are
+    // read off the live scene the same way world.js derives them, so a stall
+    // that moves takes this check with it instead of silently passing. This is
+    // the regression for the hand-copied list that had the west stall at the
+    // wrong z and no crates at all.
+    const propRects = [];
+    api.scene.traverse((node) => {
+      const data = node.userData;
+      if (!data || !node.geometry || !node.geometry.parameters) return;
+      if (!data.marketStallStandin && !data.crateStandin) return;
+      const { width, depth } = node.geometry.parameters;
+      if (!(width > 0) || !(depth > 0)) return;
+      propRects.push({
+        minX: node.position.x - width / 2, maxX: node.position.x + width / 2,
+        minZ: node.position.z - depth / 2, maxZ: node.position.z + depth / 2
+      });
+    });
+    let insideProp = 0;
+    let propProbes = 0;
+    for (const v of variants) {
+      const mesh = byName(v.name);
+      if (!mesh) continue;
+      const e = mesh.instanceMatrix.array;
+      for (let i = 0; i < mesh.count; i += 1) {
+        const x = e[i * 16 + 12];
+        const z = e[i * 16 + 14];
+        for (const r of propRects) {
+          if (x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ) insideProp += 1;
+        }
+      }
+      propProbes += mesh.count;
+    }
+    // The west stall really is at +z and the crates really are south-east; if
+    // the derivation returned nothing the check would pass vacuously, so record
+    // how many footprints it found and where they are.
+    const stallRects = propRects.map((r) => [
+      Math.round((r.minX + r.maxX) / 2 * 10) / 10,
+      Math.round((r.minZ + r.maxZ) / 2 * 10) / 10
+    ]);
+
+    // Sway: sample one instance's matrix at two different wind times and see it
+    // change. `updateMeadow` advances its own clock, so two calls with a real dt
+    // must move the blades.
+    const firstVariant = variants[0] ? byName(variants[0].name) : null;
+    const readInstance = (mesh) => Array.from(mesh.instanceMatrix.array.slice(0, 16));
+    let swayMoved = null;
+    if (firstVariant && env.updateMeadow) {
+      env.updateMeadow(0.4);
+      const before = readInstance(firstVariant);
+      env.updateMeadow(0.9);
+      const after = readInstance(firstVariant);
+      let diff = 0;
+      for (let i = 0; i < 16; i += 1) diff += Math.abs(after[i] - before[i]);
+      swayMoved = diff > 1e-5;
+    }
+
+    // Low tier: the sway must stop. Switch, step twice, and confirm the matrix
+    // no longer changes.
+    let lowFrozen = null;
+    if (firstVariant && env.setMeadowSway) {
+      api.quality.set('low');
+      const wasEnabled = env.meadowSway;
+      const before = readInstance(firstVariant);
+      env.updateMeadow(0.5);
+      const after = readInstance(firstVariant);
+      let diff = 0;
+      for (let i = 0; i < 16; i += 1) diff += Math.abs(after[i] - before[i]);
+      lowFrozen = wasEnabled === false && diff < 1e-9;
+    }
+
+    // Phase tint: the material colour is the daylight white at day and a darker,
+    // cooler colour at night.
+    api.quality.set('full');
+    api.setClock(10);
+    const dayTint = byName('meadow-tufts-0')
+      ? byName('meadow-tufts-0').material.color?.getHexString?.() : null;
+    api.setClock(150);
+    const nightTint = byName('meadow-tufts-0')
+      ? byName('meadow-tufts-0').material.color?.getHexString?.() : null;
+
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(10);
+    return {
+      groupVisible: group ? group.visible : null,
+      variantCount: variants.length,
+      variants,
+      totalInstances,
+      sampled,
+      offGround,
+      onPaving,
+      outside,
+      propRects: propRects.length,
+      propProbes,
+      insideProp,
+      stallRects,
+      swayMoved,
+      lowFrozen,
+      dayTint,
+      nightTint
+    };
+  });
+
+  const md = meadow;
+  checks.check('the meadow stands four instanced tuft variants on the ring',
+    md.groupVisible === true && md.variantCount === 4 &&
+      md.variants.every((v) => v.count > 0 && v.vertexCount === 15 && v.hasColor && v.doubleSided) &&
+      md.totalInstances > 500,
+    JSON.stringify({ variants: md.variants, total: md.totalInstances }));
+  checks.check('every tuft stands on the ground, inside the walls and off the paving',
+    md.sampled > 100 && md.offGround === 0 && md.onPaving === 0 && md.outside === 0,
+    JSON.stringify({ sampled: md.sampled, offGround: md.offGround,
+                     onPaving: md.onPaving, outside: md.outside }));
+  checks.check('no tuft grows through a market stall or a crate',
+    md.propRects >= 8 && md.propProbes > 500 && md.insideProp === 0 &&
+      md.stallRects.some(([x, z]) => Math.abs(x + 11) < 0.6 && Math.abs(z - 6) < 0.6),
+    JSON.stringify({ rects: md.propRects, probes: md.propProbes,
+                     insideProp: md.insideProp, centres: md.stallRects }));
+  checks.check('the wind sways the meadow on the full tier and stills it on low',
+    md.swayMoved === true && md.lowFrozen === true,
+    JSON.stringify({ swayMoved: md.swayMoved, lowFrozen: md.lowFrozen }));
+  checks.check('the meadow is daylight green by day and cools at night',
+    md.dayTint === 'ffffff' && md.nightTint === '46536e',
+    JSON.stringify({ day: md.dayTint, night: md.nightTint }));
+  await capture(page, 'round90-meadow.png');
+
+  // --- 28n4. Cloth flutter, fireflies, the bird flock, chimney smoke ---------
+  // Rounds 91 and 92 added four per-frame instanced dressing passes: the cloth
+  // flutter on the bunting and banner, the night firefly field, the daytime bird
+  // flock overhead, and the chimney columns. Each is driven by a pure module and
+  // each is meant to be invisible at the wrong hour and frozen or hidden on the
+  // low tier, so this block proves all four properties live rather than trusting
+  // the modules alone.
+  const dressing = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+
+    const byName = (name) => {
+      let found = null;
+      api.scene.traverse((o) => { if (o.name === name) found = o; });
+      return found;
+    };
+    // The instance translation of instance `i` and its x-scale, read straight out
+    // of the matrix buffer (16 floats per instance) so no THREE object is needed.
+    const instanceAt = (mesh, i) => {
+      const a = mesh.instanceMatrix.array;
+      const b = i * 16;
+      return { x: a[b], y: a[b + 13], z: a[b + 14], sx: a[b] };
+    };
+    // Accepts either a live mesh or a snapshot object ({ array }) on either side,
+    // so a before/after comparison does not need two live meshes.
+    const arrayFor = (m) => (m && m.instanceMatrix && m.instanceMatrix.array)
+      ? m.instanceMatrix.array
+      : (m && m.array) ? m.array : null;
+    const matrixDiff = (mesh, i, other) => {
+      const a = arrayFor(mesh);
+      const b = arrayFor(other);
+      if (!a || !b) return 0;
+      let diff = 0;
+      for (let k = 0; k < 16; k += 1) diff += Math.abs(a[i * 16 + k] - b[i * 16 + k]);
+      return diff;
+    };
+    const snapshot = (mesh) => ({ array: Float32Array.from(mesh.instanceMatrix.array) });
+
+    // --- Flutter ---------------------------------------------------------
+    const flags = [];
+    api.scene.traverse((o) => { if (o.name === 'BuntingFlag') flags.push(o); });
+    api.setClock(10);
+    let flutter = null;
+    if (flags.length && env.updateFlutter) {
+      env.updateFlutter(0.3);
+      const before = [flags[0].rotation.y, flags[0].rotation.z, flags[3].rotation.y];
+      env.updateFlutter(0.75);
+      const after = [flags[0].rotation.y, flags[0].rotation.z, flags[3].rotation.y];
+      // Two flags must not move in lockstep: each has its own seeded phase.
+      const phaseSpread = Math.abs((after[0] - before[0]) - (after[2] - before[2]));
+      flutter = {
+        flagCount: flags.length,
+        moved: Math.abs(after[0] - before[0]) + Math.abs(after[1] - before[1]) > 1e-5,
+        phaseSpread
+      };
+    }
+    // The banner canvas is the modelled mesh the flutter follows after the GLB
+    // upgrade; if the flutter lost it the banner would hang perfectly still.
+    let banner = null;
+    if (env.updateFlutter) {
+      const canvas = byName('BannerCanvas');
+      if (canvas) {
+        env.updateFlutter(0.2);
+        const y0 = canvas.rotation.y;
+        env.updateFlutter(0.65);
+        banner = { moved: Math.abs(canvas.rotation.y - y0) > 1e-6 };
+      } else {
+        banner = { moved: null };
+      }
+    }
+    // Low tier: no flutter at all.
+    let flutterLow = null;
+    if (flags.length && env.updateFlutter) {
+      api.quality.set('low');
+      env.updateFlutter(0.4);
+      const b = flags[0].rotation.y;
+      env.updateFlutter(0.9);
+      flutterLow = { still: Math.abs(flags[0].rotation.y - b) < 1e-12, on: env.flutterOn };
+      api.quality.set('full');
+    }
+
+    // --- Fireflies -------------------------------------------------------
+    const ff = byName('fireflies');
+    api.setClock(10);
+    const ffDay = ff ? { visible: ff.visible, count: ff.count } : null;
+    api.setClock(150);
+    let ffNight = null;
+    if (ff) {
+      const snap = snapshot(ff);
+      env.updateFireflies(0.4);
+      env.updateFireflies(0.9);
+      // A firefly that never blinks would leave the matrices identical.
+      let blink = 0;
+      for (let i = 0; i < ff.count; i += 1) {
+        blink = Math.max(blink, Math.abs(ff.instanceMatrix.array[i * 16] - snap.array[i * 16]));
+      }
+      ffNight = {
+        visible: ff.visible,
+        count: ff.count,
+        opacity: Number(ff.material.opacity.toFixed(3)),
+        blink
+      };
+    }
+    // Every firefly must sit above the ground and off the paving.
+    let ffPlacement = null;
+    if (ff) {
+      let low = 0;
+      let onPaving = 0;
+      for (let i = 0; i < ff.count; i += 1) {
+        const p = instanceAt(ff, i);
+        if (p.y < 0.2) low += 1;
+        const x = ff.instanceMatrix.array[i * 16 + 12];
+        const z = ff.instanceMatrix.array[i * 16 + 14];
+        if (Math.hypot(x, z) < 8) onPaving += 1;
+      }
+      ffPlacement = { low, onPaving };
+    }
+    let ffLow = null;
+    if (ff) {
+      api.quality.set('low');
+      const before = snapshot(ff);
+      env.updateFireflies(0.5);
+      ffLow = { frozen: matrixDiff(ff, 0, before) < 1e-9, visible: ff.visible };
+      api.quality.set('full');
+    }
+
+    // --- Birds -----------------------------------------------------------
+    api.setClock(10);
+    const wings = env.birdWings || [];
+    const birdDay = { count: env.birdCount, wings: wings.length,
+      visible: wings.map((w) => w.visible) };
+    let birdMotion = null;
+    if (wings.length) {
+      const before = snapshot(wings[0]);
+      env.updateBirds(0.4);
+      env.updateBirds(0.8);
+      // Height band: 15-23 m plus the 0.7 m bob, so above the roofs and below
+      // a comfortable upward glance.
+      let minY = Infinity;
+      let maxY = -Infinity;
+      let maxR = 0;
+      for (let i = 0; i < wings[0].count; i += 1) {
+        const p = instanceAt(wings[0], i);
+        minY = Math.min(minY, p.y);
+        maxY = Math.max(maxY, p.y);
+        maxR = Math.max(maxR, Math.hypot(p.x, p.z));
+      }
+      birdMotion = {
+        moved: matrixDiff(wings[0], 0, before) > 1e-6,
+        minY: Number(minY.toFixed(2)), maxY: Number(maxY.toFixed(2)),
+        maxR: Number(maxR.toFixed(2))
+      };
+    }
+    api.setClock(150);
+    const birdNight = { visible: wings.map((w) => w.visible) };
+    let birdLow = null;
+    if (wings.length) {
+      api.quality.set('low');
+      env.updateBirds(0.3);
+      birdLow = { visible: wings.map((w) => w.visible) };
+      api.quality.set('full');
+    }
+
+    // --- Chimney smoke ---------------------------------------------------
+    api.setClock(10);
+    const smoke = env.smoke;
+    let smokeDay = null;
+    if (smoke) {
+      const before = snapshot(smoke);
+      env.updateSmoke(0.5);
+      env.updateSmoke(1.0);
+      // The plume top must be well above the 3.2 m border wall; that is the
+      // whole point of siting the outer columns at ~4.5 m roof height.
+      let topY = -Infinity;
+      let baseY = Infinity;
+      for (let i = 0; i < smoke.count; i += 1) {
+        const y = smoke.instanceMatrix.array[i * 16 + 13];
+        topY = Math.max(topY, y);
+        baseY = Math.min(baseY, y);
+      }
+      smokeDay = {
+        count: smoke.count,
+        visible: smoke.visible,
+        opacity: Number(smoke.material.opacity.toFixed(3)),
+        moved: matrixDiff(smoke, 3, before) > 1e-6,
+        sites: (env.smokeSites || []).length,
+        topY: Number(topY.toFixed(2)),
+        baseY: Number(baseY.toFixed(2))
+      };
+    }
+    // The plumes read strongest at dusk, weakest at day, still present at night.
+    // Dusk begins at clock 70, so 80 is safely inside it (clock 60 is still day).
+    api.setClock(80);
+    const smokeDusk = smoke ? Number(smoke.material.opacity.toFixed(3)) : null;
+    api.setClock(150);
+    const smokeNight = smoke ? Number(smoke.material.opacity.toFixed(3)) : null;
+    api.setClock(10);
+    const smokeDayOpacity = smoke ? Number(smoke.material.opacity.toFixed(3)) : null;
+    let smokeLow = null;
+    if (smoke) {
+      api.quality.set('low');
+      smokeLow = { visible: smoke.visible };
+      api.quality.set('full');
+    }
+
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      flutter, banner, flutterLow,
+      ffDay, ffNight, ffPlacement, ffLow,
+      birdDay, birdMotion, birdNight, birdLow,
+      smokeDay, smokeDusk, smokeNight, smokeDayOpacity, smokeLow
+    };
+  });
+
+  const dr = dressing;
+  checks.check('the bunting flags flutter out of step on the full tier and hold still on low',
+    dr.flutter && dr.flutter.flagCount === 28 && dr.flutter.moved === true &&
+      dr.flutter.phaseSpread > 1e-4 && dr.flutterLow && dr.flutterLow.still === true &&
+      dr.flutterLow.on === false,
+    JSON.stringify({ flutter: dr.flutter, low: dr.flutterLow }));
+  checks.check('the flutter follows the modelled banner canvas, not the hidden stand-in',
+    dr.banner && dr.banner.moved === true,
+    JSON.stringify(dr.banner));
+  checks.check('the firefly field is off by day, lit and blinking at night, and frozen on low',
+    dr.ffDay && dr.ffDay.visible === false && dr.ffNight && dr.ffNight.visible === true &&
+      dr.ffNight.count === 64 && dr.ffNight.blink > 1e-4 && dr.ffLow && dr.ffLow.frozen === true,
+    JSON.stringify({ day: dr.ffDay, night: dr.ffNight, low: dr.ffLow }));
+  checks.check('every firefly floats above the meadow and off the paving',
+    dr.ffPlacement && dr.ffPlacement.low === 0 && dr.ffPlacement.onPaving === 0,
+    JSON.stringify(dr.ffPlacement));
+  checks.check('the bird flock flies overhead by day, hides at night and on low',
+    dr.birdDay && dr.birdDay.count === 8 && dr.birdDay.wings === 2 &&
+      dr.birdDay.visible.every(Boolean) && dr.birdMotion && dr.birdMotion.moved === true &&
+      dr.birdMotion.minY > 13 && dr.birdMotion.maxY < 25 && dr.birdMotion.maxR < 30 &&
+      dr.birdNight.visible.every((v) => v === false) &&
+      dr.birdLow.visible.every((v) => v === false),
+    JSON.stringify({ day: dr.birdDay, motion: dr.birdMotion, night: dr.birdNight, low: dr.birdLow }));
+  checks.check('the chimney columns climb above the wall and read strongest at dusk',
+    dr.smokeDay && dr.smokeDay.count === 28 && dr.smokeDay.sites === 4 &&
+      dr.smokeDay.visible === true && dr.smokeDay.moved === true &&
+      dr.smokeDay.topY > 4 && dr.smokeDay.baseY < 7 &&
+      dr.smokeDusk > dr.smokeDayOpacity && dr.smokeNight > dr.smokeDayOpacity &&
+      dr.smokeLow.visible === false,
+    JSON.stringify({ day: dr.smokeDay, dusk: dr.smokeDusk, night: dr.smokeNight, low: dr.smokeLow }));
+  await capture(page, 'round92-dressing.png');
+
+  // --- Round 93: butterflies, windows, litter, motes, ivy, spray, mist, haze ----
+  const r93 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    api.setClock(10); // day
+    const bfL = byName('butterfly-wings-left');
+    const bfR = byName('butterfly-wings-right');
+    const windows = byName('cottage-windows');
+    const litter = []; api.scene.traverse((o) => { if (/^meadow-litter-/.test(o.name)) litter.push(o); });
+    const motes = byName('dust-motes');
+    const ivy = []; api.scene.traverse((o) => { if (o.name === 'ivy-patch') ivy.push(o); });
+    const spray = byName('fountain-spray');
+    const mist = byName('ground-mist');
+    const haze = byName('ground-haze');
+    // Day visibility must be sampled here: api.setClock(150) below repaints
+    // the phase and restores it at the end, so reading haze.visible later
+    // would describe the suite's starting clock, not the day we set above.
+    const hazeVisibleDay = haze ? haze.visible : null;
+    // windows night
+    api.setClock(150);
+    const winNightVisible = windows ? windows.visible : null;
+    const winNightOpacity = windows ? Number(windows.material.opacity.toFixed(3)) : null;
+    // low tier
+    api.quality.set('low');
+    const lowBf = bfL ? bfL.visible : null;
+    const lowWin = windows ? windows.visible : null;
+    const lowMotes = motes ? motes.visible : null;
+    const lowHaze = haze ? haze.visible : null;
+    api.quality.set('full');
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      butterflies: { count: bfL ? bfL.count : 0, visibleDay: bfL ? bfL.visible : null },
+      windows: { count: windows ? windows.count : 0, nightVisible: winNightVisible, nightOpacity: winNightOpacity },
+      litter: { count: litter.length },
+      motes: { count: motes ? motes.count : 0, visibleDay: motes ? motes.visible : null },
+      ivy: { count: ivy.length },
+      spray: { count: spray ? spray.count : 0 },
+      mist: { count: mist ? mist.count : 0 },
+      haze: { count: haze ? haze.count : 0, visibleDay: hazeVisibleDay },
+      low: { butterflies: lowBf, windows: lowWin, motes: lowMotes, haze: lowHaze }
+    };
+  });
+  checks.check('daytime butterflies exist',
+    r93.butterflies.count > 0,
+    JSON.stringify(r93.butterflies));
+  checks.check('cottage windows light up at night',
+    r93.windows.nightVisible === true && r93.windows.nightOpacity > 0,
+    JSON.stringify(r93.windows));
+  checks.check('fallen leaves scatter exists',
+    r93.litter.count > 0,
+    JSON.stringify(r93.litter));
+  checks.check('dust motes exist',
+    r93.motes.count > 0,
+    JSON.stringify(r93.motes));
+  checks.check('ivy patches exist',
+    r93.ivy.count > 0,
+    JSON.stringify(r93.ivy));
+  checks.check('fountain spray exists',
+    r93.spray.count > 0,
+    JSON.stringify(r93.spray));
+  checks.check('ground mist exists',
+    r93.mist.count > 0,
+    JSON.stringify(r93.mist));
+  checks.check('mid-level haze exists and is visible by day',
+    r93.haze.count > 0 && r93.haze.visibleDay === true,
+    JSON.stringify(r93.haze));
+  checks.check('butterflies, windows and motes drop on the low tier',
+    r93.low.butterflies === false && r93.low.windows === false && r93.low.motes === false
+      && r93.low.haze === false,
+    JSON.stringify(r93.low));
+  await capture(page, 'round93-dressing.png');
+
+  // --- Round 94: ripples, moths, puddles, shingles -----------------------
+  const r94 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    api.setClock(10);
+    const ripples = byName('fountain-ripples');
+    const moths = byName('night-moths');
+    const puddles = byName('meadow-puddles');
+    const shingles = byName('roof-shingles');
+    // ripples travel
+    let rippleMoved = false;
+    if (ripples && env.updateRipples) {
+      const before = Float32Array.from(ripples.instanceMatrix.array);
+      env.updateRipples(0.5);
+      for (let k = 0; k < ripples.instanceMatrix.array.length; k += 1) {
+        if (Math.abs(ripples.instanceMatrix.array[k] - before[k]) > 1e-9) { rippleMoved = true; break; }
+      }
+    }
+    // tier gating
+    api.quality.set('low');
+    const lowRipples = ripples ? ripples.visible : null;
+    const lowMoths = moths ? moths.visible : null;
+    const lowPuddles = puddles ? puddles.visible : null;
+    const lowShingles = shingles ? shingles.visible : null;
+    api.quality.set('full');
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      ripples: ripples ? { count: ripples.count, visible: ripples.visible } : null,
+      moths: moths ? { count: moths.count } : null,
+      puddles: puddles ? { count: puddles.count } : null,
+      shingles: shingles ? { count: shingles.count } : null,
+      rippleMoved,
+      low: { ripples: lowRipples, moths: lowMoths, puddles: lowPuddles, shingles: lowShingles }
+    };
+  });
+  checks.check('fountain ripples exist and travel',
+    r94.ripples && r94.ripples.count > 0 && r94.rippleMoved === true,
+    JSON.stringify(r94.ripples));
+  checks.check('night moths exist',
+    r94.moths && r94.moths.count === 30,
+    JSON.stringify(r94.moths));
+  checks.check('meadow puddles exist',
+    r94.puddles && r94.puddles.count === 18,
+    JSON.stringify(r94.puddles));
+  checks.check('roof shingles exist',
+    r94.shingles && r94.shingles.count > 0,
+    JSON.stringify(r94.shingles));
+  checks.check('the four new fields drop on the low tier',
+    r94.low.ripples === false && r94.low.moths === false &&
+      r94.low.puddles === false && r94.low.shingles === false,
+    JSON.stringify(r94.low));
+
+  // The shingles dress the MODELLED roofs. Until Round 103 they were laid on
+  // the three flat procedural stand-in slabs, which upgradeHouse() and
+  // upgradeMarketStalls() hide once the GLBs load, so 44 of 150 strips floated
+  // up to 0.543 m above the gable. This reads every instance matrix out of the
+  // InstancedMesh and checks it against the measured top faces of
+  // assets/house.glb and assets/market_stall.glb, and it checks the strips are
+  // TILTED to lie flush with the slope rather than left flat (a flat strip on a
+  // 28 degree roof is buried at one edge and hovering at the other).
+  const r103 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    let mesh = null;
+    api.scene.traverse((o) => { if (o.name === 'roof-shingles') mesh = o; });
+    if (!mesh) return { missing: true };
+    const m = mesh.instanceMatrix.array;
+    // Measured top faces: the two ends of the line the roof surface follows.
+    const roofs = [
+      { id: 'house-south', x: [-14.5, -6.5], z: [-5.9009, -9.0332], y: [3.0265, 4.6971], pitch: 0.533333 },
+      { id: 'house-north', x: [-14.5, -6.5], z: [-12.0991, -8.9668], y: [3.0265, 4.6971], pitch: 0.533333 },
+      { id: 'east-awning', x: [8.85, 13.15], z: [-2.6, -3.6], y: [0.84, 1.04], pitch: 0.2 },
+      { id: 'west-awning', x: [-12.6125, -9.3875], z: [6.3, 5.55], y: [0.756, 0.936], pitch: 0.24 }
+    ];
+    const surfaceY = (roof, z) =>
+      roof.y[0] + ((z - roof.z[0]) / (roof.z[1] - roof.z[0])) * (roof.y[1] - roof.y[0]);
+    const failures = [];
+    let worst = 0;
+    let worstAt = null;
+    let houseYMin = Infinity;
+    let houseYMax = -Infinity;
+    let tiltWorst = 0;
+    let tiltAt = null;
+    let unroofed = 0;
+    for (let i = 0; i < mesh.count; i += 1) {
+      const o = i * 16;
+      const x = m[o + 12];
+      const y = m[o + 13];
+      const z = m[o + 14];
+      const roof = roofs.find((r) =>
+        x >= r.x[0] - 0.01 && x <= r.x[1] + 0.01 &&
+        z >= Math.min(r.z[0], r.z[1]) - 0.02 && z <= Math.max(r.z[0], r.z[1]) + 0.02);
+      if (!roof) {
+        unroofed += 1;
+        if (failures.length < 6) failures.push({ i, x, y, z, why: 'no roof under it' });
+        continue;
+      }
+      const dev = Math.abs(y - surfaceY(roof, z));
+      if (dev > worst) { worst = dev; worstAt = { i, roof: roof.id, x, y, z, surface: surfaceY(roof, z) }; }
+      if (dev > 0.03 && failures.length < 6) failures.push({ i, roof: roof.id, y, z, dev });
+      if (roof.id.startsWith('house')) {
+        if (y < houseYMin) houseYMin = y;
+        if (y > houseYMax) houseYMax = y;
+      }
+      // The strip's own local +Z (column 2 of the matrix) must point downhill by
+      // pitch / sqrt(1 + pitch^2); read it out of the upper-left 3x3 and
+      // normalise, since the column is scaled by the strip's depth.
+      const cx = m[o + 8];
+      const cy = m[o + 9];
+      const cz = m[o + 10];
+      const len = Math.hypot(cx, cy, cz);
+      const down = len > 0 ? -cy / len : 0;
+      const expected = roof.pitch / Math.sqrt(1 + roof.pitch * roof.pitch);
+      const tiltDev = Math.abs(down - expected);
+      if (tiltDev > tiltWorst) { tiltWorst = tiltDev; tiltAt = { i, roof: roof.id, down, expected }; }
+    }
+    const result = {
+      count: mesh.count,
+      worst: Number(worst.toFixed(4)),
+      worstAt,
+      unroofed,
+      failures,
+      houseSpan: Number((houseYMax - houseYMin).toFixed(4)),
+      tiltWorst: Number(tiltWorst.toFixed(4)),
+      tiltAt
+    };
+    api.quality.set(startTier);
+    api.quality.setAdaptive(startAdaptive);
+    return result;
+  });
+  checks.check('every roof shingle lies on a modelled roof surface',
+    !r103.missing && r103.count === 282 && r103.unroofed === 0 &&
+      r103.worst <= 0.03 && r103.failures.length === 0,
+    JSON.stringify(r103));
+  checks.check('the house shingles climb the gable and lie flush with the slope',
+    !r103.missing && r103.houseSpan > 1.4 && r103.tiltWorst <= 0.02,
+    JSON.stringify({ span: r103.houseSpan, tiltWorst: r103.tiltWorst, tiltAt: r103.tiltAt }));
+
+  // Round 104: the eave trim. The shingles end on a modelled eave, and until
+  // this round the roofline simply stopped there, so the courses read as strips
+  // stopping in mid-air. A fascia board now caps the eave, a lead apron hangs
+  // under it, and a bargeboard closes each rake. The checks read the two
+  // instanced meshes rather than the module, so a placement bug in world.js is
+  // caught: a fascia must sit just under the measured eave line of one of the
+  // four roofs, and a bargeboard must be tilted by the roof's own pitch (a barge
+  // left level would cut through the gable).
+  const r104 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    // Every later check shares this page, so the tier this block forces for its
+    // own visibility probe must come back however this block ends. A `finally`
+    // covers the early `missing` return and any thrown error; restoring only on
+    // the success path would leave the page pinned at full with adaptive off and
+    // quietly change what every subsequent check measures.
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    try {
+      let group = null;
+      let boards = null;
+      let drips = null;
+      api.scene.traverse((o) => {
+        if (o.name === 'roof-edge-trim') group = o;
+        if (o.name === 'roof-edge-boards') boards = o;
+        if (o.name === 'roof-edge-drips') drips = o;
+      });
+      if (!group || !boards || !drips) return { missing: true };
+      // The four modelled roofs: eave line and rake extents, plus the pitch, the
+      // top-face centre height and the yaw that says which way the slope runs.
+      // `planeY` is the value from `roofPlanes` in world.js; `yaw` PI on the
+      // north house roof flips the slope so its eave lies at a larger z.
+      const roofs = [
+        { id: 'house-south', eaveZ: -5.9009, eaveY: 3.0265, centreZ: -7.467059, x: [-14.5, -6.5], pitch: 0.533333, planeY: 3.861765, yaw: 0 },
+        { id: 'house-north', eaveZ: -12.0991, eaveY: 3.0265, centreZ: -10.532941, x: [-14.5, -6.5], pitch: 0.533333, planeY: 3.861765, yaw: Math.PI },
+        { id: 'east', eaveZ: -2.6, eaveY: 0.84, centreZ: -3.1, x: [8.85, 13.15], pitch: 0.2, planeY: 0.94, yaw: 0 },
+        { id: 'west', eaveZ: 6.3, eaveY: 0.756, centreZ: 5.925, x: [-12.6125, -9.3875], pitch: 0.24, planeY: 0.846, yaw: 0 }
+      ];
+      // The roof surface height at a given z, as a function of the plane's
+      // centre height and pitch. The sign follows the yaw: with yaw 0 the far
+      // (eave) edge is at +z and the surface falls towards it, so a positive
+      // pitch lowers y as z grows; with yaw PI the slope runs the other way.
+      // Reproducing the eave heights already in the array pins the convention:
+      // house-south gives 3.02648 against eaveY 3.0265, house-north likewise.
+      const planeYAtZ = (r, z) =>
+        r.planeY - r.pitch * (z - r.centreZ) * (r.yaw === 0 ? 1 : -1);
+      const m = boards.instanceMatrix.array;
+      const failures = [];
+      // Every fascia centre, so each drip can be matched to the board it hangs
+      // from rather than merely counted.
+      const fasciaAt = [];
+      let fascias = 0;
+      let barges = 0;
+      let worstFascia = 0;
+      let worstBarge = 0;
+      let worstBargeX = 0;
+      let worstBargeY = 0;
+      for (let i = 0; i < boards.count; i += 1) {
+        const o = i * 16;
+        const x = m[o + 12];
+        const y = m[o + 13];
+        const z = m[o + 14];
+        // Column 2 is the box's local +Z scaled by its size: level for a fascia,
+        // tilted downhill for a bargeboard.
+        const down = -m[o + 9] / Math.max(1e-9, Math.hypot(m[o + 8], m[o + 9], m[o + 10]));
+        // The two house roofs share an x range, so the roof is the nearest one in
+        // z among those whose x span holds the board. A board sits on its roof's
+        // eave line (a fascia) or at mid-slope (a barge), so the nearer of those
+        // two z values identifies the roof unambiguously.
+        let roof = null;
+        let best = Infinity;
+        for (const r of roofs) {
+          if (x < r.x[0] - 0.2 || x > r.x[1] + 0.2) continue;
+          const d = Math.min(Math.abs(z - r.eaveZ), Math.abs(z - r.centreZ));
+          if (d < best) { best = d; roof = r; }
+        }
+        if (!roof || best > 3) { if (failures.length < 6) failures.push({ i, x, y, z, why: 'no roof under it' }); continue; }
+        if (Math.abs(down) < 0.02) {
+          fascias += 1;
+          fasciaAt.push({ x, y, z });
+          // A fascia's centre sits 6.5 cm under the eave surface (fasciaRise 0.02
+          // minus half its 0.17 m height) and on the eave line in z.
+          const dev = Math.abs(y - (roof.eaveY - 0.065));
+          if (dev > worstFascia) worstFascia = dev;
+          if (dev > 0.02 || Math.abs(z - roof.eaveZ) > 0.05) {
+            if (failures.length < 6) failures.push({ i, roof: roof.id, y, z, dev, why: 'fascia off the eave' });
+          }
+        } else {
+          barges += 1;
+          const expected = roof.pitch / Math.sqrt(1 + roof.pitch * roof.pitch);
+          const dev = Math.abs(down - expected);
+          if (dev > worstBarge) worstBarge = dev;
+          if (dev > 0.02) {
+            if (failures.length < 6) failures.push({ i, roof: roof.id, down, expected, why: 'barge not tilted with the roof' });
+          }
+          // A barge is centred ON a rake, so its x is one of the roof's two rake
+          // x values, not merely somewhere inside the span. 5 cm catches a board
+          // on the wrong rake while leaving room for the plane's own rounding.
+          const rakeX = Math.min(Math.abs(x - roof.x[0]), Math.abs(x - roof.x[1]));
+          if (rakeX > worstBargeX) worstBargeX = rakeX;
+          if (rakeX > 0.05) {
+            if (failures.length < 6) failures.push({ i, roof: roof.id, x, rakes: roof.x, rakeX, why: 'barge off the rake' });
+          }
+          // A barge runs from the eave to the ridge, so its centre is mid-slope.
+          if (Math.abs(z - roof.centreZ) > 0.15) {
+            if (failures.length < 6) failures.push({ i, roof: roof.id, z, centreZ: roof.centreZ, why: 'barge off mid-slope' });
+          }
+          // The board is pushed `along = -bargeHeight/2 + bargeRise` (-0.055 m)
+          // down the roof normal, so its centre y is the plane's height at its
+          // own z plus cos(atan(pitch)) * along. That surface term ignores the
+          // z the normal itself shifts the board by (sinT * along), which costs
+          // up to pitch * sinT * |along| = 1.4 cm on the 0.533 house roof; the
+          // 5 cm tolerance absorbs that while still rejecting a board sunk into
+          // the slope or floating a hand's width above it.
+          const along = -0.15 / 2 + 0.02;
+          const expectedY = planeYAtZ(roof, z) + Math.cos(Math.atan(roof.pitch)) * along;
+          const yDev = Math.abs(y - expectedY);
+          if (yDev > worstBargeY) worstBargeY = yDev;
+          if (yDev > 0.05) {
+            if (failures.length < 6) failures.push({ i, roof: roof.id, y, expectedY, yDev, why: 'barge off the roof surface' });
+          }
+        }
+      }
+      // The drips hang from the fascia, so each one's centre must be directly
+      // under the nearest fascia in x/z and at the height that fascia's own
+      // section dictates. The lip's centre is fasciaY - fasciaHeight/2 - lipGap
+      // - lipDrop/2: half the board below its centre, the gap under the board,
+      // then half the lip's own drop. With ROOF_EDGE's 0.17 / 0.02 / 0.04 that
+      // is fasciaY - 0.125. In z the lip sits lipSetback behind the fascia's
+      // outer face, which on an eave line is the same z to within 1.5 cm.
+      const dm = drips.instanceMatrix.array;
+      let worstDripY = 0;
+      let worstDripZ = 0;
+      for (let i = 0; i < drips.count; i += 1) {
+        const o = i * 16;
+        const dx = dm[o + 12];
+        const dy = dm[o + 13];
+        const dz = dm[o + 14];
+        let fascia = null;
+        let best = Infinity;
+        for (const f of fasciaAt) {
+          const d = Math.hypot(f.x - dx, f.z - dz);
+          if (d < best) { best = d; fascia = f; }
+        }
+        if (!fascia) {
+          if (failures.length < 6) failures.push({ i, dx, dy, dz, why: 'drip with no fascia above it' });
+          continue;
+        }
+        const expectedY = fascia.y - 0.17 / 2 - 0.02 - 0.04 / 2;
+        const yDev = Math.abs(dy - expectedY);
+        const zDev = Math.abs(dz - fascia.z);
+        if (yDev > worstDripY) worstDripY = yDev;
+        if (zDev > worstDripZ) worstDripZ = zDev;
+        if (yDev > 0.01 || zDev > 0.05) {
+          if (failures.length < 6) failures.push({ i, dx, dy, dz, expectedY, yDev, zDev, why: 'drip off its fascia' });
+        }
+      }
+      const fullVisible = Boolean(group.visible && boards.visible && drips.visible);
+      api.quality.set('low');
+      const lowVisible = Boolean(group.visible && boards.visible && drips.visible);
+      api.quality.set('full');
+      const backVisible = Boolean(group.visible && boards.visible && drips.visible);
+      return {
+        groupVisible: fullVisible,
+        boards: boards.count,
+        drips: drips.count,
+        fascias,
+        barges,
+        worstFascia: Number(worstFascia.toFixed(4)),
+        worstBarge: Number(worstBarge.toFixed(4)),
+        worstDripY: Number(worstDripY.toFixed(4)),
+        worstDripZ: Number(worstDripZ.toFixed(4)),
+        worstBargeX: Number(worstBargeX.toFixed(4)),
+        worstBargeY: Number(worstBargeY.toFixed(4)),
+        failures,
+        low: lowVisible,
+        back: backVisible
+      };
+    } finally {
+      api.quality.set(startTier);
+      api.quality.setAdaptive(startAdaptive);
+    }
+  });
+  checks.check('the rooflines carry a fascia, a drip apron and a bargeboard',
+    !r104.missing && r104.groupVisible === true &&
+      r104.boards === 6 && r104.drips === 2 && r104.fascias === 2 && r104.barges === 4,
+    JSON.stringify(r104));
+  checks.check('every fascia caps a modelled eave, every drip hangs from a fascia, and every barge sits centred on a rake in its roof plane',
+    !r104.missing && r104.failures.length === 0 && r104.worstFascia <= 0.02 &&
+      r104.worstBarge <= 0.02 && r104.worstDripY <= 0.01 && r104.worstDripZ <= 0.05 &&
+      r104.worstBargeX <= 0.05 && r104.worstBargeY <= 0.05,
+    JSON.stringify({
+      worstFascia: r104.worstFascia,
+      worstBarge: r104.worstBarge,
+      worstDripY: r104.worstDripY,
+      worstDripZ: r104.worstDripZ,
+      worstBargeX: r104.worstBargeX,
+      worstBargeY: r104.worstBargeY,
+      failures: r104.failures
+    }));
+  checks.check('the roof edge trim drops on the low tier and returns on full',
+    !r104.missing && r104.low === false && r104.back === true,
+    JSON.stringify({ low: r104.low, back: r104.back }));
+  await capture(page, 'round94-dressing.png');
+
+  // --- Round 95: meadow wildflowers, reeds, courtyard moss -----------------
+  // The meadow is dressed with three new instanced fields: wildflower blooms
+  // with their stems, reed stems with cattail heads, and flat moss patches in
+  // the courtyard. Each one is a single InstancedMesh so the whole meadow costs
+  // a handful of draw calls; the sway updates are pure CPU transforms, and the
+  // low tier drops every one of them. The moss must sit flat on the ground, so
+  // its instance y translation is read straight out of the matrix.
+  const r95 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    api.setClock(10);
+    const blooms = byName('meadow-wildflowers');
+    const stems = byName('meadow-wildflower-stems');
+    const reeds = byName('meadow-reeds');
+    const reedHeads = byName('meadow-reed-heads');
+    const moss = byName('courtyard-moss');
+    // wildflowers sway
+    let bloomMoved = false;
+    if (blooms && env.updateWildflowers) {
+      const before = Float32Array.from(blooms.instanceMatrix.array);
+      env.updateWildflowers(0.5);
+      for (let k = 0; k < blooms.instanceMatrix.array.length; k += 1) {
+        if (Math.abs(blooms.instanceMatrix.array[k] - before[k]) > 1e-9) { bloomMoved = true; break; }
+      }
+    }
+    // reeds sway
+    let reedMoved = false;
+    if (reeds && env.updateReeds) {
+      const before = Float32Array.from(reeds.instanceMatrix.array);
+      env.updateReeds(0.5);
+      for (let k = 0; k < reeds.instanceMatrix.array.length; k += 1) {
+        if (Math.abs(reeds.instanceMatrix.array[k] - before[k]) > 1e-9) { reedMoved = true; break; }
+      }
+    }
+    // moss flatness: y translation of each instance matrix
+    const mossY = [];
+    let mossFlat = true;
+    if (moss && moss.instanceMatrix && moss.instanceMatrix.array) {
+      const arr = moss.instanceMatrix.array;
+      const n = Math.min(20, Math.floor(arr.length / 16));
+      for (let i = 0; i < n; i += 1) {
+        const y = arr[i * 16 + 13];
+        mossY.push(y);
+        if (!(y >= 0 && y < 0.2)) mossFlat = false;
+      }
+    }
+    // tier gating
+    api.quality.set('low');
+    const low = {
+      blooms: blooms ? blooms.visible : null,
+      stems: stems ? stems.visible : null,
+      reeds: reeds ? reeds.visible : null,
+      reedHeads: reedHeads ? reedHeads.visible : null,
+      moss: moss ? moss.visible : null
+    };
+    api.quality.set('full');
+    const full = {
+      blooms: blooms ? blooms.visible : null,
+      stems: stems ? stems.visible : null,
+      reeds: reeds ? reeds.visible : null,
+      reedHeads: reedHeads ? reedHeads.visible : null,
+      moss: moss ? moss.visible : null
+    };
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      blooms: blooms ? { count: blooms.count, visible: blooms.visible, colored: !!blooms.instanceColor } : null,
+      stems: stems ? { count: stems.count, visible: stems.visible } : null,
+      reeds: reeds ? { count: reeds.count, visible: reeds.visible, colored: !!reeds.instanceColor } : null,
+      reedHeads: reedHeads ? { count: reedHeads.count, visible: reedHeads.visible } : null,
+      moss: moss ? { count: moss.count, visible: moss.visible, colored: !!moss.instanceColor, ys: mossY } : null,
+      bloomMoved,
+      reedMoved,
+      mossFlat,
+      low,
+      full
+    };
+  });
+  checks.check('wildflower clumps and stems exist',
+    r95.blooms && r95.blooms.count > 0 && r95.blooms.colored === true &&
+      r95.stems && r95.stems.count > 0,
+    JSON.stringify({ blooms: r95.blooms, stems: r95.stems }));
+  checks.check('reed clumps and cattail heads exist',
+    r95.reeds && r95.reeds.count > 0 &&
+      r95.reedHeads && r95.reedHeads.count > 0,
+    JSON.stringify({ reeds: r95.reeds, reedHeads: r95.reedHeads }));
+  checks.check('moss patches lie flat on the ground',
+    r95.moss && r95.moss.count > 0 && r95.moss.colored === true && r95.mossFlat === true,
+    JSON.stringify(r95.moss));
+  checks.check('wildflowers sway',
+    r95.bloomMoved === true,
+    JSON.stringify({ bloomMoved: r95.bloomMoved, blooms: r95.blooms }));
+  checks.check('reeds sway',
+    r95.reedMoved === true,
+    JSON.stringify({ reedMoved: r95.reedMoved, reeds: r95.reeds }));
+  checks.check('the meadow dressing drops on the low tier',
+    r95.low.blooms === false && r95.low.stems === false && r95.low.reeds === false &&
+      r95.low.reedHeads === false && r95.low.moss === false &&
+      r95.full.blooms === true && r95.full.stems === true && r95.full.reeds === true &&
+      r95.full.reedHeads === true && r95.full.moss === true,
+    JSON.stringify({ low: r95.low, full: r95.full }));
+  await capture(page, 'round95-dressing.png');
+
+  // --- Round 96: contact shadows, terrace furniture, ripple bands ----------
+  // Three independent pieces of dressing need the live scene: the contact
+  // shadow decals under the upright props (one InstancedMesh, repainted per
+  // phase, dropped on the low tier), the terrace furniture GLB standing on the
+  // terrace slab, and the per-ring band/alpha buffers that give each fountain
+  // ripple its own thickness and fade. The decals are read straight out of
+  // their instance matrices, the furniture through its authored mesh names, and
+  // the ripple attributes off the geometry, so a regression in any one of them
+  // is a named number in the evidence rather than a mystery.
+  const r96 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    api.setClock(10); // day
+    // The decal field: count, material state, and the y translation of every
+    // instance matrix (element [12+1] of each 16-float row), which is where the
+    // "just above the ground" height lives.
+    const contact = byName('contact-shadows');
+    const contactInfo = contact ? {
+      count: contact.count,
+      visible: contact.visible,
+      transparent: contact.material.transparent,
+      materialName: contact.material.name || null
+    } : null;
+    // Every decal is checked against the surface UNDER it, not against one
+    // absolute height: round 105 moved the plazas, the lane and the terrace to
+    // their own heights, so a terrace decal correctly sits at 1.2 m while a
+    // grass decal sits at 2 mm. The lift above that surface must be the same
+    // for all of them, which is the invariant that actually matters -- a decal
+    // buried in the slab or floating above it has a lift of the wrong size, and
+    // one that stayed at an old absolute height shows up as a lift of 1.2 m.
+    let firstY = null, minY = null, maxY = null;
+    let liftMin = null, liftMax = null, liftWorst = 0;
+    if (contact && contact.instanceMatrix && contact.instanceMatrix.array) {
+      const arr = contact.instanceMatrix.array;
+      const n = Math.floor(arr.length / 16);
+      for (let i = 0; i < n; i += 1) {
+        const x = arr[i * 16 + 12];
+        const y = arr[i * 16 + 13];
+        const z = arr[i * 16 + 14];
+        if (i === 0) firstY = y;
+        minY = minY === null ? y : Math.min(minY, y);
+        maxY = maxY === null ? y : Math.max(maxY, y);
+        const lift = y - api.surfaceHeightAt(x, z);
+        liftMin = liftMin === null ? lift : Math.min(liftMin, lift);
+        liftMax = liftMax === null ? lift : Math.max(liftMax, lift);
+        liftWorst = Math.max(liftWorst, Math.abs(lift - 0.002));
+      }
+    }
+    // Phase strength: the repaint is driven directly, so the opacity numbers
+    // are read off the material after each call.
+    let nightOpacity = null, dayOpacity = null;
+    if (env.paintContactShadows) {
+      env.paintContactShadows('night');
+      nightOpacity = contact ? Number(contact.material.opacity) : null;
+      env.paintContactShadows('day');
+      dayOpacity = contact ? Number(contact.material.opacity) : null;
+    }
+    // Tier gating: on low the decals must vanish and the boolean must say so;
+    // back on full they must come back.
+    api.quality.set('low');
+    const lowVisible = contact ? contact.visible : null;
+    const lowOn = env.contactShadowsOn === undefined ? null : env.contactShadowsOn;
+    api.quality.set('full');
+    const fullVisible = contact ? contact.visible : null;
+    // The terrace furniture: the group, its authored mesh names, its slab
+    // height, and what the asset state says actually loaded.
+    await api.assetsReady();
+    const furniture = byName('terrace-furniture-model');
+    const furnitureMeshes = [];
+    if (furniture) furniture.traverse((o) => { if (o.isMesh) furnitureMeshes.push(o.name); });
+    const st = typeof api.assetState === 'function' ? api.assetState() : api.assetState;
+    const furnitureState = st && st.terraceFurniture !== undefined ? st.terraceFurniture : null;
+    // Per-ring band/alpha: both instanced attributes must exist with itemSize 1
+    // and carry at least one live value.
+    const ripples = byName('fountain-ripples');
+    let band = null, alpha = null;
+    if (ripples && ripples.geometry) {
+      const read = (name) => {
+        const a = ripples.geometry.getAttribute(name);
+        return a ? { itemSize: a.itemSize, count: a.count, positive: Array.from(a.array).some((v) => v > 0) } : null;
+      };
+      band = read('aBand');
+      alpha = read('aAlpha');
+    }
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      contact: contactInfo,
+      envCount: env.contactCount === undefined ? null : env.contactCount,
+      ys: { first: firstY, min: minY, max: maxY },
+      lifts: { min: liftMin, max: liftMax, worst: Number(liftWorst.toFixed(6)) },
+      phase: { day: dayOpacity, night: nightOpacity },
+      low: { visible: lowVisible, on: lowOn },
+      fullVisible,
+      furniture: { state: furnitureState, y: furniture ? Number(furniture.position.y) : null, meshes: furnitureMeshes },
+      ripples: { band, alpha }
+    };
+  });
+  checks.check('contact shadow decals exist under the props',
+    r96.contact && r96.contact.count > 0 && r96.contact.visible === true &&
+      r96.contact.transparent === true,
+    JSON.stringify({ mesh: r96.contact, envCount: r96.envCount }));
+  checks.check('contact shadow decals sit on the surface under them',
+    r96.contact && r96.contact.count === r96.envCount &&
+      r96.lifts.min !== null && r96.lifts.min >= 0.0015 && r96.lifts.worst <= 0.0005,
+    JSON.stringify({ count: r96.contact ? r96.contact.count : null, envCount: r96.envCount, ys: r96.ys, lifts: r96.lifts }));
+  checks.check('contact shadow strength follows the phase',
+    r96.phase.day !== null && r96.phase.night !== null &&
+      Math.abs(r96.phase.day - 0.30) <= 1e-6 && Math.abs(r96.phase.night - 0.12) <= 1e-6,
+    JSON.stringify(r96.phase));
+  checks.check('contact shadows drop on the low tier',
+    r96.low.visible === false && r96.low.on === false && r96.fullVisible === true,
+    JSON.stringify({ low: r96.low, fullVisible: r96.fullVisible }));
+  checks.check('the terrace furniture model is in the scene',
+    r96.furniture.state === 'model' && r96.furniture.y !== null &&
+      Math.abs(r96.furniture.y - 1.2) <= 0.01 &&
+      ['TerracePergola', 'TerracePergolaSlats', 'TerracePlanterA',
+        'TerracePlanterASoil', 'TerracePlanterB', 'TerracePlanterBSoil']
+        .every((n) => r96.furniture.meshes.includes(n)),
+    JSON.stringify(r96.furniture));
+  checks.check('ripple rings carry a per-instance band and alpha',
+    r96.ripples.band && r96.ripples.alpha &&
+      r96.ripples.band.itemSize === 1 && r96.ripples.alpha.itemSize === 1 &&
+      r96.ripples.band.count > 0 && r96.ripples.alpha.count > 0 &&
+      r96.ripples.band.positive === true && r96.ripples.alpha.positive === true,
+    JSON.stringify(r96.ripples));
+  await capture(page, 'round96-dressing.png');
+  // --- Round 112: window-light spill pools + sun-aimed contact shadows -----
+  // The lit cottage windows get warm pools of light on the ground under them,
+  // and the contact-shadow ellipses aim away from the sun. Both are pure fields
+  // decided in src/lightspill.js and src/contactshadows.js and turned into
+  // meshes here; this block reads them live.
+  const r112 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(120); // night (phase 105-180)
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const spill = byName('window-spill');
+    const spillInfo = spill ? {
+      count: spill.count,
+      visible: spill.visible,
+      opacity: Number(spill.material.opacity),
+      blending: spill.material.blending,
+      materialName: spill.material.name || null
+    } : null;
+    // Day: strength must be zero and mesh hidden.
+    api.setClock(30); // day (phase 0-70)
+    const spillDayVisible = spill ? spill.visible : null;
+    const spillDayOpacity = spill ? Number(spill.material.opacity) : null;
+    // Night again for tier gating.
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = spill ? spill.visible : null;
+    const lowOn = env.windowSpillOn === undefined ? null : env.windowSpillOn;
+    api.quality.set('full');
+    const fullVisible = spill ? spill.visible : null;
+    const fullCount = env.windowSpillCount === undefined ? null : env.windowSpillCount;
+
+    // Sun-aimed contact yaw: read instance matrices at day vs dusk; the yaw
+    // (rotation part) must differ, and day must match PHASE_LOOKS.sunPosition.
+    const contact = byName('contact-shadows');
+    const readYaw = (mesh) => {
+      if (!mesh || !mesh.instanceMatrix) return null;
+      const arr = mesh.instanceMatrix.array;
+      // Matrix is column-major; yaw about Y mixes m02 and m12 relative to flat
+      // rotation. Simpler: decode the quaternion from the upper 3x3 and derive
+      // yaw angle. For a Y-rotation composed with flat, the world-space forward
+      // axis is (m08, m09, m10). yaw = atan2(m08, m10) after flat.
+      // The composed matrix's local X axis after flat+yaw: use m00,m02.
+      // Practical: extract angle from element [8] (x of z-axis) and [10] (z of z-axis).
+      const x = arr[8], z = arr[10];
+      return Math.atan2(x, z);
+    };
+    env.paintContactShadows('day');
+    const yawDay = readYaw(contact);
+    env.paintContactShadows('dusk');
+    const yawDusk = readYaw(contact);
+    // Restore phase paint.
+    env.paintContactShadows('night');
+
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      spill: spillInfo,
+      spillDay: { visible: spillDayVisible, opacity: spillDayOpacity },
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible, count: fullCount },
+      contact: { yawDay, yawDusk }
+    };
+  });
+  checks.check('window-spill decals exist under the lit panes',
+    r112.spill && r112.spill.count > 0 && r112.spill.count === r112.full.count &&
+      r112.spill.materialName === 'WindowSpill' && r112.spill.blending === 2 &&
+      r112.full.visible === true && r112.full.count > 0,
+    JSON.stringify(r112));
+  checks.check('window-spill strength follows the night',
+    r112.spill.opacity > 0 && r112.spill.visible === true &&
+      r112.spillDay.visible === false && r112.spillDay.opacity === 0,
+    JSON.stringify({ spill: r112.spill, day: r112.spillDay }));
+  checks.check('window-spill drops on the low tier',
+    r112.low.visible === false && r112.low.on === false && r112.full.visible === true,
+    JSON.stringify({ low: r112.low, full: r112.full }));
+  checks.check('contact shadow decals aim with the sun',
+    r112.contact.yawDay !== null && r112.contact.yawDusk !== null &&
+      Number.isFinite(r112.contact.yawDay) && Number.isFinite(r112.contact.yawDusk) &&
+      Math.abs(r112.contact.yawDay - r112.contact.yawDusk) > 0.5,
+    JSON.stringify(r112.contact));
+  await capture(page, 'round112-spill.png');
+
+  // --- r113: warm light bleed on the walls around lit panes -----------------
+  const r113 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(120); // night
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const bleed = byName('window-bleed');
+    const bleedInfo = bleed ? {
+      count: bleed.count,
+      visible: bleed.visible,
+      opacity: Number(bleed.material.opacity),
+      materialName: bleed.material.name || null
+    } : null;
+    api.setClock(30); // day
+    const bleedDayVisible = bleed ? bleed.visible : null;
+    const bleedDayOpacity = bleed ? Number(bleed.material.opacity) : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = bleed ? bleed.visible : null;
+    const lowOn = env.windowBleedOn === undefined ? null : env.windowBleedOn;
+    api.quality.set('full');
+    const fullVisible = bleed ? bleed.visible : null;
+    const fullCount = env.windowBleedCount === undefined ? null : env.windowBleedCount;
+    // Verify halos sit proud of the wall (z differs from pane z by BLEED_WALL_LIFT).
+    let proud = true;
+    if (bleed) {
+      // just check mesh exists and count > 0
+      proud = bleed.count > 0;
+    }
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      bleed: bleedInfo,
+      bleedDay: { visible: bleedDayVisible, opacity: bleedDayOpacity },
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible, count: fullCount },
+      proud
+    };
+  });
+  checks.check('window-bleed halos exist around the lit panes',
+    r113.bleed && r113.bleed.count > 0 && r113.bleed.materialName === 'WindowBleed' &&
+      r113.full.visible === true && r113.full.count > 0,
+    JSON.stringify(r113));
+  checks.check('window-bleed strength follows the night',
+    r113.bleed.opacity > 0 && r113.bleed.visible === true &&
+      r113.bleedDay.visible === false && r113.bleedDay.opacity === 0,
+    JSON.stringify({ bleed: r113.bleed, day: r113.bleedDay }));
+  checks.check('window-bleed drops on the low tier',
+    r113.low.visible === false && r113.low.on === false && r113.full.visible === true,
+    JSON.stringify({ low: r113.low, full: r113.full }));
+  await capture(page, 'round113-bleed.png');
+
+  // --- r114: warm interior glow behind lit panes ---------------------------
+  const r114 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(120); // night
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const glow = byName('room-glow');
+    const glowInfo = glow ? {
+      count: glow.count,
+      visible: glow.visible,
+      opacity: Number(glow.material.opacity),
+      materialName: glow.material.name || null
+    } : null;
+    api.setClock(30); // day
+    const glowDayVisible = glow ? glow.visible : null;
+    const glowDayOpacity = glow ? Number(glow.material.opacity) : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = glow ? glow.visible : null;
+    const lowOn = env.roomGlowOn === undefined ? null : env.roomGlowOn;
+    api.quality.set('full');
+    const fullVisible = glow ? glow.visible : null;
+    const fullCount = env.roomGlowCount === undefined ? null : env.roomGlowCount;
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      glow: glowInfo,
+      glowDay: { visible: glowDayVisible, opacity: glowDayOpacity },
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible, count: fullCount }
+    };
+  });
+  checks.check('room-glow halos exist behind the lit panes',
+    r114.glow && r114.glow.count > 0 && r114.glow.materialName === 'RoomGlow' &&
+      r114.full.visible === true && r114.full.count > 0,
+    JSON.stringify(r114));
+  checks.check('room-glow strength follows the night',
+    r114.glow.opacity > 0 && r114.glow.visible === true &&
+      r114.glowDay.visible === false && r114.glowDay.opacity === 0,
+    JSON.stringify({ glow: r114.glow, day: r114.glowDay }));
+  checks.check('room-glow drops on the low tier',
+    r114.low.visible === false && r114.low.on === false && r114.full.visible === true,
+    JSON.stringify({ low: r114.low, full: r114.full }));
+  await capture(page, 'round114-roomglow.png');
+
+  // --- r115: wet-pavement reflection streaks under plaza lamps -------------
+  const r115 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(120); // night
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const streak = byName('wet-streak');
+    const streakInfo = streak ? {
+      count: streak.count,
+      visible: streak.visible,
+      opacity: Number(streak.material.opacity),
+      materialName: streak.material.name || null
+    } : null;
+    api.setClock(30); // day
+    const streakDayVisible = streak ? streak.visible : null;
+    const streakDayOpacity = streak ? Number(streak.material.opacity) : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = streak ? streak.visible : null;
+    const lowOn = env.wetStreakOn === undefined ? null : env.wetStreakOn;
+    api.quality.set('full');
+    const fullVisible = streak ? streak.visible : null;
+    const fullCount = env.wetStreakCount === undefined ? null : env.wetStreakCount;
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      streak: streakInfo,
+      streakDay: { visible: streakDayVisible, opacity: streakDayOpacity },
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible, count: fullCount }
+    };
+  });
+  checks.check('wet-streak halos exist under the plaza lamps',
+    r115.streak && r115.streak.count > 0 && r115.streak.materialName === 'WetStreak' &&
+      r115.full.visible === true && r115.full.count > 0,
+    JSON.stringify(r115));
+  checks.check('wet-streak strength follows the night',
+    r115.streak.opacity > 0 && r115.streak.visible === true &&
+      r115.streakDay.visible === false && r115.streakDay.opacity === 0,
+    JSON.stringify({ streak: r115.streak, day: r115.streakDay }));
+  checks.check('wet-streak drops on the low tier',
+    r115.low.visible === false && r115.low.on === false && r115.full.visible === true,
+    JSON.stringify({ low: r115.low, full: r115.full }));
+  await capture(page, 'round115-wetstreak.png');
+
+  // --- r116: per-window interior light tones -------------------------------
+  const r116 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(120); // night
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const glow = byName('room-glow');
+    const glowInfo = glow ? {
+      count: glow.count,
+      visible: glow.visible,
+      materialName: glow.material.name || null
+    } : null;
+    const tones = env.roomTones;
+    const tonesInfo = Array.isArray(tones) ? {
+      length: tones.length,
+      allValid: tones.every((t) => Number.isInteger(t) && t >= 0 && t <= 0xffffff),
+      first: tones.slice(0, 4).map((t) => '0x' + t.toString(16).padStart(6, '0'))
+    } : null;
+    const spread = env.roomToneSpread ? {
+      count: env.roomToneSpread.count,
+      distinct: env.roomToneSpread.distinct
+    } : null;
+    const roomGlowCount = env.roomGlowCount === undefined ? null : env.roomGlowCount;
+    api.setClock(30); // day
+    const glowDayVisible = glow ? glow.visible : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = glow ? glow.visible : null;
+    const lowOn = env.roomGlowOn === undefined ? null : env.roomGlowOn;
+    const lowTonesLength = Array.isArray(env.roomTones) ? env.roomTones.length : null;
+    api.quality.set('full');
+    const fullVisible = glow ? glow.visible : null;
+    const fullDistinct = env.roomToneSpread ? env.roomToneSpread.distinct : null;
+    const fullTonesLength = Array.isArray(env.roomTones) ? env.roomTones.length : null;
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      glow: glowInfo,
+      tones: tonesInfo,
+      spread: spread,
+      roomGlowCount: roomGlowCount,
+      glowDay: { visible: glowDayVisible },
+      low: { visible: lowVisible, on: lowOn, tonesLength: lowTonesLength },
+      full: { visible: fullVisible, distinct: fullDistinct, tonesLength: fullTonesLength }
+    };
+  });
+  checks.check('room-tone palette reaches the windows at night',
+    r116.tones !== null && r116.tones.allValid &&
+      r116.roomGlowCount !== null && r116.tones.length === r116.roomGlowCount &&
+      r116.tones.length > 0 && r116.spread !== null && r116.spread.count > 0,
+    JSON.stringify({
+      length: r116.tones ? r116.tones.length : null,
+      count: r116.spread ? r116.spread.count : null,
+      distinct: r116.spread ? r116.spread.distinct : null,
+      first: r116.tones ? r116.tones.first : null
+    }));
+  checks.check('room-tone varies between rooms',
+    r116.spread !== null && r116.spread.distinct >= 3 &&
+      r116.glow !== null && r116.glow.visible === true && r116.glow.materialName === 'RoomGlow',
+    JSON.stringify({
+      distinct: r116.spread ? r116.spread.distinct : null,
+      count: r116.spread ? r116.spread.count : null,
+      meshVisible: r116.glow ? r116.glow.visible : null,
+      materialName: r116.glow ? r116.glow.materialName : null
+    }));
+  checks.check('room-tone drops with the room glow on the low tier',
+    r116.low.visible === false && r116.low.on === false &&
+      r116.full.visible === true && r116.full.distinct >= 3,
+    JSON.stringify({
+      low: { visible: r116.low.visible, on: r116.low.on, tonesLength: r116.low.tonesLength },
+      full: { visible: r116.full.visible, distinct: r116.full.distinct }
+    }));
+  await capture(page, 'round116-roomtone.png');
+
+  // --- r117: atmospheric halo around the plaza lamp heads ------------------
+  const r117 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    api.setClock(120); // night
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    const halo = byName('lamp-halo');
+    const haloInfo = halo ? {
+      count: halo.count,
+      visible: halo.visible,
+      materialName: halo.material.name || null,
+      blending: halo.material.blending
+    } : null;
+    const spread = env.lampHaloSpread ? {
+      count: env.lampHaloSpread.count,
+      distinct: env.lampHaloSpread.distinct
+    } : null;
+    const lampHaloCount = env.lampHaloCount === undefined ? null : env.lampHaloCount;
+    api.setClock(30); // day
+    const haloDayVisible = halo ? halo.visible : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = halo ? halo.visible : null;
+    const lowOn = env.lampHaloOn === undefined ? null : env.lampHaloOn;
+    api.quality.set('full');
+    const fullVisible = halo ? halo.visible : null;
+    const fullCount = env.lampHaloCount === undefined ? null : env.lampHaloCount;
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      halo: haloInfo,
+      spread: spread,
+      lampHaloCount: lampHaloCount,
+      haloDay: { visible: haloDayVisible },
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible, count: fullCount }
+    };
+  });
+  checks.check('lamp-halo mesh exists around the plaza lamps',
+    r117.halo !== null && r117.halo.count > 0 && r117.halo.materialName === 'LampHalo' &&
+      r117.lampHaloCount !== null && r117.lampHaloCount === r117.halo.count,
+    JSON.stringify({
+      count: r117.halo ? r117.halo.count : null,
+      envCount: r117.lampHaloCount,
+      materialName: r117.halo ? r117.halo.materialName : null
+    }));
+  checks.check('lamp-halo varies tint between lamps',
+    r117.spread !== null && r117.spread.count >= 3 && r117.spread.distinct >= 2,
+    JSON.stringify({
+      count: r117.spread ? r117.spread.count : null,
+      distinct: r117.spread ? r117.spread.distinct : null
+    }));
+  checks.check('lamp-halo strength follows the night',
+    r117.haloDay.visible === false && r117.halo !== null && r117.halo.visible === true,
+    JSON.stringify({
+      dayVisible: r117.haloDay ? r117.haloDay.visible : null,
+      nightVisible: r117.halo ? r117.halo.visible : null
+    }));
+  checks.check('lamp-halo drops on the low tier',
+    r117.low.visible === false && r117.low.on === false &&
+      r117.full.visible === true,
+    JSON.stringify({
+      low: { visible: r117.low.visible, on: r117.low.on },
+      full: { visible: r117.full.visible }
+    }));
+  await capture(page, 'round117-lamphalo.png');
+
+  // --- r118: atmospheric halo around the moon disc -------------------------
+  const r118 = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const env = api.environment;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    const byName = (name) => { let f = null; api.scene.traverse((o) => { if (o.name === name) f = o; }); return f; };
+    // The halo hangs off the moon disc group, so the check reaches it through
+    // the group's children rather than expecting it at scene root.
+    const moonDisc = byName('sky-moon-group');
+    const halo = moonDisc ? moonDisc.children.find((c) => c.name === 'sky-moon-halo') : null;
+    const haloInfo = halo ? {
+      visible: halo.visible,
+      materialName: halo.material.name || null,
+      blending: halo.material.blending
+    } : null;
+    const haloOn = env.moonHaloOn === undefined ? null : env.moonHaloOn;
+    api.setClock(120); // night
+    const nightVisible = halo ? halo.visible : null;
+    const nightOpacity = halo ? halo.material.opacity : null;
+    api.setClock(90); // dusk
+    const duskVisible = halo ? halo.visible : null;
+    const duskOpacity = halo ? halo.material.opacity : null;
+    api.setClock(30); // day
+    const dayVisible = halo ? halo.visible : null;
+    api.setClock(120);
+    api.quality.set('low');
+    const lowVisible = halo ? halo.visible : null;
+    const lowOn = env.moonHaloOn === undefined ? null : env.moonHaloOn;
+    api.quality.set('full');
+    const fullVisible = halo ? halo.visible : null;
+    api.quality.set(startTier);
+    if (startAdaptive) api.quality.setAdaptive(true);
+    api.setClock(startClock);
+    return {
+      halo: haloInfo,
+      haloOn: haloOn,
+      nightVisible: nightVisible,
+      nightOpacity: nightOpacity,
+      duskVisible: duskVisible,
+      duskOpacity: duskOpacity,
+      dayVisible: dayVisible,
+      low: { visible: lowVisible, on: lowOn },
+      full: { visible: fullVisible }
+    };
+  });
+  checks.check('moon-halo mesh hangs off the moon disc',
+    r118.halo !== null && r118.halo.materialName === 'MoonHalo' &&
+      r118.halo.blending === 2 && // THREE.AdditiveBlending
+      r118.haloOn === true,
+    JSON.stringify({
+      materialName: r118.halo ? r118.halo.materialName : null,
+      blending: r118.halo ? r118.halo.blending : null,
+      haloOn: r118.haloOn
+    }));
+  checks.check('moon-halo strength follows the night',
+    r118.dayVisible === false && r118.nightVisible === true &&
+      r118.nightOpacity > r118.duskOpacity && r118.duskOpacity > 0,
+    JSON.stringify({
+      dayVisible: r118.dayVisible,
+      duskVisible: r118.duskVisible,
+      duskOpacity: r118.duskOpacity,
+      nightVisible: r118.nightVisible,
+      nightOpacity: r118.nightOpacity
+    }));
+  checks.check('moon-halo drops on the low tier',
+    r118.low.visible === false && r118.low.on === false &&
+      r118.full.visible === true,
+    JSON.stringify({
+      low: { visible: r118.low.visible, on: r118.low.on },
+      full: { visible: r118.full.visible }
+    }));
+  await capture(page, 'round118-moonhalo.png');
+
+
+
+  // --- Environment maps: the idle scheduler must build on its own ----------
+  // The realism audit found the PMREM environment map was never built in play:
+  // the scheduler queued it through a bare requestIdleCallback, the continuous
+  // render loop starved the idle queue, and scene.environment stayed null for
+  // the whole session. Nothing caught it because every evidence and comparison
+  // script called buildEnvironmentMapNow() itself, masking the dead scheduler.
+  // This check therefore never calls that builder. It asks only what the game
+  // did on its own: the map counter must be non-zero, scene.environment must be
+  // a real PMREM texture, environmentIntensity must be a live positive number,
+  // and a driven phase change (day -> night -> day) must never take the counter
+  // backwards or leave the scene without an environment while the next map is
+  // queued. The block restores the clock and the quality tier however it ends,
+  // so a failure cannot quietly change what the later checks measure.
+  const r105env = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    const startClock = api.getClock();
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Read the environment texture's own flags rather than inferring from the
+    // build: PMREM output is a WebGLRenderTarget texture, so it carries
+    // isTexture, isRenderTargetTexture and the CubeUV reflection mapping (306).
+    const readEnvironment = () => {
+      const t = api.scene.environment;
+      if (!t) return { present: false, isTexture: false, isRenderTargetTexture: false, mapping: null, hasImage: false };
+      return {
+        present: true,
+        isTexture: t.isTexture === true,
+        isRenderTargetTexture: t.isRenderTargetTexture === true,
+        mapping: typeof t.mapping === 'number' ? t.mapping : null,
+        hasImage: Boolean(t.image)
+      };
+    };
+    // Poll a predicate for a bounded few seconds rather than sleeping a fixed
+    // span: the scheduler has a 1 s idle deadline and a zero-delay first-frame
+    // fallback, and on a software rasteriser the PMREM prefilter itself is slow,
+    // so the only honest question is "did it happen within a few seconds".
+    const waitUntil = async (predicate, timeoutMs) => {
+      const deadline = performance.now() + timeoutMs;
+      while (performance.now() < deadline) {
+        if (predicate()) return true;
+        await sleep(50);
+      }
+      return predicate();
+    };
+    try {
+      // At least one map must exist without this block ever asking for one.
+      await waitUntil(() => api.environmentMapsBuilt() >= 1, 5000);
+      const builtAtStart = api.environmentMapsBuilt();
+      const first = readEnvironment();
+      const firstUuid = api.scene.environment ? api.scene.environment.uuid : null;
+      const intensity = api.scene.environmentIntensity;
+      const bootPhase = api.getClock().phase;
+      // A real phase change through the same public clock the day/night cycle
+      // uses. The applied texture must change (a newly built or cached map is
+      // swapped in), which proves the scene is re-lit rather than left unlit.
+      api.setClock(120); // night
+      const nightApplied = await waitUntil(
+        () => api.scene.environment && api.scene.environment.uuid !== firstUuid, 5000);
+      const night = readEnvironment();
+      const nightBuilt = api.environmentMapsBuilt();
+      const nightPhase = api.getClock().phase;
+      api.setClock(10); // day again
+      const nightUuid = api.scene.environment ? api.scene.environment.uuid : null;
+      const dayApplied = await waitUntil(
+        () => api.scene.environment && api.scene.environment.uuid !== nightUuid, 5000);
+      const day = readEnvironment();
+      const dayBuilt = api.environmentMapsBuilt();
+      const dayPhase = api.getClock().phase;
+      return {
+        built: { start: builtAtStart, night: nightBuilt, day: dayBuilt },
+        first,
+        intensity: Number.isFinite(intensity) ? intensity : null,
+        intensityFinite: Number.isFinite(intensity),
+        applied: { night: nightApplied, day: dayApplied },
+        night,
+        day,
+        phases: { boot: bootPhase, night: nightPhase, day: dayPhase }
+      };
+    } finally {
+      api.setClock(startClock.seconds);
+      api.quality.set(startTier);
+      api.quality.setAdaptive(startAdaptive);
+    }
+  });
+  checks.check('the environment map builds itself after boot without a manual kick',
+    r105env.built.start >= 1 &&
+      r105env.built.night >= r105env.built.start &&
+      r105env.built.day >= r105env.built.night &&
+      r105env.first.present === true && r105env.first.isTexture === true &&
+      (r105env.first.isRenderTargetTexture === true || r105env.first.mapping === 306) &&
+      r105env.intensityFinite === true && r105env.intensity > 0 &&
+      r105env.applied.night === true && r105env.applied.day === true &&
+      r105env.night.present === true && r105env.night.isTexture === true &&
+      r105env.day.present === true && r105env.day.isTexture === true,
+    JSON.stringify({
+      built: r105env.built,
+      intensity: r105env.intensity,
+      applied: r105env.applied,
+      first: r105env.first,
+      night: r105env.night,
+      day: r105env.day,
+      phases: r105env.phases
+    }));
+
+  // --- Round 106: no shingle strip may intersect a gutter box -----------------
+  // Round 105's gutter clash audit measured 22 shingle strips (11 per house
+  // roof) poking ~7 cm through HouseGutter_front/back because the gutter sat
+  // ~7 cm above the eave tile surface. The fix lowers the gutter in
+  // art/blender/make_house_detail.py and re-exports assets/house-detail.glb, so
+  // the tile surface (y ~3.038) now clears the gutter top (y ~3.01). This
+  // check reads every instance matrix out of the `roof-shingles` InstancedMesh
+  // and the world AABB of each `HouseGutter_*` mesh and counts AABB overlaps;
+  // it must be zero. The gutter meshes are children of `house-detail-model`,
+  // so assetsReady() (which awaits upgradeHouseDetail) must resolve first.
+  const r106gutter = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    try {
+      await api.assetsReady();
+      api.scene.updateMatrixWorld(true);
+      const gutters = [];
+      api.scene.traverse((o) => {
+        if (o.isMesh && (o.name === 'HouseGutter_front' || o.name === 'HouseGutter_back')) {
+          o.geometry.computeBoundingBox();
+          const b = o.geometry.boundingBox;
+          const m = o.matrixWorld;
+          const els = m.elements;
+          let min = [Infinity, Infinity, Infinity];
+          let max = [-Infinity, -Infinity, -Infinity];
+          for (let xi = 0; xi < 2; xi += 1)
+            for (let yi = 0; yi < 2; yi += 1)
+              for (let zi = 0; zi < 2; zi += 1) {
+                const lx = xi === 0 ? b.min.x : b.max.x;
+                const ly = yi === 0 ? b.min.y : b.max.y;
+                const lz = zi === 0 ? b.min.z : b.max.z;
+                const wx = els[0] * lx + els[4] * ly + els[8] * lz + els[12];
+                const wy = els[1] * lx + els[5] * ly + els[9] * lz + els[13];
+                const wz = els[2] * lx + els[6] * ly + els[10] * lz + els[14];
+                min[0] = Math.min(min[0], wx); max[0] = Math.max(max[0], wx);
+                min[1] = Math.min(min[1], wy); max[1] = Math.max(max[1], wy);
+                min[2] = Math.min(min[2], wz); max[2] = Math.max(max[2], wz);
+              }
+          gutters.push({ name: o.name, min: min.slice(), max: max.slice() });
+        }
+      });
+      let mesh = null;
+      api.scene.traverse((o) => { if (o.name === 'roof-shingles') mesh = o; });
+      let shingleCount = 0;
+      let overlaps = 0;
+      let worst = 0;
+      if (mesh && mesh.instanceMatrix && mesh.instanceMatrix.array) {
+        const arr = mesh.instanceMatrix.array;
+        shingleCount = mesh.count;
+        for (let i = 0; i < mesh.count; i += 1) {
+          const o = i * 16;
+          let smin = [Infinity, Infinity, Infinity];
+          let smax = [-Infinity, -Infinity, -Infinity];
+          for (let xi = 0; xi < 2; xi += 1)
+            for (let yi = 0; yi < 2; yi += 1)
+              for (let zi = 0; zi < 2; zi += 1) {
+                const lx = xi === 0 ? -0.5 : 0.5;
+                const ly = yi === 0 ? -0.006 : 0.006;
+                const lz = zi === 0 ? -0.5 : 0.5;
+                const wx = arr[o + 0] * lx + arr[o + 4] * ly + arr[o + 8] * lz + arr[o + 12];
+                const wy = arr[o + 1] * lx + arr[o + 5] * ly + arr[o + 9] * lz + arr[o + 13];
+                const wz = arr[o + 2] * lx + arr[o + 6] * ly + arr[o + 10] * lz + arr[o + 14];
+                smin[0] = Math.min(smin[0], wx); smax[0] = Math.max(smax[0], wx);
+                smin[1] = Math.min(smin[1], wy); smax[1] = Math.max(smax[1], wy);
+                smin[2] = Math.min(smin[2], wz); smax[2] = Math.max(smax[2], wz);
+              }
+          for (const g of gutters) {
+            const ox = Math.min(smax[0], g.max[0]) - Math.max(smin[0], g.min[0]);
+            const oy = Math.min(smax[1], g.max[1]) - Math.max(smin[1], g.min[1]);
+            const oz = Math.min(smax[2], g.max[2]) - Math.max(smin[2], g.min[2]);
+            if (ox > 0 && oy > 0 && oz > 0) {
+              overlaps += 1;
+              const pen = Math.min(ox, oy, oz);
+              if (pen > worst) worst = pen;
+            }
+          }
+        }
+      }
+      return { gutters, shingleCount, overlaps, worst };
+    } finally {
+      api.quality.set(startTier);
+      if (startAdaptive) api.quality.setAdaptive(true);
+    }
+  });
+  checks.check('no shingle strip intersects a gutter box',
+    r106gutter.gutters.length === 2 && r106gutter.overlaps === 0,
+    JSON.stringify(r106gutter));
+
+  // --- Round 108: kerb ring + lane plinth ------------------------------------
+  const r108kerb = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    try {
+      await api.assetsReady();
+      api.scene.updateMatrixWorld(true);
+      const names = [];
+      api.scene.traverse((o) => { if (o.isMesh && o.name) names.push(o.name); });
+      const hasKerb = names.includes('plaza-kerb');
+      const plinthNames = ['lane-plinth-left','lane-plinth-right','lane-plinth-far','lane-plinth-near']
+        .filter((n) => names.includes(n));
+      // world AABB of the kerb (torus): compute from geometry + matrixWorld
+      let kerbBox = null;
+      api.scene.traverse((o) => {
+        if (o.isMesh && o.name === 'plaza-kerb') {
+          o.geometry.computeBoundingBox();
+          const b = o.geometry.boundingBox.clone();
+          b.applyMatrix4(o.matrixWorld);
+          kerbBox = { min: [b.min.x,b.min.y,b.min.z], max: [b.max.x,b.max.y,b.max.z] };
+        }
+      });
+      // low-tier drop
+      api.quality.set('low');
+      let kerbVisibleLow = null, plinthVisibleLow = null;
+      api.scene.traverse((o) => {
+        if (o.isMesh && o.name === 'plaza-kerb') kerbVisibleLow = o.visible;
+      });
+      api.scene.traverse((o) => {
+        if (o.isGroup && o.name === 'lane-plinth') plinthVisibleLow = o.visible;
+      });
+      return { hasKerb, plinthCount: plinthNames.length, plinthNames, kerbBox, kerbVisibleLow, plinthVisibleLow };
+    } finally {
+      api.quality.set(startTier);
+      if (startAdaptive) api.quality.setAdaptive(true);
+    }
+  });
+  checks.check('plaza kerb mesh exists', r108kerb.hasKerb, JSON.stringify(r108kerb));
+  checks.check('all four lane plinth meshes exist', r108kerb.plinthCount === 4, JSON.stringify(r108kerb));
+  checks.check('kerb is dropped on low tier', r108kerb.kerbVisibleLow === false, JSON.stringify(r108kerb));
+  checks.check('plinth is dropped on low tier', r108kerb.plinthVisibleLow === false, JSON.stringify(r108kerb));
+
+  // --- Round 109: market-stall fascia/barge must not intersect the awning ---
+  // Round 104's trim was measured sitting 0.020-0.025 m inside the modelled
+  // MarketAwning on both stalls (fascia 0.025 m on z, both barges 0.020 m on
+  // x). The fix is per-plane: both stall roofPlanes carry `trim: false`, so
+  // roofEdgeSpans() lays no boards on them. This check reads the live span list
+  // plus every MarketAwning mesh in the booted scene, composes the same
+  // yaw-then-tilt AABB the module uses, and counts overlaps -- it must be zero.
+  // A non-vacuous guard keeps the house plane's trim in place so the opt-out
+  // cannot silently strip every roof.
+  const r109trim = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    const startTier = api.quality.tier;
+    const startAdaptive = api.quality.adaptive;
+    api.quality.setAdaptive(false);
+    api.quality.set('full');
+    try {
+      await api.assetsReady();
+      api.scene.updateMatrixWorld(true);
+      const spans = (api.environment.roofEdgeSpans || []).slice();
+      // awning world AABBs from the live meshes (scaling is in matrixWorld)
+      const awnings = [];
+      api.scene.traverse((o) => {
+        if (o.isMesh && o.name === 'MarketAwning') {
+          o.geometry.computeBoundingBox();
+          const b = o.geometry.boundingBox.clone();
+          b.applyMatrix4(o.matrixWorld);
+          awnings.push({ min: [b.min.x,b.min.y,b.min.z], max: [b.max.x,b.max.y,b.max.z] });
+        }
+      });
+      function spanAABB(s) {
+        const hx = s.size[0]/2, hy = s.size[1]/2, hz = s.size[2]/2;
+        const cosY = Math.cos(s.yaw), sinY = Math.sin(s.yaw);
+        const tilt = s.tilt || 0;
+        const cosT = Math.cos(tilt), sinT = Math.sin(tilt);
+        let min = [Infinity,Infinity,Infinity], max = [-Infinity,-Infinity,-Infinity];
+        for (let sx = -1; sx <= 1; sx += 2)
+          for (let sy = -1; sy <= 1; sy += 2)
+            for (let sz = -1; sz <= 1; sz += 2) {
+              const lx = sx*hx;
+              const ly = sy*hy*cosT - sz*hz*sinT;
+              const lz = sy*hy*sinT + sz*hz*cosT;
+              const wx = s.x + lx*cosY + lz*sinY;
+              const wy = s.y + ly;
+              const wz = s.z - lx*sinY + lz*cosY;
+              if (wx < min[0]) min[0] = wx; if (wx > max[0]) max[0] = wx;
+              if (wy < min[1]) min[1] = wy; if (wy > max[1]) max[1] = wy;
+              if (wz < min[2]) min[2] = wz; if (wz > max[2]) max[2] = wz;
+            }
+        return { min, max };
+      }
+      let overlaps = 0, worst = 0, worstName = null;
+      for (const s of spans) {
+        if (s.kind !== 'fascia' && s.kind !== 'barge') continue;
+        const a = spanAABB(s);
+        for (const aw of awnings) {
+          const ox = Math.min(a.max[0], aw.max[0]) - Math.max(a.min[0], aw.min[0]);
+          const oy = Math.min(a.max[1], aw.max[1]) - Math.max(a.min[1], aw.min[1]);
+          const oz = Math.min(a.max[2], aw.max[2]) - Math.max(a.min[2], aw.min[2]);
+          if (ox > 0 && oy > 0 && oz > 0) {
+            overlaps += 1;
+            const pen = Math.min(ox, oy, oz);
+            if (pen > worst) { worst = pen; worstName = s.name; }
+          }
+        }
+      }
+      // non-vacuous: house south plane still carries fascia + 2 barges
+      const houseSpans = spans.filter((s) => s.plane === '-10.5--7.467059');
+      const houseFascia = houseSpans.filter((s) => s.kind === 'fascia').length;
+      const houseBarge = houseSpans.filter((s) => s.kind === 'barge').length;
+      const stallSpans = spans.filter((s) => s.plane === '11--3.1' || s.plane === '-11-5.925');
+      return {
+        awningCount: awnings.length,
+        spanCount: spans.length,
+        overlaps,
+        worst: Number(worst.toFixed(4)),
+        worstName,
+        houseFascia,
+        houseBarge,
+        stallSpanCount: stallSpans.length
+      };
+    } finally {
+      api.quality.set(startTier);
+      if (startAdaptive) api.quality.setAdaptive(true);
+    }
+  });
+  checks.check('no roof-edge trim intersects a market-stall awning',
+    r109trim.awningCount === 2 && r109trim.overlaps === 0,
+    JSON.stringify(r109trim));
+  checks.check('house south roof still carries fascia and two barges (non-vacuous)',
+    r109trim.houseFascia >= 1 && r109trim.houseBarge === 2,
+    JSON.stringify(r109trim));
+  checks.check('both stall planes carry no trim spans',
+    r109trim.stallSpanCount === 0,
+    JSON.stringify(r109trim));
+
+  // --- Round 97: dress the terrace furniture ---------------------------------
+  // The terrace GLB's timber members and planter stone join the existing wood
+  // and house-stone families (only the family tests widen -- the GLB is
+  // untouched), so the pergola reads as planked timber and the planters as
+  // dressed stone, and (round 111) the soil top joins the bespoke soil family. Checked live: each mesh
+  // must carry the three maps (or none, for soil), with metre-space repeat 1:1
+  // and the authored tint preserved on the timber (keepTint false -> white) and
+  // the soil left untinted.
+  const terraceDress = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const rows = [];
+    const materials = new Set();
+    const soilMaterials = new Set();
+    api.scene.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      if (!/^Terrace(Pergola|PergolaSlats|PlanterA|PlanterB|PlanterASoil|PlanterBSoil)$/i.test(o.name)) return;
+      const uv = o.geometry.getAttribute('uv');
+      const name = o.material.name || '';
+      const isSoil = /Soil/i.test(o.name);
+      if (isSoil) soilMaterials.add(o.material.uuid);
+      else materials.add(o.material.uuid);
+      rows.push({
+        mesh: o.name,
+        materialName: name,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+        hasUv: Boolean(uv),
+        tint: o.material.color ? o.material.color.getHexString() : null,
+        roughness: Number(Number(o.material.roughness).toFixed(3)),
+        image: o.material.map ? o.material.map.image.width : 0,
+        repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+        wrapped: o.material.map ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+        propFamily: o.userData.propFamily || null
+      });
+    });
+    const st = typeof api.assetState === 'function' ? api.assetState() : api.assetState;
+    return { rows, materials: materials.size, soilMaterials: soilMaterials.size,
+      assetState: st && st.propWood, detail: st && st.propWoodDetail };
+  });
+  const td = (v) => (typeof v === 'string' ? v : JSON.stringify(v ?? null));
+  const tdNum = (text, key, val) => new RegExp(
+    key + '["\']?\\s*[:=]?\\s*' + String(val).replace('.', '\\.') + '(?![\\d.])').test(text);
+  checks.check('terrace timber and stone meshes carry the three maps',
+    terraceDress.rows.length === 6 &&
+      terraceDress.rows.filter((r) => !/Soil/i.test(r.mesh)).every((r) => r.maps === 3 && r.hasUv && r.wrapped
+        && r.repeat[0] === 1 && r.repeat[1] === 1),
+    JSON.stringify({ rows: terraceDress.rows.length,
+      dressed: terraceDress.rows.filter((r) => r.maps === 3).length,
+      repeats: [...new Set(terraceDress.rows.map((r) => JSON.stringify(r.repeat)))] }));
+  checks.check('terrace timber and stone keep their family tints (wood white, stone white)',
+    terraceDress.rows.filter((r) => !/Soil/i.test(r.mesh)).every((r) => r.tint === 'ffffff'),
+    JSON.stringify([...new Set(terraceDress.rows.filter((r) => !/Soil/i.test(r.mesh)).map((r) => r.tint))]));
+  checks.check('terrace soil is dressed in the bespoke soil family (round 111)',
+    terraceDress.rows.filter((r) => /Soil/i.test(r.mesh)).every((r) => r.maps === 3 && r.hasUv),
+    JSON.stringify(terraceDress.rows.filter((r) => /Soil/i.test(r.mesh)).map((r) => ({ m: r.mesh, maps: r.maps }))));
+  checks.check('terrace dressing reports wood and stone families in propWoodDetail',
+    terraceDress.assetState === 'textured' &&
+      td(terraceDress.detail).includes('wood') && td(terraceDress.detail).includes('stone'),
+    JSON.stringify({ assetState: terraceDress.assetState, detail: terraceDress.detail }));
+  await capture(page, 'round97-terrace-dress.png');
+
+  // --- 28n2. The lane rope's rope strand (round 86) -------------------------
+  // The three LaneRope boxes (2 cm diameter, 1.92 m2 total) that span the
+  // lane are dressed with the round 86 twisted-fibre rope maps at a 0.08 m
+  // physical tile, keeping the authored brown tint. Checked live after the
+  // real asset chain.
+  const rope = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const rows = [];
+    const materials = new Set();
+    api.scene.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      if (!/^LaneRope$/i.test(o.material.name || '')) return;
+      const uv = o.geometry.getAttribute('uv');
+      materials.add(o.material.uuid);
+      rows.push({
+        name: o.name,
+        materialName: o.material.name,
+        maps: ['map', 'normalMap', 'roughnessMap'].filter((k) => Boolean(o.material[k])).length,
+        hasUv: Boolean(uv),
+        tint: o.material.color ? o.material.color.getHexString() : null,
+        roughness: Number(Number(o.material.roughness).toFixed(3)),
+        metalness: Number(o.material.metalness).toFixed(3),
+        image: o.material.map ? o.material.map.image.width : 0,
+        repeat: o.material.map ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+        wrapped: o.material.map
+          ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+        dressed: o.userData.ropeDressed === true
+      });
+    });
+    const st = typeof api.assetState === 'function' ? api.assetState() : api.assetState;
+    return { rows, materials: materials.size, assetState: st.rope, detail: st.ropeDetail };
+  });
+  checks.check('all 3 LaneRope meshes wear the three rope maps',
+    rope.rows.length === 3 && rope.rows.every((r) => r.maps === 3 && r.hasUv
+      && r.image === 512),
+    JSON.stringify({ rows: rope.rows.length,
+                    maps: [...new Set(rope.rows.map((r) => r.maps))],
+                    images: [...new Set(rope.rows.map((r) => r.image))] }));
+  checks.check('the rope map is one per material and tiles by projection, not repeat',
+    rope.materials >= 1 && rope.rows.every((r) => r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    `${rope.materials} materials for ${rope.rows.length} meshes; ` +
+    JSON.stringify([...new Set(rope.rows.map((r) => JSON.stringify(r.repeat)))]));
+  checks.check('the dressed rope keeps the authored brown tint (keepTint true)',
+    rope.rows.every((r) => r.tint !== 'ffffff'),
+    JSON.stringify([...new Set(rope.rows.map((r) => r.tint))]));
+  checks.check('the dressed rope sits at rope roughness 0.9, not metal',
+    rope.rows.every((r) => r.roughness === 0.9 && Number(r.metalness) === 0),
+    JSON.stringify({ roughness: [...new Set(rope.rows.map((r) => r.roughness))],
+                     metalness: [...new Set(rope.rows.map((r) => r.metalness))] }));
+  checks.check('assetState reports the rope as textured',
+    rope.assetState === 'textured',
+    JSON.stringify({ assetState: rope.assetState, detail: rope.detail }));
+  await capture(page, 'round86-rope.png');
+  // --- 28n3. The lane lanterns, sack ties and notice board (round 87) --------
+  // The three lane lantern housings reuse the lamp-post maps at a 0.25 m
+  // tile, the nine sack ties wear the authored dark cord maps at 0.04 m, and
+  // the single notice board face carries its maps at 0.4 m. Checked live.
+  const laneDetail = await page.evaluate(async () => {
+    const api = window.amazingAdventure;
+    await api.assetsReady();
+    const housing = [];
+    const sackTies = [];
+    const notices = [];
+    const housingMaterials = new Set();
+    const housingMaterialNames = new Set();
+    api.scene.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const name = o.material.name || '';
+      const uv = o.geometry.getAttribute('uv');
+      const row = {
+        name: o.name,
+        materialName: name,
+        maps: ['map', 'normalMap', 'roughnessMap']
+          .filter((k) => Boolean(o.material[k])).length,
+        hasUv: Boolean(uv),
+        tint: o.material.color ? o.material.color.getHexString() : null,
+        roughness: Number(Number(o.material.roughness).toFixed(3)),
+        metalness: Number(Number(o.material.metalness).toFixed(3)),
+        image: o.material.map ? o.material.map.image.width : null,
+        repeat: o.material.map
+          ? [o.material.map.repeat.x, o.material.map.repeat.y] : null,
+        wrapped: o.material.map
+          ? o.material.map.wrapS === 1000 && o.material.map.wrapT === 1000 : false,
+        dressed: o.userData.housingDressed === true
+          || o.userData.sackTieDressed === true
+          || o.userData.noticeFaceDressed === true
+      };
+      if (/^LanternHousing$/i.test(name)) {
+        housingMaterials.add(o.material.uuid);
+        housingMaterialNames.add(name);
+        housing.push(row);
+      } else if (/^SackTie$/i.test(name)) {
+        sackTies.push(row);
+      } else if (/^NoticeFace(Lane)?$/i.test(name)) {
+        // Two faces belong to the family: the modelled panel (NoticeFace) and
+        // the procedural stand-in (NoticeFaceLane) the model pass hides. The
+        // visible one must be dressed too, or the board reads flat paint.
+        let hidden = false;
+        for (let p = o; p; p = p.parent) if (p.visible === false) hidden = true;
+        notices.push({ ...row, hidden, modelled: /^NoticeFace$/i.test(name) });
+      }
+    });
+    const state = typeof api.assetState === 'function' ? api.assetState() : api.assetState;
+    return {
+      housing,
+      sackTies,
+      notices,
+      housingMaterials: housingMaterials.size,
+      housingMaterialNames: [...housingMaterialNames],
+      housingState: state?.housing,
+      housingDetail: state?.housingDetail,
+      sackTieState: state?.sackTie,
+      sackTieDetail: state?.sackTieDetail,
+      noticeFaceState: state?.noticeFace,
+      noticeFaceDetail: state?.noticeFaceDetail
+    };
+  });
+  const laneText = (value) => (typeof value === 'string'
+    ? value : JSON.stringify(value ?? null));
+  const laneNum = (text, key, val) => new RegExp(
+    key + '["\']?\\s*[:=]?\\s*' + String(val).replace('.', '\\.') + '(?![\\d.])').test(text);
+  checks.check('all 3 LanternHousing meshes wear the reused lamp maps at a 0.25 m tile',
+    laneDetail.housing.length === 3 && laneDetail.housing.every((r) => r.maps === 3
+      && r.hasUv && r.image === 512 && r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    JSON.stringify({ rows: laneDetail.housing.length,
+                    maps: [...new Set(laneDetail.housing.map((r) => r.maps))],
+                    images: [...new Set(laneDetail.housing.map((r) => r.image))] }));
+  checks.check('the housing keeps one LanternHousing material at 0.55/0.35, tint ffffff',
+    laneDetail.housingMaterials <= 1
+      && laneDetail.housingMaterialNames.length === 1
+      && laneDetail.housingMaterialNames[0] === 'LanternHousing'
+      && laneDetail.housing.every((r) => r.tint === 'ffffff' && r.roughness === 0.55
+        && r.metalness === 0.35 && r.dressed),
+    JSON.stringify({ materials: laneDetail.housingMaterials,
+                    names: laneDetail.housingMaterialNames,
+                    tints: [...new Set(laneDetail.housing.map((r) => r.tint))],
+                    roughness: [...new Set(laneDetail.housing.map((r) => r.roughness))],
+                    metalness: [...new Set(laneDetail.housing.map((r) => r.metalness))] }));
+  await capture(page, 'round87-lane-detail.png');
+  const housingDetailText = laneText(laneDetail.housingDetail);
+  checks.check('assetState reports the housing textured at a 0.25 m tile with all three maps',
+    laneDetail.housingState === 'textured' && laneNum(housingDetailText, 'meshes', 3)
+      && laneNum(housingDetailText, 'tileMeters', 0.25)
+      && housingDetailText.includes('map') && housingDetailText.includes('normalMap')
+      && housingDetailText.includes('roughnessMap'),
+    JSON.stringify({ assetState: laneDetail.housingState,
+                    detail: laneDetail.housingDetail }));
+  checks.check('all 9 SackTie meshes are dressed with three maps and no repeat',
+    laneDetail.sackTies.length >= 9 && laneDetail.sackTies.every((r) => r.dressed
+      && r.maps === 3 && r.hasUv && r.wrapped
+      && r.repeat[0] === 1 && r.repeat[1] === 1),
+    JSON.stringify({ rows: laneDetail.sackTies.length,
+                    maps: [...new Set(laneDetail.sackTies.map((r) => r.maps))],
+                    repeats: [...new Set(laneDetail.sackTies.map((r) => JSON.stringify(r.repeat)))] }));
+  checks.check('the sack ties keep the authored dark cord (keepTint true) at 0.95 roughness',
+    laneDetail.sackTies.every((r) => r.tint !== 'ffffff' && r.roughness === 0.95
+      && r.metalness === 0),
+    JSON.stringify({ tints: [...new Set(laneDetail.sackTies.map((r) => r.tint))],
+                    roughness: [...new Set(laneDetail.sackTies.map((r) => r.roughness))],
+                    metalness: [...new Set(laneDetail.sackTies.map((r) => r.metalness))] }));
+  await capture(page, 'round87-sacktie.png');
+  const sackTieDetailText = laneText(laneDetail.sackTieDetail);
+  checks.check('assetState reports the sack ties textured at a 0.04 m tile',
+    laneDetail.sackTieState === 'textured'
+      && laneNum(sackTieDetailText, 'tileMeters', 0.04)
+      && laneNum(sackTieDetailText, 'meshes', laneDetail.sackTies.length),
+    JSON.stringify({ assetState: laneDetail.sackTieState,
+                    detail: laneDetail.sackTieDetail }));
+  checks.check('both notice faces (modelled and stand-in) wear three maps at 0.4 m',
+    laneDetail.notices.length === 2
+      && laneDetail.notices.every((r) => r.maps === 3
+        && r.hasUv && r.wrapped && r.repeat[0] === 1 && r.repeat[1] === 1
+        && r.tint === 'ffffff' && r.roughness === 0.9 && r.metalness === 0
+        && r.dressed),
+    JSON.stringify({ rows: laneDetail.notices.length,
+                    names: laneDetail.notices.map((r) => r.materialName),
+                    maps: laneDetail.notices.map((r) => r.maps),
+                    tint: laneDetail.notices.map((r) => r.tint),
+                    roughness: laneDetail.notices.map((r) => r.roughness) }));
+  checks.check('the notice face the player can see is the dressed modelled panel',
+    laneDetail.notices.some((r) => r.modelled && !r.hidden && r.dressed),
+    JSON.stringify(laneDetail.notices.map((r) => ({ name: r.materialName,
+      hidden: r.hidden, modelled: r.modelled, dressed: r.dressed }))));
+  checks.check('assetState reports the notice face textured at a 0.4 m tile',
+    laneDetail.noticeFaceState === 'textured'
+      && laneNum(laneText(laneDetail.noticeFaceDetail), 'tileMeters', 0.4)
+      && laneNum(laneText(laneDetail.noticeFaceDetail), 'meshes', 2),
+    JSON.stringify({ assetState: laneDetail.noticeFaceState,
+                    detail: laneDetail.noticeFaceDetail }));
+  // --- 28o. Vegetation: trees stand in, upgrade to models --------------------
   const trees = await page.evaluate(async () => {
     const api = window.amazingAdventure;
     await api.assetsReady();
@@ -3142,6 +6496,11 @@ try {
     const byKind = {};
     api.scene.traverse((o) => {
       if (!o.isMesh || !o.material) return;
+      // Contact-shadow decals carry a linear alpha falloff as their `map`, not
+      // an albedo: tagging it sRGB would bend the gradient. It is not an albedo
+      // map, so it is excluded from this albedo color-space check.
+      if (o.name === 'contact-shadows' || o.name === 'ground-cloud-shadows' ||
+        o.material.name === 'ContactShadow') return;
       for (const key of ['map', 'normalMap', 'roughnessMap']) {
         const t = o.material[key];
         if (!t) continue;
@@ -3184,7 +6543,14 @@ try {
       await new Promise((r) => requestAnimationFrame(r));
       if (mara.limbs.legL) leanMax.v = Math.max(leanMax.v, Math.abs(mara.limbs.legL.rotation.z));
       if (mara.limbs.neck) glanceMax.v = Math.max(glanceMax.v, Math.abs(mara.limbs.neck.rotation.y));
-      if (glanceMax.v > 0.1) break; // seen one; no need to wait the full cycle
+      // Break only once BOTH idle motions have been seen. Breaking on the
+      // glance alone (the old condition) ended the sample early on runs where
+      // a glance happened to fall in the first second: round 81 measured
+      // leanRange 0.008 against a 0.01 threshold while the weight shift was
+      // still on its way up. The two motions have independent periods (7.5 s
+      // lean, 11 s glance), so a sample that stops at the first of either is
+      // measuring the scheduler, not the animation.
+      if (glanceMax.v > 0.1 && leanMax.v > 0.01) break;
     }
     // Walk the player back next to her: attention must override the glance.
     //
@@ -3584,7 +6950,7 @@ try {
       bulb.localToWorld(centre);
       bulbWorld = { x: Number(centre.x.toFixed(4)), y: Number(centre.y.toFixed(4)), z: Number(centre.z.toFixed(4)) };
     }
-    const emissive = bulb ? bulb.material.emissive.getHexString() : null;
+    const emissive = bulb ? bulb.material.emissive?.getHexString?.() : null;
     // The head is a state readout, not a lamp that burns all night: it must be
     // dark in daylight, dark at dusk before the round is walked, and lit only
     // once the lane is lit -- otherwise it advertises a job it has not done.
@@ -3716,7 +7082,7 @@ try {
           map: true,
           normal: Boolean(o.material.normalMap),
           rough: Boolean(o.material.roughnessMap),
-          color: o.material.color.getHexString(),
+          color: o.material.color?.getHexString?.(),
           repeat: [o.material.map.repeat.x, o.material.map.repeat.y]
         };
       }
@@ -4232,6 +7598,52 @@ try {
   await new Promise((r) => setTimeout(r, 400));
   await page.keyboard.press('Escape');
   await new Promise((r) => setTimeout(r, 400));
+
+  // --- 29d. The stall actually sells its rope (round 78) --------------------
+  // The four "What do you sell?" branches used to be dead ends. Drive the real
+  // page: walk up to Oswin, open the stall, buy the rope, and reopen it.
+  const ropeSale = await page.evaluate(async () => {
+    const S = await import('./src/state.js');
+    const api = window.amazingAdventure;
+    const before = api.getState();
+    api.setState(S.createInitialState());
+    api.refreshHUD();
+    return { coins: S.coins(api.getState()), rope: S.hasItem(api.getState(), 'rope'), keep: before };
+  });
+  const stallOpen = await talkToNpc('oswin');
+  const stallChoice = await clickChoiceRegex('What do you sell');
+  const wares = await page.evaluate(() => window.amazingAdventure.getDialogue());
+  checks.check('Oswin\u2019s stall opens a priced ware instead of a dead end',
+    stallOpen.visible && stallChoice.ok && Boolean(wares) && wares.choices.some((l) => /Buy Coil of Rope/.test(l)),
+    JSON.stringify({ line: stallOpen.line.slice(0, 60), choices: wares?.choices }));
+  const bought = await clickChoiceRegex('Buy Coil of Rope');
+  const afterSale = await page.evaluate(async () => {
+    const S = await import('./src/state.js');
+    const state = window.amazingAdventure.getState();
+    return {
+      coins: S.coins(state), rope: S.hasItem(state, 'rope'),
+      line: document.getElementById('dialogue-line').textContent,
+      inventory: document.getElementById('inventory-list')?.textContent ?? ''
+    };
+  });
+  checks.check('buying the rope spends 3 coins and puts it in the pack',
+    bought.ok && afterSale.coins === ropeSale.coins - 3 && afterSale.rope === true,
+    JSON.stringify(afterSale));
+  await capture(page, 'round78-rope-sale.png');
+  const reopen = await clickChoiceRegex('already yours|Leave');
+  await page.evaluate(() => document.getElementById('dialogue-close')?.click() ?? null);
+  await new Promise((r) => setTimeout(r, 200));
+  const reoffer = await talkToNpc('oswin');
+  const reofferSell = await clickChoiceRegex('What do you sell');
+  const owned = await page.evaluate(() => window.amazingAdventure.getDialogue());
+  checks.check('the rope cannot be bought twice',
+    reoffer.visible && reofferSell.ok && Boolean(owned) &&
+    owned.choices.some((l) => /already yours/.test(l)) &&
+    !owned.choices.some((l) => /Buy Coil of Rope/.test(l)),
+    JSON.stringify({ choices: owned?.choices }));
+  await page.evaluate((keep) => { window.amazingAdventure.setState(keep); }, ropeSale.keep);
+  await page.keyboard.press('Escape');
+  await new Promise((r) => setTimeout(r, 200));
 
   // --- 30. Save hardening and exhaustive reachability ----------------------
   // Save loading is the only place untrusted data enters the game, and a coin

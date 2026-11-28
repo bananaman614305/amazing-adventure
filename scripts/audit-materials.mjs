@@ -23,6 +23,13 @@ try {
   // while the canopy family was still in flight. assetsReady() resolves only
   // after every upgrade pass (loadAssets) has finished.
   await page.evaluate(() => window.amazingAdventure.assetsReady()).catch(() => {});
+  // The cast's own dressing passes (cloth, skin/hair, accent) chain onto
+  // `castReady`, which can still be in flight when assetsReady resolves on a
+  // fast machine. Await it too, or the audit reports the cast's flat
+  // pre-dress colours and hides whatever a cast pass just fixed.
+  await page.evaluate(async () => {
+    if (window.amazingAdventure.castReady) await window.amazingAdventure.castReady;
+  }).catch(() => {});
   const report = await page.evaluate(() => {
     const { scene } = window.amazingAdventure;
     const flat = [];

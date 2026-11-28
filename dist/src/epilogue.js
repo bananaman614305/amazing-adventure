@@ -1,13 +1,13 @@
-// The ending. Six quests currently just... stop. A player who finishes everything
+// The ending. Seven quests currently just... stop. A player who finishes everything
 // gets silence, which makes the whole thing feel unfinished rather than complete.
 //
 // The epilogue is deliberately composed from what the player actually did, using
 // the same `outcomes` record the journal uses, plus their standing. There is no
-// single "you win" text: two players who finish the same six quests can read
+// single "you win" text: two players who finish the same seven quests can read
 // materially different endings, and the ending never claims something that did
 // not happen.
 
-import { QUEST_ORDER, QUESTS, questStatus } from './state.js';
+import { QUEST_ORDER, CHORE_ORDER, QUESTS, questStatus } from './state.js';
 import { reputation, tierFor, FACTIONS } from './factions.js';
 
 /** True when every branching quest has a recorded outcome. */
@@ -53,6 +53,25 @@ export function branchLines(state) {
     if (text) lines.push({ questId, outcome, text });
   }
   return lines;
+}
+
+/**
+ * The two late faction chores live outside QUEST_ORDER, so the spine can finish
+ * without ever touching them. They exist to make the Keepers and the Watch
+ * matter in the final third, which only works if the ending remembers them: an
+ * ending that stays silent about a walked wick round makes that work invisible.
+ * A chore that was never taken, or is half-finished, gets no line at all.
+ */
+const SIDE_WORK_LINES = {
+  wicks: 'You walked Mara’s wick round at dusk, and the plaza lanterns have burned steadier for it.',
+  tally: 'You gave Halden his gate count, and the open gate has a tally behind it now.'
+};
+
+/** One line per late chore actually finished, in CHORE_ORDER. */
+export function sideWorkLines(state) {
+  return CHORE_ORDER
+    .filter((choreId) => SIDE_WORK_LINES[choreId] && questStatus(state, choreId) === 'done')
+    .map((choreId) => ({ choreId, text: SIDE_WORK_LINES[choreId] }));
 }
 
 /** The faction the player stands best and worst with, at the end. */
@@ -121,12 +140,13 @@ export function buildEpilogue(state) {
   const closers = factionClosers(state);
   return {
     title: 'The plaza at closing',
-    opening: 'Six errands, and none of them were only errands. The lanterns are lit, the gate is open, and the lane’s books are as straight as they have been in a month.',
+    opening: 'Seven errands, and none of them were only errands. The lanterns are lit, the gate is open, and the lane’s books are as straight as they have been in a month.',
     branches,
     // A save finished before branches were recorded (or a hand-edited one) has no
     // outcomes. Saying nothing about what the player chose would be a quiet lie,
     // so the ending admits the record is incomplete instead of implying it is not.
     branchesUnrecorded: !hasAllOutcomes(state),
+    sidework: sideWorkLines(state),
     closers,
     standing,
     closing: 'The plaza does not need you any more. It is a strange thing to be given. You could stay, and the market would keep, and someone would find you a crate to sit on. Or you could walk out through the north gate while the light is still good.'

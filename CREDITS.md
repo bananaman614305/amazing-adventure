@@ -215,6 +215,44 @@ its procedural stand-in or flat colour and stays fully playable.
   maps, so the plaza and the border walls are now visually distinct surfaces.
   Fully procedural; no outside images, datasets or models to license.
 
+### Round 100 additions
+
+- `assets/textures/plaza_floor_v2_{albedo,normal,rough}.webp` —
+  `art/kaggle/plaza_floor_v2_textures.py`, run on the private Kaggle notebook
+  (Tesla T4, CuPy backend, 13.0 s including the lit preview). A second-generation
+  flagstone set for the plaza, replacing the round-61 maps in `upgradePlazaFloor()`
+  (the round-61 files stay shipped and are the documented fallback if a v2 file is
+  missing). What changed: the per-stone jitter is stronger (0.40 of a cell) and
+  each stone is inset toward its own centre, so the joints stagger and courses
+  break instead of lining up across the tile; each stone carries its own warm/cool
+  tint (honey and slate rather than one stamped grey); a broad damp field darkens
+  and cools the worn hollows; the joint is deeper (0.16 of normalised height
+  against 0.10) with an irregular chipped arris, and each slab dishes by its own
+  amount. Albedo/normal/roughness 512x512, seam ratios albedo [0.193, 0.154],
+  normal [0.255, 0.194], rough [0.225, 0.195] (all well under 3 = no visible
+  seam). Shipped as high-quality lossy WebP (Pillow quality 88, method 6):
+  9.7 KB / 23.5 KB / 12.5 KB against 164 KB / 208 KB / 111 KB for the source
+  PNGs. Fully procedural; no outside images, datasets or models to license.
+
+### Round 101 additions
+
+- `assets/textures/roof_shingle_{albedo,normal,rough}.webp` —
+  `art/kaggle/roof_shingle_textures.py`, run on the private Kaggle notebook
+  (Tesla T4, CuPy backend). A tile family for the procedural roof shingles:
+  the `roof-shingles` InstancedMesh lays 1 x 1 m boxes across three flat roof
+  slabs (pitch 0), and the authored 0..1 UVs carry the map once per metre, so a 1 m tile
+  is one repeat across every instance. A value albedo (joint shadow, fine
+  grain, nail dots, damp field) so the authored 0x6d3a2c shingle
+  colour and the per-phase glow keep supplying hue and brightness; a shallow
+  lap-relief normal (periodic roll-based gradient, wrapped edges pinned for
+  exact tileability), and a near-flat matte roughness so the roof reads as
+  timber shingling rather than painted iron. Albedo/normal/roughness 1024x1024,
+  seam ratios albedo, normal and rough all well under 3 = no visible seam.
+  Shipped as lossless WebP. Applied by `upgradeShingles()` with the shingle base
+  colour 0x6d3a2c as the tint, so the existing per-instance tone and the
+  `paintShingles` day/night glow keep working over the map. Fully procedural;
+  no outside images, datasets or models to license.
+
 ### Round 71 additions
 
 - `assets/banner.glb` — `art/blender/make_banner.py`. 4 meshes, 17.6 KB: a subdivided cloth panel (BannerCanvas, 384 tris, fold wave + sagging hem), a painted-iron rod, finials, and hanging straps. Authored around the cloth centre with front facing glTF +Z, so the game sets position only. Footprint measured off the cloth only (rod span is finial overhang). Same licence as the game (generated, not downloaded).
@@ -286,6 +324,61 @@ its procedural stand-in or flat colour and stays fully playable.
   deliberately excluded. Fully procedural; no outside images, datasets or
   models to license.
 
+### Round 81 additions
+
+- No new outside assets. The cast's nine `Accent` meshes (Mara's sash and
+  lantern strap, Oswin's scarf and pouch strap, Pip's two leg wraps, Halden's
+  tabard, Sable's cloak band, Wren's collar — 2.38 m2 of flat colour before)
+  are now dressed with the existing round 72 felt maps
+  (`assets/textures/felt_{albedo,normal,rough}.webp`, credited above, already
+  covered by the game's licence): the accent bands are felted fabric at the
+  same 0.18 m scale as the lane pennants, and the neutral albedo means each
+  NPC's authored dye still reads. Applied by the new `upgradeCastAccent()` /
+  `dressCastAccent()` (`src/accent.js` rules, `src/npcs.js` geometry) with
+  metre-space box-projected UVs and one cloned material per rig, roughness 0.9
+  / metalness 0. Nothing new to license.
+
+### Round 82 additions
+
+- No new outside assets. The cast's eighteen `Boot` meshes (oswin, pip,
+  halden, sable and wren — the robed Keeper's rig has no boots; 1.49 m2 of
+  flat colour before) are dressed with a leather map family generated for
+  this round by the project's own Kaggle texture job
+  (`assets/textures/leather_{albedo,normal,rough}.webp`, 512x512 lossless
+  WebP: periodic value-noise fbm height field with pore detail, a
+  Sobel-derived tangent-space normal, a near-neutral albedo so each
+  character's authored boot tint still reads, roughness 0.78-0.94). Applied
+  by the new `upgradeCastBoot()` / `dressCastBoot()` (`src/boot.js` rules,
+  `src/npcs.js` geometry) with metre-space box-projected UVs at a 0.2 m
+  physical tile, roughness 0.9 / metalness 0, one cloned material per rig,
+  chained last on `castReady` after the accent pass. Fully procedural;
+  nothing new to license.
+
+### Round 83 additions
+
+- No new outside assets. The plaza job board's face (`BoardFace`, 2.16 m2)
+  and its three pinned slips (`BoardPaper`, 0.4 m2) are dressed with a
+  parchment map family generated for this round by the project's own
+  Kaggle texture job (`art/kaggle/paper_textures.py`,
+  `assets/textures/paper_{albedo,normal,rough}.webp`, 512x512 lossless WebP:
+  periodic layered fibre streaks with pore detail, a Sobel-derived
+  tangent-space normal, a warm-cream albedo so the tint is forced white).
+  Applied by the new `dressBoardPaper()` (`src/paper.js` rules,
+  `src/world.js` geometry) with metre-space box-projected UVs at a 0.3 m
+  physical tile, roughness 0.9 / metalness 0, one cloned material per mesh.
+  Fully procedural; nothing new to license.
+
+### Round 84 additions
+
+- No new outside assets. The cast's three `Paper` meshes (Oswin's Apron,
+  Sable's PropMap and Wren's PropLedgerPages — 0.31 m2 of flat colour before)
+  reuse the round 83 parchment
+  maps unchanged, with the same 0.3 m tile, roughness 0.9 / metalness 0
+  and a forced white tint. Applied by the new
+  `upgradeCastPaper()` / `dressCastPaper()` (`src/paper.js` rules,
+  `src/npcs.js` geometry) with metre-space box-projected UVs, one cloned
+  material per rig, chained last on `castReady` after the boot pass.
+
 ### Round 67 additions
 
 - `assets/textures/cloth_*.webp` — `art/kaggle/cloth_textures.py`, run on the
@@ -322,3 +415,11 @@ its procedural stand-in or flat colour and stays fully playable.
   to within 2% of its own projection plane, all four split meshes unindexed with
   exactly one corner per triangle slot, and the lane sacks tiling uniformly at
   1.2 m with zero spread (was 0.53).
+
+### Round 96 additions
+
+- **assets/terrace-detail.glb** — timber pergola (four square posts, two top
+  beams, four cross slats) plus two stone planters with inset soil tops, giving
+  the north terrace a readable silhouette. Authored by `art/blender/make_terrace_detail.py`
+  (168 triangles), flat Principled materials `TerraceTimber`, `TerraceTimberDark`,
+  `TerraceStone`, `TerraceSoil`; no outside images or models, no textures.
