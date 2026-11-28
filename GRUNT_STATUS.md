@@ -12,30 +12,35 @@
 
 ## Current task
 
-**Round 118 done (atmospheric moon halo).** Pure module `src/moonhalo.js`
-(seed 0x7a3f1c9b: per-moon halo descriptor with radius/opacity/tint, positional
-hash for tint, `moonHaloStrength` by phase (day 0, dusk DUSK_BASE x night
-fraction, night 1x, clamped), `moonHaloEnabled` drops on low), 14 unit cases
-(totality guards + determinism). Integration in `src/world.js` as a single
-additive `sky-moon-halo` PlaneGeometry quad hung off the `sky-moon-group`
-(sRGB radial gradient texture, fog off, DoubleSide, additive blending,
-renderOrder 2, radius-driven uniform scale), environment handle
-(`moonHalo`, `paintMoonHalo`, `moonHaloOn`), wiring in `src/main.js` syncPhase +
-per-frame update, paint calls inside `applyPhase` and `setQuality`. Manifest +
-dist rebuilt.
+**Round 119 in flight (warm halo around each lit glass pane).** Pure module
+`src/glasshalo.js` (seed 0x4e7ab21d: per-pane descriptor {width, thickness,
+tintWarmth, response, wander}, width 1.6 window / 0.55 lamp, thickness 0.62 /
+0.35, tintWarmth 0.9 x response, response curve day 0 / dusk 0.9 / night 1,
+dark lane pane 0 at every hour, wander seeded by positional hash <= 0.25),
+12 unit cases. Integration in `src/world.js`: one additive InstancedMesh quad
+per registered pane (`glass-halo`, GlassHalo material, sRGB radial gradient,
+vertex colors from tintWarmth, renderOrder 2), anchored at the pane's
+registration-time centre; `applyGlass` re-derives the halo opacity from the
+same phase and lane state as the pane's own glow; environment handle
+(`glassHalo`, `glassHaloCount`, `paintGlassHalo`, `glassHaloOn`); both the
+applyPhase and setQuality paint lists re-paint it; the low tier drops the
+layer. Browser checks in scripts/test-round2.mjs: 7 quads, one per pane;
+opacity follows the hour; a dark lane keeps its halo dark at every hour; the
+low tier drops the layer. Manifest + dist rebuilt. Sources committed at
+c01918e, dist at b239386.
 
-Checks: unit 1668/1668; desktop browser 406/406 exit 0 (three new r118
-checks: mesh/material/blending/haloOn, strength follows night, low-tier drop).
-Mobile suite 184/184 exit 0 at clean head b96d417 (round 118).
+Checks so far: unit 1680/1680 (incl. 12 glasshalo, preview digest matches).
+Desktop browser suite running; mobile suite next.
 
 ## Next steps
-1. Refresh `/worker/state/outbox/publish.json` at the clean exact HEAD 34eff9f,
-   then commit the GRUNT_STATUS.md checkpoint.
-2. Record the mobile result for round 118 when the mobile suite finishes (one
-   browser suite at a time), then prepare the release round.
-3. Round 119: pick the next highest-impact graphics beat against the r113-118
-   night look — candidates: real glass response polish (HouseGlass 4.63 m2,
-   LampGlass 4.5 m2), ground-level fog/mist layering, or per-lamp
-   shadow/occlusion. Choose whichever reads best in the saved screenshots.
+1. Confirm desktop suite (expect 410/410 with 4 new r119 checks) and then
+   run the mobile suite (one browser suite at a time); record both in
+   GRUNT_STATUS.md.
+2. Refresh `/worker/state/outbox/publish.json` at the clean exact HEAD
+   b239386, then commit the GRUNT_STATUS.md checkpoint.
+3. Round 120: pick the next highest-impact graphics beat against the r113-119
+   night look — candidates: ground-level fog/mist layering, per-lamp
+   shadow/occlusion, or water surface motion. Choose whichever reads best in
+   the saved screenshots.
 4. Keep rounds 101-118 batched for `grunt-release` once the host commit cap is
    lifted; keep `publish.json` current per round until then.
